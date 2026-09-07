@@ -1,1 +1,12 @@
 .worktrees/
+.env
+.venv/
+*.egg-info/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+node_modules/
+cache/
+projects/**/audio/
+projects/**/renders/
+projects/**/source-documents/
