@@ -7,5 +7,5 @@ class AuthorBrief(BaseModel):
     why_speak: str = ""
     personal_position: str = ""
     desired_audience_action: str = ""
-    emotion: str = "điềm tĩnh, thẳng thắn"
+    emotion: str = ""
     phrases_to_keep: list[str] = Field(default_factory=list)
