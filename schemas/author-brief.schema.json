@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "desired_audience_action": {
+      "default": "",
+      "title": "Desired Audience Action",
+      "type": "string"
+    },
+    "emotion": {
+      "default": "",
+      "title": "Emotion",
+      "type": "string"
+    },
+    "personal_position": {
+      "default": "",
+      "title": "Personal Position",
+      "type": "string"
+    },
+    "phrases_to_keep": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Phrases To Keep",
+      "type": "array"
+    },
+    "schema_version": {
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "title": {
+      "title": "Title",
+      "type": "string"
+    },
+    "why_speak": {
+      "default": "",
+      "title": "Why Speak",
+      "type": "string"
+    }
+  },
+  "required": [
+    "title"
+  ],
+  "title": "AuthorBrief",
+  "type": "object"
+}

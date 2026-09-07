@@ -7,7 +7,7 @@ thành video y tế dự phòng tiếng Việt dọc 1080 × 1920.
 
 ## Trạng thái hiện tại
 
-Project scaffold, author brief, project state và storage nguyên tử đã hoạt động.
+Project scaffold, claim ledger, author-owned script và read-aloud QA đã hoạt động.
 
 ## Milestone
 
@@ -21,7 +21,7 @@ MVP hoàn thành vertical slice từ author brief, evidence, kịch bản và st
 | 1 | Bootstrap repo và CLI có thể kiểm thử | complete | `pytest tests/test_cli.py`; `ruff check src tests` | `chore: bootstrap healthvideo CLI` |
 | 2 | Domain model, state machine và storage nguyên tử | complete | `python -m pytest tests/domain/test_project.py -v`; `python -m pytest tests/storage/test_files.py -v`; `python -m ruff check src tests` | `feat: add project state and atomic storage` |
 | 3 | Project scaffold và author-owned voice | complete | `python -m pytest tests/workflows/test_create_project.py tests/test_cli.py -v` | `feat: scaffold projects from doctor briefs` |
-| 4 | Claim ledger, human script và read-aloud QA | planned | — | — |
+| 4 | Claim ledger, human script và read-aloud QA | complete | `python tools/export_schemas.py`; `python -m pytest tests/domain/test_script.py tests/qa/test_script_qa.py tests/contracts/test_schemas.py -v` | `feat: validate evidence-linked human scripts` |
 | 5 | Storyboard, evidence highlight và render contract | planned | — | — |
 | 6 | Remotion composition 9:16 và visual regression cơ bản | planned | — | — |
 | 7 | TTS giả lập, manifest cache và render workflow | planned | — | — |
@@ -49,18 +49,20 @@ Author brief → evidence ledger → medical review → script/storyboard → pr
 
 ## Kiểm thử gần nhất
 
-`python -m pytest tests/workflows/test_create_project.py tests/test_cli.py -v`
-và `python -m ruff check src tests`.
+`python -m pytest tests/domain/test_script.py tests/qa/test_script_qa.py tests/contracts/test_schemas.py -v`
+(8 passed); exporter được chạy hai lần không tạo Git diff.
 
 ## Quyết định
 
 Tiếng Việt trước; AI chỉ chấp bút từ ý kiến bác sĩ; mọi claim y khoa cần định
-danh và nguồn đã xác minh; không tự động đăng video.
+danh và nguồn đã xác minh; không tự động đăng video. Read-aloud QA gắn cờ câu
+vượt 32 từ, claim không có trong ledger và cụm từ máy móc bị cấm.
 
 ## Giới hạn hiện tại
 
-Đã có domain model và scaffold; mỗi dự án mới lưu `author-brief.yaml` ở thư mục
-gốc dự án. Chưa có intake nguồn, TTS, render, review, packaging hay installer.
+Đã có domain model, schema JSON và scaffold; mỗi dự án mới lưu
+`author-brief.yaml` ở thư mục gốc dự án. Chưa có intake nguồn, TTS, render,
+review, packaging hay installer.
 
 ## Tài liệu
 
