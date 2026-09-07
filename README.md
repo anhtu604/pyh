@@ -7,7 +7,7 @@ thành video y tế dự phòng tiếng Việt dọc 1080 × 1920.
 
 ## Trạng thái hiện tại
 
-Project state và storage nguyên tử đã hoạt động.
+Project scaffold, author brief, project state và storage nguyên tử đã hoạt động.
 
 ## Milestone
 
@@ -20,7 +20,7 @@ MVP hoàn thành vertical slice từ author brief, evidence, kịch bản và st
 | --- | --- | --- | --- | --- |
 | 1 | Bootstrap repo và CLI có thể kiểm thử | complete | `pytest tests/test_cli.py`; `ruff check src tests` | `chore: bootstrap healthvideo CLI` |
 | 2 | Domain model, state machine và storage nguyên tử | complete | `python -m pytest tests/domain/test_project.py -v`; `python -m pytest tests/storage/test_files.py -v`; `python -m ruff check src tests` | `feat: add project state and atomic storage` |
-| 3 | Project scaffold và author-owned voice | planned | — | — |
+| 3 | Project scaffold và author-owned voice | complete | `python -m pytest tests/workflows/test_create_project.py tests/test_cli.py -v` | `feat: scaffold projects from doctor briefs` |
 | 4 | Claim ledger, human script và read-aloud QA | planned | — | — |
 | 5 | Storyboard, evidence highlight và render contract | planned | — | — |
 | 6 | Remotion composition 9:16 và visual regression cơ bản | planned | — | — |
@@ -39,6 +39,7 @@ khỏi TTS và renderer; Remotion nhận `render-input.json` bất biến.
 ```powershell
 python -m pip install -e ".[dev]"
 healthvideo version
+healthvideo project new muoi-va-huyet-ap --title "Ăn mặn và tăng huyết áp"
 ```
 
 ## Workflow
@@ -48,7 +49,7 @@ Author brief → evidence ledger → medical review → script/storyboard → pr
 
 ## Kiểm thử gần nhất
 
-`python -m pytest tests/domain/test_project.py tests/storage/test_files.py -v`
+`python -m pytest tests/workflows/test_create_project.py tests/test_cli.py -v`
 và `python -m ruff check src tests`.
 
 ## Quyết định
@@ -58,7 +59,8 @@ danh và nguồn đã xác minh; không tự động đăng video.
 
 ## Giới hạn hiện tại
 
-Chưa có model domain, intake nguồn, TTS, render, review, packaging hay installer.
+Đã có domain model và scaffold; mỗi dự án mới lưu `author-brief.yaml` ở thư mục
+gốc dự án. Chưa có intake nguồn, TTS, render, review, packaging hay installer.
 
 ## Tài liệu
 

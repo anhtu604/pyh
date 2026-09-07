@@ -1,0 +1,14 @@
+schema_version: "1.0"
+language: vi
+pronouns:
+  self: "tôi"
+  audience: "bạn"
+directness: clear_and_calm
+avoid_phrases:
+  - "hãy cùng tìm hiểu"
+  - "bí mật"
+  - "sốc"
+  - "100%"
+personal_experience:
+  fabricate: false
+  rule: "Không tự thêm trải nghiệm cá nhân, cảm xúc, câu chuyện nghề nghiệp hoặc lập trường chưa được tác giả cung cấp."
