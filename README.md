@@ -22,7 +22,7 @@ MVP hoàn thành vertical slice từ author brief, evidence, kịch bản và st
 | 2 | Domain model, state machine và storage nguyên tử | complete | `python -m pytest tests/domain/test_project.py -v`; `python -m pytest tests/storage/test_files.py -v`; `python -m ruff check src tests` | `feat: add project state and atomic storage` |
 | 3 | Project scaffold và author-owned voice | complete | `python -m pytest tests/workflows/test_create_project.py tests/test_cli.py -v` | `feat: scaffold projects from doctor briefs` |
 | 4 | Claim ledger, human script và read-aloud QA | complete | `python tools/export_schemas.py`; `python -m pytest tests/domain/test_script.py tests/qa/test_script_qa.py tests/contracts/test_schemas.py -v` | `feat: validate evidence-linked human scripts` |
-| 5 | Storyboard, evidence highlight và render contract | planned | — | — |
+| 5 | Storyboard, evidence highlight và render contract | complete | `python tools/export_schemas.py`; `python -m pytest tests/render/test_input.py tests/contracts/test_schemas.py -v` | `feat: define storyboard render contract` |
 | 6 | Remotion composition 9:16 và visual regression cơ bản | planned | — | — |
 | 7 | TTS giả lập, manifest cache và render workflow | planned | — | — |
 | 8 | Hai cổng duyệt có hash và audit trail | planned | — | — |
@@ -49,8 +49,8 @@ Author brief → evidence ledger → medical review → script/storyboard → pr
 
 ## Kiểm thử gần nhất
 
-`python -m pytest tests/domain/test_script.py tests/qa/test_script_qa.py tests/contracts/test_schemas.py -v`
-(8 passed); exporter được chạy hai lần không tạo Git diff.
+`python -m pytest tests/render/test_input.py tests/contracts/test_schemas.py -v`
+(18 passed); exporter được chạy hai lần không tạo Git diff.
 
 ## Quyết định
 
@@ -60,8 +60,10 @@ vượt 32 từ, claim không có trong ledger và cụm từ máy móc bị c�
 
 ## Giới hạn hiện tại
 
-Đã có domain model, schema JSON và scaffold; mỗi dự án mới lưu
-`author-brief.yaml` ở thư mục gốc dự án. Chưa có intake nguồn, TTS, render,
+Đã có domain model, schema JSON, storyboard và render input bất biến. Render
+contract cố định khung hình dọc 1080 × 1920 ở 30 fps; storyboard phải có cảnh
+liên tiếp, không chồng lấp và tổng thời lượng 45–90 giây. Mỗi dự án mới lưu
+`author-brief.yaml` ở thư mục gốc dự án. Chưa có intake nguồn, TTS, renderer,
 review, packaging hay installer.
 
 ## Tài liệu

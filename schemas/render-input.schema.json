@@ -1,0 +1,181 @@
+{
+  "$defs": {
+    "EvidenceHighlight": {
+      "properties": {
+        "height": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Height",
+          "type": "number"
+        },
+        "image": {
+          "title": "Image",
+          "type": "string"
+        },
+        "quote": {
+          "title": "Quote",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "width": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Width",
+          "type": "number"
+        },
+        "x": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "image",
+        "quote",
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
+      "title": "EvidenceHighlight",
+      "type": "object"
+    },
+    "Scene": {
+      "properties": {
+        "claim_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Claim Id"
+        },
+        "duration_frames": {
+          "title": "Duration Frames",
+          "type": "integer"
+        },
+        "evidence_highlight": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EvidenceHighlight"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "narration": {
+          "title": "Narration",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "source_marker": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Marker"
+        },
+        "start_frame": {
+          "title": "Start Frame",
+          "type": "integer"
+        },
+        "visual": {
+          "enum": [
+            "whiteboard",
+            "chart",
+            "evidence_highlight",
+            "ai_clip"
+          ],
+          "title": "Visual",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "start_frame",
+        "duration_frames",
+        "narration",
+        "visual"
+      ],
+      "title": "Scene",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "audio_file": {
+      "title": "Audio File",
+      "type": "string"
+    },
+    "fps": {
+      "const": 30,
+      "default": 30,
+      "title": "Fps",
+      "type": "integer"
+    },
+    "height": {
+      "const": 1920,
+      "default": 1920,
+      "title": "Height",
+      "type": "integer"
+    },
+    "scenes": {
+      "items": {
+        "$ref": "#/$defs/Scene"
+      },
+      "title": "Scenes",
+      "type": "array"
+    },
+    "schema_version": {
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "title": {
+      "title": "Title",
+      "type": "string"
+    },
+    "width": {
+      "const": 1080,
+      "default": 1080,
+      "title": "Width",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "title",
+    "audio_file"
+  ],
+  "title": "RenderInput",
+  "type": "object"
+}

@@ -8,6 +8,8 @@ from pydantic import BaseModel
 from healthvideo.domain.author import AuthorBrief
 from healthvideo.domain.evidence import EvidenceClaim
 from healthvideo.domain.script import Script
+from healthvideo.domain.storyboard import Storyboard
+from healthvideo.render.input import RenderInput
 
 JSON_SCHEMA_DIALECT = "https://json-schema.org/draft/2020-12/schema"
 DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parents[1] / "schemas"
@@ -15,6 +17,8 @@ SCHEMAS: dict[str, type[BaseModel]] = {
     "evidence.schema.json": EvidenceClaim,
     "author-brief.schema.json": AuthorBrief,
     "script.schema.json": Script,
+    "storyboard.schema.json": Storyboard,
+    "render-input.schema.json": RenderInput,
 }
 
 
