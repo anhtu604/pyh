@@ -1,3 +1,5 @@
+import re
+
 from pydantic import BaseModel
 
 from healthvideo.domain.evidence import EvidenceClaim
@@ -30,7 +32,12 @@ def review_script(
             issues.append(
                 QAIssue(code="unknown_claim", line_id=line.id, message=line.claim_id)
             )
-        if len(line.text.split()) > 32:
+        spoken_sentences = re.split(r"[.?!…]+", line.text)
+        if any(
+            len(sentence.split()) > 32
+            for sentence in spoken_sentences
+            if sentence.split()
+        ):
             issues.append(
                 QAIssue(
                     code="long_spoken_sentence",
