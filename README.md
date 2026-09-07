@@ -7,8 +7,7 @@ thành video y tế dự phòng tiếng Việt dọc 1080 × 1920.
 
 ## Trạng thái hiện tại
 
-CLI `healthvideo` có thể cài đặt và hiển thị phiên bản; phần domain và workflow
-được triển khai theo các nhiệm vụ tiếp theo.
+Project state và storage nguyên tử đã hoạt động.
 
 ## Milestone
 
@@ -20,7 +19,7 @@ MVP hoàn thành vertical slice từ author brief, evidence, kịch bản và st
 | Task | Deliverable | Status | Tests | Commit |
 | --- | --- | --- | --- | --- |
 | 1 | Bootstrap repo và CLI có thể kiểm thử | complete | `pytest tests/test_cli.py`; `ruff check src tests` | `chore: bootstrap healthvideo CLI` |
-| 2 | Domain model, state machine và storage nguyên tử | planned | — | — |
+| 2 | Domain model, state machine và storage nguyên tử | complete | `python -m pytest tests/domain/test_project.py -v`; `python -m pytest tests/storage/test_files.py -v`; `python -m ruff check src tests` | `feat: add project state and atomic storage` |
 | 3 | Project scaffold và author-owned voice | planned | — | — |
 | 4 | Claim ledger, human script và read-aloud QA | planned | — | — |
 | 5 | Storyboard, evidence highlight và render contract | planned | — | — |
@@ -49,7 +48,8 @@ Author brief → evidence ledger → medical review → script/storyboard → pr
 
 ## Kiểm thử gần nhất
 
-`python -m pytest tests/test_cli.py -v` và `python -m ruff check src tests`.
+`python -m pytest tests/domain/test_project.py tests/storage/test_files.py -v`
+và `python -m ruff check src tests`.
 
 ## Quyết định
 
