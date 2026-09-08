@@ -32,6 +32,7 @@ MVP complete: vertical slice từ author brief, evidence, kịch bản và story
 | 9 | Gói xuất bản và golden end-to-end test | complete | `python -m pytest tests/e2e/test_golden_project.py -v` (15 passed); `python -m pytest -v` (99 passed); `python -m ruff check src tests tools`; `pnpm --dir video test` (11 passed); `pnpm --dir video typecheck` | `feat: package reviewed videos for publishing`; `fix: harden publication package integrity` |
 | 10 | Installer Windows và environment doctor | complete | `python -m pytest -v` (106 passed); `ruff`; video test/typecheck; `install/doctor.ps1` | `feat: add Windows installer and diagnostics` |
 | Final review | Approval, asset, package và Windows render hardening | complete | `python -m pytest -v` (122 passed); Ruff; video test (12 passed)/typecheck; real Windows golden render 1080 × 1920, 30 fps, 45.056 s | `fix: close final production integrity gaps` |
+| Security closure | Loại bỏ Windows batch-shell boundary cho pnpm | complete | `python -m pytest -v` (124 passed); Ruff; video test (12 passed)/typecheck; doctor; real Windows golden render 1080 × 1920, 30 fps, 45.056 s | `fix: remove Windows batch-shell launcher` |
 
 ## Kiến trúc
 
@@ -65,9 +66,11 @@ artifact và không đổi state):
 
 `healthvideo doctor` yêu cầu Python >=3.11, Node >=22, pnpm >=11, FFmpeg >=8 và
 Arial hoặc Noto Sans. Doctor và production dùng chung resolver: ưu tiên executable
-`pnpm`, dùng `corepack pnpm` khi cần, và chạy shim `.cmd`/`.bat` qua `cmd.exe` bằng
-argv với `shell=False`; CUDA chỉ là cảnh báo tùy chọn. Lần kiểm tra Windows gần nhất
-(08-09-2026) phát hiện Python 3.14.3, Node 24.14.0, pnpm 11.19.0 và FFmpeg 8.1.1.
+`pnpm`; trên Windows, nếu PATH chỉ có shim `.cmd`, resolver gọi `pnpm.cjs` hoặc
+`corepack.js` trực tiếp bằng `node.exe` và không đi qua `cmd.exe`. Batch launcher
+khác bị từ chối với lỗi rõ ràng; CUDA chỉ là cảnh báo tùy chọn. Lần kiểm tra Windows
+gần nhất (08-09-2026) phát hiện Python 3.14.3, Node 24.14.0, pnpm 12.3.4 và
+FFmpeg 8.1.1.
 
 Artifact nằm trong thư mục dự án: `evidence/`, `script/`, `storyboard/` là đầu vào
 do bác sĩ sở hữu; `reviews/` giữ audit trail của hai cổng duyệt;
@@ -138,16 +141,17 @@ snapshot ledger/script/storyboard đã đối chiếu với medical approval, n�
 
 ## Kiểm thử gần nhất
 
-Ngày chạy gần nhất: **08-09-2026**. `python -m pytest -v` (122 passed);
+Ngày chạy gần nhất: **08-09-2026**. `python -m pytest -v` (124 passed);
 `python -m ruff check src tests tools`; `pnpm --dir video test` (12 passed);
-`pnpm --dir video typecheck`. Golden project
+`pnpm --dir video typecheck`; `install/doctor.ps1`. Golden project
 (`tests/fixtures/golden-project`) chạy hết luồng từ duyệt y khoa, sản xuất, duyệt
 video đến `package` offline với TTS im lặng và renderer giả lập; hai cổng duyệt,
 audit trail và test approval stale (`status` báo `approval_stale=true`, `produce`
 và `package` từ chối chạy) đều PASS, không cần TTY, mạng hay GPU. Ngoài test giả,
-CLI Windows đã render thật golden project bằng silent TTS và `pnpm.CMD`: MP4 H.264
-1080 × 1920, 30 fps, 45.056 giây; frame chart được kiểm tra trực quan có marker
-`[1]`. Bộ dev ghim
+CLI Windows đã render thật golden project bằng silent TTS qua
+`node.exe` + Corepack entrypoint, không qua `cmd.exe`: MP4 H.264 1080 × 1920,
+30 fps, 45.056 giây. Regression test chạy thật bảo toàn nguyên văn đối số chứa
+`&`, `%`, `!`, `^`, khoảng trắng và Unicode. Bộ dev ghim
 `jsonschema==4.26.0` để kiểm tra các contract JSON Schema đã xuất.
 
 ## Quyết định

@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from healthvideo.process import prepare_subprocess_argv
+from healthvideo.process import prepare_subprocess_argv, resolve_pnpm_argv
 
 RunCommand = Callable[[list[str]], tuple[int, str]]
 Version = tuple[int, ...]
@@ -58,8 +58,16 @@ def check_environment(run: RunCommand) -> list[CheckResult]:
 
 def run_command(argv: list[str]) -> tuple[int, str]:
     """Run a diagnostic command with argv, never through a command shell."""
-    resolved_argv = prepare_subprocess_argv(argv)
     try:
+        if argv and argv[0].casefold() == "pnpm":
+            resolved_argv = resolve_pnpm_argv(argv[1:])
+        elif len(argv) >= 2 and [item.casefold() for item in argv[:2]] == [
+            "corepack",
+            "pnpm",
+        ]:
+            resolved_argv = resolve_pnpm_argv(argv[2:])
+        else:
+            resolved_argv = prepare_subprocess_argv(argv)
         completed = subprocess.run(
             resolved_argv,
             check=False,
@@ -67,7 +75,7 @@ def run_command(argv: list[str]) -> tuple[int, str]:
             text=True,
             shell=False,
         )
-    except OSError as error:
+    except (OSError, RuntimeError) as error:
         return 1, str(error)
     return completed.returncode, (completed.stdout or completed.stderr).strip()
 

@@ -70,8 +70,8 @@ def test_cuda_is_reported_as_an_optional_warning() -> None:
     assert cuda.required == "optional"
 
 
-def test_runner_resolves_a_windows_cmd_shim_without_a_shell(monkeypatch) -> None:
-    """A bare pnpm command must use its .cmd executable on Windows."""
+def test_runner_resolves_windows_pnpm_through_node(tmp_path, monkeypatch) -> None:
+    """Putting cmd.exe back in the doctor path must fail this test."""
     captured: list[object] = []
 
     class Completed:
@@ -81,12 +81,27 @@ def test_runner_resolves_a_windows_cmd_shim_without_a_shell(monkeypatch) -> None
 
     from healthvideo import process
 
+    pnpm_shim = tmp_path / "pnpm.cmd"
+    pnpm_shim.write_text("@echo off\r\n", encoding="utf-8")
+    node = tmp_path / "node.exe"
+    node.write_bytes(b"")
+    corepack_shim = tmp_path / "corepack.cmd"
+    corepack_shim.write_text("@echo off\r\n", encoding="utf-8")
+    corepack_entrypoint = (
+        tmp_path / "node_modules" / "corepack" / "dist" / "corepack.js"
+    )
+    corepack_entrypoint.parent.mkdir(parents=True)
+    corepack_entrypoint.write_text("", encoding="utf-8")
+
     monkeypatch.setattr(process.sys, "platform", "win32")
-    monkeypatch.setenv("COMSPEC", r"C:\\Windows\\System32\\cmd.exe")
     monkeypatch.setattr(
         process.shutil,
         "which",
-        lambda name: r"C:\\tools\\pnpm.cmd" if name == "pnpm" else None,
+        lambda name: {
+            "pnpm": str(pnpm_shim),
+            "corepack": str(corepack_shim),
+            "node": str(node),
+        }.get(name),
     )
 
     def fake_subprocess_run(argv, **kwargs):
@@ -96,11 +111,27 @@ def test_runner_resolves_a_windows_cmd_shim_without_a_shell(monkeypatch) -> None
     monkeypatch.setattr(doctor.subprocess, "run", fake_subprocess_run)
 
     assert doctor.run_command(["pnpm", "--version"]) == (0, "11.19.0")
-    assert captured[0][:4] == [
-        r"C:\\Windows\\System32\\cmd.exe",
-        "/d",
-        "/s",
-        "/c",
+    assert captured[0] == [
+        str(node),
+        str(corepack_entrypoint),
+        "pnpm",
+        "--version",
     ]
-    assert captured[0][4:] == ["call", r"C:\\tools\\pnpm.cmd", "--version"]
     assert captured[1]["shell"] is False
+
+
+def test_runner_reports_when_no_safe_windows_pnpm_launcher(monkeypatch) -> None:
+    """Losing every safe entrypoint must produce a diagnostic, not a traceback."""
+    from healthvideo import process
+
+    monkeypatch.setattr(process.sys, "platform", "win32")
+    monkeypatch.setattr(
+        process.shutil,
+        "which",
+        lambda name: r"C:\tools\pnpm.cmd" if name == "pnpm" else None,
+    )
+
+    code, output = doctor.run_command(["pnpm", "--version"])
+
+    assert code == 1
+    assert "Cannot launch pnpm safely" in output
