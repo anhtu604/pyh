@@ -7,7 +7,8 @@ thành video y tế dự phòng tiếng Việt dọc 1080 × 1920.
 
 ## Trạng thái hiện tại
 
-Project scaffold, claim ledger, author-owned script và read-aloud QA đã hoạt động.
+Project scaffold, claim ledger, author-owned script, read-aloud QA và Remotion
+vertical preview đã hoạt động.
 
 ## Milestone
 
@@ -23,7 +24,7 @@ MVP hoàn thành vertical slice từ author brief, evidence, kịch bản và st
 | 3 | Project scaffold và author-owned voice | complete | `python -m pytest tests/workflows/test_create_project.py tests/test_cli.py -v` | `feat: scaffold projects from doctor briefs` |
 | 4 | Claim ledger, human script và read-aloud QA | complete | `python tools/export_schemas.py`; `python -m pytest tests/domain/test_script.py tests/qa/test_script_qa.py tests/contracts/test_schemas.py -v` | `feat: validate evidence-linked human scripts` |
 | 5 | Storyboard, evidence highlight và render contract | complete | `python tools/export_schemas.py`; `python -m pytest tests/render/test_input.py tests/contracts/test_schemas.py -v` | `feat: define storyboard render contract` |
-| 6 | Remotion composition 9:16 và visual regression cơ bản | planned | — | — |
+| 6 | Remotion composition 9:16 và visual regression cơ bản | complete | `pnpm --dir video test`; `pnpm --dir video typecheck`; still 1080 × 1920 | `feat: render vertical whiteboard scenes` |
 | 7 | TTS giả lập, manifest cache và render workflow | planned | — | — |
 | 8 | Hai cổng duyệt có hash và audit trail | planned | — | — |
 | 9 | Gói xuất bản và golden end-to-end test | planned | — | — |
@@ -61,11 +62,32 @@ vượt 32 từ, claim không có trong ledger và cụm từ máy móc bị c�
 
 ## Giới hạn hiện tại
 
-Đã có domain model, schema JSON, storyboard và render input bất biến. Render
-contract cố định khung hình dọc 1080 × 1920 ở 30 fps; storyboard phải có cảnh
-liên tiếp, không chồng lấp và tổng thời lượng 45–90 giây. Mỗi dự án mới lưu
-`author-brief.yaml` ở thư mục gốc dự án. Chưa có intake nguồn, TTS, renderer,
-review, packaging hay installer.
+Đã có domain model, schema JSON, storyboard, render input bất biến và composition
+`HealthVideo`. Render contract cố định khung hình dọc 1080 × 1920 ở 30 fps;
+storyboard phải có cảnh liên tiếp, không chồng lấp và tổng thời lượng 45–90 giây.
+Composition dùng tối thiểu 1.350 frame, render whiteboard/subtitle hoặc ảnh bằng
+chứng với bôi vàng; Zod kiểm tra điều kiện `x + width <= 1`, `y + height <= 1`
+và dữ liệu bắt buộc cho `evidence_highlight` trước render. Mỗi dự án mới lưu
+`author-brief.yaml` ở thư mục gốc dự án. Chưa có intake nguồn, TTS thực, review,
+packaging hay installer.
+
+## Remotion preview
+
+Frame kiểm tra gần nhất: [frame-001.png](tests/artifacts/frame-001.png) (1080 ×
+1920, nền trắng ngà, chữ than, bôi vàng). Đã chạy:
+
+```powershell
+pnpm --dir video test
+pnpm --dir video typecheck
+pnpm --dir video exec remotion still src/index.ts HealthVideo ../tests/artifacts/frame-001.png --props=../tests/fixtures/render-input.json --frame=120 --overwrite
+```
+
+Ở Remotion `4.0.522`, JSON props phải truyền bằng `--props`; tham số vị trí thứ
+ba là đường dẫn PNG output. Render video dùng composition `HealthVideo`:
+
+```powershell
+pnpm --dir video render --props ../projects/sample/render-input.json --output ../projects/sample/renders/video.mp4
+```
 
 ## Tài liệu
 

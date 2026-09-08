@@ -1,0 +1,34 @@
+{
+  "schema_version": "1.0",
+  "title": "Đọc bằng chứng đúng bối cảnh",
+  "audio_file": "audio/silence.wav",
+  "width": 1080,
+  "height": 1920,
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "S01",
+      "start_frame": 0,
+      "duration_frames": 102,
+      "narration": "Đừng chỉ nhìn vào một con số khi đọc bằng chứng y học.",
+      "visual": "whiteboard"
+    },
+    {
+      "id": "S02",
+      "start_frame": 102,
+      "duration_frames": 1248,
+      "narration": "Hãy xem cả bối cảnh, giới hạn và nguồn của kết quả này.",
+      "source_marker": "[1]",
+      "visual": "evidence_highlight",
+      "evidence_highlight": {
+        "schema_version": "1.0",
+        "image": "assets/evidence-card.svg",
+        "quote": "Nghiên cứu cần được đọc trong đúng bối cảnh và giới hạn.",
+        "x": 0.1,
+        "y": 0.27,
+        "width": 0.8,
+        "height": 0.15
+      }
+    }
+  ]
+}
