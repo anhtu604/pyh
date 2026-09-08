@@ -24,7 +24,7 @@ MVP hoàn thành vertical slice từ author brief, evidence, kịch bản và st
 | 3 | Project scaffold và author-owned voice | complete | `python -m pytest tests/workflows/test_create_project.py tests/test_cli.py -v` | `feat: scaffold projects from doctor briefs` |
 | 4 | Claim ledger, human script và read-aloud QA | complete | `python tools/export_schemas.py`; `python -m pytest tests/domain/test_script.py tests/qa/test_script_qa.py tests/contracts/test_schemas.py -v` | `feat: validate evidence-linked human scripts` |
 | 5 | Storyboard, evidence highlight và render contract | complete | `python tools/export_schemas.py`; `python -m pytest tests/render/test_input.py tests/contracts/test_schemas.py -v` | `feat: define storyboard render contract` |
-| 6 | Remotion composition 9:16 và visual regression cơ bản | complete | `pnpm --dir video test`; `pnpm --dir video typecheck`; still 1080 × 1920 | `feat: render vertical whiteboard scenes` |
+| 6 | Remotion composition 9:16 và visual regression cơ bản | complete | `pnpm --dir video test` (6 passed); `pnpm --dir video typecheck`; still 1080 × 1920 | `feat: render vertical whiteboard scenes` |
 | 7 | TTS giả lập, manifest cache và render workflow | planned | — | — |
 | 8 | Hai cổng duyệt có hash và audit trail | planned | — | — |
 | 9 | Gói xuất bản và golden end-to-end test | planned | — | — |

@@ -6,13 +6,27 @@ type CaptionsProps = {
   durationInFrames: number;
 };
 
+const MAX_CAPTION_WORDS = 6;
+
+export const captionWindow = (
+  words: readonly string[],
+  activeIndex: number,
+  maxWords: number,
+): {startIndex: number; words: string[]} => {
+  const pageSize = Math.max(1, Math.floor(maxWords));
+  const safeIndex = Math.max(0, Math.min(activeIndex, Math.max(words.length - 1, 0)));
+  const startIndex = Math.floor(safeIndex / pageSize) * pageSize;
+
+  return {startIndex, words: words.slice(startIndex, startIndex + pageSize)};
+};
+
 export const Captions: React.FC<CaptionsProps> = ({text, durationInFrames}) => {
   const frame = useCurrentFrame();
   const words = text.trim().split(/\s+/).filter(Boolean);
-  const activeWord = Math.min(
-    words.length - 1,
-    Math.floor((frame / Math.max(durationInFrames, 1)) * words.length),
-  );
+  const activeWord = words.length === 0
+    ? -1
+    : Math.min(words.length - 1, Math.floor((frame / Math.max(durationInFrames, 1)) * words.length));
+  const visible = captionWindow(words, activeWord, MAX_CAPTION_WORDS);
 
   return (
     <div
@@ -29,14 +43,20 @@ export const Captions: React.FC<CaptionsProps> = ({text, durationInFrames}) => {
         position: 'absolute',
         right: 72,
         textAlign: 'center',
+        display: '-webkit-box',
+        WebkitBoxOrient: 'vertical',
+        WebkitLineClamp: 2,
       }}
     >
-      {words.map((word, index) => (
-        <React.Fragment key={`${word}-${index}`}>
-          <span style={{color: index === activeWord ? '#D97706' : undefined}}>{word}</span>
-          {index < words.length - 1 ? ' ' : null}
-        </React.Fragment>
-      ))}
+      {visible.words.map((word, index) => {
+        const wordIndex = visible.startIndex + index;
+        return (
+          <React.Fragment key={`${word}-${wordIndex}`}>
+            <span style={{color: wordIndex === activeWord ? '#D97706' : undefined}}>{word}</span>
+            {index < visible.words.length - 1 ? ' ' : null}
+          </React.Fragment>
+        );
+      })}
     </div>
   );
 };
