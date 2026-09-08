@@ -26,7 +26,7 @@ MVP hoàn thành vertical slice từ author brief, evidence, kịch bản và st
 | 5 | Storyboard, evidence highlight và render contract | complete | `python tools/export_schemas.py`; `python -m pytest tests/render/test_input.py tests/contracts/test_schemas.py -v` | `feat: define storyboard render contract` |
 | 6 | Remotion composition 9:16 và visual regression cơ bản | complete | `pnpm --dir video test` (11 passed); `pnpm --dir video typecheck`; still 1080 × 1920 | `feat: render vertical whiteboard scenes` |
 | 7 | TTS giả lập, manifest cache và render workflow | complete | `python -m pytest` (61 passed); `ruff check src tests tools`; `pnpm --dir video test` (11 passed); `pnpm --dir video typecheck` | `feat: add cached production workflow`; `fix: make production failures transactional`; `fix: publish production runs atomically`; `fix: converge production publish over a damaged run` |
-| 8 | Hai cổng duyệt có hash và audit trail | complete | `python -m pytest tests/workflows/test_review.py tests/domain/test_project.py -v` (14 passed); `python -m pytest` (79 passed); `python -m ruff check src tests tools`; `pnpm --dir video test` (11 passed); `pnpm --dir video typecheck` | `feat: enforce doctor review gates` |
+| 8 | Hai cổng duyệt có hash và audit trail | complete | `python -m pytest tests/workflows/test_review.py tests/workflows/test_produce.py tests/storage -v` (35 passed); `python -m pytest -v` (83 passed); `python -m ruff check src tests tools`; `pnpm --dir video test` (11 passed); `pnpm --dir video typecheck` | `feat: enforce doctor review gates`; `fix: bind the medical gate to the storyboard` |
 | 9 | Gói xuất bản và golden end-to-end test | planned | — | — |
 | 10 | Installer Windows và environment doctor | planned | — | — |
 
@@ -57,7 +57,9 @@ Author brief → evidence ledger → medical review → script/storyboard → pr
 ## Cổng duyệt và audit trail
 
 `healthvideo review medical` chỉ chạy ở `awaiting_medical_review`, gắn hash của
-`evidence/ledger.yaml` và `script/script.yaml` rồi chuyển `script_approved`.
+`evidence/ledger.yaml`, `script/script.yaml` và `storyboard/storyboard.yaml` rồi
+chuyển `script_approved`; storyboard nằm trong cổng vì nó quyết định nội dung và
+dấu trích dẫn hiện trên màn hình.
 `healthvideo review video` chỉ chạy ở `awaiting_video_review`, gắn hash của MP4 và
 `render-input.json` trong run đang hoạt động rồi chuyển `approved_to_publish`.
 Mỗi lần duyệt ghi một `ReviewRecord` bất biến (`reviews/medical-<uuid>.yaml`,

@@ -1,3 +1,4 @@
+import datetime
 import hashlib
 import json
 import os
@@ -34,15 +35,30 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _hashable_date(value: Any) -> str:
+    """Encode YAML dates, and refuse every other value JSON cannot represent.
+
+    Narrow on purpose: a blanket `default=str` would also stringify values with
+    no stable text form (a `set` from YAML `!!set` iterates in an order that
+    varies with PYTHONHASHSEED), turning "not hashable" into a wrong hash.
+    """
+    if isinstance(value, datetime.date):  # datetime.datetime is a date subclass
+        return str(value)
+    raise TypeError(
+        f"canonical_json_hash cannot hash {type(value).__name__} deterministically"
+    )
+
+
 def canonical_json_hash(payload: Any) -> str:
     """Hash a payload by meaning: canonical JSON with sorted keys, then SHA-256.
 
-    Values JSON cannot represent (dates parsed from YAML) are hashed as their
-    string form so a document stays hashable without a second scheme.
+    Dates parsed from YAML are hashed as their string form so a document stays
+    hashable without a second scheme; anything else JSON cannot represent
+    raises `TypeError` rather than hashing to a value that may not repeat.
     """
     canonical = json.dumps(
         payload,
-        default=str,
+        default=_hashable_date,
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),

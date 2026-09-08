@@ -20,7 +20,7 @@ from tests.helpers import create_project_fixture
 def test_medical_approval_binds_script_and_evidence_hash(tmp_path) -> None:
     project = create_project_fixture(tmp_path, state="awaiting_medical_review")
     record = approve_medical(project, reviewer="BS An", note="Đã đối chiếu số liệu")
-    assert set(record.artifact_hashes) == {"evidence", "script"}
+    assert set(record.artifact_hashes) == {"evidence", "script", "storyboard"}
     assert record.decision == "approved"
 
 
@@ -90,6 +90,33 @@ def test_medical_approval_goes_stale_when_the_script_changes(tmp_path) -> None:
     assert approval_is_stale(project_dir, _project(project_dir), ReviewKind.MEDICAL)
     with pytest.raises(ValueError, match="stale"):
         produce_project(project_dir, SilentTTS(), lambda argv: 0)
+
+
+def test_medical_approval_goes_stale_when_the_storyboard_changes(tmp_path) -> None:
+    """A storyboard edited after review changes what the video shows on screen."""
+    project_dir = create_project_fixture(tmp_path, state="awaiting_medical_review")
+    approve_medical(project_dir, reviewer="BS An")
+    assert not approval_is_stale(project_dir, _project(project_dir), ReviewKind.MEDICAL)
+
+    storyboard_path = project_dir / "storyboard" / "storyboard.yaml"
+    storyboard = read_yaml(storyboard_path)
+    storyboard["scenes"][0]["source_marker"] = "[2]"
+    write_yaml_atomic(storyboard_path, storyboard)
+
+    assert approval_is_stale(project_dir, _project(project_dir), ReviewKind.MEDICAL)
+    with pytest.raises(ValueError, match="stale"):
+        produce_project(project_dir, SilentTTS(), lambda argv: 0)
+
+
+def test_medical_approval_needs_the_storyboard(tmp_path) -> None:
+    project_dir = create_project_fixture(tmp_path, state="awaiting_medical_review")
+    (project_dir / "storyboard" / "storyboard.yaml").unlink()
+
+    with pytest.raises(FileNotFoundError, match="medical review needs artifacts"):
+        approve_medical(project_dir, reviewer="BS An")
+
+    assert list((project_dir / "reviews").glob("*.yaml")) == []
+    assert read_yaml(project_dir / "project.yaml")["state"] == "awaiting_medical_review"
 
 
 def test_medical_approval_survives_a_cosmetic_rewrite_of_the_script(tmp_path) -> None:

@@ -33,7 +33,7 @@ GATES: dict[ReviewKind, tuple[ProjectState, ProjectState]] = {
 def approve_medical(
     project_dir: Path, *, reviewer: str, note: str = ""
 ) -> ReviewRecord:
-    """Record the medical gate over the evidence ledger and the script."""
+    """Record the medical gate over the evidence, script and storyboard."""
     return _approve(project_dir, ReviewKind.MEDICAL, reviewer=reviewer, note=note)
 
 
@@ -86,6 +86,7 @@ def _reviewed_paths(
         return {
             "evidence": project_dir / "evidence" / "ledger.yaml",
             "script": project_dir / "script" / "script.yaml",
+            "storyboard": project_dir / "storyboard" / "storyboard.yaml",
         }
     input_hash = project.artifact_hashes.get(PRODUCTION_ARTIFACT)
     if input_hash is None:
