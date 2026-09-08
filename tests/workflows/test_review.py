@@ -172,7 +172,7 @@ def test_video_approval_needs_the_published_render(tmp_path, break_run: str) -> 
     with pytest.raises(FileNotFoundError, match="video review needs artifacts"):
         approve_video(project_dir, reviewer="BS An")
 
-    assert list((project_dir / "reviews").glob("*.yaml")) == []
+    assert list((project_dir / "reviews").glob("video-*.yaml")) == []
     assert read_yaml(project_dir / "project.yaml")["state"] == "awaiting_video_review"
 
 

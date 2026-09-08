@@ -11,6 +11,25 @@ from typing import Any
 import yaml
 
 
+class DirectoryPromotionError(OSError):
+    """A replacement failed and the recoverable previous directory was retained."""
+
+    def __init__(
+        self,
+        promotion_error: Exception,
+        restore_error: Exception,
+        backup_dir: Path,
+    ) -> None:
+        super().__init__(
+            "Directory promotion failed "
+            f"({promotion_error}); restoring the previous directory also failed "
+            f"({restore_error}). Recoverable backup retained at: {backup_dir}"
+        )
+        self.promotion_error = promotion_error
+        self.restore_error = restore_error
+        self.backup_dir = backup_dir
+
+
 def read_yaml(path: Path) -> dict[str, Any]:
     with path.open(encoding="utf-8") as stream:
         data = yaml.safe_load(stream)
@@ -43,6 +62,7 @@ def replace_directory_atomic(source_dir: Path, destination_dir: Path) -> None:
     existing destination is renamed aside first and deleted only once the new
     directory is in place; a failed rename puts the old directory back.
     """
+    _recover_missing_destination(destination_dir)
     if not destination_dir.exists():
         os.replace(source_dir, destination_dir)
         return
@@ -55,10 +75,32 @@ def replace_directory_atomic(source_dir: Path, destination_dir: Path) -> None:
     os.replace(destination_dir, superseded)
     try:
         os.replace(source_dir, destination_dir)
-    except Exception:
-        os.replace(superseded, destination_dir)
+    except Exception as promotion_error:
+        try:
+            os.replace(superseded, destination_dir)
+        except OSError as restore_error:
+            raise DirectoryPromotionError(
+                promotion_error, restore_error, superseded
+            ) from promotion_error
         raise
     shutil.rmtree(superseded, ignore_errors=True)
+
+
+def _recover_missing_destination(destination_dir: Path) -> None:
+    """Restore the one preserved predecessor before attempting a new promotion."""
+    if destination_dir.exists():
+        return
+    backups = sorted(
+        destination_dir.parent.glob(f".{destination_dir.name}.superseded-*")
+    )
+    if not backups:
+        return
+    if len(backups) != 1:
+        raise FileExistsError(
+            "Cannot recover missing directory with multiple preserved backups: "
+            + ", ".join(str(backup) for backup in backups)
+        )
+    os.replace(backups[0], destination_dir)
 
 
 def sha256_file(path: Path) -> str:

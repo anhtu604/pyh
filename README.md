@@ -28,7 +28,7 @@ MVP hoàn thành vertical slice từ author brief, evidence, kịch bản và st
 | 6 | Remotion composition 9:16 và visual regression cơ bản | complete | `pnpm --dir video test` (11 passed); `pnpm --dir video typecheck`; still 1080 × 1920 | `feat: render vertical whiteboard scenes` |
 | 7 | TTS giả lập, manifest cache và render workflow | complete | `python -m pytest` (61 passed); `ruff check src tests tools`; `pnpm --dir video test` (11 passed); `pnpm --dir video typecheck` | `feat: add cached production workflow`; `fix: make production failures transactional`; `fix: publish production runs atomically`; `fix: converge production publish over a damaged run` |
 | 8 | Hai cổng duyệt có hash và audit trail | complete | `python -m pytest tests/workflows/test_review.py tests/workflows/test_produce.py tests/storage -v` (35 passed); `python -m pytest -v` (83 passed); `python -m ruff check src tests tools`; `pnpm --dir video test` (11 passed); `pnpm --dir video typecheck` | `feat: enforce doctor review gates`; `fix: bind the medical gate to the storyboard` |
-| 9 | Gói xuất bản và golden end-to-end test | complete | `python -m pytest tests/e2e/test_golden_project.py -v` (8 passed); `python -m pytest -v` (91 passed); `python -m ruff check src tests tools`; `pnpm --dir video test` (11 passed); `pnpm --dir video typecheck` | `feat: package reviewed videos for publishing` |
+| 9 | Gói xuất bản và golden end-to-end test | complete | `python -m pytest tests/e2e/test_golden_project.py -v` (15 passed); `python -m pytest -v` (99 passed); `python -m ruff check src tests tools`; `pnpm --dir video test` (11 passed); `pnpm --dir video typecheck` | `feat: package reviewed videos for publishing`; `fix: harden publication package integrity` |
 | 10 | Installer Windows và environment doctor | planned | — | — |
 
 ## Kiến trúc
@@ -45,6 +45,8 @@ healthvideo project new muoi-va-huyet-ap --title "Ăn mặn và tăng huyết á
 # Bác sĩ viết evidence/ledger.yaml, script/script.yaml, storyboard/storyboard.yaml
 # theo mẫu tests/fixtures/golden-project, rồi đặt state=awaiting_medical_review
 # trong project.yaml (MVP chưa có lệnh intake cho các bước này).
+# Đây là smoke test độc lập của fixture golden: không thay thế lần render thật
+# của dự án ở các lệnh sau và không tạo artifact hay thay đổi state.
 healthvideo produce tests/fixtures/golden-project --tts silent --dry-run
 healthvideo review medical projects/2026/09/muoi-va-huyet-ap --reviewer "BS An" --note "Đã đối chiếu số liệu"
 healthvideo produce projects/2026/09/muoi-va-huyet-ap --tts silent
@@ -90,30 +92,33 @@ Khi artifact đã duyệt đổi hoặc biến mất, `healthvideo status` báo
 ## Gói xuất bản
 
 `healthvideo package <project>` chỉ chạy khi dự án ở `approved_to_publish` **và**
-có `ReviewRecord` video còn hiệu lực: thiếu bản ghi cũng bị từ chối như bản ghi đã
-cũ, vì gói này đi ra ngoài nên mọi lần duyệt phải truy vết được. Lệnh không gọi API
-đăng bài và không đổi state, nên đóng gói lại nhiều lần vẫn an toàn.
+cả `ReviewRecord` y khoa (ledger, script, storyboard) lẫn video (`render-input.json`,
+MP4) còn hiệu lực. Thiếu bản ghi nào cũng bị từ chối như bản ghi đã cũ, vì gói này đi
+ra ngoài nên mọi lần duyệt phải truy vết được. Lệnh không gọi API đăng bài và không
+đổi state, nên đóng gói lại nhiều lần vẫn an toàn.
 
-Gói gồm bốn file trong `publish/`:
+`publish/` gồm bốn payload được tự kiểm tra và manifest của chúng:
 
 - `video.mp4` — bản sao `shutil.copy2` của MP4 đã duyệt trong run đang hoạt động.
+- `render-input.json` — render contract đúng bản đã được duyệt video.
 - `caption.txt` — hook ngắn lấy từ câu đầu kịch bản, disclaimer thông tin chung và
   danh sách `[n]` kèm nguồn.
 - `sources.md` — nguồn đầy đủ theo từng dấu `[n]`: tiêu đề, tác giả, năm, thiết kế
   nghiên cứu, cỡ mẫu, DOI/PMID/URL.
-- `manifest.json` — người duyệt, thời điểm duyệt, `approval_stale`, hash đầu vào
-  sản xuất và SHA-256 của bốn file (`caption.txt`, `sources.md`, `video.mp4` và
-  `render-input.json` mà bác sĩ đã duyệt).
+- `manifest.json` — `payload_sha256` của bốn payload trên (không hash chính
+  manifest), cùng `approval_bindings` riêng cho hai gate với canonical
+  `approval_sha256` và hash artifact mà mỗi gate đã ký.
 
-Mỗi dấu `[n]` hiện trên màn hình phải dẫn về ít nhất một record trong ledger; nếu
-không, `package` từ chối thay vì phát hành một trích dẫn không có nguồn. Câu
+Mỗi dấu `[n]` hiện trong `render-input.json` đã duyệt phải khớp claim và nguồn trong
+script/ledger; nếu không, `package` từ chối thay vì phát hành một trích dẫn không có
+nguồn. Câu
 `professional_opinion` không mang `source_marker` nên không bao giờ xuất hiện trong
 danh sách nguồn. Gói được dựng trong thư mục staging cạnh `publish/` rồi publish
 bằng một lần đổi tên thư mục; lỗi giữa chừng không để lại `publish/` dở dang.
 
 ## Kiểm thử gần nhất
 
-`python -m pytest` (91 passed); `python -m ruff check src tests tools`;
+`python -m pytest` (99 passed); `python -m ruff check src tests tools`;
 `pnpm --dir video test` (11 passed); `pnpm --dir video typecheck`. Golden project
 (`tests/fixtures/golden-project`) chạy hết luồng từ duyệt y khoa, sản xuất, duyệt
 video đến `package` offline với TTS im lặng và renderer giả lập; hai cổng duyệt,

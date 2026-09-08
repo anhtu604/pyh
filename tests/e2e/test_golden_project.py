@@ -7,10 +7,21 @@ from typer.testing import CliRunner
 
 import healthvideo.workflows.package as package_workflow
 from healthvideo.cli import app
-from healthvideo.storage.files import read_yaml, write_yaml_atomic
+from healthvideo.domain.review import ReviewKind
+from healthvideo.storage.files import (
+    canonical_json_hash,
+    read_yaml,
+    sha256_file,
+    write_yaml_atomic,
+)
 from healthvideo.tts.silent import SilentTTS
 from healthvideo.workflows.package import package_project
 from healthvideo.workflows.produce import produce_project
+from healthvideo.workflows.review import (
+    approve_medical,
+    approve_video,
+    latest_approval,
+)
 from tests.helpers import create_project_fixture, synthesize_fixture_audio
 
 GOLDEN_PROJECT = Path(__file__).parents[1] / "fixtures" / "golden-project"
@@ -50,6 +61,7 @@ def test_golden_project_runs_from_medical_review_to_publishable_package(
     assert sorted(path.name for path in publish_dir.iterdir()) == [
         "caption.txt",
         "manifest.json",
+        "render-input.json",
         "sources.md",
         "video.mp4",
     ]
@@ -68,14 +80,24 @@ def test_golden_project_runs_from_medical_review_to_publishable_package(
 
     manifest = json.loads((publish_dir / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["approval_stale"] is False
-    assert manifest["video_approval"]["reviewer"] == "BS An"
+    assert manifest["approval_bindings"]["video"]["reviewer"] == "BS An"
     assert manifest["source_markers"] == {"[1]": ["R01"]}
-    assert sorted(manifest["artifact_sha256"]) == [
+    assert sorted(manifest["payload_sha256"]) == [
         "caption.txt",
         "render-input.json",
         "sources.md",
         "video.mp4",
     ]
+    assert all(
+        manifest["payload_sha256"][name] == sha256_file(publish_dir / name)
+        for name in manifest["payload_sha256"]
+    )
+    for kind in (ReviewKind.MEDICAL, ReviewKind.VIDEO):
+        approval = latest_approval(project_dir, kind)
+        assert approval is not None
+        assert manifest["approval_bindings"][kind.value]["approval_sha256"] == (
+            canonical_json_hash(approval.model_dump(mode="json"))
+        )
     assert read_yaml(project_dir / "project.yaml")["state"] == "approved_to_publish"
 
 
@@ -91,9 +113,21 @@ def test_package_refuses_a_project_that_has_not_passed_the_video_gate(tmp_path) 
 def test_package_refuses_when_the_video_approval_record_is_missing(tmp_path) -> None:
     """State alone is not evidence of approval: packaging publishes outward."""
     project_dir = create_project_fixture(tmp_path, state="approved_to_publish")
-    shutil.rmtree(project_dir / "reviews")
+    for record in (project_dir / "reviews").glob("video-*.yaml"):
+        record.unlink()
 
     with pytest.raises(FileNotFoundError, match="video approval record"):
+        package_project(project_dir)
+
+    assert not (project_dir / "publish").exists()
+
+
+def test_package_refuses_when_the_medical_approval_record_is_missing(tmp_path) -> None:
+    project_dir = create_project_fixture(tmp_path, state="approved_to_publish")
+    for record in (project_dir / "reviews").glob("medical-*.yaml"):
+        record.unlink()
+
+    with pytest.raises(FileNotFoundError, match="medical approval record"):
         package_project(project_dir)
 
     assert not (project_dir / "publish").exists()
@@ -109,12 +143,70 @@ def test_package_refuses_a_stale_video_approval(tmp_path) -> None:
     assert not (project_dir / "publish").exists()
 
 
+@pytest.mark.parametrize("artifact", ["ledger", "script", "storyboard"])
+def test_package_refuses_when_medically_approved_input_changes_after_both_gates(
+    tmp_path, artifact: str
+) -> None:
+    project_dir = create_project_fixture(tmp_path, state="approved_to_publish")
+    path = {
+        "ledger": project_dir / "evidence" / "ledger.yaml",
+        "script": project_dir / "script" / "script.yaml",
+        "storyboard": project_dir / "storyboard" / "storyboard.yaml",
+    }[artifact]
+    data = read_yaml(path)
+    data["schema_version"] = "1.1"
+    write_yaml_atomic(path, data)
+
+    with pytest.raises(ValueError, match="medical approval is stale"):
+        package_project(project_dir)
+
+    assert not (project_dir / "publish").exists()
+
+
+def test_package_refuses_marker_only_shown_by_the_approved_render_input(tmp_path) -> None:
+    project_dir = create_project_fixture(tmp_path, state="approved_to_publish")
+    _replace_video_approval_after_changing_render_marker(project_dir, "[2]")
+
+    with pytest.raises(ValueError, match=r"Render scene S01 shows \[2\]"):
+        package_project(project_dir)
+
+    assert not (project_dir / "publish").exists()
+
+
+def test_package_checks_each_repeated_render_marker_against_its_script_claim(
+    tmp_path,
+) -> None:
+    project_dir = create_project_fixture(tmp_path, state="approved_to_publish")
+    render_input_path = _active_video(project_dir).with_name("render-input.json")
+    render_input = json.loads(render_input_path.read_text(encoding="utf-8"))
+    render_input["scenes"][1]["claim_id"] = "C02"
+    render_input_path.write_text(
+        json.dumps(render_input, ensure_ascii=False), encoding="utf-8"
+    )
+    _replace_video_approval(project_dir)
+
+    with pytest.raises(ValueError, match=r"Render scene S02 shows \[1\]"):
+        package_project(project_dir)
+
+    assert not (project_dir / "publish").exists()
+
+
+def test_package_uses_markers_from_the_approved_render_input(tmp_path) -> None:
+    project_dir = create_project_fixture(tmp_path, state="approved_to_publish")
+    output = package_project(project_dir)
+
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["source_markers"] == {"[1]": ["R01"]}
+    assert "[1]" in (output / "sources.md").read_text(encoding="utf-8")
+
+
 def test_package_refuses_a_marker_no_evidence_record_backs(tmp_path) -> None:
     project_dir = create_project_fixture(tmp_path, state="approved_to_publish")
     ledger_path = project_dir / "evidence" / "ledger.yaml"
     ledger = read_yaml(ledger_path)
     ledger["claims"][0]["sources"] = []
     write_yaml_atomic(ledger_path, ledger)
+    _replace_approvals(project_dir)
 
     with pytest.raises(ValueError, match="lists no source"):
         package_project(project_dir)
@@ -179,6 +271,34 @@ def _active_video(project_dir: Path) -> Path:
     return (
         project_dir / "renders" / manifest["artifact_hashes"]["production"] / "video.mp4"
     )
+
+
+def _replace_video_approval_after_changing_render_marker(
+    project_dir: Path, marker: str
+) -> None:
+    render_input_path = _active_video(project_dir).with_name("render-input.json")
+    render_input = json.loads(render_input_path.read_text(encoding="utf-8"))
+    render_input["scenes"][0]["source_marker"] = marker
+    render_input_path.write_text(
+        json.dumps(render_input, ensure_ascii=False), encoding="utf-8"
+    )
+    _replace_video_approval(project_dir)
+
+
+def _replace_video_approval(project_dir: Path) -> None:
+    for record in (project_dir / "reviews").glob("video-*.yaml"):
+        record.unlink()
+    _set_state(project_dir, "awaiting_video_review")
+    approve_video(project_dir, reviewer="BS An")
+
+
+def _replace_approvals(project_dir: Path) -> None:
+    for record in (project_dir / "reviews").glob("*.yaml"):
+        record.unlink()
+    _set_state(project_dir, "awaiting_medical_review")
+    approve_medical(project_dir, reviewer="BS An")
+    _set_state(project_dir, "awaiting_video_review")
+    approve_video(project_dir, reviewer="BS An")
 
 
 def _staging_directories(project_dir: Path) -> list[Path]:

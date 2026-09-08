@@ -15,7 +15,7 @@ from healthvideo.render.run import (
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.tts.base import TTSRequest
 from healthvideo.tts.silent import SilentTTS
-from healthvideo.workflows.review import approve_video
+from healthvideo.workflows.review import approve_medical, approve_video
 
 FIXTURE_PRODUCTION_HASH = "synthetic-production-run"
 FIXTURE_REVIEWER = "BS Nguyễn Văn An"
@@ -112,8 +112,9 @@ def create_project_fixture(root: Path, state: str) -> Path:
         project["artifact_hashes"][PRODUCTION_ARTIFACT] = FIXTURE_PRODUCTION_HASH
 
     approve_the_video = _needs_video_approval(state)
-    if approve_the_video:
-        project["state"] = ProjectState.AWAITING_VIDEO_REVIEW.value
+    approve_the_medical_review = _needs_medical_approval(state)
+    if approve_the_medical_review:
+        project["state"] = ProjectState.AWAITING_MEDICAL_REVIEW.value
 
     write_yaml_atomic(project_dir / "project.yaml", project)
     write_yaml_atomic(project_dir / "author-brief.yaml", brief)
@@ -121,8 +122,12 @@ def create_project_fixture(root: Path, state: str) -> Path:
     write_yaml_atomic(project_dir / "script" / "script.yaml", script)
     write_yaml_atomic(project_dir / "storyboard" / "storyboard.yaml", storyboard)
 
+    if approve_the_medical_review:
+        approve_medical(project_dir, reviewer=FIXTURE_REVIEWER, note="Đã đối chiếu.")
     if approve_the_video:
+        _set_state(project_dir, ProjectState.AWAITING_VIDEO_REVIEW.value)
         approve_video(project_dir, reviewer=FIXTURE_REVIEWER, note="Đã xem toàn bộ.")
+    if approve_the_medical_review:
         _set_state(project_dir, state)
     return project_dir
 
@@ -143,6 +148,13 @@ def _needs_video_approval(state: str) -> bool:
     """States at or past the video gate carry a real approval record."""
     return ORDER.index(ProjectState(state)) >= ORDER.index(
         ProjectState.APPROVED_TO_PUBLISH
+    )
+
+
+def _needs_medical_approval(state: str) -> bool:
+    """Video-gate fixtures must carry the real preceding medical approval."""
+    return ORDER.index(ProjectState(state)) >= ORDER.index(
+        ProjectState.AWAITING_VIDEO_REVIEW
     )
 
 

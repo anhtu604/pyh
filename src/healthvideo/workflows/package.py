@@ -1,4 +1,4 @@
-"""Assemble the four publishable files for a video-approved project.
+"""Assemble four payload files and their manifest for a video-approved project.
 
 Packaging is the last step before a human uploads the video by hand: it copies
 the approved MP4 next to the caption, the full source list and an audit
@@ -18,6 +18,7 @@ from healthvideo.domain.evidence import EvidenceClaim, SourceRecord
 from healthvideo.domain.project import ProjectManifest, ProjectState
 from healthvideo.domain.review import ReviewKind, ReviewRecord
 from healthvideo.domain.script import Script
+from healthvideo.render.input import RenderInput
 from healthvideo.render.run import (
     OUTPUT_NAME,
     PRODUCTION_ARTIFACT,
@@ -25,6 +26,7 @@ from healthvideo.render.run import (
     production_run_dir,
 )
 from healthvideo.storage.files import (
+    canonical_json_hash,
     read_yaml,
     replace_directory_atomic,
     sha256_file,
@@ -61,8 +63,16 @@ def package_project(project_dir: Path) -> Path:
             "Packaging requires project state "
             f"{ProjectState.APPROVED_TO_PUBLISH.value}, not {project.state.value}"
         )
-    approval = latest_approval(project_dir, ReviewKind.VIDEO)
-    if approval is None:
+    medical_approval = latest_approval(project_dir, ReviewKind.MEDICAL)
+    if medical_approval is None:
+        raise FileNotFoundError(
+            "Packaging requires a medical approval record; "
+            "run 'healthvideo review medical'"
+        )
+    ensure_approval_current(project_dir, project, ReviewKind.MEDICAL)
+
+    video_approval = latest_approval(project_dir, ReviewKind.VIDEO)
+    if video_approval is None:
         raise FileNotFoundError(
             "Packaging requires a video approval record; "
             "run 'healthvideo review video'"
@@ -75,12 +85,19 @@ def package_project(project_dir: Path) -> Path:
         raise FileNotFoundError(f"Approved video is missing: {video}")
 
     script = Script.model_validate(read_yaml(project_dir / "script" / "script.yaml"))
-    citations = _citations(script, read_yaml(project_dir / "evidence" / "ledger.yaml"))
+    render_input_path = run_dir / RENDER_INPUT_NAME
+    render_input = RenderInput.model_validate(
+        json.loads(render_input_path.read_text(encoding="utf-8"))
+    )
+    citations = _citations(
+        script, read_yaml(project_dir / "evidence" / "ledger.yaml"), render_input
+    )
 
     publish_dir = project_dir / PUBLISH_DIRECTORY
     staging_dir = Path(mkdtemp(prefix=f".{project.slug}.package-", dir=project_dir))
     try:
         shutil.copy2(video, staging_dir / OUTPUT_NAME)
+        shutil.copy2(render_input_path, staging_dir / RENDER_INPUT_NAME)
         write_text_atomic(staging_dir / CAPTION_NAME, _caption(script, citations))
         write_text_atomic(staging_dir / SOURCES_NAME, _sources(script, citations))
         write_text_atomic(
@@ -88,9 +105,9 @@ def package_project(project_dir: Path) -> Path:
             _manifest_json(
                 project=project,
                 script=script,
-                approval=approval,
+                medical_approval=medical_approval,
+                video_approval=video_approval,
                 staging_dir=staging_dir,
-                render_input=run_dir / RENDER_INPUT_NAME,
                 citations=citations,
             ),
         )
@@ -112,7 +129,7 @@ def _active_run_dir(project_dir: Path, project: ProjectManifest) -> Path:
 
 
 def _citations(
-    script: Script, ledger: Mapping[str, Any]
+    script: Script, ledger: Mapping[str, Any], render_input: RenderInput
 ) -> dict[str, list[SourceRecord]]:
     """Resolve each on-screen marker to the evidence records standing behind it.
 
@@ -128,21 +145,44 @@ def _citations(
         claim.id: claim for claim in _validated(EvidenceClaim, ledger.get("claims", []))
     }
     citations: dict[str, list[SourceRecord]] = {}
-    for line in script.lines:
-        marker = line.source_marker
-        if marker is None or marker in citations:
+    for scene in render_input.scenes:
+        marker = scene.source_marker
+        if marker is None:
             continue
-        claim = claims.get(line.claim_id or "")
+        matching_line = next(
+            (
+                line
+                for line in script.lines
+                if line.source_marker == marker and line.claim_id == scene.claim_id
+            ),
+            None,
+        )
+        if matching_line is None:
+            raise ValueError(
+                f"Render scene {scene.id} shows {marker} without a script claim/source "
+                "mapping"
+            )
+        claim = claims.get(matching_line.claim_id or "")
         if claim is None:
             raise ValueError(
-                f"Script line {line.id} cites {marker} through claim "
-                f"{line.claim_id!r}, which the evidence ledger does not define"
+                f"Render scene {scene.id} shows {marker} through script line "
+                f"{matching_line.id} and undefined claim {matching_line.claim_id!r}"
             )
-        cited = [_record(records, record_id, line.id) for record_id in claim.sources]
+        cited = [
+            _record(records, record_id, matching_line.id) for record_id in claim.sources
+        ]
         if not cited:
             raise ValueError(
-                f"Script line {line.id} shows {marker} but claim {claim.id} "
+                f"Render scene {scene.id} shows {marker} but claim {claim.id} "
                 f"({claim.type}) lists no source"
+            )
+        existing = citations.get(marker)
+        if existing is not None and [record.id for record in existing] != [
+            record.id for record in cited
+        ]:
+            raise ValueError(
+                f"Render scene {scene.id} reuses {marker} for a different source "
+                "mapping"
             )
         citations[marker] = cited
     return citations
@@ -228,9 +268,9 @@ def _manifest_json(
     *,
     project: ProjectManifest,
     script: Script,
-    approval: ReviewRecord,
+    medical_approval: ReviewRecord,
+    video_approval: ReviewRecord,
     staging_dir: Path,
-    render_input: Path,
     citations: Mapping[str, list[SourceRecord]],
 ) -> str:
     """Describe the package: what was approved, by whom, and the file hashes."""
@@ -241,18 +281,15 @@ def _manifest_json(
         "title": script.title,
         "production_input_hash": project.artifact_hashes[PRODUCTION_ARTIFACT],
         "approval_stale": False,
-        "video_approval": {
-            "id": str(approval.id),
-            "decision": approval.decision,
-            "reviewer": approval.reviewer,
-            "reviewed_at": approval.reviewed_at.isoformat(),
-            "note": approval.note,
+        "approval_bindings": {
+            "medical": _approval_binding(medical_approval),
+            "video": _approval_binding(video_approval),
         },
-        "artifact_sha256": {
+        "payload_sha256": {
             CAPTION_NAME: sha256_file(staging_dir / CAPTION_NAME),
             OUTPUT_NAME: sha256_file(staging_dir / OUTPUT_NAME),
             SOURCES_NAME: sha256_file(staging_dir / SOURCES_NAME),
-            RENDER_INPUT_NAME: sha256_file(render_input),
+            RENDER_INPUT_NAME: sha256_file(staging_dir / RENDER_INPUT_NAME),
         },
         "source_markers": {
             marker: [record.id for record in records]
@@ -260,3 +297,14 @@ def _manifest_json(
         },
     }
     return json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+
+
+def _approval_binding(approval: ReviewRecord) -> dict[str, Any]:
+    """Make approval identity distinct from hashes of package payload bytes."""
+    return {
+        "approval_sha256": canonical_json_hash(approval.model_dump(mode="json")),
+        "id": str(approval.id),
+        "reviewer": approval.reviewer,
+        "reviewed_at": approval.reviewed_at.isoformat(),
+        "artifact_hashes": approval.artifact_hashes,
+    }
