@@ -1,10 +1,15 @@
 import json
+from collections.abc import Callable
+from pathlib import Path
 
 import pytest
 
+from healthvideo.domain.script import Script
+from healthvideo.domain.storyboard import Storyboard
 from healthvideo.storage.files import read_yaml
+from healthvideo.tts.base import TTSRequest, TTSResult
 from healthvideo.tts.silent import SilentTTS
-from healthvideo.workflows.produce import produce_project
+from healthvideo.workflows.produce import _input_hash, produce_project
 from tests.helpers import create_project_fixture
 
 
@@ -14,8 +19,7 @@ def test_produce_reuses_matching_artifact_hash(tmp_path) -> None:
 
     def fake_runner(argv: list[str]) -> int:
         calls.append(argv)
-        output = project_dir / "renders" / "video.mp4"
-        output.write_bytes(b"synthetic-mp4")
+        _write_synthetic_output(argv)
         return 0
 
     first = produce_project(project_dir, SilentTTS(), fake_runner)
@@ -36,7 +40,7 @@ def test_produce_rejects_reviewed_project_when_cached_output_is_missing(
         produce_project(project_dir, SilentTTS(), lambda argv: 0)
 
 
-def test_produce_dry_run_does_not_mutate_project_or_run_renderer(tmp_path) -> None:
+def test_produce_dry_run_does_not_mutate_project_or_call_renderer(tmp_path) -> None:
     project_dir = create_project_fixture(tmp_path, state="script_approved")
     original_manifest = (project_dir / "project.yaml").read_bytes()
     calls: list[list[str]] = []
@@ -44,21 +48,40 @@ def test_produce_dry_run_does_not_mutate_project_or_run_renderer(tmp_path) -> No
     output = produce_project(project_dir, SilentTTS(), calls.append, dry_run=True)
 
     assert output == project_dir / "renders" / "video.mp4"
-    assert len(calls) == 1
-    assert calls[0][0:2] == ["pnpm", "--dir"]
-    assert calls[0][3] == "render"
-    assert calls[0][-2:] == ["--public-dir", str(project_dir)]
+    assert calls == []
     assert not output.exists()
     assert not (project_dir / "audio" / "narration.wav").exists()
     assert not (project_dir / "render-input.json").exists()
     assert (project_dir / "project.yaml").read_bytes() == original_manifest
 
 
+def test_produce_dry_run_cache_hit_does_not_call_renderer_or_mutate_project(
+    tmp_path,
+) -> None:
+    project_dir = create_project_fixture(tmp_path, state="script_approved")
+
+    def successful_runner(argv: list[str]) -> int:
+        _write_synthetic_output(argv)
+        return 0
+
+    output = produce_project(project_dir, SilentTTS(), successful_runner)
+    original_manifest = (project_dir / "project.yaml").read_bytes()
+    original_output = output.read_bytes()
+    calls: list[list[str]] = []
+
+    assert (
+        produce_project(project_dir, SilentTTS(), calls.append, dry_run=True) == output
+    )
+    assert calls == []
+    assert (project_dir / "project.yaml").read_bytes() == original_manifest
+    assert output.read_bytes() == original_output
+
+
 def test_produce_writes_render_input_and_manifest_with_canonical_hash(tmp_path) -> None:
     project_dir = create_project_fixture(tmp_path, state="script_approved")
 
     def fake_runner(argv: list[str]) -> int:
-        (project_dir / "renders" / "video.mp4").write_bytes(b"synthetic-mp4")
+        _write_synthetic_output(argv)
         return 0
 
     produce_project(project_dir, SilentTTS(), fake_runner)
@@ -85,7 +108,7 @@ def test_produce_rejects_cached_reviewed_video_after_author_profile_changes(
     )
 
     def fake_runner(argv: list[str]) -> int:
-        (project_dir / "renders" / "video.mp4").write_bytes(b"synthetic-mp4")
+        _write_synthetic_output(argv)
         return 0
 
     produce_project(project_dir, SilentTTS(), fake_runner)
@@ -93,3 +116,121 @@ def test_produce_rejects_cached_reviewed_video_after_author_profile_changes(
 
     with pytest.raises(ValueError, match="script_approved"):
         produce_project(project_dir, SilentTTS(), fake_runner)
+
+
+class ExplodingTTS:
+    provider_name = "exploding"
+
+    def synthesize(self, request: TTSRequest, output: Path) -> TTSResult:
+        raise RuntimeError("synthetic TTS failure")
+
+
+@pytest.mark.parametrize(
+    ("label", "tts", "runner", "error"),
+    [
+        (
+            "tts",
+            ExplodingTTS(),
+            lambda argv: 0,
+            RuntimeError,
+        ),
+        (
+            "runner",
+            SilentTTS(),
+            lambda argv: 9,
+            RuntimeError,
+        ),
+        (
+            "output",
+            SilentTTS(),
+            lambda argv: 0,
+            FileNotFoundError,
+        ),
+    ],
+)
+def test_produce_failure_preserves_project_and_allows_retry(
+    tmp_path,
+    label: str,
+    tts: SilentTTS | ExplodingTTS,
+    runner: Callable[[list[str]], int],
+    error: type[Exception],
+) -> None:
+    project_dir = create_project_fixture(tmp_path, state="script_approved")
+    original_manifest = (project_dir / "project.yaml").read_bytes()
+    _write_existing_production_artifacts(project_dir)
+    original_artifacts = _production_artifacts(project_dir)
+
+    with pytest.raises(error):
+        produce_project(project_dir, tts, runner)
+
+    assert (project_dir / "project.yaml").read_bytes() == original_manifest
+    assert _production_artifacts(project_dir) == original_artifacts
+    assert list(tmp_path.glob(".muoi-va-huyet-ap.produce-*")) == []
+
+    def successful_runner(argv: list[str]) -> int:
+        _write_synthetic_output(argv)
+        return 0
+
+    output = produce_project(project_dir, SilentTTS(), successful_runner)
+    assert output.is_file(), label
+    assert read_yaml(project_dir / "project.yaml")["state"] == "awaiting_video_review"
+
+
+def test_input_hash_changes_for_every_declared_input(tmp_path) -> None:
+    project_dir = create_project_fixture(tmp_path, state="script_approved")
+    script_data = read_yaml(project_dir / "script" / "script.yaml")
+    storyboard_data = read_yaml(project_dir / "storyboard" / "storyboard.yaml")
+
+    script = Script.model_validate(script_data)
+    storyboard = Storyboard.model_validate(storyboard_data)
+    profile = {"language": "vi", "directness": "clear_and_calm"}
+    baseline = _input_hash(script, storyboard, profile, "silent")
+
+    changed_script = script.model_copy(
+        update={"title": "Ăn mặn và tăng huyết áp — cập nhật"}
+    )
+    changed_storyboard = storyboard.model_copy(
+        update={"title": "Ăn mặn và tăng huyết áp — cập nhật"}
+    )
+
+    assert _input_hash(changed_script, storyboard, profile, "silent") != baseline
+    assert _input_hash(script, changed_storyboard, profile, "silent") != baseline
+    assert (
+        _input_hash(
+            script, storyboard, {"language": "vi", "directness": "direct"}, "silent"
+        )
+        != baseline
+    )
+    assert _input_hash(script, storyboard, profile, "other") != baseline
+
+
+def _production_artifacts(project_dir: Path) -> dict[str, bytes]:
+    paths = (
+        project_dir / "audio" / "narration.wav",
+        project_dir / "render-input.json",
+        project_dir / "renders" / "manifest.json",
+        project_dir / "renders" / "video.mp4",
+    )
+    return {
+        str(path.relative_to(project_dir)): path.read_bytes()
+        for path in paths
+        if path.is_file()
+    }
+
+
+def _write_synthetic_output(argv: list[str]) -> None:
+    output = Path(argv[argv.index("--output") + 1])
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_bytes(b"synthetic-mp4")
+
+
+def _write_existing_production_artifacts(project_dir: Path) -> None:
+    artifacts = {
+        project_dir / "audio" / "narration.wav": b"old-audio",
+        project_dir / "render-input.json": b'{"old":"input"}',
+        project_dir / "renders" / "manifest.json": b'{"old":"manifest"}',
+        project_dir / "renders" / "video.mp4": b"old-video",
+    }
+    for path, contents in artifacts.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(contents)

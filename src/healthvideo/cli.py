@@ -6,6 +6,7 @@ from typing import Annotated
 import typer
 
 from healthvideo import __version__
+from healthvideo.render.remotion import build_render_argv
 from healthvideo.tts.silent import SilentTTS
 from healthvideo.workflows.create_project import create_project
 from healthvideo.workflows.produce import produce_project
@@ -43,11 +44,18 @@ def produce(
     if tts != "silent":
         typer.echo(f"Unsupported TTS provider: {tts}")
         raise typer.Exit(code=1)
+    if dry_run:
+        typer.echo(
+            " ".join(
+                build_render_argv(
+                    project_dir / "render-input.json",
+                    project_dir / "renders" / "video.mp4",
+                    project_dir,
+                )
+            )
+        )
 
     def run_remotion(argv: list[str]) -> int:
-        if dry_run:
-            typer.echo(" ".join(argv))
-            return 0
         return subprocess.run(argv, check=False).returncode
 
     try:

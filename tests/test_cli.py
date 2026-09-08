@@ -6,6 +6,9 @@ from typer.testing import CliRunner
 from healthvideo import __version__
 from healthvideo.cli import app
 from healthvideo.storage.files import read_yaml
+from healthvideo.tts.silent import SilentTTS
+from healthvideo.workflows.produce import produce_project
+from tests.helpers import synthesize_fixture_audio
 
 
 def test_version_command() -> None:
@@ -46,6 +49,7 @@ def test_produce_dry_run_prints_remotion_command_without_changing_state(
     fixture = Path(__file__).parent / "fixtures" / "golden-project"
     project_dir = tmp_path / "golden-project"
     shutil.copytree(fixture, project_dir)
+    synthesize_fixture_audio(project_dir)
     original_manifest = (project_dir / "project.yaml").read_bytes()
 
     result = CliRunner().invoke(
@@ -55,4 +59,28 @@ def test_produce_dry_run_prints_remotion_command_without_changing_state(
     assert result.exit_code == 0
     assert "pnpm --dir" in result.stdout
     assert not (project_dir / "renders" / "video.mp4").exists()
+    assert (project_dir / "project.yaml").read_bytes() == original_manifest
+
+
+def test_produce_dry_run_prints_remotion_command_for_a_cache_hit(tmp_path) -> None:
+    fixture = Path(__file__).parent / "fixtures" / "golden-project"
+    project_dir = tmp_path / "golden-project"
+    shutil.copytree(fixture, project_dir)
+    synthesize_fixture_audio(project_dir)
+
+    def successful_runner(argv: list[str]) -> int:
+        output = Path(argv[argv.index("--output") + 1])
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(b"synthetic-mp4")
+        return 0
+
+    produce_project(project_dir, SilentTTS(), successful_runner)
+    original_manifest = (project_dir / "project.yaml").read_bytes()
+
+    result = CliRunner().invoke(
+        app, ["produce", str(project_dir), "--tts", "silent", "--dry-run"]
+    )
+
+    assert result.exit_code == 0
+    assert "pnpm --dir" in result.stdout
     assert (project_dir / "project.yaml").read_bytes() == original_manifest

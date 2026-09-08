@@ -1,7 +1,9 @@
 from pathlib import Path
 from typing import Any
 
-from healthvideo.storage.files import write_yaml_atomic
+from healthvideo.storage.files import read_yaml, write_yaml_atomic
+from healthvideo.tts.base import TTSRequest
+from healthvideo.tts.silent import SilentTTS
 
 
 def create_project_fixture(root: Path, state: str) -> Path:
@@ -77,3 +79,15 @@ def create_project_fixture(root: Path, state: str) -> Path:
     write_yaml_atomic(project_dir / "script" / "script.yaml", script)
     write_yaml_atomic(project_dir / "storyboard" / "storyboard.yaml", storyboard)
     return project_dir
+
+
+def synthesize_fixture_audio(project_dir: Path) -> Path:
+    """Create a local silent WAV for a copied fixture without tracking generated audio."""
+    script = read_yaml(project_dir / "script" / "script.yaml")
+    narration = " ".join(line["text"] for line in script["lines"])
+    output = project_dir / "audio" / "narration.wav"
+    return (
+        SilentTTS()
+        .synthesize(TTSRequest(text=narration, language=script["language"]), output)
+        .audio_file
+    )

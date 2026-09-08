@@ -8,6 +8,7 @@ __pycache__/
 node_modules/
 cache/
 tests/artifacts/
+tests/fixtures/**/audio/
 projects/**/audio/
 projects/**/renders/
 projects/**/source-documents/
