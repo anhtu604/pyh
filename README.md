@@ -8,7 +8,7 @@ thành video y tế dự phòng tiếng Việt dọc 1080 × 1920.
 ## Trạng thái hiện tại
 
 Project scaffold, claim ledger, author-owned script, read-aloud QA, Remotion
-vertical preview và production cache đã hoạt động.
+vertical preview, production cache và hai cổng duyệt của bác sĩ đã hoạt động.
 
 ## Milestone
 
@@ -26,7 +26,7 @@ MVP hoàn thành vertical slice từ author brief, evidence, kịch bản và st
 | 5 | Storyboard, evidence highlight và render contract | complete | `python tools/export_schemas.py`; `python -m pytest tests/render/test_input.py tests/contracts/test_schemas.py -v` | `feat: define storyboard render contract` |
 | 6 | Remotion composition 9:16 và visual regression cơ bản | complete | `pnpm --dir video test` (11 passed); `pnpm --dir video typecheck`; still 1080 × 1920 | `feat: render vertical whiteboard scenes` |
 | 7 | TTS giả lập, manifest cache và render workflow | complete | `python -m pytest` (61 passed); `ruff check src tests tools`; `pnpm --dir video test` (11 passed); `pnpm --dir video typecheck` | `feat: add cached production workflow`; `fix: make production failures transactional`; `fix: publish production runs atomically`; `fix: converge production publish over a damaged run` |
-| 8 | Hai cổng duyệt có hash và audit trail | planned | — | — |
+| 8 | Hai cổng duyệt có hash và audit trail | complete | `python -m pytest tests/workflows/test_review.py tests/domain/test_project.py -v` (14 passed); `python -m pytest` (79 passed); `python -m ruff check src tests tools`; `pnpm --dir video test` (11 passed); `pnpm --dir video typecheck` | `feat: enforce doctor review gates` |
 | 9 | Gói xuất bản và golden end-to-end test | planned | — | — |
 | 10 | Installer Windows và environment doctor | planned | — | — |
 
@@ -42,6 +42,9 @@ python -m pip install -e ".[dev]"
 healthvideo version
 healthvideo project new muoi-va-huyet-ap --title "Ăn mặn và tăng huyết áp"
 healthvideo produce tests/fixtures/golden-project --tts silent --dry-run
+healthvideo review medical projects/2026/09/muoi-va-huyet-ap --reviewer "BS An" --note "Đã đối chiếu số liệu"
+healthvideo review video projects/2026/09/muoi-va-huyet-ap --reviewer "BS An"
+healthvideo status projects/2026/09/muoi-va-huyet-ap
 ```
 
 ## Workflow
@@ -51,11 +54,31 @@ Author brief → evidence ledger → medical review → script/storyboard → pr
 `produce` chỉ nhận dự án ở `script_approved`; nếu dự án đã ở
 `awaiting_video_review`, nó chỉ trả lại video cache khi hash đầu vào vẫn khớp.
 
+## Cổng duyệt và audit trail
+
+`healthvideo review medical` chỉ chạy ở `awaiting_medical_review`, gắn hash của
+`evidence/ledger.yaml` và `script/script.yaml` rồi chuyển `script_approved`.
+`healthvideo review video` chỉ chạy ở `awaiting_video_review`, gắn hash của MP4 và
+`render-input.json` trong run đang hoạt động rồi chuyển `approved_to_publish`.
+Mỗi lần duyệt ghi một `ReviewRecord` bất biến (`reviews/medical-<uuid>.yaml`,
+`reviews/video-<uuid>.yaml`) gồm người duyệt, thời điểm có múi giờ, quyết định,
+ghi chú và hash artifact. Cả hai lệnh bắt buộc `--reviewer`, nhận `--note`, và
+yêu cầu gõ `APPROVE` trên terminal trừ khi có `--yes`; xác nhận chỉ nằm ở lớp CLI
+nên `approve_medical`/`approve_video` vẫn thuần và test được offline.
+
+Tài liệu YAML/JSON được hash theo nghĩa (canonical JSON), MP4 hash theo byte, nên
+định dạng lại file không làm mất hiệu lực duyệt còn sửa nội dung thì có.
+Khi artifact đã duyệt đổi hoặc biến mất, `healthvideo status` báo
+`approval_stale=true` và `produce` từ chối chạy với lỗi `medical approval is stale`;
+`package` (Task 9) dùng lại `ensure_approval_current` cho cổng video.
+
 ## Kiểm thử gần nhất
 
-`python -m pytest tests/tts/test_silent.py tests/workflows/test_produce.py -v`
-(19 passed); silent TTS, immutable production run, cache manifest và state gate đều chạy offline. Bộ dev ghim
-`jsonschema==4.26.0` để kiểm tra các contract JSON Schema đã xuất.
+`python -m pytest` (79 passed); `python -m ruff check src tests tools`;
+`pnpm --dir video test` (11 passed); `pnpm --dir video typecheck`. Hai cổng duyệt,
+audit trail và test approval stale (`status` báo `approval_stale=true`, `produce`
+từ chối chạy) đều PASS offline, không cần TTY. Bộ dev ghim `jsonschema==4.26.0`
+để kiểm tra các contract JSON Schema đã xuất.
 
 ## Quyết định
 
@@ -73,7 +96,7 @@ chứng với bôi vàng; Zod kiểm tra điều kiện `x + width <= 1`, `y + h
 và dữ liệu bắt buộc cho `evidence_highlight` trước render. Mỗi dự án mới lưu
 `author-brief.yaml` ở thư mục gốc dự án. `SilentTTS` chỉ ghi WAV im lặng, xác định
 (mono PCM 16-bit, 24 kHz), phục vụ test và smoke render — chưa phải giọng đọc để
-đăng. Chưa có intake nguồn, TTS thực, review, packaging hay installer.
+đăng. Chưa có intake nguồn, TTS thực, packaging hay installer.
 
 ## Remotion preview
 

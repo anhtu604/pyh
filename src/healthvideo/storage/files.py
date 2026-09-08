@@ -1,4 +1,5 @@
 import hashlib
+import json
 import os
 from collections.abc import Mapping
 from pathlib import Path
@@ -31,3 +32,19 @@ def sha256_file(path: Path) -> str:
         while block := stream.read(64 * 1024):
             digest.update(block)
     return digest.hexdigest()
+
+
+def canonical_json_hash(payload: Any) -> str:
+    """Hash a payload by meaning: canonical JSON with sorted keys, then SHA-256.
+
+    Values JSON cannot represent (dates parsed from YAML) are hashed as their
+    string form so a document stays hashable without a second scheme.
+    """
+    canonical = json.dumps(
+        payload,
+        default=str,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()

@@ -8,7 +8,7 @@ from healthvideo.cli import app
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.tts.silent import SilentTTS
 from healthvideo.workflows.produce import produce_project
-from tests.helpers import synthesize_fixture_audio
+from tests.helpers import create_project_fixture, synthesize_fixture_audio
 
 
 def test_version_command() -> None:
@@ -102,3 +102,86 @@ def test_produce_dry_run_rejects_invalid_state_before_printing_command(
 
     assert result.exit_code == 1
     assert "pnpm --dir" not in result.stdout
+
+
+def test_review_medical_requires_the_typed_confirmation(tmp_path) -> None:
+    project_dir = create_project_fixture(tmp_path, state="awaiting_medical_review")
+
+    result = CliRunner().invoke(
+        app,
+        ["review", "medical", str(project_dir), "--reviewer", "BS An"],
+        input="ok\n",
+    )
+
+    assert result.exit_code == 1
+    assert read_yaml(project_dir / "project.yaml")["state"] == "awaiting_medical_review"
+    assert list((project_dir / "reviews").glob("*.yaml")) == []
+
+
+def test_review_medical_approves_after_the_typed_confirmation(tmp_path) -> None:
+    project_dir = create_project_fixture(tmp_path, state="awaiting_medical_review")
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "review",
+            "medical",
+            str(project_dir),
+            "--reviewer",
+            "BS An",
+            "--note",
+            "Đã đối chiếu số liệu",
+        ],
+        input="APPROVE\n",
+    )
+
+    assert result.exit_code == 0
+    assert read_yaml(project_dir / "project.yaml")["state"] == "script_approved"
+    records = list((project_dir / "reviews").glob("medical-*.yaml"))
+    assert len(records) == 1
+    assert read_yaml(records[0])["reviewer"] == "BS An"
+
+
+def test_review_video_with_yes_skips_the_confirmation(tmp_path) -> None:
+    project_dir = create_project_fixture(tmp_path, state="awaiting_video_review")
+
+    result = CliRunner().invoke(
+        app, ["review", "video", str(project_dir), "--reviewer", "BS An", "--yes"]
+    )
+
+    assert result.exit_code == 0
+    assert read_yaml(project_dir / "project.yaml")["state"] == "approved_to_publish"
+    assert len(list((project_dir / "reviews").glob("video-*.yaml"))) == 1
+
+
+def test_review_medical_reports_the_state_gate(tmp_path) -> None:
+    project_dir = create_project_fixture(tmp_path, state="script_approved")
+
+    result = CliRunner().invoke(
+        app, ["review", "medical", str(project_dir), "--reviewer", "BS An", "--yes"]
+    )
+
+    assert result.exit_code == 1
+    assert "awaiting_medical_review" in result.stdout
+
+
+def test_status_reports_state_and_a_stale_approval(tmp_path) -> None:
+    project_dir = create_project_fixture(tmp_path, state="awaiting_medical_review")
+    runner = CliRunner()
+    runner.invoke(
+        app, ["review", "medical", str(project_dir), "--reviewer", "BS An", "--yes"]
+    )
+
+    approved = runner.invoke(app, ["status", str(project_dir)])
+    script_path = project_dir / "script" / "script.yaml"
+    script = read_yaml(script_path)
+    script["title"] = "Ăn mặn và tăng huyết áp — bản sửa"
+    write_yaml_atomic(script_path, script)
+    stale = runner.invoke(app, ["status", str(project_dir)])
+
+    assert approved.exit_code == 0
+    assert "state=script_approved" in approved.stdout
+    assert "approval_stale=false" in approved.stdout
+    assert "BS An" in approved.stdout
+    assert stale.exit_code == 0
+    assert "approval_stale=true" in stale.stdout

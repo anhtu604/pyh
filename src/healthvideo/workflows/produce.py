@@ -1,4 +1,3 @@
-import hashlib
 import json
 import os
 import shutil
@@ -8,17 +7,23 @@ from tempfile import mkdtemp
 from typing import Any
 
 from healthvideo.domain.project import ProjectManifest, ProjectState, transition
+from healthvideo.domain.review import ReviewKind
 from healthvideo.domain.script import Script
 from healthvideo.domain.storyboard import Storyboard
 from healthvideo.render.input import build_render_input
 from healthvideo.render.remotion import build_render_argv
-from healthvideo.storage.files import read_yaml, write_yaml_atomic
+from healthvideo.render.run import (
+    MANIFEST_NAME,
+    OUTPUT_NAME,
+    PRODUCTION_ARTIFACT,
+    RENDER_INPUT_NAME,
+    renders_directory,
+)
+from healthvideo.storage.files import canonical_json_hash, read_yaml, write_yaml_atomic
 from healthvideo.tts.base import TTSProvider, TTSRequest
+from healthvideo.workflows.review import ensure_approval_current
 
 Runner = Callable[[list[str]], int]
-OUTPUT_NAME = "video.mp4"
-MANIFEST_NAME = "manifest.json"
-PRODUCTION_ARTIFACT = "production"
 AUTHOR_PROFILE_PATH = (
     Path(__file__).resolve().parents[3] / "profiles" / "author-voice.vi.yaml"
 )
@@ -34,6 +39,7 @@ def produce_project(
     """Render an approved project, reusing an output with a matching input hash."""
     manifest_path = project_dir / "project.yaml"
     project = ProjectManifest.model_validate(read_yaml(manifest_path))
+    ensure_approval_current(project_dir, project, ReviewKind.MEDICAL)
     script = Script.model_validate(read_yaml(project_dir / "script" / "script.yaml"))
     storyboard = Storyboard.model_validate(
         read_yaml(project_dir / "storyboard" / "storyboard.yaml")
@@ -41,7 +47,7 @@ def produce_project(
     author_profile = read_yaml(AUTHOR_PROFILE_PATH)
     provider_name = _provider_name(tts)
     input_hash = _input_hash(script, storyboard, author_profile, provider_name)
-    renders_dir = project_dir / "renders"
+    renders_dir = renders_directory(project_dir)
     run_dir = renders_dir / input_hash
     output = run_dir / OUTPUT_NAME
     render_input = build_render_input(storyboard, audio_file="audio/narration.wav")
@@ -76,7 +82,7 @@ def produce_project(
             ),
             staged_audio,
         )
-        staged_render_input = staging_dir / "render-input.json"
+        staged_render_input = staging_dir / RENDER_INPUT_NAME
         _write_json_atomic(staged_render_input, render_input.model_dump(mode="json"))
         staged_output = staging_dir / OUTPUT_NAME
         argv = build_render_argv(staged_render_input, staged_output, staging_dir)
@@ -128,16 +134,13 @@ def _input_hash(
         "script": script.model_dump(mode="json"),
         "storyboard": storyboard.model_dump(mode="json"),
     }
-    canonical = json.dumps(
-        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-    )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return canonical_json_hash(payload)
 
 
 def _run_is_valid(run_dir: Path, input_hash: str, provider_name: str) -> bool:
     required_paths = (
         run_dir / "audio" / "narration.wav",
-        run_dir / "render-input.json",
+        run_dir / RENDER_INPUT_NAME,
         run_dir / OUTPUT_NAME,
         run_dir / MANIFEST_NAME,
     )
