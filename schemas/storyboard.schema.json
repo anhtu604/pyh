@@ -9,10 +9,12 @@
           "type": "number"
         },
         "image": {
+          "pattern": "\\S",
           "title": "Image",
           "type": "string"
         },
         "quote": {
+          "pattern": "\\S",
           "title": "Quote",
           "type": "string"
         },
@@ -49,9 +51,42 @@
         "height"
       ],
       "title": "EvidenceHighlight",
-      "type": "object"
+      "type": "object",
+      "x-invariants": {
+        "x_plus_width": "x + width <= 1",
+        "y_plus_height": "y + height <= 1"
+      }
     },
     "Scene": {
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "visual": {
+                "const": "evidence_highlight"
+              }
+            },
+            "required": [
+              "visual"
+            ]
+          },
+          "then": {
+            "properties": {
+              "evidence_highlight": {
+                "$ref": "#/$defs/EvidenceHighlight"
+              },
+              "source_marker": {
+                "pattern": "\\S",
+                "type": "string"
+              }
+            },
+            "required": [
+              "source_marker",
+              "evidence_highlight"
+            ]
+          }
+        }
+      ],
       "properties": {
         "claim_id": {
           "anyOf": [
@@ -66,6 +101,7 @@
           "title": "Claim Id"
         },
         "duration_frames": {
+          "exclusiveMinimum": 0,
           "title": "Duration Frames",
           "type": "integer"
         },
@@ -103,9 +139,11 @@
             }
           ],
           "default": null,
+          "pattern": "\\S",
           "title": "Source Marker"
         },
         "start_frame": {
+          "minimum": 0,
           "title": "Start Frame",
           "type": "integer"
         },

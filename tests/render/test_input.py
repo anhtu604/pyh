@@ -93,7 +93,7 @@ def test_build_render_input_rejects_gap_with_scene_id() -> None:
 
 
 @pytest.mark.parametrize(
-    "audio_file", ["audio\\narration.wav", "/audio/narration.wav"]
+    "audio_file", ["audio\\narration.wav", "/audio/narration.wav", ".", "./"]
 )
 def test_build_render_input_rejects_non_posix_relative_media_paths(
     audio_file: str,
@@ -102,6 +102,30 @@ def test_build_render_input_rejects_non_posix_relative_media_paths(
 
     with pytest.raises(ValueError, match="audio"):
         build_render_input(board, audio_file=audio_file)
+
+
+@pytest.mark.parametrize("image", [".", "./"])
+def test_build_render_input_rejects_dot_highlight_image_with_scene_id(
+    image: str,
+) -> None:
+    board = Storyboard(
+        title="Muối",
+        scenes=[
+            valid_highlight_scene(
+                evidence_highlight=EvidenceHighlight(
+                    image=image,
+                    quote="giảm huyết áp tâm thu",
+                    x=0.12,
+                    y=0.42,
+                    width=0.64,
+                    height=0.08,
+                )
+            )
+        ],
+    )
+
+    with pytest.raises(ValueError, match="Scene S01"):
+        build_render_input(board, audio_file="audio/narration.wav")
 
 
 @pytest.mark.parametrize("duration_frames", [1349, 2701])

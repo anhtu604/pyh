@@ -52,11 +52,13 @@ def build_render_input(storyboard: Storyboard, audio_file: str) -> RenderInput:
 
 def _validate_relative_posix_path(path: str, location: str) -> None:
     normalized = PurePosixPath(path)
+    parts = normalized.parts
     if (
         not path
+        or not parts
         or "\\" in path
         or normalized.is_absolute()
-        or ".." in normalized.parts
-        or ":" in normalized.parts[0]
+        or ".." in parts
+        or ":" in parts[0]
     ):
         raise ValueError(f"Scene {location}: media path must be relative POSIX")

@@ -4,11 +4,19 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class EvidenceHighlight(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(
+        frozen=True,
+        json_schema_extra={
+            "x-invariants": {
+                "x_plus_width": "x + width <= 1",
+                "y_plus_height": "y + height <= 1",
+            }
+        },
+    )
 
     schema_version: str = "1.0"
-    image: str
-    quote: str
+    image: str = Field(json_schema_extra={"pattern": r"\S"})
+    quote: str = Field(json_schema_extra={"pattern": r"\S"})
     x: float = Field(ge=0, le=1)
     y: float = Field(ge=0, le=1)
     width: float = Field(ge=0, le=1)
@@ -32,11 +40,13 @@ class Scene(BaseModel):
 
     schema_version: str = "1.0"
     id: str
-    start_frame: int
-    duration_frames: int
+    start_frame: int = Field(json_schema_extra={"minimum": 0})
+    duration_frames: int = Field(json_schema_extra={"exclusiveMinimum": 0})
     narration: str
     claim_id: str | None = None
-    source_marker: str | None = None
+    source_marker: str | None = Field(
+        default=None, json_schema_extra={"pattern": r"\S"}
+    )
     visual: Literal["whiteboard", "chart", "evidence_highlight", "ai_clip"]
     evidence_highlight: EvidenceHighlight | None = None
 

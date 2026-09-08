@@ -50,7 +50,8 @@ Author brief → evidence ledger → medical review → script/storyboard → pr
 ## Kiểm thử gần nhất
 
 `python -m pytest tests/render/test_input.py tests/contracts/test_schemas.py -v`
-(18 passed); exporter được chạy hai lần không tạo Git diff.
+(26 passed); exporter được chạy hai lần không tạo Git diff. Bộ dev ghim
+`jsonschema==4.26.0` để kiểm tra các contract JSON Schema đã xuất.
 
 ## Quyết định
 
