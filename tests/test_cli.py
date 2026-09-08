@@ -7,6 +7,7 @@ from healthvideo import __version__
 from healthvideo.cli import app
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.tts.silent import SilentTTS
+from healthvideo.workflows.doctor import CheckResult
 from healthvideo.workflows.produce import produce_project
 from tests.helpers import create_project_fixture, synthesize_fixture_audio
 
@@ -15,6 +16,37 @@ def test_version_command() -> None:
     result = CliRunner().invoke(app, ["version"])
     assert result.exit_code == 0
     assert result.stdout.strip() == __version__
+
+
+def test_doctor_allows_a_missing_optional_cuda_check(monkeypatch) -> None:
+    """CUDA absence must be reported without making `healthvideo doctor` fail."""
+    monkeypatch.setattr(
+        "healthvideo.cli.check_environment",
+        lambda _run: [
+            CheckResult("python", True, "3.14.3", ">=3.11", "Install Python."),
+            CheckResult("cuda", False, "not detected", "optional", "CUDA is optional."),
+        ],
+    )
+
+    result = CliRunner().invoke(app, ["doctor"])
+
+    assert result.exit_code == 0
+    assert "WARN cuda: not detected (requires optional)" in result.stdout
+
+
+def test_doctor_exits_nonzero_for_a_missing_required_dependency(monkeypatch) -> None:
+    """A missing FFmpeg binary must block the environment doctor command."""
+    monkeypatch.setattr(
+        "healthvideo.cli.check_environment",
+        lambda _run: [
+            CheckResult("ffmpeg", False, "not found", ">=8", "Install FFmpeg 8 or newer."),
+        ],
+    )
+
+    result = CliRunner().invoke(app, ["doctor"])
+
+    assert result.exit_code == 1
+    assert "Install FFmpeg 8 or newer." in result.stdout
 
 
 def test_project_new_creates_project_and_reports_duplicate_without_overwrite(

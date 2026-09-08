@@ -7,14 +7,15 @@ thành video y tế dự phòng tiếng Việt dọc 1080 × 1920.
 
 ## Trạng thái hiện tại
 
-Project scaffold, claim ledger, author-owned script, read-aloud QA, Remotion
-vertical preview, production cache, hai cổng duyệt của bác sĩ và gói xuất bản
-đã hoạt động.
+MVP đã hoàn thành: project scaffold, claim ledger, author-owned script,
+read-aloud QA, Remotion vertical preview, production cache, hai cổng duyệt của
+bác sĩ, gói xuất bản, Windows installer và environment doctor. Plan tiếp theo:
+`evidence-ingestion`.
 
 ## Milestone
 
-MVP hoàn thành vertical slice từ author brief, evidence, kịch bản và storyboard
-đến TTS giả lập, render, hai cổng duyệt và gói xuất bản.
+MVP complete: vertical slice từ author brief, evidence, kịch bản và storyboard
+đến TTS giả lập, render, hai cổng duyệt, gói xuất bản và kiểm tra Windows.
 
 ## Tiến độ nhiệm vụ
 
@@ -29,7 +30,7 @@ MVP hoàn thành vertical slice từ author brief, evidence, kịch bản và st
 | 7 | TTS giả lập, manifest cache và render workflow | complete | `python -m pytest` (61 passed); `ruff check src tests tools`; `pnpm --dir video test` (11 passed); `pnpm --dir video typecheck` | `feat: add cached production workflow`; `fix: make production failures transactional`; `fix: publish production runs atomically`; `fix: converge production publish over a damaged run` |
 | 8 | Hai cổng duyệt có hash và audit trail | complete | `python -m pytest tests/workflows/test_review.py tests/workflows/test_produce.py tests/storage -v` (35 passed); `python -m pytest -v` (83 passed); `python -m ruff check src tests tools`; `pnpm --dir video test` (11 passed); `pnpm --dir video typecheck` | `feat: enforce doctor review gates`; `fix: bind the medical gate to the storyboard` |
 | 9 | Gói xuất bản và golden end-to-end test | complete | `python -m pytest tests/e2e/test_golden_project.py -v` (15 passed); `python -m pytest -v` (99 passed); `python -m ruff check src tests tools`; `pnpm --dir video test` (11 passed); `pnpm --dir video typecheck` | `feat: package reviewed videos for publishing`; `fix: harden publication package integrity` |
-| 10 | Installer Windows và environment doctor | planned | — | — |
+| 10 | Installer Windows và environment doctor | complete | `python -m pytest -v` (106 passed); `ruff`; video test/typecheck; `install/doctor.ps1` | `feat: add Windows installer and diagnostics` |
 
 ## Kiến trúc
 
@@ -39,21 +40,32 @@ khỏi TTS và renderer; Remotion nhận `render-input.json` bất biến.
 ## Quick start
 
 ```powershell
-python -m pip install -e ".[dev]"
-healthvideo version
-healthvideo project new muoi-va-huyet-ap --title "Ăn mặn và tăng huyết áp"
+# Cài lại an toàn được: chỉ tạo/cập nhật .venv và dependencies trong repo.
+powershell -NoProfile -ExecutionPolicy Bypass -File install/install.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File install/doctor.ps1
+& .venv\Scripts\healthvideo.exe version
+& .venv\Scripts\healthvideo.exe project new muoi-va-huyet-ap --title "Ăn mặn và tăng huyết áp"
 # Bác sĩ viết evidence/ledger.yaml, script/script.yaml, storyboard/storyboard.yaml
 # theo mẫu tests/fixtures/golden-project, rồi đặt state=awaiting_medical_review
 # trong project.yaml (MVP chưa có lệnh intake cho các bước này).
-# Đây là smoke test độc lập của fixture golden: không thay thế lần render thật
-# của dự án ở các lệnh sau và không tạo artifact hay thay đổi state.
-healthvideo produce tests/fixtures/golden-project --tts silent --dry-run
-healthvideo review medical projects/2026/09/muoi-va-huyet-ap --reviewer "BS An" --note "Đã đối chiếu số liệu"
-healthvideo produce projects/2026/09/muoi-va-huyet-ap --tts silent
-healthvideo review video projects/2026/09/muoi-va-huyet-ap --reviewer "BS An"
-healthvideo package projects/2026/09/muoi-va-huyet-ap
-healthvideo status projects/2026/09/muoi-va-huyet-ap
+& .venv\Scripts\healthvideo.exe review medical projects/2026/09/muoi-va-huyet-ap --reviewer "BS An" --note "Đã đối chiếu số liệu"
+& .venv\Scripts\healthvideo.exe produce projects/2026/09/muoi-va-huyet-ap --tts silent
+& .venv\Scripts\healthvideo.exe review video projects/2026/09/muoi-va-huyet-ap --reviewer "BS An"
+& .venv\Scripts\healthvideo.exe package projects/2026/09/muoi-va-huyet-ap
+& .venv\Scripts\healthvideo.exe status projects/2026/09/muoi-va-huyet-ap
 ```
+
+Smoke test fixture golden độc lập (không thay thế render của dự án thật, không tạo
+artifact và không đổi state):
+
+```powershell
+& .venv\Scripts\healthvideo.exe produce tests/fixtures/golden-project --tts silent --dry-run
+```
+
+`healthvideo doctor` yêu cầu Python >=3.11, Node >=22, pnpm >=11, FFmpeg >=8 và
+Arial hoặc Noto Sans. Nếu `pnpm` không có trực tiếp trên PATH, doctor và installer
+dùng `corepack pnpm`; CUDA chỉ là cảnh báo tùy chọn. Lần kiểm tra Windows gần nhất
+(08-09-2026) phát hiện Python 3.14.3, Node 24.14.0, pnpm 11.19.0 và FFmpeg 8.1.1.
 
 Artifact nằm trong thư mục dự án: `evidence/`, `script/`, `storyboard/` là đầu vào
 do bác sĩ sở hữu; `reviews/` giữ audit trail của hai cổng duyệt;
@@ -64,8 +76,9 @@ sản xuất; `publish/` là gói cuối cùng để đăng thủ công. Chỉ `
 
 ## Workflow
 
-Author brief → evidence ledger → medical review → script/storyboard → production
-→ video review → publication package. Cả hai cổng duyệt của bác sĩ là bắt buộc.
+Author brief → evidence ledger → script + storyboard → medical review → production
+→ video review → publication package. Cả hai cổng duyệt của bác sĩ là bắt buộc;
+storyboard phải tồn tại trước khi duyệt y khoa.
 `produce` chỉ nhận dự án ở `script_approved`; nếu dự án đã ở
 `awaiting_video_review`, nó chỉ trả lại video cache khi hash đầu vào vẫn khớp.
 
@@ -118,8 +131,9 @@ bằng một lần đổi tên thư mục; lỗi giữa chừng không để l�
 
 ## Kiểm thử gần nhất
 
-`python -m pytest` (99 passed); `python -m ruff check src tests tools`;
-`pnpm --dir video test` (11 passed); `pnpm --dir video typecheck`. Golden project
+Ngày chạy gần nhất: **08-09-2026**. `python -m pytest -v` (106 passed);
+`python -m ruff check src tests tools`; `pnpm --dir video test` (11 passed);
+`pnpm --dir video typecheck`. Golden project
 (`tests/fixtures/golden-project`) chạy hết luồng từ duyệt y khoa, sản xuất, duyệt
 video đến `package` offline với TTS im lặng và renderer giả lập; hai cổng duyệt,
 audit trail và test approval stale (`status` báo `approval_stale=true`, `produce`
@@ -140,11 +154,14 @@ storyboard phải có cảnh liên tiếp, không chồng lấp và tổng thờ
 Composition dùng tối thiểu 1.350 frame, render whiteboard/subtitle hoặc ảnh bằng
 chứng với bôi vàng; Zod kiểm tra điều kiện `x + width <= 1`, `y + height <= 1`
 và dữ liệu bắt buộc cho `evidence_highlight` trước render. Mỗi dự án mới lưu
-`author-brief.yaml` ở thư mục gốc dự án. `SilentTTS` chỉ ghi WAV im lặng, xác định
+`author-brief.yaml` ở thư mục gốc dự án. `install/install.ps1` tạo hoặc dùng lại
+`.venv`, cài dependency Python/video trong repo rồi chạy doctor; nó không sửa PATH,
+cài driver hay ghi secret. `SilentTTS` chỉ ghi WAV im lặng, xác định
 (mono PCM 16-bit, 24 kHz), phục vụ test và smoke render — chưa phải giọng đọc để
 đăng: `publish/video.mp4` dựng bằng `--tts silent` là video câm, chỉ dùng để kiểm
-tra luồng chứ chưa đăng được. Chưa có intake nguồn, TTS thực hay installer; đăng
-video vẫn là thao tác thủ công của con người từ thư mục `publish/`.
+tra luồng chứ chưa đăng được. Chưa có intake nguồn hay TTS thực; đăng video vẫn là
+thao tác thủ công của con người từ thư mục `publish/`. CUDA không bắt buộc cho MVP;
+GPU acceleration và Linux installer thuộc các plan tiếp theo.
 
 ## Remotion preview
 

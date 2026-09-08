@@ -13,6 +13,11 @@ from healthvideo.render.remotion import build_render_argv
 from healthvideo.storage.files import read_yaml
 from healthvideo.tts.silent import SilentTTS
 from healthvideo.workflows.create_project import create_project
+from healthvideo.workflows.doctor import (
+    check_environment,
+    has_mandatory_failure,
+    run_command,
+)
 from healthvideo.workflows.package import package_project
 from healthvideo.workflows.produce import produce_project
 from healthvideo.workflows.review import (
@@ -46,6 +51,22 @@ def main() -> None:
 def version() -> None:
     """In phiên bản healthvideo."""
     typer.echo(__version__)
+
+
+@app.command()
+def doctor() -> None:
+    """Kiểm tra các dependency cục bộ cần để tạo video."""
+    results = check_environment(run_command)
+    for result in results:
+        status = "OK" if result.ok else "WARN" if result.required == "optional" else "FAIL"
+        typer.echo(
+            f"{status} {result.name}: {result.detected} "
+            f"(requires {result.required})"
+        )
+        if not result.ok:
+            typer.echo(f"  Remedy: {result.remedy}")
+    if has_mandatory_failure(results):
+        raise typer.Exit(code=1)
 
 
 @app.command()
