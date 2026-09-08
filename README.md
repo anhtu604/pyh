@@ -25,7 +25,7 @@ MVP hoàn thành vertical slice từ author brief, evidence, kịch bản và st
 | 4 | Claim ledger, human script và read-aloud QA | complete | `python tools/export_schemas.py`; `python -m pytest tests/domain/test_script.py tests/qa/test_script_qa.py tests/contracts/test_schemas.py -v` | `feat: validate evidence-linked human scripts` |
 | 5 | Storyboard, evidence highlight và render contract | complete | `python tools/export_schemas.py`; `python -m pytest tests/render/test_input.py tests/contracts/test_schemas.py -v` | `feat: define storyboard render contract` |
 | 6 | Remotion composition 9:16 và visual regression cơ bản | complete | `pnpm --dir video test` (11 passed); `pnpm --dir video typecheck`; still 1080 × 1920 | `feat: render vertical whiteboard scenes` |
-| 7 | TTS giả lập, manifest cache và render workflow | in_progress | `python -m pytest tests/tts/test_silent.py tests/workflows/test_produce.py -v`; `python -m ruff check src tests` | `feat: add cached production workflow` |
+| 7 | TTS giả lập, manifest cache và render workflow | complete | `python -m pytest` (61 passed); `ruff check src tests tools`; `pnpm --dir video test` (11 passed); `pnpm --dir video typecheck` | `feat: add cached production workflow`; `fix: make production failures transactional`; `fix: publish production runs atomically`; `fix: converge production publish over a damaged run` |
 | 8 | Hai cổng duyệt có hash và audit trail | planned | — | — |
 | 9 | Gói xuất bản và golden end-to-end test | planned | — | — |
 | 10 | Installer Windows và environment doctor | planned | — | — |
@@ -90,7 +90,7 @@ pnpm --dir video exec remotion still src/index.ts HealthVideo ../tests/artifacts
 ba là đường dẫn PNG output. Render video dùng composition `HealthVideo`:
 
 ```powershell
-pnpm --dir video render --props ../projects/sample/render-input.json --output ../projects/sample/renders/video.mp4
+pnpm --dir video render --props ../projects/sample/renders/<input_hash>/render-input.json --output ../projects/sample/renders/<input_hash>/video.mp4
 ```
 
 ## Production cache
