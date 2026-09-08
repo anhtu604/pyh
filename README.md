@@ -9,8 +9,9 @@ thành video y tế dự phòng tiếng Việt dọc 1080 × 1920.
 
 MVP đã hoàn thành: project scaffold, claim ledger, author-owned script,
 read-aloud QA, Remotion vertical preview, production cache, hai cổng duyệt của
-bác sĩ, gói xuất bản, Windows installer và environment doctor. Plan tiếp theo:
-`evidence-ingestion`.
+bác sĩ, gói xuất bản, Windows installer và environment doctor. Thiết kế workflow
+khép kín A–Z đã hoàn tất và đang chờ duyệt bản đặc tả trước khi lập kế hoạch triển
+khai; MVP hiện tại vẫn là đường chạy ổn định.
 
 ## Milestone
 
@@ -33,6 +34,7 @@ MVP complete: vertical slice từ author brief, evidence, kịch bản và story
 | 10 | Installer Windows và environment doctor | complete | `python -m pytest -v` (106 passed); `ruff`; video test/typecheck; `install/doctor.ps1` | `feat: add Windows installer and diagnostics` |
 | Final review | Approval, asset, package và Windows render hardening | complete | `python -m pytest -v` (122 passed); Ruff; video test (12 passed)/typecheck; real Windows golden render 1080 × 1920, 30 fps, 45.056 s | `fix: close final production integrity gaps` |
 | Security closure | Loại bỏ Windows batch-shell boundary cho pnpm | complete | `python -m pytest -v` (124 passed); Ruff; video test (12 passed)/typecheck; doctor; real Windows golden render 1080 × 1920, 30 fps, 45.056 s | `fix: remove Windows batch-shell launcher` |
+| A–Z workflow design | Đặc tả pipeline khép kín, migration v1→v2, phân vai AI, token budget và roadmap bảy giai đoạn | draft complete; awaiting written review | self-review; `git diff --check` | `docs: design closed-loop video workflow` |
 
 ## Kiến trúc
 
@@ -216,3 +218,4 @@ setup, không lưu audio đã sinh vào Git.
 
 - [Thiết kế hệ thống](docs/superpowers/specs/2026-09-07-preventive-health-video-system-design.md)
 - [Kế hoạch MVP](docs/superpowers/plans/2026-09-07-preventive-health-video-mvp.md)
+- [Thiết kế workflow khép kín A–Z](docs/superpowers/specs/2026-09-09-closed-loop-healthvideo-workflow-design.md)
