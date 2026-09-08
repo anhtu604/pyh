@@ -25,13 +25,27 @@ describe('EvidenceHighlightSchema', () => {
 });
 
 describe('SceneSchema', () => {
-  it('requires marker and highlight details for evidence scenes', () => {
+  it('requires a source marker for evidence scenes', () => {
     expect(
       SceneSchema.safeParse({
         id: 'S02',
         start_frame: 0,
         duration_frames: 90,
         narration: 'Bằng chứng cần ngữ cảnh.',
+        visual: 'evidence_highlight',
+        evidence_highlight: validHighlight,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('requires evidence highlight details for evidence scenes', () => {
+    expect(
+      SceneSchema.safeParse({
+        id: 'S02',
+        start_frame: 0,
+        duration_frames: 90,
+        narration: 'Bằng chứng cần ngữ cảnh.',
+        source_marker: '[1]',
         visual: 'evidence_highlight',
       }).success,
     ).toBe(false);

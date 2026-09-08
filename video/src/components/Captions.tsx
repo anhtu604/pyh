@@ -8,16 +8,28 @@ type CaptionsProps = {
 
 const MAX_CAPTION_WORDS = 6;
 
-export const captionWindow = (
+type CaptionWord = {
+  index: number;
+  text: string;
+};
+
+export const captionRows = (
   words: readonly string[],
   activeIndex: number,
   maxWords: number,
-): {startIndex: number; words: string[]} => {
+): {startIndex: number; rows: CaptionWord[][]} => {
   const pageSize = Math.max(1, Math.floor(maxWords));
   const safeIndex = Math.max(0, Math.min(activeIndex, Math.max(words.length - 1, 0)));
   const startIndex = Math.floor(safeIndex / pageSize) * pageSize;
+  const page = words
+    .slice(startIndex, startIndex + pageSize)
+    .map((text, offset) => ({index: startIndex + offset, text}));
+  const firstRowLength = Math.ceil(page.length / 2);
+  const rows = [page.slice(0, firstRowLength), page.slice(firstRowLength)].filter(
+    (row) => row.length > 0,
+  );
 
-  return {startIndex, words: words.slice(startIndex, startIndex + pageSize)};
+  return {startIndex, rows};
 };
 
 export const Captions: React.FC<CaptionsProps> = ({text, durationInFrames}) => {
@@ -26,37 +38,41 @@ export const Captions: React.FC<CaptionsProps> = ({text, durationInFrames}) => {
   const activeWord = words.length === 0
     ? -1
     : Math.min(words.length - 1, Math.floor((frame / Math.max(durationInFrames, 1)) * words.length));
-  const visible = captionWindow(words, activeWord, MAX_CAPTION_WORDS);
+  const layout = captionRows(words, activeWord, MAX_CAPTION_WORDS);
 
   return (
-    <div
+    <svg
+      aria-label="Phụ đề đang đọc"
+      viewBox="0 0 936 136"
       style={{
         bottom: 174,
-        color: '#202124',
-        fontFamily: 'Arial, sans-serif',
-        fontSize: 48,
-        fontWeight: 700,
+        height: 136,
         left: 72,
-        lineHeight: 1.2,
-        maxHeight: '2.4em',
-        overflow: 'hidden',
         position: 'absolute',
         right: 72,
-        textAlign: 'center',
-        display: '-webkit-box',
-        WebkitBoxOrient: 'vertical',
-        WebkitLineClamp: 2,
+        width: 936,
       }}
     >
-      {visible.words.map((word, index) => {
-        const wordIndex = visible.startIndex + index;
-        return (
-          <React.Fragment key={`${word}-${wordIndex}`}>
-            <span style={{color: wordIndex === activeWord ? '#D97706' : undefined}}>{word}</span>
-            {index < visible.words.length - 1 ? ' ' : null}
-          </React.Fragment>
-        );
-      })}
-    </div>
+      {layout.rows.map((row, rowIndex) => (
+        <text
+          key={row[0]?.index}
+          fill="#202124"
+          fontFamily="Arial, sans-serif"
+          fontSize="48"
+          fontWeight="700"
+          lengthAdjust="spacingAndGlyphs"
+          textAnchor="middle"
+          textLength="900"
+          x="468"
+          y={rowIndex === 0 ? 52 : 116}
+        >
+          {row.map((word, index) => (
+            <tspan fill={word.index === activeWord ? '#D97706' : undefined} key={word.index}>
+              {word.text}{index < row.length - 1 ? ' ' : null}
+            </tspan>
+          ))}
+        </text>
+      ))}
+    </svg>
   );
 };
