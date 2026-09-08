@@ -15,8 +15,10 @@ from healthvideo.render.run import (
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.tts.base import TTSRequest
 from healthvideo.tts.silent import SilentTTS
+from healthvideo.workflows.review import approve_video
 
 FIXTURE_PRODUCTION_HASH = "synthetic-production-run"
+FIXTURE_REVIEWER = "BS Nguyễn Văn An"
 
 
 def create_project_fixture(root: Path, state: str) -> Path:
@@ -82,24 +84,66 @@ def create_project_fixture(root: Path, state: str) -> Path:
     storyboard = {"schema_version": "1.0", "title": brief["title"], "scenes": scenes}
     ledger = {
         "schema_version": "1.0",
-        "records": [{"id": "R01", "synthetic_test_record": True}],
-        "claims": [{"id": "C01", "synthetic_test_record": True}],
+        "records": [
+            {
+                "id": "R01",
+                "title": "Bản ghi tổng hợp cho test: giảm muối và huyết áp",
+                "authors": ["Nguyen A", "Tran B"],
+                "year": 2020,
+                "study_design": "tổng quan hệ thống",
+                "doi": "10.0000/synthetic-salt-bp",
+                "synthetic_test_record": True,
+            }
+        ],
+        "claims": [
+            {
+                "id": "C01",
+                "text_public": "Giảm muối giúp hạ huyết áp ở nhiều người.",
+                "text_technical": "Giảm natri ăn vào liên quan tới hạ huyết áp.",
+                "type": "evidence",
+                "sources": ["R01"],
+                "synthetic_test_record": True,
+            }
+        ],
     }
 
     if _has_published_render(state):
         _write_published_run(project_dir, storyboard)
         project["artifact_hashes"][PRODUCTION_ARTIFACT] = FIXTURE_PRODUCTION_HASH
 
+    approve_the_video = _needs_video_approval(state)
+    if approve_the_video:
+        project["state"] = ProjectState.AWAITING_VIDEO_REVIEW.value
+
     write_yaml_atomic(project_dir / "project.yaml", project)
     write_yaml_atomic(project_dir / "author-brief.yaml", brief)
     write_yaml_atomic(project_dir / "evidence" / "ledger.yaml", ledger)
     write_yaml_atomic(project_dir / "script" / "script.yaml", script)
     write_yaml_atomic(project_dir / "storyboard" / "storyboard.yaml", storyboard)
+
+    if approve_the_video:
+        approve_video(project_dir, reviewer=FIXTURE_REVIEWER, note="Đã xem toàn bộ.")
+        _set_state(project_dir, state)
     return project_dir
+
+
+def _set_state(project_dir: Path, state: str) -> None:
+    """Restore the requested state after the gate walked the project forward."""
+    manifest_path = project_dir / "project.yaml"
+    manifest = read_yaml(manifest_path)
+    manifest["state"] = state
+    write_yaml_atomic(manifest_path, manifest)
 
 
 def _has_published_render(state: str) -> bool:
     return ORDER.index(ProjectState(state)) >= ORDER.index(ProjectState.RENDERED)
+
+
+def _needs_video_approval(state: str) -> bool:
+    """States at or past the video gate carry a real approval record."""
+    return ORDER.index(ProjectState(state)) >= ORDER.index(
+        ProjectState.APPROVED_TO_PUBLISH
+    )
 
 
 def _write_published_run(project_dir: Path, storyboard: dict[str, Any]) -> None:

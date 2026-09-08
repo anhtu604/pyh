@@ -24,11 +24,9 @@ lines:
     delivery: {intent: qualify}
   - id: L05
     text: Tôi khuyên bạn giảm dần để dễ duy trì.
-    claim_id: C01
-    source_marker: '[1]'
+    claim_id: C02
     delivery: {intent: advise}
   - id: L06
     text: Hãy trao đổi với bác sĩ khi đang điều trị huyết áp.
-    claim_id: C01
-    source_marker: '[1]'
+    claim_id: C02
     delivery: {intent: caution}

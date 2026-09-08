@@ -1,9 +1,50 @@
 schema_version: '1.0'
 title: Ăn mặn và tăng huyết áp
 scenes:
-  - {id: S01, start_frame: 0, duration_frames: 225, narration: Ăn mặn có thể làm huyết áp tăng., claim_id: C01, source_marker: '[1]', visual: whiteboard}
-  - {id: S02, start_frame: 225, duration_frames: 225, narration: Bạn không cần bỏ hết gia vị., claim_id: C01, source_marker: '[1]', visual: whiteboard}
-  - {id: S03, start_frame: 450, duration_frames: 225, narration: Giảm muối giúp hạ huyết áp ở nhiều người., claim_id: C01, source_marker: '[1]', visual: chart}
-  - {id: S04, start_frame: 675, duration_frames: 225, narration: Hiệu quả có thể khác nhau giữa mỗi người., claim_id: C01, source_marker: '[1]', visual: whiteboard}
-  - {id: S05, start_frame: 900, duration_frames: 225, narration: Tôi khuyên bạn giảm dần để dễ duy trì., claim_id: C01, source_marker: '[1]', visual: whiteboard}
-  - {id: S06, start_frame: 1125, duration_frames: 225, narration: Hãy trao đổi với bác sĩ khi đang điều trị huyết áp., claim_id: C01, source_marker: '[1]', visual: whiteboard}
+  - id: S01
+    start_frame: 0
+    duration_frames: 225
+    narration: Ăn mặn có thể làm huyết áp tăng.
+    claim_id: C01
+    source_marker: '[1]'
+    visual: whiteboard
+  - id: S02
+    start_frame: 225
+    duration_frames: 225
+    narration: Bạn không cần bỏ hết gia vị.
+    claim_id: C01
+    source_marker: '[1]'
+    visual: whiteboard
+  - id: S03
+    start_frame: 450
+    duration_frames: 225
+    narration: Giảm muối giúp hạ huyết áp ở nhiều người.
+    claim_id: C01
+    source_marker: '[1]'
+    visual: evidence_highlight
+    evidence_highlight:
+      image: assets/evidence-r01.svg
+      quote: Giảm natri ăn vào liên quan tới mức giảm huyết áp tâm thu.
+      x: 0.08
+      y: 0.32
+      width: 0.84
+      height: 0.18
+  - id: S04
+    start_frame: 675
+    duration_frames: 225
+    narration: Hiệu quả có thể khác nhau giữa mỗi người.
+    claim_id: C01
+    source_marker: '[1]'
+    visual: chart
+  - id: S05
+    start_frame: 900
+    duration_frames: 225
+    narration: Tôi khuyên bạn giảm dần để dễ duy trì.
+    claim_id: C02
+    visual: whiteboard
+  - id: S06
+    start_frame: 1125
+    duration_frames: 225
+    narration: Hãy trao đổi với bác sĩ khi đang điều trị huyết áp.
+    claim_id: C02
+    visual: whiteboard

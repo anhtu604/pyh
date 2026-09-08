@@ -13,6 +13,7 @@ from healthvideo.render.remotion import build_render_argv
 from healthvideo.storage.files import read_yaml
 from healthvideo.tts.silent import SilentTTS
 from healthvideo.workflows.create_project import create_project
+from healthvideo.workflows.package import package_project
 from healthvideo.workflows.produce import produce_project
 from healthvideo.workflows.review import (
     approval_is_stale,
@@ -85,6 +86,19 @@ def produce(
         )
         return
     typer.echo(f"Rendered video: {output}")
+
+
+@app.command()
+def package(
+    project_dir: Annotated[Path, typer.Argument(help="Thư mục dự án đã duyệt video")],
+) -> None:
+    """Đóng gói video đã duyệt thành thư mục publish để đăng thủ công."""
+    try:
+        output = package_project(project_dir)
+    except (FileNotFoundError, TypeError, ValueError) as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
+    typer.echo(f"Packaged: {output}")
 
 
 @project_app.command("new")

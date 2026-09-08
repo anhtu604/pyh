@@ -2,8 +2,10 @@ import datetime
 import hashlib
 import json
 import os
+import shutil
 from collections.abc import Mapping
 from pathlib import Path
+from tempfile import mkdtemp
 from typing import Any
 
 import yaml
@@ -17,14 +19,46 @@ def read_yaml(path: Path) -> dict[str, Any]:
     return dict(data)
 
 
-def write_yaml_atomic(path: Path, data: Mapping[str, Any]) -> None:
+def write_text_atomic(path: Path, text: str) -> None:
+    """Write UTF-8 text through a sibling temporary file and one rename."""
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary_path = path.with_suffix(f"{path.suffix}.tmp")
     with temporary_path.open("w", encoding="utf-8", newline="\n") as stream:
-        yaml.safe_dump(dict(data), stream, allow_unicode=True, sort_keys=False)
+        stream.write(text)
         stream.flush()
         os.fsync(stream.fileno())
     os.replace(temporary_path, path)
+
+
+def write_yaml_atomic(path: Path, data: Mapping[str, Any]) -> None:
+    write_text_atomic(
+        path, yaml.safe_dump(dict(data), allow_unicode=True, sort_keys=False)
+    )
+
+
+def replace_directory_atomic(source_dir: Path, destination_dir: Path) -> None:
+    """Publish a staged directory with one rename, replacing what is there.
+
+    ``os.replace`` refuses a non-empty destination directory on Windows, so an
+    existing destination is renamed aside first and deleted only once the new
+    directory is in place; a failed rename puts the old directory back.
+    """
+    if not destination_dir.exists():
+        os.replace(source_dir, destination_dir)
+        return
+    superseded = Path(
+        mkdtemp(
+            prefix=f".{destination_dir.name}.superseded-", dir=destination_dir.parent
+        )
+    )
+    superseded.rmdir()
+    os.replace(destination_dir, superseded)
+    try:
+        os.replace(source_dir, destination_dir)
+    except Exception:
+        os.replace(superseded, destination_dir)
+        raise
+    shutil.rmtree(superseded, ignore_errors=True)
 
 
 def sha256_file(path: Path) -> str:

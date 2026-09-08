@@ -1,7 +1,24 @@
 schema_version: '1.0'
 records:
   - id: R01
+    title: 'Bản ghi thử nghiệm tổng hợp: giảm natri và huyết áp'
+    authors: [Nguyen Van A, Tran Thi B]
+    year: 2020
+    study_design: tổng quan hệ thống (dữ liệu giả lập cho test)
+    sample_size: 1200
+    doi: 10.0000/synthetic-salt-bp
+    url: https://example.invalid/synthetic-salt-bp
     synthetic_test_record: true
 claims:
   - id: C01
+    text_public: Giảm muối giúp hạ huyết áp ở nhiều người.
+    text_technical: Giảm natri ăn vào liên quan tới mức giảm huyết áp tâm thu.
+    type: evidence
+    sources: [R01]
+    synthetic_test_record: true
+  - id: C02
+    text_public: Tôi khuyên bạn giảm dần để dễ duy trì.
+    text_technical: Ý kiến chuyên môn của bác sĩ, không phải kết quả nghiên cứu.
+    type: professional_opinion
+    sources: []
     synthetic_test_record: true

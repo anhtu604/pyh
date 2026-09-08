@@ -9,6 +9,9 @@ node_modules/
 cache/
 tests/artifacts/
 tests/fixtures/**/audio/
+tests/fixtures/**/renders/
+tests/fixtures/**/publish/
 projects/**/audio/
 projects/**/renders/
+projects/**/publish/
 projects/**/source-documents/
