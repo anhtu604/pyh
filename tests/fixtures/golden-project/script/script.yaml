@@ -1,0 +1,34 @@
+schema_version: '1.0'
+title: Ăn mặn và tăng huyết áp
+language: vi
+lines:
+  - id: L01
+    text: Ăn mặn có thể làm huyết áp tăng.
+    claim_id: C01
+    source_marker: '[1]'
+    delivery: {intent: introduce}
+  - id: L02
+    text: Bạn không cần bỏ hết gia vị.
+    claim_id: C01
+    source_marker: '[1]'
+    delivery: {intent: reassure}
+  - id: L03
+    text: Giảm muối giúp hạ huyết áp ở nhiều người.
+    claim_id: C01
+    source_marker: '[1]'
+    delivery: {intent: explain}
+  - id: L04
+    text: Hiệu quả có thể khác nhau giữa mỗi người.
+    claim_id: C01
+    source_marker: '[1]'
+    delivery: {intent: qualify}
+  - id: L05
+    text: Tôi khuyên bạn giảm dần để dễ duy trì.
+    claim_id: C01
+    source_marker: '[1]'
+    delivery: {intent: advise}
+  - id: L06
+    text: Hãy trao đổi với bác sĩ khi đang điều trị huyết áp.
+    claim_id: C01
+    source_marker: '[1]'
+    delivery: {intent: caution}

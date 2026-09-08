@@ -1,3 +1,6 @@
+import shutil
+from pathlib import Path
+
 from typer.testing import CliRunner
 
 from healthvideo import __version__
@@ -11,7 +14,9 @@ def test_version_command() -> None:
     assert result.stdout.strip() == __version__
 
 
-def test_project_new_creates_project_and_reports_duplicate_without_overwrite(tmp_path) -> None:
+def test_project_new_creates_project_and_reports_duplicate_without_overwrite(
+    tmp_path,
+) -> None:
     runner = CliRunner()
     command = [
         "project",
@@ -33,3 +38,21 @@ def test_project_new_creates_project_and_reports_duplicate_without_overwrite(tmp
     assert read_yaml(tmp_path / "muoi-va-huyet-ap" / "author-brief.yaml")["title"] == (
         "Ăn mặn và tăng huyết áp"
     )
+
+
+def test_produce_dry_run_prints_remotion_command_without_changing_state(
+    tmp_path,
+) -> None:
+    fixture = Path(__file__).parent / "fixtures" / "golden-project"
+    project_dir = tmp_path / "golden-project"
+    shutil.copytree(fixture, project_dir)
+    original_manifest = (project_dir / "project.yaml").read_bytes()
+
+    result = CliRunner().invoke(
+        app, ["produce", str(project_dir), "--tts", "silent", "--dry-run"]
+    )
+
+    assert result.exit_code == 0
+    assert "pnpm --dir" in result.stdout
+    assert not (project_dir / "renders" / "video.mp4").exists()
+    assert (project_dir / "project.yaml").read_bytes() == original_manifest

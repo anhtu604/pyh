@@ -1,0 +1,7 @@
+schema_version: '1.0'
+records:
+  - id: R01
+    synthetic_test_record: true
+claims:
+  - id: C01
+    synthetic_test_record: true
