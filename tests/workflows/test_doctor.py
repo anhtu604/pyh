@@ -79,11 +79,14 @@ def test_runner_resolves_a_windows_cmd_shim_without_a_shell(monkeypatch) -> None
         stdout = "11.19.0\n"
         stderr = ""
 
-    monkeypatch.setattr(doctor.sys, "platform", "win32")
+    from healthvideo import process
+
+    monkeypatch.setattr(process.sys, "platform", "win32")
+    monkeypatch.setenv("COMSPEC", r"C:\\Windows\\System32\\cmd.exe")
     monkeypatch.setattr(
-        doctor.shutil,
+        process.shutil,
         "which",
-        lambda name: r"C:\\tools\\pnpm.cmd" if name == "pnpm.cmd" else None,
+        lambda name: r"C:\\tools\\pnpm.cmd" if name == "pnpm" else None,
     )
 
     def fake_subprocess_run(argv, **kwargs):
@@ -93,5 +96,11 @@ def test_runner_resolves_a_windows_cmd_shim_without_a_shell(monkeypatch) -> None
     monkeypatch.setattr(doctor.subprocess, "run", fake_subprocess_run)
 
     assert doctor.run_command(["pnpm", "--version"]) == (0, "11.19.0")
-    assert captured[0] == [r"C:\\tools\\pnpm.cmd", "--version"]
+    assert captured[0][:4] == [
+        r"C:\\Windows\\System32\\cmd.exe",
+        "/d",
+        "/s",
+        "/c",
+    ]
+    assert captured[0][4:] == ["call", r"C:\\tools\\pnpm.cmd", "--version"]
     assert captured[1]["shell"] is False

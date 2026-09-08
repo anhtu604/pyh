@@ -12,7 +12,7 @@ from healthvideo.render.run import (
     RENDER_INPUT_NAME,
     production_run_dir,
 )
-from healthvideo.storage.files import read_yaml, write_yaml_atomic
+from healthvideo.storage.files import read_yaml, sha256_file, write_yaml_atomic
 from healthvideo.tts.base import TTSRequest
 from healthvideo.tts.silent import SilentTTS
 from healthvideo.workflows.review import approve_medical, approve_video
@@ -26,6 +26,10 @@ def create_project_fixture(root: Path, state: str) -> Path:
     project_dir = root / "muoi-va-huyet-ap"
     for directory in ("audio", "assets", "evidence", "renders", "script", "storyboard"):
         (project_dir / directory).mkdir(parents=True, exist_ok=True)
+    (project_dir / "assets" / "evidence-r01.svg").write_text(
+        "<svg xmlns='http://www.w3.org/2000/svg'><text>synthetic</text></svg>",
+        encoding="utf-8",
+    )
 
     project: dict[str, Any] = {
         "schema_version": "1.0",
@@ -80,6 +84,16 @@ def create_project_fixture(root: Path, state: str) -> Path:
             "source_marker": "[1]",
             "visual": "whiteboard",
         }
+        if index == 0:
+            scene["visual"] = "evidence_highlight"
+            scene["evidence_highlight"] = {
+                "image": "assets/evidence-r01.svg",
+                "quote": "Synthetic evidence fixture for tests only.",
+                "x": 0.1,
+                "y": 0.2,
+                "width": 0.8,
+                "height": 0.2,
+            }
         scenes.append(scene)
     storyboard = {"schema_version": "1.0", "title": brief["title"], "scenes": scenes}
     ledger = {
@@ -121,7 +135,6 @@ def create_project_fixture(root: Path, state: str) -> Path:
     write_yaml_atomic(project_dir / "evidence" / "ledger.yaml", ledger)
     write_yaml_atomic(project_dir / "script" / "script.yaml", script)
     write_yaml_atomic(project_dir / "storyboard" / "storyboard.yaml", storyboard)
-
     if approve_the_medical_review:
         approve_medical(project_dir, reviewer=FIXTURE_REVIEWER, note="Đã đối chiếu.")
     if approve_the_video:
@@ -152,9 +165,9 @@ def _needs_video_approval(state: str) -> bool:
 
 
 def _needs_medical_approval(state: str) -> bool:
-    """Video-gate fixtures must carry the real preceding medical approval."""
+    """Every fixture at or beyond production carries a real medical approval."""
     return ORDER.index(ProjectState(state)) >= ORDER.index(
-        ProjectState.AWAITING_VIDEO_REVIEW
+        ProjectState.SCRIPT_APPROVED
     )
 
 
@@ -164,6 +177,10 @@ def _write_published_run(project_dir: Path, storyboard: dict[str, Any]) -> None:
     (run_dir / "audio").mkdir(parents=True, exist_ok=True)
     (run_dir / "audio" / "narration.wav").write_bytes(b"synthetic-wav")
     (run_dir / OUTPUT_NAME).write_bytes(b"synthetic-mp4")
+    asset = project_dir / "assets" / "evidence-r01.svg"
+    staged_asset = run_dir / "assets" / "evidence-r01.svg"
+    staged_asset.parent.mkdir(parents=True, exist_ok=True)
+    staged_asset.write_bytes(asset.read_bytes())
     render_input = build_render_input(
         Storyboard.model_validate(storyboard), audio_file="audio/narration.wav"
     )
@@ -174,6 +191,7 @@ def _write_published_run(project_dir: Path, storyboard: dict[str, Any]) -> None:
             "input_hash": FIXTURE_PRODUCTION_HASH,
             "output": OUTPUT_NAME,
             "provider": "silent",
+            "asset_sha256": {"assets/evidence-r01.svg": sha256_file(asset)},
         },
     )
 

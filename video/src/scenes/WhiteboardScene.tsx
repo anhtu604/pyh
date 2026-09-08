@@ -7,6 +7,27 @@ type WhiteboardSceneProps = {
   scene: Scene;
 };
 
+export const SourceMarker = ({sourceMarker}: {sourceMarker: string}): React.JSX.Element => (
+  <div
+    aria-label={`Nguồn ${sourceMarker}`}
+    style={{
+      backgroundColor: '#FFD54F',
+      border: '4px solid #202124',
+      borderRadius: 18,
+      color: '#202124',
+      fontFamily: 'Arial, sans-serif',
+      fontSize: 52,
+      fontWeight: 800,
+      padding: '12px 22px',
+      position: 'absolute',
+      right: 72,
+      top: 96,
+    }}
+  >
+    {sourceMarker}
+  </div>
+);
+
 export const WhiteboardScene: React.FC<WhiteboardSceneProps> = ({scene}) => {
   const frame = useCurrentFrame();
   const dashOffset = interpolate(frame, [0, 45], [1, 0], {
@@ -46,6 +67,7 @@ export const WhiteboardScene: React.FC<WhiteboardSceneProps> = ({scene}) => {
       >
         {scene.narration}
       </div>
+      {scene.source_marker ? <SourceMarker sourceMarker={scene.source_marker} /> : null}
       <Captions text={scene.narration} durationInFrames={scene.duration_frames} />
     </>
   );

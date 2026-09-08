@@ -18,6 +18,7 @@ from healthvideo.domain.evidence import EvidenceClaim, SourceRecord
 from healthvideo.domain.project import ProjectManifest, ProjectState
 from healthvideo.domain.review import ReviewKind, ReviewRecord
 from healthvideo.domain.script import Script
+from healthvideo.domain.storyboard import Storyboard
 from healthvideo.render.input import RenderInput
 from healthvideo.render.run import (
     OUTPUT_NAME,
@@ -32,7 +33,7 @@ from healthvideo.storage.files import (
     sha256_file,
     write_text_atomic,
 )
-from healthvideo.workflows.review import ensure_approval_current, latest_approval
+from healthvideo.workflows.review import ensure_approval_current
 
 LedgerEntry = TypeVar("LedgerEntry", bound=BaseModel)
 
@@ -63,41 +64,50 @@ def package_project(project_dir: Path) -> Path:
             "Packaging requires project state "
             f"{ProjectState.APPROVED_TO_PUBLISH.value}, not {project.state.value}"
         )
-    medical_approval = latest_approval(project_dir, ReviewKind.MEDICAL)
-    if medical_approval is None:
+    try:
+        medical_approval = ensure_approval_current(
+            project_dir, project, ReviewKind.MEDICAL
+        )
+    except FileNotFoundError as error:
         raise FileNotFoundError(
             "Packaging requires a medical approval record; "
             "run 'healthvideo review medical'"
+        ) from error
+    try:
+        video_approval = ensure_approval_current(
+            project_dir, project, ReviewKind.VIDEO
         )
-    ensure_approval_current(project_dir, project, ReviewKind.MEDICAL)
-
-    video_approval = latest_approval(project_dir, ReviewKind.VIDEO)
-    if video_approval is None:
+    except FileNotFoundError as error:
         raise FileNotFoundError(
             "Packaging requires a video approval record; "
             "run 'healthvideo review video'"
-        )
-    ensure_approval_current(project_dir, project, ReviewKind.VIDEO)
+        ) from error
+
+    ledger, script, _storyboard = _approved_medical_snapshots(
+        project_dir, medical_approval
+    )
 
     run_dir = _active_run_dir(project_dir, project)
     video = run_dir / OUTPUT_NAME
     if not video.is_file():
         raise FileNotFoundError(f"Approved video is missing: {video}")
 
-    script = Script.model_validate(read_yaml(project_dir / "script" / "script.yaml"))
     render_input_path = run_dir / RENDER_INPUT_NAME
-    render_input = RenderInput.model_validate(
-        json.loads(render_input_path.read_text(encoding="utf-8"))
+    render_input_data = json.loads(render_input_path.read_text(encoding="utf-8"))
+    _require_approved_hash(
+        video_approval,
+        "render_input",
+        canonical_json_hash(render_input_data),
     )
-    citations = _citations(
-        script, read_yaml(project_dir / "evidence" / "ledger.yaml"), render_input
-    )
+    render_input = RenderInput.model_validate(render_input_data)
+    citations = _citations(script, ledger, render_input)
 
     publish_dir = project_dir / PUBLISH_DIRECTORY
     staging_dir = Path(mkdtemp(prefix=f".{project.slug}.package-", dir=project_dir))
     try:
         shutil.copy2(video, staging_dir / OUTPUT_NAME)
         shutil.copy2(render_input_path, staging_dir / RENDER_INPUT_NAME)
+        _validate_staged_video_artifacts(staging_dir, video_approval)
         write_text_atomic(staging_dir / CAPTION_NAME, _caption(script, citations))
         write_text_atomic(staging_dir / SOURCES_NAME, _sources(script, citations))
         write_text_atomic(
@@ -116,6 +126,58 @@ def package_project(project_dir: Path) -> Path:
         shutil.rmtree(staging_dir, ignore_errors=True)
         raise
     return publish_dir
+
+
+def _approved_medical_snapshots(
+    project_dir: Path, approval: ReviewRecord
+) -> tuple[dict[str, Any], Script, Storyboard]:
+    """Capture medical inputs once and prove each snapshot is doctor-approved."""
+    ledger = read_yaml(project_dir / "evidence" / "ledger.yaml")
+    script_data = read_yaml(project_dir / "script" / "script.yaml")
+    storyboard_data = read_yaml(project_dir / "storyboard" / "storyboard.yaml")
+    for name, data in (
+        ("evidence", ledger),
+        ("script", script_data),
+        ("storyboard", storyboard_data),
+    ):
+        _require_approved_hash(approval, name, canonical_json_hash(data))
+    return (
+        ledger,
+        Script.model_validate(script_data),
+        Storyboard.model_validate(storyboard_data),
+    )
+
+
+def _validate_staged_video_artifacts(
+    staging_dir: Path, approval: ReviewRecord
+) -> None:
+    """Reject package bytes that no longer match the captured video approval."""
+    staged_video = staging_dir / OUTPUT_NAME
+    _require_approved_hash(approval, "video", sha256_file(staged_video), staged=True)
+    staged_render_input = json.loads(
+        (staging_dir / RENDER_INPUT_NAME).read_text(encoding="utf-8")
+    )
+    _require_approved_hash(
+        approval,
+        "render_input",
+        canonical_json_hash(staged_render_input),
+        staged=True,
+    )
+
+
+def _require_approved_hash(
+    approval: ReviewRecord,
+    name: str,
+    actual_hash: str,
+    *,
+    staged: bool = False,
+) -> None:
+    expected = approval.artifact_hashes.get(name)
+    if expected != actual_hash:
+        prefix = "staged " if staged else ""
+        raise ValueError(
+            f"{prefix}{name} does not match the approved {approval.kind.value} artifact"
+        )
 
 
 def _active_run_dir(project_dir: Path, project: ProjectManifest) -> Path:

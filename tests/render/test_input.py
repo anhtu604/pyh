@@ -73,6 +73,18 @@ def test_evidence_highlight_scene_requires_source_marker_and_highlight(
         valid_highlight_scene(**values)
 
 
+def test_scene_rejects_whitespace_only_source_marker() -> None:
+    with pytest.raises(ValidationError, match="source_marker"):
+        Scene(
+            id="S01",
+            start_frame=0,
+            duration_frames=1350,
+            narration="Không có dấu nguồn hợp lệ.",
+            source_marker="   ",
+            visual="whiteboard",
+        )
+
+
 def test_build_render_input_rejects_gap_with_scene_id() -> None:
     board = Storyboard(
         title="Muối",

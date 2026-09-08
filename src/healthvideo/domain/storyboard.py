@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class EvidenceHighlight(BaseModel):
@@ -49,6 +49,13 @@ class Scene(BaseModel):
     )
     visual: Literal["whiteboard", "chart", "evidence_highlight", "ai_clip"]
     evidence_highlight: EvidenceHighlight | None = None
+
+    @field_validator("source_marker")
+    @classmethod
+    def validate_source_marker(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("source_marker must contain a visible marker")
+        return value
 
     @model_validator(mode="after")
     def validate_scene(self) -> "Scene":

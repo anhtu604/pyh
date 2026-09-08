@@ -244,6 +244,60 @@ def test_package_leaves_no_partial_publish_when_publishing_fails(
     assert _staging_directories(project_dir) == []
 
 
+@pytest.mark.parametrize("artifact", ["video.mp4", "render-input.json"])
+def test_package_rejects_staged_video_artifact_changed_during_copy(
+    tmp_path, monkeypatch, artifact: str
+) -> None:
+    project_dir = create_project_fixture(tmp_path, state="approved_to_publish")
+    real_copy = shutil.copy2
+
+    def tampering_copy(source: Path, destination: Path) -> Path:
+        result = real_copy(source, destination)
+        if source.name == artifact:
+            if artifact == "video.mp4":
+                destination.write_bytes(b"unapproved-video")
+            else:
+                payload = json.loads(destination.read_text(encoding="utf-8"))
+                payload["title"] = "Unapproved render input"
+                destination.write_text(json.dumps(payload), encoding="utf-8")
+        return result
+
+    monkeypatch.setattr(package_workflow.shutil, "copy2", tampering_copy)
+
+    with pytest.raises(ValueError, match="staged .* approved"):
+        package_project(project_dir)
+
+    assert not (project_dir / "publish").exists()
+
+
+def test_package_uses_approved_medical_snapshots_when_source_mutates_during_copy(
+    tmp_path, monkeypatch
+) -> None:
+    project_dir = create_project_fixture(tmp_path, state="approved_to_publish")
+    script_path = project_dir / "script" / "script.yaml"
+    approved_text = read_yaml(script_path)["lines"][0]["text"]
+    real_copy = shutil.copy2
+    mutated = False
+
+    def mutating_copy(source: Path, destination: Path) -> Path:
+        nonlocal mutated
+        result = real_copy(source, destination)
+        if not mutated:
+            script = read_yaml(script_path)
+            script["lines"][0]["text"] = "UNAPPROVED MUTATION"
+            write_yaml_atomic(script_path, script)
+            mutated = True
+        return result
+
+    monkeypatch.setattr(package_workflow.shutil, "copy2", mutating_copy)
+
+    output = package_project(project_dir)
+
+    caption = (output / "caption.txt").read_text(encoding="utf-8")
+    assert approved_text in caption
+    assert "UNAPPROVED MUTATION" not in caption
+
+
 def _copy_golden_project(tmp_path: Path) -> Path:
     project_dir = tmp_path / "golden-project"
     shutil.copytree(GOLDEN_PROJECT, project_dir)

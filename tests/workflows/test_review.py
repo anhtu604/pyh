@@ -20,7 +20,12 @@ from tests.helpers import create_project_fixture
 def test_medical_approval_binds_script_and_evidence_hash(tmp_path) -> None:
     project = create_project_fixture(tmp_path, state="awaiting_medical_review")
     record = approve_medical(project, reviewer="BS An", note="Đã đối chiếu số liệu")
-    assert set(record.artifact_hashes) == {"evidence", "script", "storyboard"}
+    assert set(record.artifact_hashes) == {
+        "asset:assets/evidence-r01.svg",
+        "evidence",
+        "script",
+        "storyboard",
+    }
     assert record.decision == "approved"
 
 
@@ -60,11 +65,12 @@ def test_medical_approval_timestamp_is_timezone_aware(tmp_path) -> None:
 
 def test_medical_approval_is_rejected_outside_its_gate(tmp_path) -> None:
     project_dir = create_project_fixture(tmp_path, state="script_approved")
+    existing_records = list((project_dir / "reviews").glob("*.yaml"))
 
     with pytest.raises(ValueError, match="awaiting_medical_review"):
         approve_medical(project_dir, reviewer="BS An")
 
-    assert list((project_dir / "reviews").glob("*.yaml")) == []
+    assert list((project_dir / "reviews").glob("*.yaml")) == existing_records
 
 
 def test_video_approval_binds_render_artifacts_and_advances_state(tmp_path) -> None:
@@ -106,6 +112,41 @@ def test_medical_approval_goes_stale_when_the_storyboard_changes(tmp_path) -> No
     assert approval_is_stale(project_dir, _project(project_dir), ReviewKind.MEDICAL)
     with pytest.raises(ValueError, match="stale"):
         produce_project(project_dir, SilentTTS(), lambda argv: 0)
+
+
+def test_medical_approval_goes_stale_when_an_evidence_asset_changes(tmp_path) -> None:
+    project_dir = create_project_fixture(tmp_path, state="awaiting_medical_review")
+    approve_medical(project_dir, reviewer="BS An")
+    assert not approval_is_stale(project_dir, _project(project_dir), ReviewKind.MEDICAL)
+
+    (project_dir / "assets" / "evidence-r01.svg").write_text(
+        "<svg xmlns='http://www.w3.org/2000/svg'><text>replacement</text></svg>",
+        encoding="utf-8",
+    )
+
+    assert approval_is_stale(project_dir, _project(project_dir), ReviewKind.MEDICAL)
+
+
+def test_medical_approval_requires_referenced_evidence_asset(tmp_path) -> None:
+    project_dir = create_project_fixture(tmp_path, state="awaiting_medical_review")
+    (project_dir / "assets" / "evidence-r01.svg").unlink()
+
+    with pytest.raises(FileNotFoundError, match="evidence-r01.svg"):
+        approve_medical(project_dir, reviewer="BS An")
+
+
+@pytest.mark.parametrize("image", ["../outside.svg", "/outside.svg", "C:/outside.svg"])
+def test_medical_approval_rejects_unsafe_evidence_asset_path(
+    tmp_path, image: str
+) -> None:
+    project_dir = create_project_fixture(tmp_path, state="awaiting_medical_review")
+    storyboard_path = project_dir / "storyboard" / "storyboard.yaml"
+    storyboard = read_yaml(storyboard_path)
+    storyboard["scenes"][0]["evidence_highlight"]["image"] = image
+    write_yaml_atomic(storyboard_path, storyboard)
+
+    with pytest.raises(ValueError, match="relative POSIX"):
+        approve_medical(project_dir, reviewer="BS An")
 
 
 def test_medical_approval_needs_the_storyboard(tmp_path) -> None:

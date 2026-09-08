@@ -1,14 +1,16 @@
 import shutil
+import sys
 from pathlib import Path
 
 from typer.testing import CliRunner
 
 from healthvideo import __version__
-from healthvideo.cli import app
+from healthvideo.cli import app, main
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.tts.silent import SilentTTS
 from healthvideo.workflows.doctor import CheckResult
 from healthvideo.workflows.produce import produce_project
+from healthvideo.workflows.review import approve_medical
 from tests.helpers import create_project_fixture, synthesize_fixture_audio
 
 
@@ -16,6 +18,22 @@ def test_version_command() -> None:
     result = CliRunner().invoke(app, ["version"])
     assert result.exit_code == 0
     assert result.stdout.strip() == __version__
+
+
+def test_cli_configures_windows_stdio_for_vietnamese_output(monkeypatch) -> None:
+    configured: list[str] = []
+
+    class Console:
+        def reconfigure(self, *, encoding: str) -> None:
+            configured.append(encoding)
+
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(sys, "stdout", Console())
+    monkeypatch.setattr(sys, "stderr", Console())
+
+    main()
+
+    assert configured == ["utf-8", "utf-8"]
 
 
 def test_doctor_allows_a_missing_optional_cuda_check(monkeypatch) -> None:
@@ -82,6 +100,10 @@ def test_produce_dry_run_prints_remotion_command_without_changing_state(
     project_dir = tmp_path / "golden-project"
     shutil.copytree(fixture, project_dir)
     synthesize_fixture_audio(project_dir)
+    project = read_yaml(project_dir / "project.yaml")
+    project["state"] = "awaiting_medical_review"
+    write_yaml_atomic(project_dir / "project.yaml", project)
+    approve_medical(project_dir, reviewer="BS An")
     original_manifest = (project_dir / "project.yaml").read_bytes()
 
     result = CliRunner().invoke(
@@ -89,7 +111,8 @@ def test_produce_dry_run_prints_remotion_command_without_changing_state(
     )
 
     assert result.exit_code == 0
-    assert "pnpm --dir" in result.stdout
+    assert "--dir" in result.stdout
+    assert "video" in result.stdout
     assert not (project_dir / "renders" / "video.mp4").exists()
     assert (project_dir / "project.yaml").read_bytes() == original_manifest
 
@@ -99,6 +122,10 @@ def test_produce_dry_run_prints_remotion_command_for_a_cache_hit(tmp_path) -> No
     project_dir = tmp_path / "golden-project"
     shutil.copytree(fixture, project_dir)
     synthesize_fixture_audio(project_dir)
+    project = read_yaml(project_dir / "project.yaml")
+    project["state"] = "awaiting_medical_review"
+    write_yaml_atomic(project_dir / "project.yaml", project)
+    approve_medical(project_dir, reviewer="BS An")
 
     def successful_runner(argv: list[str]) -> int:
         output = Path(argv[argv.index("--output") + 1])
@@ -114,7 +141,8 @@ def test_produce_dry_run_prints_remotion_command_for_a_cache_hit(tmp_path) -> No
     )
 
     assert result.exit_code == 0
-    assert "pnpm --dir" in result.stdout
+    assert "--dir" in result.stdout
+    assert "video" in result.stdout
     assert (project_dir / "project.yaml").read_bytes() == original_manifest
 
 

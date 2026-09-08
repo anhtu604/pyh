@@ -32,6 +32,23 @@ def test_produce_reuses_matching_artifact_hash(tmp_path) -> None:
     assert read_yaml(project_dir / "project.yaml")["state"] == "awaiting_video_review"
 
 
+@pytest.mark.parametrize("dry_run", [False, True])
+def test_produce_requires_a_present_medical_approval_before_any_work(
+    tmp_path, dry_run: bool
+) -> None:
+    project_dir = create_project_fixture(tmp_path, state="script_approved")
+    for record in (project_dir / "reviews").glob("medical-*.yaml"):
+        record.unlink()
+    calls: list[list[str]] = []
+
+    with pytest.raises(FileNotFoundError, match="medical approval record"):
+        produce_project(
+            project_dir, SilentTTS(), calls.append, dry_run=dry_run
+        )
+
+    assert calls == []
+
+
 def test_produce_rejects_reviewed_project_when_cached_output_is_missing(
     tmp_path,
 ) -> None:
@@ -330,7 +347,13 @@ def test_input_hash_changes_for_every_declared_input(tmp_path) -> None:
     script = Script.model_validate(script_data)
     storyboard = Storyboard.model_validate(storyboard_data)
     profile = {"language": "vi", "directness": "clear_and_calm"}
-    baseline = _input_hash(script, storyboard, profile, "silent")
+    baseline = _input_hash(
+        script,
+        storyboard,
+        profile,
+        "silent",
+        {"assets/evidence-r01.svg": "a" * 64},
+    )
 
     changed_script = script.model_copy(
         update={"title": "Ăn mặn và tăng huyết áp — cập nhật"}
@@ -339,15 +362,87 @@ def test_input_hash_changes_for_every_declared_input(tmp_path) -> None:
         update={"title": "Ăn mặn và tăng huyết áp — cập nhật"}
     )
 
-    assert _input_hash(changed_script, storyboard, profile, "silent") != baseline
-    assert _input_hash(script, changed_storyboard, profile, "silent") != baseline
     assert (
         _input_hash(
-            script, storyboard, {"language": "vi", "directness": "direct"}, "silent"
+            changed_script,
+            storyboard,
+            profile,
+            "silent",
+            {"assets/evidence-r01.svg": "a" * 64},
         )
         != baseline
     )
-    assert _input_hash(script, storyboard, profile, "other") != baseline
+    assert (
+        _input_hash(
+            script,
+            changed_storyboard,
+            profile,
+            "silent",
+            {"assets/evidence-r01.svg": "a" * 64},
+        )
+        != baseline
+    )
+    assert (
+        _input_hash(
+            script,
+            storyboard,
+            {"language": "vi", "directness": "direct"},
+            "silent",
+            {"assets/evidence-r01.svg": "a" * 64},
+        )
+        != baseline
+    )
+    assert (
+        _input_hash(
+            script,
+            storyboard,
+            profile,
+            "other",
+            {"assets/evidence-r01.svg": "a" * 64},
+        )
+        != baseline
+    )
+    assert (
+        _input_hash(
+            script,
+            storyboard,
+            profile,
+            "silent",
+            {"assets/evidence-r01.svg": "b" * 64},
+        )
+        != baseline
+    )
+
+
+def test_produce_invalidates_cache_after_approved_evidence_asset_is_replaced(
+    tmp_path,
+) -> None:
+    project_dir = create_project_fixture(tmp_path, state="script_approved")
+    calls: list[list[str]] = []
+
+    def fake_runner(argv: list[str]) -> int:
+        calls.append(argv)
+        _write_synthetic_output(argv)
+        return 0
+
+    first = produce_project(project_dir, SilentTTS(), fake_runner)
+    first_hash = first.parent.name
+    asset = project_dir / "assets" / "evidence-r01.svg"
+    asset.write_text(
+        "<svg xmlns='http://www.w3.org/2000/svg'><text>replacement</text></svg>",
+        encoding="utf-8",
+    )
+    project = read_yaml(project_dir / "project.yaml")
+    project["state"] = "awaiting_medical_review"
+    write_yaml_atomic(project_dir / "project.yaml", project)
+    from healthvideo.workflows.review import approve_medical
+
+    approve_medical(project_dir, reviewer="BS An")
+
+    second = produce_project(project_dir, SilentTTS(), fake_runner)
+
+    assert len(calls) == 2
+    assert second.parent.name != first_hash
 
 
 def _run_artifacts(run_dir: Path) -> dict[str, bytes]:

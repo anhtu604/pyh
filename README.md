@@ -31,6 +31,7 @@ MVP complete: vertical slice từ author brief, evidence, kịch bản và story
 | 8 | Hai cổng duyệt có hash và audit trail | complete | `python -m pytest tests/workflows/test_review.py tests/workflows/test_produce.py tests/storage -v` (35 passed); `python -m pytest -v` (83 passed); `python -m ruff check src tests tools`; `pnpm --dir video test` (11 passed); `pnpm --dir video typecheck` | `feat: enforce doctor review gates`; `fix: bind the medical gate to the storyboard` |
 | 9 | Gói xuất bản và golden end-to-end test | complete | `python -m pytest tests/e2e/test_golden_project.py -v` (15 passed); `python -m pytest -v` (99 passed); `python -m ruff check src tests tools`; `pnpm --dir video test` (11 passed); `pnpm --dir video typecheck` | `feat: package reviewed videos for publishing`; `fix: harden publication package integrity` |
 | 10 | Installer Windows và environment doctor | complete | `python -m pytest -v` (106 passed); `ruff`; video test/typecheck; `install/doctor.ps1` | `feat: add Windows installer and diagnostics` |
+| Final review | Approval, asset, package và Windows render hardening | complete | `python -m pytest -v` (122 passed); Ruff; video test (12 passed)/typecheck; real Windows golden render 1080 × 1920, 30 fps, 45.056 s | `fix: close final production integrity gaps` |
 
 ## Kiến trúc
 
@@ -63,8 +64,9 @@ artifact và không đổi state):
 ```
 
 `healthvideo doctor` yêu cầu Python >=3.11, Node >=22, pnpm >=11, FFmpeg >=8 và
-Arial hoặc Noto Sans. Nếu `pnpm` không có trực tiếp trên PATH, doctor và installer
-dùng `corepack pnpm`; CUDA chỉ là cảnh báo tùy chọn. Lần kiểm tra Windows gần nhất
+Arial hoặc Noto Sans. Doctor và production dùng chung resolver: ưu tiên executable
+`pnpm`, dùng `corepack pnpm` khi cần, và chạy shim `.cmd`/`.bat` qua `cmd.exe` bằng
+argv với `shell=False`; CUDA chỉ là cảnh báo tùy chọn. Lần kiểm tra Windows gần nhất
 (08-09-2026) phát hiện Python 3.14.3, Node 24.14.0, pnpm 11.19.0 và FFmpeg 8.1.1.
 
 Artifact nằm trong thư mục dự án: `evidence/`, `script/`, `storyboard/` là đầu vào
@@ -79,15 +81,17 @@ sản xuất; `publish/` là gói cuối cùng để đăng thủ công. Chỉ `
 Author brief → evidence ledger → script + storyboard → medical review → production
 → video review → publication package. Cả hai cổng duyệt của bác sĩ là bắt buộc;
 storyboard phải tồn tại trước khi duyệt y khoa.
-`produce` chỉ nhận dự án ở `script_approved`; nếu dự án đã ở
+`produce` chỉ nhận dự án ở `script_approved` khi có `ReviewRecord` y khoa hiện hành,
+kể cả với `--dry-run` hoặc cache hit; state YAML đơn lẻ không mở cổng. Nếu dự án đã ở
 `awaiting_video_review`, nó chỉ trả lại video cache khi hash đầu vào vẫn khớp.
 
 ## Cổng duyệt và audit trail
 
 `healthvideo review medical` chỉ chạy ở `awaiting_medical_review`, gắn hash của
-`evidence/ledger.yaml`, `script/script.yaml` và `storyboard/storyboard.yaml` rồi
-chuyển `script_approved`; storyboard nằm trong cổng vì nó quyết định nội dung và
-dấu trích dẫn hiện trên màn hình.
+`evidence/ledger.yaml`, `script/script.yaml`, `storyboard/storyboard.yaml` và byte
+của mọi ảnh `evidence_highlight` rồi chuyển `script_approved`; đường dẫn asset phải
+là POSIX tương đối, nằm trong dự án và trỏ tới file có thật. Storyboard nằm trong
+cổng vì nó quyết định nội dung và dấu trích dẫn hiện trên màn hình.
 `healthvideo review video` chỉ chạy ở `awaiting_video_review`, gắn hash của MP4 và
 `render-input.json` trong run đang hoạt động rồi chuyển `approved_to_publish`.
 Mỗi lần duyệt ghi một `ReviewRecord` bất biến (`reviews/medical-<uuid>.yaml`,
@@ -127,17 +131,23 @@ script/ledger; nếu không, `package` từ chối thay vì phát hành một tr
 nguồn. Câu
 `professional_opinion` không mang `source_marker` nên không bao giờ xuất hiện trong
 danh sách nguồn. Gói được dựng trong thư mục staging cạnh `publish/` rồi publish
-bằng một lần đổi tên thư mục; lỗi giữa chừng không để lại `publish/` dở dang.
+bằng một lần đổi tên thư mục; trước promotion, MP4 và canonical `render-input.json`
+trong staging phải khớp chính xác video approval. Caption và sources chỉ sinh từ
+snapshot ledger/script/storyboard đã đối chiếu với medical approval, nên sửa file
+đồng thời trong lúc copy không thể đưa byte hoặc nội dung chưa duyệt vào gói.
 
 ## Kiểm thử gần nhất
 
-Ngày chạy gần nhất: **08-09-2026**. `python -m pytest -v` (106 passed);
-`python -m ruff check src tests tools`; `pnpm --dir video test` (11 passed);
+Ngày chạy gần nhất: **08-09-2026**. `python -m pytest -v` (122 passed);
+`python -m ruff check src tests tools`; `pnpm --dir video test` (12 passed);
 `pnpm --dir video typecheck`. Golden project
 (`tests/fixtures/golden-project`) chạy hết luồng từ duyệt y khoa, sản xuất, duyệt
 video đến `package` offline với TTS im lặng và renderer giả lập; hai cổng duyệt,
 audit trail và test approval stale (`status` báo `approval_stale=true`, `produce`
-và `package` từ chối chạy) đều PASS, không cần TTY, mạng hay GPU. Bộ dev ghim
+và `package` từ chối chạy) đều PASS, không cần TTY, mạng hay GPU. Ngoài test giả,
+CLI Windows đã render thật golden project bằng silent TTS và `pnpm.CMD`: MP4 H.264
+1080 × 1920, 30 fps, 45.056 giây; frame chart được kiểm tra trực quan có marker
+`[1]`. Bộ dev ghim
 `jsonschema==4.26.0` để kiểm tra các contract JSON Schema đã xuất.
 
 ## Quyết định
@@ -153,7 +163,8 @@ vượt 32 từ, claim không có trong ledger và cụm từ máy móc bị c�
 storyboard phải có cảnh liên tiếp, không chồng lấp và tổng thời lượng 45–90 giây.
 Composition dùng tối thiểu 1.350 frame, render whiteboard/subtitle hoặc ảnh bằng
 chứng với bôi vàng; Zod kiểm tra điều kiện `x + width <= 1`, `y + height <= 1`
-và dữ liệu bắt buộc cho `evidence_highlight` trước render. Mỗi dự án mới lưu
+và dữ liệu bắt buộc cho `evidence_highlight` trước render. Whiteboard và chart
+đều hiển thị `source_marker` nhất quán ở góc trên bên phải. Mỗi dự án mới lưu
 `author-brief.yaml` ở thư mục gốc dự án. `install/install.ps1` tạo hoặc dùng lại
 `.venv`, cài dependency Python/video trong repo rồi chạy doctor; nó không sửa PATH,
 cài driver hay ghi secret. `SilentTTS` chỉ ghi WAV im lặng, xác định
@@ -184,7 +195,8 @@ pnpm --dir video render --props ../projects/sample/renders/<input_hash>/render-i
 ## Production cache
 
 `healthvideo produce <project> --tts silent` kết hợp canonical JSON của script,
-storyboard, profile giọng tác giả và provider thành SHA-256. Một lần render hợp lệ
+storyboard, profile giọng tác giả, provider và SHA-256 byte của từng evidence asset
+thành input hash. Thay asset làm approval cũ stale và tạo cache identity mới. Một lần render hợp lệ
 được publish nguyên khối ở `renders/<input_hash>/` (WAV, `render-input.json`, MP4,
 manifest); `project.yaml.artifact_hashes.production` chọn run đang hoạt động. Khi
 run đang hoạt động cùng khớp hash, lệnh tái sử dụng MP4 và không gọi Remotion.

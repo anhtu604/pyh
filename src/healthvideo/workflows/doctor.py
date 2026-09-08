@@ -2,12 +2,13 @@
 
 import os
 import re
-import shutil
 import subprocess
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+
+from healthvideo.process import prepare_subprocess_argv
 
 RunCommand = Callable[[list[str]], tuple[int, str]]
 Version = tuple[int, ...]
@@ -57,7 +58,7 @@ def check_environment(run: RunCommand) -> list[CheckResult]:
 
 def run_command(argv: list[str]) -> tuple[int, str]:
     """Run a diagnostic command with argv, never through a command shell."""
-    resolved_argv = [_resolve_command(argv[0]), *argv[1:]]
+    resolved_argv = prepare_subprocess_argv(argv)
     try:
         completed = subprocess.run(
             resolved_argv,
@@ -69,13 +70,6 @@ def run_command(argv: list[str]) -> tuple[int, str]:
     except OSError as error:
         return 1, str(error)
     return completed.returncode, (completed.stdout or completed.stderr).strip()
-
-
-def _resolve_command(command: str) -> str:
-    if sys.platform == "win32":
-        return shutil.which(f"{command}.cmd") or command
-    return command
-
 
 def has_mandatory_failure(results: list[CheckResult]) -> bool:
     """Return whether a missing mandatory prerequisite blocks the toolchain."""

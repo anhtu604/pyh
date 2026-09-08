@@ -1,4 +1,5 @@
 import subprocess
+import sys
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
@@ -9,6 +10,7 @@ import typer
 from healthvideo import __version__
 from healthvideo.domain.project import ProjectManifest
 from healthvideo.domain.review import ReviewKind, ReviewRecord
+from healthvideo.process import resolve_pnpm_argv
 from healthvideo.render.remotion import build_render_argv
 from healthvideo.storage.files import read_yaml
 from healthvideo.tts.silent import SilentTTS
@@ -45,6 +47,11 @@ SkipConfirmation = Annotated[
 @app.callback()
 def main() -> None:
     """Các lệnh healthvideo."""
+    if sys.platform == "win32":
+        for stream in (sys.stdout, sys.stderr):
+            reconfigure = getattr(stream, "reconfigure", None)
+            if reconfigure is not None:
+                reconfigure(encoding="utf-8")
 
 
 @app.command()
@@ -88,7 +95,8 @@ def produce(
         raise typer.Exit(code=1)
 
     def run_remotion(argv: list[str]) -> int:
-        return subprocess.run(argv, check=False).returncode
+        resolved = resolve_pnpm_argv(argv[1:])
+        return subprocess.run(resolved, check=False, shell=False).returncode
 
     try:
         output = produce_project(
@@ -98,13 +106,10 @@ def produce(
         typer.echo(str(error))
         raise typer.Exit(code=1) from error
     if dry_run:
-        typer.echo(
-            " ".join(
-                build_render_argv(
-                    output.parent / "render-input.json", output, output.parent
-                )
-            )
+        logical = build_render_argv(
+            output.parent / "render-input.json", output, output.parent
         )
+        typer.echo(subprocess.list2cmdline(resolve_pnpm_argv(logical[1:])))
         return
     typer.echo(f"Rendered video: {output}")
 

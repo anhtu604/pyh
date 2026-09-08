@@ -1,8 +1,10 @@
 import json
 from pathlib import Path
 
+from healthvideo.assets import referenced_evidence_assets
 from healthvideo.domain.project import ProjectManifest, ProjectState, transition
 from healthvideo.domain.review import ReviewKind, ReviewRecord
+from healthvideo.domain.storyboard import Storyboard
 from healthvideo.render.run import (
     OUTPUT_NAME,
     PRODUCTION_ARTIFACT,
@@ -69,13 +71,20 @@ def approval_is_stale(
 
 def ensure_approval_current(
     project_dir: Path, project: ProjectManifest, kind: ReviewKind
-) -> None:
+) -> ReviewRecord:
     """Refuse to move a project forward on an approval its artifacts outgrew."""
-    if approval_is_stale(project_dir, project, kind):
+    record = latest_approval(project_dir, kind)
+    if record is None:
+        raise FileNotFoundError(
+            f"{kind.value} approval record is missing; "
+            f"run 'healthvideo review {kind.value}'"
+        )
+    if _current_artifact_hashes(project_dir, project, kind) != record.artifact_hashes:
         raise ValueError(
             f"{kind.value} approval is stale: artifacts changed after review; "
             f"run 'healthvideo review {kind.value}' again"
         )
+    return record
 
 
 def _reviewed_paths(
@@ -83,11 +92,23 @@ def _reviewed_paths(
 ) -> dict[str, Path]:
     """Name the artifacts a gate covers; empty when there is nothing to review."""
     if kind is ReviewKind.MEDICAL:
-        return {
+        paths = {
             "evidence": project_dir / "evidence" / "ledger.yaml",
             "script": project_dir / "script" / "script.yaml",
             "storyboard": project_dir / "storyboard" / "storyboard.yaml",
         }
+        storyboard_path = paths["storyboard"]
+        if storyboard_path.is_file():
+            storyboard = Storyboard.model_validate(read_yaml(storyboard_path))
+            paths.update(
+                {
+                    f"asset:{relative}": path
+                    for relative, path in referenced_evidence_assets(
+                        project_dir, storyboard
+                    ).items()
+                }
+            )
+        return paths
     input_hash = project.artifact_hashes.get(PRODUCTION_ARTIFACT)
     if input_hash is None:
         return {}
