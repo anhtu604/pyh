@@ -166,6 +166,9 @@ def test_produce_failure_preserves_project_and_allows_retry(
     assert (project_dir / "project.yaml").read_bytes() == original_manifest
     assert _run_artifacts(old_run) == original_artifacts
     assert list((project_dir / "renders").glob(".*.produce-*")) == []
+    assert list((project_dir / "renders").iterdir()) == [old_run], label
+    assert not (project_dir / "audio" / "narration.wav").exists(), label
+    assert not (project_dir / "render-input.json").exists(), label
 
     def successful_runner(argv: list[str]) -> int:
         _write_synthetic_output(argv)
@@ -263,6 +266,62 @@ def test_produce_dry_run_rejects_reviewed_project_with_cache_miss(tmp_path) -> N
     assert calls == []
 
 
+RUN_ARTIFACT_NAMES = frozenset(
+    {"audio/narration.wav", "render-input.json", "video.mp4", "manifest.json"}
+)
+
+
+def test_produce_publishes_a_populated_run_in_one_rename(tmp_path, monkeypatch) -> None:
+    project_dir = create_project_fixture(tmp_path, state="script_approved")
+    real_promote = produce_workflow._promote_run
+    observed: list[tuple[frozenset[str], bool]] = []
+
+    def observing_promote(staging_dir: Path, run_dir: Path) -> None:
+        observed.append((frozenset(_run_artifacts(staging_dir)), run_dir.exists()))
+        real_promote(staging_dir, run_dir)
+
+    def successful_runner(argv: list[str]) -> int:
+        _write_synthetic_output(argv)
+        return 0
+
+    monkeypatch.setattr(produce_workflow, "_promote_run", observing_promote)
+    output = produce_project(project_dir, SilentTTS(), successful_runner)
+
+    assert len(observed) == 1
+    staged_names, destination_existed = observed[0]
+    assert not destination_existed
+    assert RUN_ARTIFACT_NAMES <= staged_names
+    assert RUN_ARTIFACT_NAMES <= frozenset(_run_artifacts(output.parent))
+    assert not (project_dir / "audio" / "narration.wav").exists()
+    assert not (project_dir / "render-input.json").exists()
+    assert not (project_dir / "renders" / "video.mp4").exists()
+    assert not (project_dir / "renders" / "manifest.json").exists()
+
+
+def test_produce_republishes_over_a_damaged_published_run(tmp_path) -> None:
+    project_dir = create_project_fixture(tmp_path, state="script_approved")
+    calls: list[list[str]] = []
+
+    def successful_runner(argv: list[str]) -> int:
+        calls.append(argv)
+        _write_synthetic_output(argv)
+        return 0
+
+    output = produce_project(project_dir, SilentTTS(), successful_runner)
+    output.unlink()
+    project = read_yaml(project_dir / "project.yaml")
+    project["state"] = "script_approved"
+    write_yaml_atomic(project_dir / "project.yaml", project)
+
+    republished = produce_project(project_dir, SilentTTS(), successful_runner)
+
+    assert republished == output
+    assert len(calls) == 2
+    assert RUN_ARTIFACT_NAMES <= frozenset(_run_artifacts(republished.parent))
+    assert list((project_dir / "renders").iterdir()) == [republished.parent]
+    assert read_yaml(project_dir / "project.yaml")["state"] == "awaiting_video_review"
+
+
 def test_input_hash_changes_for_every_declared_input(tmp_path) -> None:
     project_dir = create_project_fixture(tmp_path, state="script_approved")
     script_data = read_yaml(project_dir / "script" / "script.yaml")
@@ -294,7 +353,7 @@ def test_input_hash_changes_for_every_declared_input(tmp_path) -> None:
 def _run_artifacts(run_dir: Path) -> dict[str, bytes]:
     paths = tuple(path for path in run_dir.rglob("*") if path.is_file())
     return {
-        str(path.relative_to(run_dir)): path.read_bytes()
+        path.relative_to(run_dir).as_posix(): path.read_bytes()
         for path in paths
         if path.is_file()
     }

@@ -25,7 +25,7 @@ MVP hoàn thành vertical slice từ author brief, evidence, kịch bản và st
 | 4 | Claim ledger, human script và read-aloud QA | complete | `python tools/export_schemas.py`; `python -m pytest tests/domain/test_script.py tests/qa/test_script_qa.py tests/contracts/test_schemas.py -v` | `feat: validate evidence-linked human scripts` |
 | 5 | Storyboard, evidence highlight và render contract | complete | `python tools/export_schemas.py`; `python -m pytest tests/render/test_input.py tests/contracts/test_schemas.py -v` | `feat: define storyboard render contract` |
 | 6 | Remotion composition 9:16 và visual regression cơ bản | complete | `pnpm --dir video test` (11 passed); `pnpm --dir video typecheck`; still 1080 × 1920 | `feat: render vertical whiteboard scenes` |
-| 7 | TTS giả lập, manifest cache và render workflow | complete | `python -m pytest tests/tts/test_silent.py tests/workflows/test_produce.py -v`; `python -m ruff check src tests` | `feat: add cached production workflow` |
+| 7 | TTS giả lập, manifest cache và render workflow | in_progress | `python -m pytest tests/tts/test_silent.py tests/workflows/test_produce.py -v`; `python -m ruff check src tests` | `feat: add cached production workflow` |
 | 8 | Hai cổng duyệt có hash và audit trail | planned | — | — |
 | 9 | Gói xuất bản và golden end-to-end test | planned | — | — |
 | 10 | Installer Windows và environment doctor | planned | — | — |
@@ -54,7 +54,7 @@ Author brief → evidence ledger → medical review → script/storyboard → pr
 ## Kiểm thử gần nhất
 
 `python -m pytest tests/tts/test_silent.py tests/workflows/test_produce.py -v`
-(17 passed); silent TTS, immutable production run, cache manifest và state gate đều chạy offline. Bộ dev ghim
+(19 passed); silent TTS, immutable production run, cache manifest và state gate đều chạy offline. Bộ dev ghim
 `jsonschema==4.26.0` để kiểm tra các contract JSON Schema đã xuất.
 
 ## Quyết định
@@ -104,7 +104,8 @@ run đang hoạt động cùng khớp hash, lệnh tái sử dụng MP4 và khô
 Dry-run chỉ hợp lệ ở `script_approved`, hoặc ở `awaiting_video_review` với cache
 chính xác. Khi render thật, run được tạo trong staging sibling rồi đổi tên thư mục
 nguyên tử sau khi renderer trả kết quả hợp lệ; lỗi TTS/render giữ nguyên state
-`script_approved` để có thể chạy lại. Fixture golden tạo WAV im lặng trong test/smoke
+`script_approved` để có thể chạy lại. Nếu một run đã publish nhưng không còn đủ
+artifact, lần chạy sau publish đè lên nó và hội tụ về trạng thái đúng. Fixture golden tạo WAV im lặng trong test/smoke
 setup, không lưu audio đã sinh vào Git.
 
 ## Tài liệu

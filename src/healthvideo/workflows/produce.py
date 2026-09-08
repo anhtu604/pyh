@@ -190,7 +190,21 @@ def _validate_staged_run(
 
 
 def _promote_run(staging_dir: Path, run_dir: Path) -> None:
-    os.replace(staging_dir, run_dir)
+    """Publish a staged run with one rename, replacing an unusable run if present."""
+    if not run_dir.exists():
+        os.replace(staging_dir, run_dir)
+        return
+    superseded = Path(
+        mkdtemp(prefix=f".{run_dir.name}.superseded-", dir=run_dir.parent)
+    )
+    superseded.rmdir()
+    os.replace(run_dir, superseded)
+    try:
+        os.replace(staging_dir, run_dir)
+    except Exception:
+        os.replace(superseded, run_dir)
+        raise
+    shutil.rmtree(superseded, ignore_errors=True)
 
 
 def _write_json_atomic(path: Path, data: Mapping[str, Any]) -> None:
