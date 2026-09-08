@@ -44,16 +44,6 @@ def produce(
     if tts != "silent":
         typer.echo(f"Unsupported TTS provider: {tts}")
         raise typer.Exit(code=1)
-    if dry_run:
-        typer.echo(
-            " ".join(
-                build_render_argv(
-                    project_dir / "render-input.json",
-                    project_dir / "renders" / "video.mp4",
-                    project_dir,
-                )
-            )
-        )
 
     def run_remotion(argv: list[str]) -> int:
         return subprocess.run(argv, check=False).returncode
@@ -65,8 +55,16 @@ def produce(
     except (FileNotFoundError, RuntimeError, ValueError) as error:
         typer.echo(str(error))
         raise typer.Exit(code=1) from error
-    if not dry_run:
-        typer.echo(f"Rendered video: {output}")
+    if dry_run:
+        typer.echo(
+            " ".join(
+                build_render_argv(
+                    output.parent / "render-input.json", output, output.parent
+                )
+            )
+        )
+        return
+    typer.echo(f"Rendered video: {output}")
 
 
 @project_app.command("new")

@@ -5,7 +5,7 @@ from typer.testing import CliRunner
 
 from healthvideo import __version__
 from healthvideo.cli import app
-from healthvideo.storage.files import read_yaml
+from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.tts.silent import SilentTTS
 from healthvideo.workflows.produce import produce_project
 from tests.helpers import synthesize_fixture_audio
@@ -84,3 +84,21 @@ def test_produce_dry_run_prints_remotion_command_for_a_cache_hit(tmp_path) -> No
     assert result.exit_code == 0
     assert "pnpm --dir" in result.stdout
     assert (project_dir / "project.yaml").read_bytes() == original_manifest
+
+
+def test_produce_dry_run_rejects_invalid_state_before_printing_command(
+    tmp_path,
+) -> None:
+    fixture = Path(__file__).parent / "fixtures" / "golden-project"
+    project_dir = tmp_path / "golden-project"
+    shutil.copytree(fixture, project_dir)
+    project = read_yaml(project_dir / "project.yaml")
+    project["state"] = "idea"
+    write_yaml_atomic(project_dir / "project.yaml", project)
+
+    result = CliRunner().invoke(
+        app, ["produce", str(project_dir), "--tts", "silent", "--dry-run"]
+    )
+
+    assert result.exit_code == 1
+    assert "pnpm --dir" not in result.stdout

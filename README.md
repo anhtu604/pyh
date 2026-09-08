@@ -54,7 +54,7 @@ Author brief → evidence ledger → medical review → script/storyboard → pr
 ## Kiểm thử gần nhất
 
 `python -m pytest tests/tts/test_silent.py tests/workflows/test_produce.py -v`
-(12 passed); silent TTS, cache manifest và state gate đều chạy offline. Bộ dev ghim
+(17 passed); silent TTS, immutable production run, cache manifest và state gate đều chạy offline. Bộ dev ghim
 `jsonschema==4.26.0` để kiểm tra các contract JSON Schema đã xuất.
 
 ## Quyết định
@@ -96,11 +96,14 @@ pnpm --dir video render --props ../projects/sample/render-input.json --output ..
 ## Production cache
 
 `healthvideo produce <project> --tts silent` kết hợp canonical JSON của script,
-storyboard, profile giọng tác giả và provider thành SHA-256. Khi `renders/manifest.json`
-và `renders/video.mp4` cùng khớp hash, lệnh tái sử dụng video và không gọi Remotion.
+storyboard, profile giọng tác giả và provider thành SHA-256. Một lần render hợp lệ
+được publish nguyên khối ở `renders/<input_hash>/` (WAV, `render-input.json`, MP4,
+manifest); `project.yaml.artifact_hashes.production` chọn run đang hoạt động. Khi
+run đang hoạt động cùng khớp hash, lệnh tái sử dụng MP4 và không gọi Remotion.
 `--dry-run` chỉ in argv Remotion; không tạo WAV/MP4/input/manifest và không đổi state.
-Khi render thật, audio/input/MP4/manifest được tạo trong staging sibling và chỉ
-được publish sau khi renderer trả kết quả hợp lệ; lỗi TTS/render giữ nguyên state
+Dry-run chỉ hợp lệ ở `script_approved`, hoặc ở `awaiting_video_review` với cache
+chính xác. Khi render thật, run được tạo trong staging sibling rồi đổi tên thư mục
+nguyên tử sau khi renderer trả kết quả hợp lệ; lỗi TTS/render giữ nguyên state
 `script_approved` để có thể chạy lại. Fixture golden tạo WAV im lặng trong test/smoke
 setup, không lưu audio đã sinh vào Git.
 
