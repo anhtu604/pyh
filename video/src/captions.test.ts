@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {captionRows} from './components/Captions';
+import {captionRows, captionTextLength} from './components/Captions';
 
 describe('captionRows', () => {
   const words = ['một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín', 'mười'];
@@ -46,5 +46,21 @@ describe('captionRows', () => {
 
     expect(layout.rows).toHaveLength(2);
     expect(layout.rows.flat().some((word) => word.index === 0)).toBe(true);
+  });
+});
+
+describe('captionTextLength', () => {
+  it('leaves a short Vietnamese row at its natural width', () => {
+    expect(captionTextLength('Đọc đúng bối cảnh', 48, 900)).toBeUndefined();
+  });
+
+  it('fits a long row to the available width', () => {
+    expect(
+      captionTextLength('điệntâmđồgắngsứcthậtdàivàcầnđượcđọcđúngngữcảnh', 48, 900),
+    ).toBe(900);
+  });
+
+  it('counts Unicode code points rather than UTF-16 code units', () => {
+    expect(captionTextLength('A😀 B', 100, 400)).toBeUndefined();
   });
 });

@@ -13,6 +13,13 @@ type CaptionWord = {
   text: string;
 };
 
+export const captionTextLength = (
+  text: string,
+  fontSize: number,
+  maxWidth: number,
+): number | undefined =>
+  Array.from(text).length * fontSize > maxWidth ? maxWidth : undefined;
+
 export const captionRows = (
   words: readonly string[],
   activeIndex: number,
@@ -53,26 +60,28 @@ export const Captions: React.FC<CaptionsProps> = ({text, durationInFrames}) => {
         width: 936,
       }}
     >
-      {layout.rows.map((row, rowIndex) => (
-        <text
-          key={row[0]?.index}
-          fill="#202124"
-          fontFamily="Arial, sans-serif"
-          fontSize="48"
-          fontWeight="700"
-          lengthAdjust="spacingAndGlyphs"
-          textAnchor="middle"
-          textLength="900"
-          x="468"
-          y={rowIndex === 0 ? 52 : 116}
-        >
-          {row.map((word, index) => (
-            <tspan fill={word.index === activeWord ? '#D97706' : undefined} key={word.index}>
-              {word.text}{index < row.length - 1 ? ' ' : null}
-            </tspan>
-          ))}
-        </text>
-      ))}
+      {layout.rows.map((row, rowIndex) => {
+        const textLength = captionTextLength(row.map((word) => word.text).join(' '), 48, 900);
+        return (
+          <text
+            key={row[0]?.index}
+            fill="#202124"
+            fontFamily="Arial, sans-serif"
+            fontSize="48"
+            fontWeight="700"
+            textAnchor="middle"
+            x="468"
+            y={rowIndex === 0 ? 52 : 116}
+            {...(textLength === undefined ? {} : {lengthAdjust: 'spacingAndGlyphs', textLength})}
+          >
+            {row.map((word, index) => (
+              <tspan fill={word.index === activeWord ? '#D97706' : undefined} key={word.index}>
+                {word.text}{index < row.length - 1 ? ' ' : null}
+              </tspan>
+            ))}
+          </text>
+        );
+      })}
     </svg>
   );
 };
