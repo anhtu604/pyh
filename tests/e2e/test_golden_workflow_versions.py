@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from pathlib import Path
 
 from healthvideo.domain.project import ProjectState, transition
@@ -9,6 +10,8 @@ GOLDEN_PROJECTS = [
     Path("tests/fixtures/golden-project"),
     Path("tests/fixtures/golden-project-v2"),
 ]
+
+GOLDEN_ENTERED_AT = datetime(2026, 9, 10, 7, 30, tzinfo=UTC)
 
 
 def test_v1_and_v2_golden_are_available_from_first_m1_task() -> None:
@@ -36,4 +39,39 @@ def test_dual_golden_keeps_v1_linear_and_advances_v2_with_its_topic_card() -> No
     )
     assert transition_v2(v2_project, WorkflowState.TOPIC_SELECTED, context).state is (
         WorkflowState.TOPIC_SELECTED
+    )
+
+
+def test_dual_golden_keeps_v1_side_state_free_while_v2_pauses_and_resumes() -> None:
+    v1_layout, v2_layout = [resolve_project_layout(path) for path in GOLDEN_PROJECTS]
+    v1_project = v1_layout.manifest
+    v2_project = v2_layout.manifest
+    context = TransitionContext(
+        active_revision="001",
+        current_input_hash="0" * 64,
+        validated_artifacts=frozenset({"topic/card.yaml"}),
+    )
+
+    assert not hasattr(v1_project, "side_state")
+    assert v2_project.side_state is None
+
+    paused = transition_v2(
+        v2_project,
+        WorkflowState.AWAITING_BROWSER_LOGIN,
+        context,
+        reason_code="browser_session_expired",
+        resume_state=WorkflowState.IDEA,
+        entered_at=GOLDEN_ENTERED_AT,
+    )
+    assert paused.state is WorkflowState.AWAITING_BROWSER_LOGIN
+    assert paused.side_state is not None
+    assert paused.side_state.resume_state is WorkflowState.IDEA
+    assert paused.side_state.entered_at == GOLDEN_ENTERED_AT
+
+    resumed = transition_v2(paused, WorkflowState.IDEA, context)
+    assert resumed.state is WorkflowState.IDEA
+    assert resumed.side_state is None
+
+    assert transition(v1_project, ProjectState.PRODUCING).state is (
+        ProjectState.PRODUCING
     )
