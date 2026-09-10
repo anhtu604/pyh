@@ -510,55 +510,63 @@ def test_side_state_entry_still_enforces_the_context_preconditions() -> None:
 
 
 @pytest.mark.parametrize(
-    ("side", "resume", "reason_code", "target"),
+    ("side", "resume", "reason_code", "target", "exit_reason_class"),
     [
         (
             WorkflowState.AWAITING_BROWSER_LOGIN,
             WorkflowState.IDEA,
             "login_expired",
             WorkflowState.IDEA,
+            None,
         ),
         (
             WorkflowState.AWAITING_BROWSER_LOGIN,
             WorkflowState.RESEARCH_IN_PROGRESS,
             "login_expired",
             WorkflowState.RESEARCH_IN_PROGRESS,
+            None,
         ),
         (
             WorkflowState.AWAITING_SECOND_MODEL_REVIEW,
             WorkflowState.EVIDENCE_READY,
             "review_required",
             WorkflowState.EVIDENCE_READY,
+            None,
         ),
         (
             WorkflowState.NEEDS_MEDICAL_REVISION,
             WorkflowState.RESEARCH_IN_PROGRESS,
             "evidence_changed",
             WorkflowState.RESEARCH_IN_PROGRESS,
+            None,
         ),
         (
             WorkflowState.NEEDS_MEDICAL_REVISION,
             WorkflowState.DRAFT_READY,
             "script_changed",
             WorkflowState.DRAFT_READY,
+            None,
         ),
         (
             WorkflowState.NEEDS_PRODUCTION_REVISION,
             WorkflowState.PRODUCTION_IN_PROGRESS,
             "asset_qa_failed",
             WorkflowState.PRODUCTION_IN_PROGRESS,
+            None,
         ),
         (
             WorkflowState.NEEDS_PRODUCTION_REVISION,
+            WorkflowState.PRODUCTION_IN_PROGRESS,
+            "asset_qa_failed",
             WorkflowState.DRAFT_READY,
             "semantic_issue",
-            WorkflowState.DRAFT_READY,
         ),
         (
             WorkflowState.BLOCKED,
             WorkflowState.PACKAGED,
             "lock_conflict",
             WorkflowState.PACKAGED,
+            None,
         ),
     ],
 )
@@ -567,13 +575,69 @@ def test_side_state_exit_clears_the_record_on_a_documented_edge(
     resume: WorkflowState,
     reason_code: str,
     target: WorkflowState,
+    exit_reason_class: str | None,
 ) -> None:
     project = manifest_at(side, resume_state=resume, reason_code=reason_code)
+    extra = {} if exit_reason_class is None else {"reason_code": exit_reason_class}
 
-    changed = transition_v2(project, target, valid_context())
+    changed = transition_v2(project, target, valid_context(**extra))
 
     assert changed.state is target
     assert changed.side_state is None
+
+
+@pytest.mark.parametrize(
+    ("exit_reason_class", "message"),
+    [
+        (None, "reason code is required"),
+        ("", "reason code is required"),
+        ("   ", "reason code is required"),
+        ("asset_qa_failed", "requires reason class semantic_issue"),
+        ("semantic", "requires reason class semantic_issue"),
+    ],
+)
+def test_production_revision_exit_to_draft_ready_needs_an_exit_reason_class(
+    exit_reason_class: str | None, message: str
+) -> None:
+    project = manifest_at(
+        WorkflowState.NEEDS_PRODUCTION_REVISION,
+        resume_state=WorkflowState.PRODUCTION_IN_PROGRESS,
+        reason_code="asset_qa_failed",
+    )
+    extra = {} if exit_reason_class is None else {"reason_code": exit_reason_class}
+
+    with pytest.raises(TransitionError, match=message):
+        transition_v2(project, WorkflowState.DRAFT_READY, valid_context(**extra))
+
+
+def test_production_revision_exit_to_draft_ready_ignores_the_entry_reason() -> None:
+    project = manifest_at(
+        WorkflowState.NEEDS_PRODUCTION_REVISION,
+        resume_state=WorkflowState.PRODUCTION_IN_PROGRESS,
+        reason_code="semantic_issue",
+    )
+
+    with pytest.raises(TransitionError, match="reason code is required"):
+        transition_v2(project, WorkflowState.DRAFT_READY, valid_context())
+
+
+def test_production_revision_exit_reads_the_reason_class_at_exit_time() -> None:
+    project = manifest_at(
+        WorkflowState.NEEDS_PRODUCTION_REVISION,
+        resume_state=WorkflowState.PRODUCTION_IN_PROGRESS,
+        reason_code="asset_qa_failed",
+    )
+
+    changed = transition_v2(
+        project,
+        WorkflowState.DRAFT_READY,
+        valid_context(reason_code="semantic_issue"),
+    )
+
+    assert changed.state is WorkflowState.DRAFT_READY
+    assert changed.side_state is None
+    assert project.side_state is not None
+    assert project.side_state.reason_code == "asset_qa_failed"
 
 
 @pytest.mark.parametrize(
@@ -592,13 +656,6 @@ def test_side_state_exit_clears_the_record_on_a_documented_edge(
             "script_changed",
             WorkflowState.AWAITING_MEDICAL_REVIEW,
             "invalid v2 side exit",
-        ),
-        (
-            WorkflowState.NEEDS_PRODUCTION_REVISION,
-            WorkflowState.PRODUCTION_IN_PROGRESS,
-            "asset_qa_failed",
-            WorkflowState.DRAFT_READY,
-            "semantic_issue",
         ),
         (
             WorkflowState.AWAITING_BROWSER_LOGIN,

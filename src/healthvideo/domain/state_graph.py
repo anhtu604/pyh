@@ -199,11 +199,18 @@ class SideEntryRule:
 
 @dataclass(frozen=True)
 class SideExitRule:
-    """What a side state must satisfy before it may return to a main state."""
+    """What a side state must satisfy before it may return to a main state.
+
+    `required_reason_class` is checked against the reason supplied *at exit time*
+    (`TransitionContext.reason_code`), never against the side state's entry reason:
+    §6 words that exit "nếu phát hiện lỗi semantic", i.e. the defect is discovered
+    while in the side state, after the entry reason was frozen into the record.
+    The entry reason stays exactly as recorded; nothing here mutates it.
+    """
 
     context_rule: TransitionRule = _CONTEXT_ONLY
     resumes_recorded_state: bool = False
-    required_reason_code: str | None = None
+    required_reason_class: str | None = None
 
     def validate(
         self,
@@ -217,16 +224,23 @@ class SideExitRule:
             or target is not side_state.resume_state
         ):
             raise TransitionError("exit must return to the recorded resume state")
+        self.context_rule.validate(project, context)
         if (
-            self.required_reason_code is not None
-            and side_state.reason_code.strip() != self.required_reason_code
+            self.required_reason_class is not None
+            and (context.reason_code or "").strip() != self.required_reason_class
         ):
             raise TransitionError(
-                f"exit to {target} requires reason code {self.required_reason_code}"
+                f"exit to {target} requires reason class {self.required_reason_class}"
             )
-        self.context_rule.validate(project, context)
 
 
+# Deviation from §6, recorded on purpose: the table says `blocked` may be entered from
+# "mọi state chưa kết thúc", which literally admits the resumable side states too. We
+# narrow the source set to the non-terminal MAIN states because `ProjectManifestV2` has
+# a single `side_state` slot: entering `blocked` from another side state would overwrite
+# that state's `resume_state` and silently lose the resume target. Widening this set
+# needs a nested side-state schema, which M1 does not own — deferred to M2. Do not add
+# `SIDE_STATES` here without that schema.
 _NON_TERMINAL_MAIN_STATES = MAIN_STATES - {WorkflowState.PUBLISHED_MANUAL}
 
 _POST_MEDICAL_GATE_STATES = frozenset(
@@ -266,7 +280,8 @@ SIDE_EXIT_RULES: Mapping[tuple[WorkflowState, WorkflowState], SideExitRule] = {
         WorkflowState.PRODUCTION_IN_PROGRESS,
     ): SideExitRule(),
     (WorkflowState.NEEDS_PRODUCTION_REVISION, WorkflowState.DRAFT_READY): SideExitRule(
-        required_reason_code="semantic_issue"
+        context_rule=_rule(requires_reason_code=True),
+        required_reason_class="semantic_issue",
     ),
     **{
         (WorkflowState.BLOCKED, target): SideExitRule(resumes_recorded_state=True)
