@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "skills": {
+    "pydantic": {
+      "source": "pydantic/pydantic",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/pydantic/SKILL.md",
+      "computedHash": "5e9c70289cf543ee4664431b6b9566c36f2efa53a938613c2e38defca4984c9a"
+    },
+    "remotion-best-practices": {
+      "source": "remotion-dev/skills",
+      "sourceType": "github",
+      "skillPath": "skills/remotion-best-practices/SKILL.md",
+      "computedHash": "e88011f31bac55fb2ce11b93bacd2c33401a6a5c01a4010c5fc6fabb0eb49837"
+    },
+    "remotion-captions": {
+      "source": "remotion-dev/skills",
+      "sourceType": "github",
+      "skillPath": "skills/remotion-captions/SKILL.md",
+      "computedHash": "2104ad0753c4f1e91685e5dc2ba2b5f50a69189c14d7c80ce9d96ca092f5f9e8"
+    },
+    "remotion-render": {
+      "source": "remotion-dev/skills",
+      "sourceType": "github",
+      "skillPath": "skills/remotion-render/SKILL.md",
+      "computedHash": "d151704b9cabb54a4e25a62b84b3d527e37eea2df9bdc0802ab6dcb6d7d52307"
+    },
+    "typer": {
+      "source": "fastapi/typer",
+      "sourceType": "github",
+      "skillPath": "typer/.agents/skills/typer/SKILL.md",
+      "computedHash": "057cd64883164a1258f18b3acf034da54f27da716e6983c329653edd179bae38"
+    }
+  }
+}

@@ -15,3 +15,6 @@ projects/**/audio/
 projects/**/renders/
 projects/**/publish/
 projects/**/source-documents/
+
+# Skill symlinks: absolute paths, machine-specific; the real content lives in .agents/skills
+.claude/
