@@ -22,12 +22,15 @@ class TransitionContext:
     validated_artifacts: frozenset[str]
     reason_code: str | None = None
     new_revision_from: str | None = None
+    run_published: bool | None = None
+    staging_verified_unusable: bool | None = None
 
 
 @dataclass(frozen=True)
 class TransitionRule:
     required_artifacts: frozenset[str]
     requires_reason_code: bool = False
+    requires_recovery_facts: bool = False
 
     def validate(
         self, project: ProjectManifestV2, context: TransitionContext
@@ -38,8 +41,18 @@ class TransitionRule:
             raise TransitionError("current input hash must be a lowercase SHA-256 hash")
         if context.new_revision_from is not None:
             raise TransitionError("new revision source must be confirmed by revision service")
+        if not self.requires_recovery_facts and (
+            context.run_published is not None
+            or context.staging_verified_unusable is not None
+        ):
+            raise TransitionError("recovery facts are reserved for recovery transitions")
         if self.requires_reason_code and not context.reason_code:
             raise TransitionError("reason code is required for this transition")
+        if self.requires_recovery_facts:
+            if context.run_published is not False:
+                raise TransitionError("run must be unpublished for recovery")
+            if context.staging_verified_unusable is not True:
+                raise TransitionError("staging must be verified unusable for recovery")
 
         missing = self.required_artifacts - context.validated_artifacts
         if missing:
@@ -47,8 +60,14 @@ class TransitionRule:
             raise TransitionError(f"missing required artifacts: {names}")
 
 
-def _rule(*artifacts: str, requires_reason_code: bool = False) -> TransitionRule:
-    return TransitionRule(frozenset(artifacts), requires_reason_code)
+def _rule(
+    *artifacts: str,
+    requires_reason_code: bool = False,
+    requires_recovery_facts: bool = False,
+) -> TransitionRule:
+    return TransitionRule(
+        frozenset(artifacts), requires_reason_code, requires_recovery_facts
+    )
 
 
 MAIN_RULES: Mapping[tuple[WorkflowState, WorkflowState], TransitionRule] = {
@@ -90,7 +109,9 @@ MAIN_RULES: Mapping[tuple[WorkflowState, WorkflowState], TransitionRule] = {
         "publish/receipt.yaml"
     ),
     (WorkflowState.PRODUCTION_IN_PROGRESS, WorkflowState.MEDICALLY_APPROVED): _rule(
-        "reviews/medical-approval.yaml", requires_reason_code=True
+        "reviews/medical-approval.yaml",
+        requires_reason_code=True,
+        requires_recovery_facts=True,
     ),
 }
 
