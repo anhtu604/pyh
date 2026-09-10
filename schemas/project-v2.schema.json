@@ -1,0 +1,165 @@
+{
+  "$defs": {
+    "ResumableSideState": {
+      "additionalProperties": false,
+      "properties": {
+        "entered_at": {
+          "format": "date-time",
+          "title": "Entered At",
+          "type": "string"
+        },
+        "reason_code": {
+          "pattern": "\\S",
+          "title": "Reason Code",
+          "type": "string"
+        },
+        "resume_state": {
+          "$ref": "#/$defs/WorkflowState"
+        },
+        "type": {
+          "enum": [
+            "awaiting_browser_login",
+            "awaiting_second_model_review",
+            "needs_medical_revision",
+            "needs_production_revision",
+            "blocked"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "resume_state",
+        "reason_code",
+        "entered_at"
+      ],
+      "title": "ResumableSideState",
+      "type": "object"
+    },
+    "TopicRejectedSideState": {
+      "additionalProperties": false,
+      "properties": {
+        "entered_at": {
+          "format": "date-time",
+          "title": "Entered At",
+          "type": "string"
+        },
+        "reason_code": {
+          "pattern": "\\S",
+          "title": "Reason Code",
+          "type": "string"
+        },
+        "type": {
+          "const": "topic_rejected",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "reason_code",
+        "entered_at"
+      ],
+      "title": "TopicRejectedSideState",
+      "type": "object"
+    },
+    "WorkflowState": {
+      "enum": [
+        "idea",
+        "topic_selected",
+        "author_brief_ready",
+        "research_in_progress",
+        "evidence_ready",
+        "draft_ready",
+        "awaiting_medical_review",
+        "medically_approved",
+        "production_in_progress",
+        "awaiting_video_review",
+        "video_approved",
+        "packaged",
+        "published_manual",
+        "awaiting_browser_login",
+        "awaiting_second_model_review",
+        "needs_medical_revision",
+        "needs_production_revision",
+        "blocked",
+        "topic_rejected"
+      ],
+      "title": "WorkflowState",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "active_revision": {
+      "default": "001",
+      "pattern": "^[0-9]{3}$",
+      "title": "Active Revision",
+      "type": "string"
+    },
+    "artifact_hashes": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Artifact Hashes",
+      "type": "object"
+    },
+    "language": {
+      "default": "vi",
+      "title": "Language",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "2.0",
+      "default": "2.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "side_state": {
+      "anyOf": [
+        {
+          "discriminator": {
+            "mapping": {
+              "awaiting_browser_login": "#/$defs/ResumableSideState",
+              "awaiting_second_model_review": "#/$defs/ResumableSideState",
+              "blocked": "#/$defs/ResumableSideState",
+              "needs_medical_revision": "#/$defs/ResumableSideState",
+              "needs_production_revision": "#/$defs/ResumableSideState",
+              "topic_rejected": "#/$defs/TopicRejectedSideState"
+            },
+            "propertyName": "type"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ResumableSideState"
+            },
+            {
+              "$ref": "#/$defs/TopicRejectedSideState"
+            }
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Side State"
+    },
+    "slug": {
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "title": "Slug",
+      "type": "string"
+    },
+    "state": {
+      "$ref": "#/$defs/WorkflowState",
+      "default": "idea"
+    }
+  },
+  "required": [
+    "slug"
+  ],
+  "title": "ProjectManifestV2",
+  "type": "object"
+}

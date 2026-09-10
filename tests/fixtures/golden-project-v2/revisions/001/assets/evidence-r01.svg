@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="900" viewBox="0 0 1080 900" role="img" aria-label="Synthetic evidence fixture">
+  <rect width="1080" height="900" fill="#fffdf7"/>
+  <rect x="70" y="80" width="940" height="740" rx="24" fill="#ffffff" stroke="#202124" stroke-width="8"/>
+  <text x="120" y="190" font-family="Arial, sans-serif" font-size="52" font-weight="700" fill="#202124">SYNTHETIC TEST EVIDENCE</text>
+  <text x="120" y="285" font-family="Arial, sans-serif" font-size="38" fill="#202124">Not a real study or medical claim.</text>
+  <rect x="120" y="380" width="790" height="110" fill="#ffd54f" opacity="0.55"/>
+  <text x="145" y="450" font-family="Arial, sans-serif" font-size="34" fill="#202124">Fixture text for render verification only.</text>
+</svg>
