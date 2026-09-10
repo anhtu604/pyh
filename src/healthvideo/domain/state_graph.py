@@ -46,7 +46,7 @@ class TransitionRule:
             or context.staging_verified_unusable is not None
         ):
             raise TransitionError("recovery facts are reserved for recovery transitions")
-        if self.requires_reason_code and not context.reason_code:
+        if self.requires_reason_code and not (context.reason_code or "").strip():
             raise TransitionError("reason code is required for this transition")
         if self.requires_recovery_facts:
             if context.run_published is not False:

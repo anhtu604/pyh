@@ -90,6 +90,7 @@ def test_main_graph_rejects_non_main_edge() -> None:
         (False, False, "staging_unusable", "staging must be verified unusable"),
         (False, True, None, "reason code"),
         (False, True, "", "reason code"),
+        (False, True, "   ", "reason code"),
     ],
 )
 def test_recovery_requires_verified_unpublished_unusable_run(
