@@ -48,6 +48,28 @@
 | `tests/e2e/test_golden_workflow_versions.py` | Checkpoint compatibility xuyên suốt M1 | Bắt buộc chạy mỗi task |
 | `README.md` | Tiến độ, test và commit từng task M1 | Cập nhật cùng commit |
 
+## Path ownership audit
+
+Bảng này là kết quả quét toàn bộ path trong contract migration qua Files list của
+cả 10 task. `C` = task duy nhất tạo file, `V` = chỉ đọc/validate, `—` = không chạm.
+Không task nào sau Task 1 được sửa byte golden fixture; thay đổi fixture là finding
+phải báo, không phải một phần implementation ngầm.
+
+| Path v2 | T1 | T2 | T3 | T4 | T5 | T6 | T7 | T8 | T9 | T10 | Task Create duy nhất |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| `project.yaml` | C | — | — | — | — | — | — | — | — | — | Task 1 |
+| `revisions/001/author/brief.yaml` | C | — | — | — | — | — | — | — | — | — | Task 1 |
+| `revisions/001/evidence/ledger.yaml` | C | — | — | — | — | — | — | — | — | — | Task 1 |
+| `revisions/001/script/script.yaml` | C | — | — | — | — | — | — | — | — | — | Task 1 |
+| `revisions/001/storyboard/storyboard.yaml` | C | — | — | — | — | — | — | — | — | — | Task 1 |
+| `revisions/001/assets/evidence-r01.svg` | C | — | — | — | — | V | — | — | — | — | Task 1 |
+| `revisions/001/topic/card.yaml` | C | — | — | — | — | — | — | — | — | — | Task 1 |
+| `revisions/001/assets/asset-manifest.yaml` | C | — | — | — | — | V | — | — | — | — | Task 1 |
+
+Kết quả: mỗi path có đúng một task `Create`; không còn file do task sau tạo nhưng
+task trước đã cần. Task 8 dùng cùng bảng làm contract cho `MigrationPlan.files`;
+Task 9 sinh các path này trong project migrate mới, không sửa golden fixture.
+
 ---
 
 ### Task 1: Contract project v2 và dual-golden checkpoint
@@ -60,6 +82,7 @@
 - Create: `tests/fixtures/golden-project-v2/project.yaml`
 - Create: `tests/fixtures/golden-project-v2/revisions/001/` với artifact golden v1 được ánh xạ theo bảng Task 8
 - Create: `tests/fixtures/golden-project-v2/revisions/001/topic/card.yaml`
+- Create: `tests/fixtures/golden-project-v2/revisions/001/assets/asset-manifest.yaml`
 - Create: `tests/e2e/test_golden_workflow_versions.py`
 - Modify: `tools/export_schemas.py`
 - Create: `schemas/project-v2.schema.json`
@@ -152,6 +175,24 @@ synthetic_test_record: true
 slug: muoi-va-huyet-ap
 title: Ăn mặn và tăng huyết áp
 origin: migration_fixture
+```
+
+Task 1 cũng tạo raw fixture `asset-manifest.yaml` ngay từ đầu để path contract và
+dual-golden là mốc cố định. SHA-256 dưới đây là hash byte đã kiểm tra của
+`assets/evidence-r01.svg` trong golden v1:
+
+```yaml
+schema_version: "2.0"
+assets:
+  - path: assets/evidence-r01.svg
+    kind: evidence_highlight
+    semantic: true
+    classification_reason: Evidence highlight changes the medical meaning.
+    sha256: 5a748bc7cc428d9def90205c88b271b82d703927dbe5ae5da8b34b6ababedddc2
+    source: synthetic_test_fixture
+    license: synthetic_test_only
+    creator: repository_fixture
+    revision: "001"
 ```
 
 - [ ] **Step 5: Xuất schema và chạy GREEN**
@@ -469,7 +510,7 @@ Commit: `git commit -m "feat: create immutable workflow revisions"`
 **Files:**
 - Create: `src/healthvideo/domain/asset_manifest.py`
 - Create: `tests/domain/test_asset_manifest.py`
-- Create: `tests/fixtures/golden-project-v2/revisions/001/assets/asset-manifest.yaml`
+- Modify/validate: `tests/fixtures/golden-project-v2/revisions/001/assets/asset-manifest.yaml` (read-only validation; Task 6 không được đổi byte hoặc tạo diff ở file này)
 - Modify: `tools/export_schemas.py`
 - Create: `schemas/asset-manifest.schema.json`
 - Modify: `tests/contracts/test_schemas.py`
@@ -497,6 +538,14 @@ def test_manifest_rejects_missing_or_changed_asset_bytes(tmp_path: Path) -> None
     (revision / manifest.assets[0].path).write_bytes(b"changed")
     with pytest.raises(AssetIntegrityError, match="sha256"):
         validate_asset_manifest(revision, manifest)
+
+
+def test_task1_golden_asset_manifest_loads_without_rewrite() -> None:
+    path = Path("tests/fixtures/golden-project-v2/revisions/001/assets/asset-manifest.yaml")
+    before = path.read_bytes()
+    manifest = AssetManifest.model_validate(read_yaml(path))
+    validate_asset_manifest(path.parents[1], manifest)
+    assert path.read_bytes() == before
 ```
 
 - [ ] **Step 2: Chạy RED**
@@ -515,7 +564,7 @@ Run: `python tools/export_schemas.py`
 
 Run: `python -m pytest tests/domain/test_asset_manifest.py tests/contracts/test_schemas.py tests/e2e/test_golden_workflow_versions.py -v`
 
-Expected: PASS; golden v2 khai báo `assets/evidence-r01.svg` là `evidence_highlight`, `semantic: true`, hash đúng; golden v1 vẫn dùng compatibility logic hiện hữu.
+Expected: PASS; golden v2 Task 1 khai báo `assets/evidence-r01.svg` là `evidence_highlight`, `semantic: true`, hash đúng và giữ nguyên byte trước/sau load+validate. `git diff --exit-code -- tests/fixtures/golden-project-v2` phải PASS ở Task 6; nếu không, dừng và ghi finding. Golden v1 vẫn dùng compatibility logic hiện hữu.
 
 - [ ] **Step 5: Full regression, README và commit**
 
