@@ -2,7 +2,9 @@
 
 **Ngày:** 07-09-2026
 
-**Trạng thái:** Chờ bác sĩ duyệt trước khi lập kế hoạch triển khai
+**Trạng thái:** Giai đoạn 1 (MVP) đã triển khai và merge vào `master`. Các phần §5,
+§7–§11, §14 và §15 đã được thay thế bởi bản thiết kế 09-09-2026; số liệu trùng lặp
+lấy theo bản mới.
 **Tên làm việc:** Protect Your Health
 
 ## 1. Mục tiêu
@@ -19,7 +21,8 @@ Sản phẩm không phải “máy viết nội dung tự động”. Nó là m�
 ### Trong phạm vi
 
 - Phát hiện chủ đề y khoa đang được bàn luận, hiểu sai hoặc mới công bố.
-- Tìm, khử trùng lặp, lưu và đánh giá nguồn từ PubMed, Europe PMC, Scopus và guideline chính thống.
+- Tìm, khử trùng lặp, lưu và đánh giá nguồn từ PubMed, Europe PMC và guideline;
+  Scopus chỉ là nguồn kiểm tra thủ công tùy quyền theo §17 bản 09-09-2026.
 - Tách rõ bằng chứng, diễn giải và quan điểm cá nhân của bác sĩ.
 - Sinh kịch bản tiếng Việt dễ hiểu, storyboard theo cảnh và danh sách claim–citation.
 - Tạo TTS, phụ đề, whiteboard/SVG, biểu đồ động, ảnh nghiên cứu và đoạn AI/Veo ngắn.
@@ -138,8 +141,8 @@ Gemini/NotebookLM hỗ trợ đối chiếu tài liệu đã chọn, tìm cách 
 | Tác vụ | Mục tiêu context |
 |---|---:|
 | Topic card | 1.500–2.500 token |
-| Evidence packet | 8.000–15.000 token |
-| Claude review khi cần | 6.000–10.000 token |
+| Evidence packet | 6.000–10.000 token |
+| Claude review khi cần | 4.000–7.000 token |
 | Viết kịch bản | 3.000–5.000 token |
 | Storyboard | 2.000–4.000 token |
 | Sửa một cảnh | dưới 2.000 token |
@@ -250,8 +253,8 @@ Mỗi cảnh chứa thời lượng, lời thoại, metadata diễn đạt, ch�
 
 Phong cách mặc định:
 
-- 70–80% whiteboard/2D từ SVG và thư viện biểu tượng có giấy phép rõ.
-- 15–20% biểu đồ động từ dữ liệu đã kiểm tra.
+- 65–75% whiteboard/2D từ SVG và thư viện biểu tượng có giấy phép rõ.
+- 15–25% biểu đồ động từ dữ liệu đã kiểm tra.
 - Không quá 10% ảnh/video AI, trừ khi bác sĩ chủ động đổi tỷ lệ.
 
 Remotion là renderer chính vì timeline nằm trong mã, dễ test và tạo biểu đồ động. FFmpeg xử lý âm lượng, codec, cắt ghép và thumbnail. OpenMontage là nguồn tham khảo cho schema, checkpoint và quy trình render; không fork toàn bộ vì phạm vi quá lớn.
@@ -266,7 +269,11 @@ TTS dùng interface chung:
 synthesize(text, voice, language, speed) -> audio + word_timestamps + metadata
 ```
 
-Ưu tiên benchmark mù ba lựa chọn: VieNeu-TTS local, VoiceStudio chạy như dịch vụ local và ElevenLabs nếu mua. VieNeu-TTS 0.5B có giấy phép Apache 2.0 phù hợp hơn bản 0.3B CC BY-NC khi kênh có thể kiếm tiền. Whisper/faster-whisper căn phụ đề và kiểm tra sai từ; bác sĩ nghe duyệt tên thuốc, số liệu và từ viết tắt.
+Ưu tiên benchmark mù VieNeu-TTS local, VoiceStudio và ElevenLabs nếu mua. Thông tin
+phiên bản/giấy phép VieNeu cũ ở bản này hết hiệu lực; dùng kết quả kiểm chứng tại
+§23 bản 09-09-2026 trước khi chọn model cho kênh có thể kiếm tiền.
+Whisper/faster-whisper căn phụ đề và kiểm tra sai từ; bác sĩ nghe duyệt tên thuốc,
+số liệu và từ viết tắt.
 
 CogVideo chỉ là provider thử nghiệm. RTX 3060 12 GB đủ cho TTS, ASR, Remotion và một số pipeline video nhỏ/quantized, nhưng không nên đặt CogVideo vào đường sản xuất bắt buộc. NotebookLM Video Overview phù hợp làm bản nháp ý tưởng, không phải renderer cuối vì khả năng kiểm soát cảnh, thời lượng và provenance còn hạn chế.
 
@@ -302,12 +309,11 @@ protect-your-health/
 │  ├─ charts/
 │  └─ brand/
 ├─ schemas/
-│  ├─ topic.schema.json
 │  ├─ evidence.schema.json
 │  ├─ author-brief.schema.json
 │  ├─ script.schema.json
 │  ├─ storyboard.schema.json
-│  └─ project.schema.json
+│  └─ render-input.schema.json
 ├─ profiles/
 │  ├─ brand.vi.yaml
 │  ├─ author-voice.vi.yaml
@@ -360,42 +366,19 @@ Không dùng snapshot hình ảnh để xác nhận tính đúng của số li�
 
 | Hoạt động của bác sĩ | Phút/video |
 |---|---:|
-| Chọn chủ đề và góc tiếp cận | 3–5 |
-| Duyệt nguồn, claim và quan điểm | 8–12 |
+| Chọn chủ đề và góc tiếp cận | 4–6 |
+| Duyệt nguồn, claim và quan điểm | 9–12 |
 | Sửa và duyệt kịch bản | 5–7 |
 | Xem bản render, ghi patch | 5–7 |
-| Duyệt caption và gói đăng | 1–2 |
-| **Tổng** | **22–33** |
+| Duyệt caption và gói đăng | 2–3 |
+| **Tổng** | **25–35** |
 
 Mục tiêu 30 phút khả thi với chủ đề thường sau khi có template và voice ổn định. Chủ đề rủi ro cao được phép vượt mục tiêu; độ an toàn quan trọng hơn tốc độ.
 
 ## 15. Roadmap và chi phí
 
-### Giai đoạn 0 — đặc tả và mẫu chuẩn, 2–3 ngày
-
-Chốt schema, policy bằng chứng, brand profile, một topic mẫu và tiêu chí benchmark TTS.
-
-### Giai đoạn 1 — video engine MVP, 1–2 tuần
-
-Dựng project CLI, storyboard schema, Remotion templates, SVG/biểu đồ, TTS adapter, subtitle, render và cổng duyệt video. Kết thúc giai đoạn này có thể sản xuất thủ công có hỗ trợ.
-
-### Giai đoạn 2 — evidence pipeline, 1–2 tuần
-
-Thêm PubMed/Europe PMC/Scopus intake, claim ledger, kiểm tra định danh, citation markers, gói phản biện Claude và cổng duyệt y khoa.
-
-### Giai đoạn 3 — trend và lịch biên tập, 1 tuần
-
-Thêm inbox đa nguồn, scoring, deduplication và kế hoạch năm video mỗi tuần.
-
-### Giai đoạn 4 — provider và chất lượng, 1 tuần
-
-Benchmark TTS, tích hợp Gemini/NotebookLM/Veo tùy chọn, audio QA, visual regression và cache tinh hơn.
-
-### Giai đoạn 5 — đa máy và hardening, 1 tuần
-
-Hoàn thiện installer, environment doctor, backup/sync guide, security review, license inventory và recovery test.
-
-Tổng thời gian dự kiến 5–7 tuần; có thể bắt đầu đăng sau giai đoạn 1 bằng quy trình nghiên cứu thủ công. Chi phí tăng thêm của MVP là 0 USD nếu dùng các gói hiện có và TTS local. ElevenLabs là tùy chọn sau benchmark; mức gói và giá phải kiểm tra lại tại thời điểm mua. Veo dùng hạn mức Gemini hiện có, không dùng mặc định cho mọi video.
+Roadmap Giai đoạn 0–5 của bản này hết hiệu lực. Giai đoạn 1 đã hoàn thành dưới tên
+MVP. Phần việc còn lại dùng duy nhất roadmap M1–M7 tại §21 bản 09-09-2026.
 
 ## 16. Rủi ro và biện pháp kiểm soát
 
@@ -429,17 +412,21 @@ Các lựa chọn sau không chặn kiến trúc, nhưng cần chốt trong giai
 - Tên kênh, bảng màu, font, logo và giọng xưng hô.
 - Giọng thật clone hay giọng tổng hợp riêng; điều kiện đồng ý khi clone giọng.
 - Mức ngưỡng nào bắt buộc gọi Claude review.
-- Cách dùng Scopus trên từng máy trong giới hạn giấy phép tài khoản.
+- Quyền dùng Scopus đã được chốt tại §17 bản 09-09-2026: không tự động hóa hoặc nhập
+  nội dung cho tới khi có xác nhận quyền bằng văn bản.
 - Syncthing, NAS hay thư mục cloud cho asset nặng.
 - Bộ ba chủ đề dùng làm golden tests.
 
 ## 19. Tài liệu và repo tham khảo
 
+**Ngày kiểm chứng:** 10-09-2026. Những mục về model, license, điều khoản hoặc phiên
+bản có thể thay đổi phải được kiểm tra lại trước khi triển khai.
+
 - [OpenAI — Using GPT-5.5](https://developers.openai.com/api/docs/guides/latest-model?model=gpt-5.5)
 - [OpenAI — ChatGPT use cases](https://learn.chatgpt.com/use-cases)
 - [Anthropic — Prompt templates and variables](https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/prompt-templates-and-variables)
 - [Anthropic — Claude Code với gói Pro/Max](https://support.anthropic.com/en/articles/11145838-using-claude-code-with-your-pro-or-max-plan)
-- [NCBI — E-utilities](https://www.ncbi.nlm.nih.gov/books/NBK25501/)
+- [NCBI — E-utilities Quick Start](https://www.ncbi.nlm.nih.gov/books/NBK25500/)
 - [Europe PMC — REST API](https://europepmc.org/RestfulWebService)
 - [Remotion](https://github.com/remotion-dev/remotion)
 - [OpenMontage](https://github.com/calesthio/OpenMontage)
@@ -447,7 +434,10 @@ Các lựa chọn sau không chặn kiến trúc, nhưng cần chốt trong giai
 - [CogVideo](https://github.com/zai-org/CogVideo)
 - [ECC](https://github.com/affaan-m/ECC)
 - [Open Generative AI](https://github.com/Anil-matcha/Open-Generative-AI)
-- [VieNeu-TTS](https://github.com/pnnbao-ump/VieNeu-TTS)
+- [VieNeu-TTS source](https://github.com/pnnbao97/VieNeu-TTS)
+- [VieNeu-TTS LICENSE](https://github.com/pnnbao97/VieNeu-TTS/blob/main/LICENSE)
+- [VieNeu-TTS v3 Turbo model package](https://huggingface.co/pnnbao-ump/VieNeu-TTS-v3-Turbo)
+- [Elsevier website terms](https://www.elsevier.com/legal/elsevier-website-terms-and-conditions)
 - [Google NotebookLM — Video Overviews](https://blog.google/technology/google-labs/notebooklm-video-overviews/)
 
 ## 20. Điều kiện chuyển sang kế hoạch triển khai
