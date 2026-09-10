@@ -58,7 +58,8 @@
 - Create: `tests/domain/test_project_v2.py`
 - Create: `tests/storage/test_project_layout.py`
 - Create: `tests/fixtures/golden-project-v2/project.yaml`
-- Create: `tests/fixtures/golden-project-v2/revisions/001/` với bản sao các artifact tác giả của golden v1 theo layout v2
+- Create: `tests/fixtures/golden-project-v2/revisions/001/` với artifact golden v1 được ánh xạ theo bảng Task 8
+- Create: `tests/fixtures/golden-project-v2/revisions/001/topic/card.yaml`
 - Create: `tests/e2e/test_golden_workflow_versions.py`
 - Modify: `tools/export_schemas.py`
 - Create: `schemas/project-v2.schema.json`
@@ -143,7 +144,15 @@ class ProjectManifestV2(BaseModel):
 
 `SideStateRecord` là discriminated union: năm side state có `resume_state`, `reason_code`, `entered_at`; `topic_rejected` không có `resume_state` nhưng vẫn có lý do và thời điểm. Model validator bắt buộc `side_state.type == state` khi state là side state và `side_state is None` khi state là main state.
 
-`resolve_project_layout` chỉ chấp nhận chính xác schema `1.0` hoặc `2.0`, validate bằng model tương ứng và từ chối active revision thiếu. Fixture v2 bắt đầu ở `idea`, chứa artifact kiểm thử dưới `revisions/001` nhưng không tạo state hoặc approval giả; các task sau chỉ chuyển state trên bản sao trong `tmp_path`.
+`resolve_project_layout` chỉ chấp nhận chính xác schema `1.0` hoặc `2.0`, validate bằng model tương ứng và từ chối active revision thiếu. Fixture v2 bắt đầu ở `idea`, chứa artifact kiểm thử dưới `revisions/001` nhưng không tạo state hoặc approval giả; các task sau chỉ chuyển state trên bản sao trong `tmp_path`. Task 1 phải tạo `topic/card.yaml` tổng hợp từ `project.slug` và tiêu đề trong `author-brief.yaml`, với đúng payload tối thiểu dưới đây; đây là fixture tổng hợp phục vụ main-edge checkpoint, không phải topic evidence thật:
+
+```yaml
+schema_version: "2.0"
+synthetic_test_record: true
+slug: muoi-va-huyet-ap
+title: Ăn mặn và tăng huyết áp
+origin: migration_fixture
+```
 
 - [ ] **Step 5: Xuất schema và chạy GREEN**
 
@@ -600,6 +609,21 @@ Commit: `git commit -m "feat: evaluate deterministic gate invalidation"`
 - `plan_migration(source: Path) -> MigrationPlan` thuần read-only.
 - Đích mặc định: sibling `source.parent / f"{source.name}-v2"`.
 
+**Bảng ánh xạ path v1→v2 bắt buộc:**
+
+| Path/source v1 | Path v2 | Xử lý |
+|---|---|---|
+| `project.yaml` | `project.yaml` ở root project đích | Transform schema/state, thêm `active_revision: "001"`; không copy nguyên văn |
+| `author-brief.yaml` | `revisions/001/author/brief.yaml` | Copy nội dung canonical, không đổi nghĩa |
+| `evidence/ledger.yaml` | `revisions/001/evidence/ledger.yaml` | Copy nội dung canonical |
+| `script/script.yaml` | `revisions/001/script/script.yaml` | Copy nội dung canonical |
+| `storyboard/storyboard.yaml` | `revisions/001/storyboard/storyboard.yaml` | Copy nội dung canonical |
+| `assets/evidence-r01.svg` | `revisions/001/assets/evidence-r01.svg` | Copy đúng byte; khai báo `semantic: true` trong asset manifest |
+| Không có path v1; tổng hợp từ `project.slug` + `author-brief.yaml.title` | `revisions/001/topic/card.yaml` | Sinh đúng payload synthetic đã khóa ở Task 1 |
+| Không có path v1 | `revisions/001/assets/asset-manifest.yaml` | Sinh ở migration từ asset được storyboard tham chiếu; không tự nhận approval |
+
+Golden v1 hiện không có artifact nào bị bỏ. Nếu fixture v1 có thêm path tracked trước lúc implement, dừng như một mâu thuẫn plan/fixture thay vì tự chọn copy hoặc bỏ. `MigrationPlan.files` và fixture v2 Task 1 phải dùng chính xác bảng này; mọi path dẫn xuất ngoài bảng là lỗi contract.
+
 - [ ] **Step 1: Viết RED table cho đủ 10 state v1**
 
 ```python
@@ -633,7 +657,7 @@ Expected: FAIL vì planner chưa tồn tại.
 
 - [ ] **Step 3: Cài planner không ghi filesystem**
 
-Planner liệt kê source file, destination dưới `revisions/001`, SHA-256/canonical hash và state map. `rendered` bị loại khỏi v2 và map `awaiting_video_review`. Planner đọc approval record hiện có nhưng chỉ ghi `retain_candidate`; chưa được khẳng định `retained` trước bước equivalence của Task 9. Nếu destination đã tồn tại, plan báo conflict và executor sau này phải từ chối.
+Planner liệt kê từng hàng trong bảng path v1→v2 ở trên, destination dưới root/revision tương ứng, SHA-256/canonical hash và state map. `rendered` bị loại khỏi v2 và map `awaiting_video_review`. Planner đọc approval record hiện có nhưng chỉ ghi `retain_candidate`; chưa được khẳng định `retained` trước bước equivalence của Task 9. Nếu destination đã tồn tại, plan báo conflict và executor sau này phải từ chối.
 
 - [ ] **Step 4: GREEN, dual-golden và full regression**
 

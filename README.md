@@ -11,8 +11,9 @@ MVP đã hoàn thành: project scaffold, claim ledger, author-owned script,
 read-aloud QA, Remotion vertical preview, production cache, hai cổng duyệt của
 bác sĩ, gói xuất bản, Windows installer và environment doctor. Thiết kế workflow
 khép kín A–Z đã được duyệt tại `8a2b9a7`. Implementation plan hiện chỉ chi tiết
-M1 workflow kernel và đang chờ duyệt; M2–M7 được giữ ở mức deliverable để tránh
-lỗi thời. MVP hiện tại vẫn là đường chạy ổn định.
+M1 workflow kernel đã được duyệt; hai contract về synthetic topic card và ánh xạ
+path migration đã được khóa trước Task 1. M2–M7 được giữ ở mức deliverable
+để tránh lỗi thời. MVP hiện tại vẫn là đường chạy ổn định.
 
 ## Milestone
 
@@ -36,7 +37,7 @@ MVP complete: vertical slice từ author brief, evidence, kịch bản và story
 | Final review | Approval, asset, package và Windows render hardening | complete | `python -m pytest -v` (122 passed); Ruff; video test (12 passed)/typecheck; real Windows golden render 1080 × 1920, 30 fps, 45.056 s | `fix: close final production integrity gaps` |
 | Security closure | Loại bỏ Windows batch-shell boundary cho pnpm | complete | `python -m pytest -v` (124 passed); Ruff; video test (12 passed)/typecheck; doctor; real Windows golden render 1080 × 1920, 30 fps, 45.056 s | `fix: remove Windows batch-shell launcher` |
 | A–Z workflow design | Đặc tả pipeline khép kín, migration v1→v2, phân vai AI, token budget và roadmap M1–M7 | approved | state/review/produce: 41 passed; Ruff; spec consistency; source/license verification; `git diff --check` | `8a2b9a7` |
-| M1 implementation plan | Plan chi tiết graph v2, revision/stage/asset manifest, invalidation và migration không phá v1 | awaiting approval | document consistency; `git diff --check` | `docs: plan workflow kernel M1` |
+| M1 implementation plan | Plan chi tiết graph v2, revision/stage/asset manifest, invalidation và migration không phá v1 | approved; contract patched | document consistency; `git diff --check` | `docs: plan workflow kernel M1`; `docs: lock M1 fixture path contracts` |
 
 ## Kiến trúc
 
