@@ -191,6 +191,12 @@ texture, flourish và transition thuần trang trí mới được `false`. Pref
 kiểm policy; bác sĩ nhìn và xác nhận phân loại trong medical packet ở bước K. Bác sĩ
 có thể nâng `false -> true`; hạ `true -> false` cần reason và phải qua lại preflight.
 
+Policy có thêm hai `AssetKind` cho mascot: `mascot_reaction` là nhân vật chỉ phản
+ứng/dẫn dắt và bắt buộc `semantic: false`; `mascot_medical_annotation` là mascot
+mang chữ y khoa, con số hoặc marker `[n]` và bắt buộc `semantic: true`. Nếu một asset
+mascot đồng thời khớp hai loại, loại semantic thắng và preflight từ chối gắn nhãn
+`mascot_reaction` để tránh né medical hash.
+
 Mọi asset `semantic: true` phải có file hoàn chỉnh và SHA-256 trước bước K. Bước L
 chỉ chép đúng byte đã duyệt vào render run; nếu thiếu hoặc hash lệch, production dừng
 và medical approval stale. Asset `semantic: false` có thể được tạo sau gate.
@@ -285,6 +291,20 @@ ngữ chưa giải thích, chuyển ý thiếu lý do, hook phóng đại, sáo 
 đối và đoạn đọc nguồn quá dày. Chỉ diff của revision đã duyệt mới được dùng để cập
 nhật `profiles/author-voice.vi.yaml`.
 
+Ở M6, `profiles/author-voice.vi.yaml.directness` đổi từ `clear_and_calm` thành
+`wry_against_false_claims`. Đây là nhãn policy, không phải câu mẫu: profile không có
+example giọng xéo xắt cho đến khi bác sĩ cung cấp câu thật. Châm biếm chỉ nhắm vào
+**phát biểu sai**, không nhắm vào người; cấm nêu tên cá nhân, nhãn hàng hoặc KOL cụ
+thể, và cấm châm biếm người tin thông tin sai. Chỉ dùng sắc thái này ở nhịp 1–2
+(vấn đề, câu chuyển). Nhịp 4 (bằng chứng) và nhịp 5 (giới hạn) luôn trung tính vì
+châm biếm tại đó dễ đẩy câu về kết luận tuyệt đối.
+
+M6 bổ sung hai luật vào `src/healthvideo/qa/script.py`: `sarcasm_in_evidence_or_limit`
+phát hiện châm biếm ở nhịp bằng chứng/giới hạn; `sarcasm_targets_person` phát hiện
+đối tượng châm biếm là người, cá nhân, nhãn hàng hoặc KOL thay vì phát biểu. Không
+tự sinh từ/câu mẫu để thực hiện hai luật; bộ lexicon/example chỉ hình thành từ câu
+thật do bác sĩ cung cấp và được duyệt vào voice profile.
+
 ## 11. Phân vai AI và token
 
 **Codex** là operator mặc định: đọc state, gọi CLI, tạo packet, ledger bản đầu,
@@ -343,6 +363,20 @@ rate và khoảng lặng.
 
 Thứ tự asset: SVG template; icon/stock có license; chart từ dữ liệu đã xác minh;
 crop bài báo hợp pháp; Veo. Mọi asset ghi source, license, sha256, người tạo, revision.
+
+Mascot là SVG rig có bộ tư thế/biểu cảm cố định và component Remotion tái sử dụng,
+nằm trong ngân sách whiteboard/SVG 65–75%, không gọi Veo. Mascot chỉ phản ứng hoặc
+dẫn dắt, không mặc áo blouse, không cầm ống nghe và không đóng vai đang khám hay kê
+đơn. Các hình thức đó dễ được hiểu thành tư vấn cá nhân hóa, nằm ngoài phạm vi §2.
+Mascot thuần phản ứng dùng `mascot_reaction`; khi mang nội dung y khoa dùng
+`mascot_medical_annotation` và chịu medical hash theo §7.
+
+Signature mở đầu/kết thúc được khai báo trong `profiles/brand.vi.yaml` và dựng bằng
+component Remotion dùng chung. Intro bắt buộc không quá 2 giây; outro bắt buộc từ
+2 đến 3 giây. Signature hình ảnh là `semantic: false`. Nếu có câu thoại signature,
+câu đó được pin trong brand profile và render bằng template, không nằm trong
+`script.yaml`, để không phát sinh duyệt lại cho từng video. Không đặt câu mặc định
+hoặc tự sáng tác; trường thoại để trống cho đến khi bác sĩ cung cấp.
 
 Chart nêu mẫu số, đơn vị, trục và CI; animation không phóng đại tỷ lệ. Crop y văn
 lưu tọa độ/chuỗi đối chiếu, bôi vàng đúng câu hoặc số và đồng bộ marker `[n]`. Không
@@ -538,7 +572,7 @@ chưa triển khai là M1–M7 dưới đây.
 | M3 | Trend + PubMed/Europe PMC/Crossref; Scopus theo §17 | 0 |
 | M4 | Agent packet, risk routing, Codex/Claude/Gemini contract | 0 API |
 | M5 | VieNeu benchmark/adapter, pronunciation, ASR, Eleven fallback | 0 local; Eleven tùy chọn |
-| M6 | Chart, SVG, paper highlight, Veo adapter, license ledger | trong quota Gemini/Veo |
+| M6 | Chart, SVG, paper highlight, mascot rig, intro/outro signature, Veo adapter, license ledger | trong quota Gemini/Veo |
 | M7 | E2E, multi-process/multi-machine, backup, security, hướng dẫn | 0 ngoài lưu trữ tùy chọn |
 
 i5-13500, RTX 3060 12 GB và RAM 32 GB là máy production chính cho local TTS, ASR,
