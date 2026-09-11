@@ -27,11 +27,14 @@ _NOT_YET_MODELED = (
 def render_medical_packet(revision_root: Path) -> str:
     ledger = read_yaml(revision_root / "evidence" / "ledger.yaml")
     sources = {
-        record["id"]: SourceRecord.model_validate(record) for record in ledger.get("records", [])
+        record["id"]: SourceRecord.model_validate(record)
+        for record in ledger.get("records", [])
     }
     claims = [EvidenceClaim.model_validate(claim) for claim in ledger.get("claims", [])]
     script = Script.model_validate(read_yaml(revision_root / "script" / "script.yaml"))
-    storyboard = Storyboard.model_validate(read_yaml(revision_root / "storyboard" / "storyboard.yaml"))
+    storyboard = Storyboard.model_validate(
+        read_yaml(revision_root / "storyboard" / "storyboard.yaml")
+    )
 
     lines_by_claim: dict[str, list[str]] = {}
     for line in script.lines:
@@ -43,35 +46,56 @@ def render_medical_packet(revision_root: Path) -> str:
             markers_by_claim.setdefault(scene.claim_id, []).append(scene.source_marker)
 
     rows = []
+    has_unmodeled = False
     for claim in claims:
         source_titles = ", ".join(
-            escape(sources[source_id].title) for source_id in claim.sources if source_id in sources
+            escape(sources[source_id].title)
+            for source_id in claim.sources
+            if source_id in sources
         )
-        script_lines = "; ".join(escape(text) for text in lines_by_claim.get(claim.id, []))
-        markers = ", ".join(escape(marker) for marker in markers_by_claim.get(claim.id, []))
+        script_lines = "; ".join(
+            escape(text) for text in lines_by_claim.get(claim.id, [])
+        )
+        markers = ", ".join(
+            escape(marker) for marker in markers_by_claim.get(claim.id, [])
+        )
+        certainty = (
+            claim.certainty
+            if claim.certainty != "unrated"
+            else "chưa có trong hệ thống"
+        )
+        population = claim.population or "chưa có trong hệ thống"
+        if (
+            certainty == "chưa có trong hệ thống"
+            or population == "chưa có trong hệ thống"
+        ):
+            has_unmodeled = True
         rows.append(
             "<tr>"
             f"<td>{escape(claim.id)}</td>"
             f"<td>{escape(claim.text_public)}</td>"
             f"<td>{escape(claim.text_technical)}</td>"
             f"<td>{source_titles}</td>"
+            f"<td>{escape(certainty)}</td>"
+            f"<td>{escape(population)}</td>"
             f"<td>{script_lines}</td>"
             f"<td>{markers}</td>"
             "</tr>"
         )
 
+    note_paragraph = f"<p>{escape(_NOT_YET_MODELED)}</p>" if has_unmodeled else ""
     return (
         '<!doctype html><html lang="vi"><head><meta charset="utf-8">'
         "<title>Gói duyệt y khoa</title></head><body>"
         f"<h1>{escape(storyboard.title)}</h1>"
         '<table border="1"><thead><tr>'
         "<th>Claim</th><th>Câu công chúng</th><th>Mệnh đề kỹ thuật</th>"
-        "<th>Nguồn</th><th>Câu thoại</th><th>Marker</th>"
+        "<th>Nguồn</th><th>Độ tin cậy</th><th>Quần thể</th><th>Câu thoại</th><th>Marker</th>"
         "</tr></thead><tbody>"
         + "".join(rows)
         + "</tbody></table>"
-        f"<p>{escape(_NOT_YET_MODELED)}</p>"
-        "</body></html>"
+        + note_paragraph
+        + "</body></html>"
     )
 
 

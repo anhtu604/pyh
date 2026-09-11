@@ -1,8 +1,45 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
+    "applicability": {
+      "default": "",
+      "title": "Applicability",
+      "type": "string"
+    },
+    "certainty": {
+      "default": "unrated",
+      "enum": [
+        "high",
+        "moderate",
+        "low",
+        "very_low",
+        "unrated"
+      ],
+      "title": "Certainty",
+      "type": "string"
+    },
+    "doctor_notes": {
+      "default": "",
+      "title": "Doctor Notes",
+      "type": "string"
+    },
+    "evidence_direction": {
+      "default": "supporting",
+      "enum": [
+        "supporting",
+        "conflicting",
+        "inconclusive"
+      ],
+      "title": "Evidence Direction",
+      "type": "string"
+    },
     "id": {
       "title": "Id",
+      "type": "string"
+    },
+    "population": {
+      "default": "",
+      "title": "Population",
       "type": "string"
     },
     "schema_version": {
@@ -16,6 +53,11 @@
       },
       "title": "Sources",
       "type": "array"
+    },
+    "synthetic_test_record": {
+      "default": false,
+      "title": "Synthetic Test Record",
+      "type": "boolean"
     },
     "text_public": {
       "title": "Text Public",

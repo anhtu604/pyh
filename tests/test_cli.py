@@ -2,11 +2,13 @@ import shutil
 import sys
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from healthvideo import __version__
 from healthvideo.cli import app, main
-from healthvideo.domain.project_v2 import WorkflowState
+from healthvideo.domain.evidence import CandidateSource
+from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.tts.silent import SilentTTS
 from healthvideo.workflows.doctor import CheckResult
@@ -64,7 +66,9 @@ def test_doctor_exits_nonzero_for_a_missing_required_dependency(monkeypatch) -> 
     monkeypatch.setattr(
         "healthvideo.cli.check_environment",
         lambda _run: [
-            CheckResult("ffmpeg", False, "not found", ">=8", "Install FFmpeg 8 or newer."),
+            CheckResult(
+                "ffmpeg", False, "not found", ">=8", "Install FFmpeg 8 or newer."
+            ),
         ],
     )
 
@@ -271,9 +275,7 @@ def test_project_migrate_dry_run_is_read_only(tmp_path: Path) -> None:
         if path.is_file()
     }
 
-    result = CliRunner().invoke(
-        app, ["project", "migrate", str(source), "--dry-run"]
-    )
+    result = CliRunner().invoke(app, ["project", "migrate", str(source), "--dry-run"])
 
     assert result.exit_code == 0
     assert "revisions/001" in result.stdout
@@ -342,8 +344,12 @@ def test_status_reports_state_and_a_stale_approval(tmp_path) -> None:
     assert "approval_stale=true" in stale.stdout
 
 
-def test_review_approve_medical_requires_gate_flag_and_confirmation(tmp_path: Path) -> None:
-    project_dir = create_v2_project_fixture(tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW)
+def test_review_approve_medical_requires_gate_flag_and_confirmation(
+    tmp_path: Path,
+) -> None:
+    project_dir = create_v2_project_fixture(
+        tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW
+    )
 
     result = runner.invoke(
         app,
@@ -364,7 +370,9 @@ def test_review_approve_medical_requires_gate_flag_and_confirmation(tmp_path: Pa
 
 
 def test_review_reject_then_resume_round_trip(tmp_path: Path) -> None:
-    project_dir = create_v2_project_fixture(tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW)
+    project_dir = create_v2_project_fixture(
+        tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW
+    )
 
     reject_result = runner.invoke(
         app,
@@ -386,7 +394,16 @@ def test_review_reject_then_resume_round_trip(tmp_path: Path) -> None:
     assert reject_result.exit_code == 0
 
     resume_result = runner.invoke(
-        app, ["review", "resume", str(project_dir), "--gate", "medical", "--to", "draft_ready"]
+        app,
+        [
+            "review",
+            "resume",
+            str(project_dir),
+            "--gate",
+            "medical",
+            "--to",
+            "draft_ready",
+        ],
     )
     assert resume_result.exit_code == 0
 
@@ -394,7 +411,9 @@ def test_review_reject_then_resume_round_trip(tmp_path: Path) -> None:
 def test_review_open_writes_html_and_prints_path(tmp_path: Path) -> None:
     project_dir = create_v2_project_fixture(tmp_path)
 
-    result = runner.invoke(app, ["review", "open", str(project_dir), "--gate", "medical"])
+    result = runner.invoke(
+        app, ["review", "open", str(project_dir), "--gate", "medical"]
+    )
 
     assert result.exit_code == 0
     packet_path = project_dir / "revisions" / "001" / "reviews" / "medical-packet.html"
@@ -407,6 +426,220 @@ def test_review_v1_commands_are_unaffected(tmp_path: Path) -> None:
 
     result = runner.invoke(
         app,
-        ["review", "medical", str(project_dir), "--reviewer", "BS Nguyễn Văn An", "--yes"],
+        [
+            "review",
+            "medical",
+            str(project_dir),
+            "--reviewer",
+            "BS Nguyễn Văn An",
+            "--yes",
+        ],
     )
     assert result.exit_code == 0
+
+
+def test_cli_topic_create_list_and_reject(tmp_path: Path) -> None:
+    inbox = tmp_path / "topics"
+    create_res = runner.invoke(
+        app,
+        [
+            "topic",
+            "create",
+            "--title",
+            "Ăn mặn và huyết áp",
+            "--question",
+            "Ăn mặn có làm tăng huyết áp không?",
+            "--slug",
+            "an-man-va-huyet-ap",
+            "--inbox",
+            str(inbox),
+        ],
+    )
+    assert create_res.exit_code == 0
+    assert "an-man-va-huyet-ap" in create_res.stdout
+
+    list_res = runner.invoke(app, ["topic", "list", "--inbox", str(inbox)])
+    assert list_res.exit_code == 0
+    assert "an-man-va-huyet-ap" in list_res.stdout
+
+    card_file = inbox / "an-man-va-huyet-ap.yaml"
+    reject_res = runner.invoke(
+        app,
+        ["topic", "reject", str(card_file), "--reason", "Không phù hợp thời điểm này"],
+    )
+    assert reject_res.exit_code == 0
+    assert "Đã từ chối" in reject_res.stdout
+
+
+def test_cli_topic_select_advances_project_state(tmp_path: Path) -> None:
+    project_dir = tmp_path / "project-v2"
+    project_dir.mkdir(parents=True)
+    (project_dir / "revisions" / "001" / "topic").mkdir(parents=True)
+
+    initial_manifest = ProjectManifestV2(
+        schema_version="2.0",
+        slug="an-man-va-huyet-ap",
+        state=WorkflowState.IDEA,
+        active_revision="001",
+    )
+    write_yaml_atomic(
+        project_dir / "project.yaml", initial_manifest.model_dump(mode="json")
+    )
+
+    inbox = tmp_path / "topics"
+    runner.invoke(
+        app,
+        [
+            "topic",
+            "create",
+            "--title",
+            "Ăn mặn và huyết áp",
+            "--question",
+            "Ăn mặn có làm tăng huyết áp không?",
+            "--slug",
+            "an-man-va-huyet-ap",
+            "--inbox",
+            str(inbox),
+        ],
+    )
+
+    select_res = runner.invoke(
+        app,
+        [
+            "topic",
+            "select",
+            str(project_dir),
+            "--slug",
+            "an-man-va-huyet-ap",
+            "--inbox",
+            str(inbox),
+        ],
+    )
+    assert select_res.exit_code == 0
+    assert "Đã chọn chủ đề" in select_res.stdout
+
+    manifest = ProjectManifestV2.model_validate(read_yaml(project_dir / "project.yaml"))
+    assert manifest.state == WorkflowState.TOPIC_SELECTED
+
+
+def test_cli_evidence_search_and_build_ledger(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class MockClient:
+        def search(self, query: str, limit: int = 10) -> list[CandidateSource]:
+            return [
+                CandidateSource(
+                    source_id="mock-1",
+                    database="pubmed",
+                    title="Sodium reduction trial",
+                    authors=["Author A"],
+                    year=2023,
+                    doi="10.1000/1",
+                )
+            ]
+
+    monkeypatch.setattr("healthvideo.cli.get_default_clients", lambda: [MockClient()])
+
+    project_dir = tmp_path / "project-v2"
+    project_dir.mkdir(parents=True)
+    rev_dir = project_dir / "revisions" / "001"
+    for sub in ("topic", "author", "evidence", "script", "storyboard", "assets"):
+        (rev_dir / sub).mkdir(parents=True)
+
+    write_yaml_atomic(
+        rev_dir / "author" / "brief.yaml",
+        {
+            "schema_version": "1.0",
+            "title": "Ăn mặn",
+            "personal_position": "Giảm muối",
+            "reasoning": "Tốt cho tim mạch",
+            "emotion": "bình tĩnh",
+            "audience_concern": "Huyết áp",
+            "phrases_to_keep": [],
+        },
+    )
+
+    initial_manifest = ProjectManifestV2(
+        schema_version="2.0",
+        slug="an-man-va-huyet-ap",
+        state=WorkflowState.AUTHOR_BRIEF_READY,
+        active_revision="001",
+    )
+    write_yaml_atomic(
+        project_dir / "project.yaml", initial_manifest.model_dump(mode="json")
+    )
+
+    search_res = runner.invoke(
+        app,
+        ["evidence", "search", str(project_dir), "--query", "sodium reduction"],
+    )
+    assert search_res.exit_code == 0
+    assert "Tìm thấy" in search_res.stdout
+
+    # Now simulate a synthesized claim and verified source in evidence directory
+    ledger_content = {
+        "schema_version": "1.0",
+        "records": [
+            {
+                "id": "R01",
+                "title": "Sodium reduction trial",
+                "authors": ["Author A"],
+                "year": 2023,
+                "study_design": "RCT",
+                "doi": "10.1000/1",
+                "retraction_status": "clean",
+            }
+        ],
+        "claims": [
+            {
+                "id": "C01",
+                "text_public": "Giảm muối giúp hạ áp",
+                "text_technical": "Sodium reduction lowers BP",
+                "type": "evidence",
+                "sources": ["R01"],
+            }
+        ],
+    }
+    write_yaml_atomic(rev_dir / "evidence" / "ledger.yaml", ledger_content)
+
+    build_res = runner.invoke(app, ["evidence", "build-ledger", str(project_dir)])
+    assert build_res.exit_code == 0
+    assert "Đã tổng hợp ledger" in build_res.stdout
+
+    updated = ProjectManifestV2.model_validate(read_yaml(project_dir / "project.yaml"))
+    assert updated.state == WorkflowState.EVIDENCE_READY
+
+
+def test_cli_evidence_ingest(tmp_path: Path) -> None:
+    project_dir = tmp_path / "project-v2"
+    project_dir.mkdir(parents=True)
+    rev_dir = project_dir / "revisions" / "001"
+    (rev_dir / "evidence").mkdir(parents=True)
+
+    initial_manifest = ProjectManifestV2(
+        schema_version="2.0",
+        slug="an-man-va-huyet-ap",
+        state=WorkflowState.RESEARCH_IN_PROGRESS,
+        active_revision="001",
+    )
+    write_yaml_atomic(
+        project_dir / "project.yaml", initial_manifest.model_dump(mode="json")
+    )
+
+    ingest_res = runner.invoke(
+        app,
+        [
+            "evidence",
+            "ingest",
+            str(project_dir),
+            "--source-id",
+            "PMID:12345",
+            "--decision",
+            "included",
+            "--rationale",
+            "Well-designed RCT on sodium and blood pressure",
+        ],
+    )
+    assert ingest_res.exit_code == 0
+    assert "Đã nạp 1 lựa chọn bằng chứng" in ingest_res.stdout
+    assert (rev_dir / "evidence" / "included-sources.yaml").is_file()

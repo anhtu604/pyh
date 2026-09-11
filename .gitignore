@@ -16,6 +16,7 @@ projects/**/renders/
 projects/**/publish/
 projects/**/source-documents/
 projects/**/reviews/*.html
+projects/**/evidence/source-cache/
 
 # Skill symlinks: absolute paths, machine-specific; the real content lives in .agents/skills
 .claude/

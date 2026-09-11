@@ -70,6 +70,7 @@ applicability, per-claim doctor notes — hoãn sang M3).
 | M3.3 | Mở rộng domain model bằng chứng (`EvidenceClaim`, `SourceRecord`, `EvidenceQuestion`, `SearchLogRecord`, `CandidateSource`, `SourceSelection`). Bổ sung các trường hoãn từ M2 (`certainty`, `population`, `applicability`, `evidence_direction`, `doctor_notes`, `pmcid`, `journal`, `retraction_status`, `conflict_of_interest`, `key_findings`). Bảo toàn 100% tương thích ngược với ledger fixture v1 và v2. | complete | `tests/domain/test_evidence.py` (5 passed); `tests/contracts/test_schemas.py` (13 passed); `python -m pytest -q` (419 passed); `python -m ruff check src tests tools`; `git diff --check` | `feat: extend evidence models with certainty population and search artifacts` |
 | M3.4 | Client tìm kiếm y văn (`PubMedClient`, `EuropePMCClient`, `CrossrefClient`, `check_scopus_policy`, `get_cached_response`, `store_cached_response`). Sử dụng `urllib.request` thuần không thêm dependency, hỗ trợ injectable transport để test offline 100%. Thực thi nghiêm ngặt quyết định loại trừ Scopus theo §17 (chặn tự động, yêu cầu tìm kiếm ngoài hệ thống). | complete | `tests/evidence/test_clients.py` (5 passed); `python -m pytest -q` (424 passed); `python -m ruff check src tests tools`; `git diff --check` | `feat: add medical literature search clients for pubmed europepmc crossref` |
 | M3.5 | Workflow tổng hợp bằng chứng (`record_question`, `search_literature`, `record_source_selections`, `build_evidence_ledger`, `reject_topic_for_lack_of_evidence`). Quản lý artifact PICO `question.yaml`, `search-log.yaml`, `candidates.jsonl`, tách sàng lọc `included-sources.yaml`/`excluded-sources.yaml`, kiểm tra rút bài (retraction check) trước khi tạo `ledger.yaml` và chuyển trạng thái `research_in_progress -> evidence_ready` hoặc `topic_rejected`. | complete | `tests/workflows/test_evidence.py` (5 passed); `python -m pytest -q` (429 passed); `python -m ruff check src tests tools`; `git diff --check` | `feat: synthesize evidence ledger and manage literature search workflow` |
+| M3.6 | Tích hợp review packet HTML, schema contracts, CLI topic & evidence và acceptance M3. Bổ sung hiển thị `certainty` và `population` vào medical packet; export `topic-card.schema.json`; bổ sung CLI `healthvideo topic list|create|select|reject` và `healthvideo evidence search|ingest|build-ledger`. Bỏ qua cache y văn `source-cache/` trong `.gitignore`. Xác nhận toàn bộ 435 tests vượt qua, giữ nguyên 0-byte diff fixtures v1/v2 và tính bất biến offline. | complete | `tests/test_cli.py` (4 passed); `tests/workflows/test_review_html.py` (4 passed); `tests/contracts/test_schemas.py` (14 passed); dual-golden E2E (28 passed); `python -m pytest -q` (435 passed); `python -m ruff check src tests tools`; `git diff --exit-code -- tests/fixtures`; `git diff --check` | `feat: wire topic and evidence CLI and complete M3 discovery pipeline` |
 
 ## Kiến trúc
 
@@ -100,6 +101,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install/doctor.ps1
 # M2: mở gói HTML review, duyệt cổng y khoa/video hoặc từ chối và nối lại.
 & .venv\Scripts\healthvideo.exe review open projects/2026/09/muoi-va-huyet-ap-v2 --gate medical
 & .venv\Scripts\healthvideo.exe review approve projects/2026/09/muoi-va-huyet-ap-v2 --gate medical --reviewer "BS An" --yes
+
+# M3: quản lý chủ đề và tìm kiếm bằng chứng y khoa.
+& .venv\Scripts\healthvideo.exe topic create --title "Ăn mặn và huyết áp" --question "Ăn mặn có làm tăng huyết áp không?" --slug an-man-va-huyet-ap
+& .venv\Scripts\healthvideo.exe topic list
+& .venv\Scripts\healthvideo.exe topic select projects/2026/09/muoi-va-huyet-ap-v2 --slug an-man-va-huyet-ap
+& .venv\Scripts\healthvideo.exe evidence search projects/2026/09/muoi-va-huyet-ap-v2 --query "sodium blood pressure"
+& .venv\Scripts\healthvideo.exe evidence build-ledger projects/2026/09/muoi-va-huyet-ap-v2
 ```
 
 Smoke test fixture golden độc lập (không thay thế render của dự án thật, không tạo

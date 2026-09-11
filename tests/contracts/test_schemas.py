@@ -14,6 +14,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
     ("filename", "has_nested_models"),
     [
         ("project-v2.schema.json", True),
+        ("topic-card.schema.json", True),
         ("evidence.schema.json", False),
         ("author-brief.schema.json", False),
         ("script.schema.json", True),
@@ -46,7 +47,12 @@ def test_exported_schema_has_versioned_contract(
 
 def test_schema_export_is_deterministic(tmp_path: Path) -> None:
     output_dir = tmp_path / "schemas"
-    command = [sys.executable, "tools/export_schemas.py", "--output-dir", str(output_dir)]
+    command = [
+        sys.executable,
+        "tools/export_schemas.py",
+        "--output-dir",
+        str(output_dir),
+    ]
 
     subprocess.run(command, check=True, cwd=REPOSITORY_ROOT)
     first = {
@@ -62,7 +68,9 @@ def test_schema_export_is_deterministic(tmp_path: Path) -> None:
     assert second == first
 
 
-@pytest.mark.parametrize("filename", ["storyboard.schema.json", "render-input.schema.json"])
+@pytest.mark.parametrize(
+    "filename", ["storyboard.schema.json", "render-input.schema.json"]
+)
 def test_exported_storyboard_contract_rejects_runtime_invalid_values(
     tmp_path: Path, filename: str
 ) -> None:
@@ -131,7 +139,9 @@ def test_exported_storyboard_contract_rejects_runtime_invalid_values(
         assert not validator.is_valid(invalid)
 
 
-@pytest.mark.parametrize("filename", ["storyboard.schema.json", "render-input.schema.json"])
+@pytest.mark.parametrize(
+    "filename", ["storyboard.schema.json", "render-input.schema.json"]
+)
 def test_exported_storyboard_contract_announces_cross_field_invariants(
     tmp_path: Path, filename: str
 ) -> None:

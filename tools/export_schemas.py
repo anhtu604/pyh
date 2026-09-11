@@ -12,12 +12,14 @@ from healthvideo.domain.project_v2 import ProjectManifestV2
 from healthvideo.domain.script import Script
 from healthvideo.domain.stage import StageManifest
 from healthvideo.domain.storyboard import Storyboard
+from healthvideo.domain.topic import TopicCard
 from healthvideo.render.input import RenderInput
 
 JSON_SCHEMA_DIALECT = "https://json-schema.org/draft/2020-12/schema"
 DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parents[1] / "schemas"
 SCHEMAS: dict[str, type[BaseModel]] = {
     "project-v2.schema.json": ProjectManifestV2,
+    "topic-card.schema.json": TopicCard,
     "evidence.schema.json": EvidenceClaim,
     "author-brief.schema.json": AuthorBrief,
     "script.schema.json": Script,
