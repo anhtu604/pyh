@@ -5,6 +5,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
+from healthvideo.domain.asset_manifest import AssetManifest
 from healthvideo.domain.author import AuthorBrief
 from healthvideo.domain.evidence import EvidenceClaim
 from healthvideo.domain.project_v2 import ProjectManifestV2
@@ -23,6 +24,7 @@ SCHEMAS: dict[str, type[BaseModel]] = {
     "storyboard.schema.json": Storyboard,
     "render-input.schema.json": RenderInput,
     "stage-manifest.schema.json": StageManifest,
+    "asset-manifest.schema.json": AssetManifest,
 }
 
 

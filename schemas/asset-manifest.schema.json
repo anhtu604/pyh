@@ -1,0 +1,105 @@
+{
+  "$defs": {
+    "AssetKind": {
+      "enum": [
+        "evidence_highlight",
+        "data_chart",
+        "medical_diagram",
+        "medical_text",
+        "background",
+        "texture",
+        "flourish",
+        "transition"
+      ],
+      "title": "AssetKind",
+      "type": "string"
+    },
+    "AssetRecord": {
+      "additionalProperties": false,
+      "description": "One tracked asset, its classification, and its provenance.\n\n``path`` must already be a safe POSIX-relative path with no ``..``\nsegment and no absolute root; whether it actually resolves inside a\ngiven revision is checked later by :func:`validate_asset_manifest`,\nwhich has the revision root to check it against.",
+      "properties": {
+        "classification_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Classification Reason"
+        },
+        "creator": {
+          "pattern": "\\S",
+          "title": "Creator",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/AssetKind"
+        },
+        "license": {
+          "pattern": "\\S",
+          "title": "License",
+          "type": "string"
+        },
+        "path": {
+          "pattern": "\\S",
+          "title": "Path",
+          "type": "string"
+        },
+        "revision": {
+          "pattern": "^[0-9]{3}$",
+          "title": "Revision",
+          "type": "string"
+        },
+        "semantic": {
+          "title": "Semantic",
+          "type": "boolean"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "source": {
+          "pattern": "\\S",
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "kind",
+        "semantic",
+        "sha256",
+        "source",
+        "license",
+        "creator",
+        "revision"
+      ],
+      "title": "AssetRecord",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "The full set of tracked assets for one revision.",
+  "properties": {
+    "assets": {
+      "items": {
+        "$ref": "#/$defs/AssetRecord"
+      },
+      "title": "Assets",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "2.0",
+      "default": "2.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "title": "AssetManifest",
+  "type": "object"
+}

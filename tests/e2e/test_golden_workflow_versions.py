@@ -2,10 +2,12 @@ import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 
+from healthvideo.domain.asset_manifest import AssetManifest, validate_asset_manifest
 from healthvideo.domain.project import ProjectState, transition
 from healthvideo.domain.project_v2 import WorkflowState
 from healthvideo.domain.stage import StageManifest, StageStatus
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
+from healthvideo.storage.files import read_yaml
 from healthvideo.storage.project_layout import resolve_project_layout
 from healthvideo.storage.revisions import create_revision
 from healthvideo.storage.stages import append_stage_manifest
@@ -115,6 +117,23 @@ def test_dual_golden_appends_a_stage_manifest_without_touching_the_tracked_fixtu
         candidate: candidate.read_bytes()
         for candidate in v2_source.rglob("*")
         if candidate.is_file()
+    }
+    assert after == before
+
+
+def test_dual_golden_asset_manifest_loads_and_validates_without_rewrite() -> None:
+    v2_source = GOLDEN_PROJECTS[1]
+    manifest_path = v2_source / "revisions" / "001" / "assets" / "asset-manifest.yaml"
+    before = {
+        path: path.read_bytes() for path in v2_source.rglob("*") if path.is_file()
+    }
+
+    manifest = AssetManifest.model_validate(read_yaml(manifest_path))
+    validate_asset_manifest(v2_source / "revisions" / "001", manifest)
+
+    assert manifest.assets[0].path == "assets/evidence-r01.svg"
+    after = {
+        path: path.read_bytes() for path in v2_source.rglob("*") if path.is_file()
     }
     assert after == before
 
