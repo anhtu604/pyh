@@ -188,7 +188,7 @@ assets:
     kind: evidence_highlight
     semantic: true
     classification_reason: Evidence highlight changes the medical meaning.
-    sha256: 5a748bc7cc428d9def90205c88b271b82d703927dbe5ae5da8b34b6ababedddc2
+    sha256: 5a748bc7cc428d9def90205c88b271b82d703927dbe5ae5da8b34b6ababeddc2
     source: synthetic_test_fixture
     license: synthetic_test_only
     creator: repository_fixture
