@@ -3,6 +3,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from healthvideo.domain.asset_manifest import AssetManifest, validate_asset_manifest
+from healthvideo.domain.invalidation import (
+    ArtifactChange,
+    InvalidationLevel,
+    evaluate_invalidation,
+)
 from healthvideo.domain.project import ProjectState, transition
 from healthvideo.domain.project_v2 import WorkflowState
 from healthvideo.domain.stage import StageManifest, StageStatus
@@ -174,5 +179,52 @@ def test_dual_golden_creates_a_revision_without_touching_the_tracked_fixture(
         candidate: candidate.read_bytes()
         for candidate in v2_source.rglob("*")
         if candidate.is_file()
+    }
+    assert after == before
+
+
+def test_dual_golden_invalidation_engine_only_evaluates_v2_assets() -> None:
+    """The invalidation engine (Task 7) is v2-only policy over v2 data.
+
+    It reads the v2 golden asset manifest, is fail-closed on unrecognised
+    paths, and never touches the filesystem -- so neither golden project's
+    tracked bytes move, and the v1 golden project is never handed to it at
+    all, i.e. fixture v1 is never subjected to v2 invalidation policy.
+    """
+    before = {
+        path: path.read_bytes()
+        for source in GOLDEN_PROJECTS
+        for path in source.rglob("*")
+        if path.is_file()
+    }
+
+    v2_source = GOLDEN_PROJECTS[1]
+    manifest_path = v2_source / "revisions" / "001" / "assets" / "asset-manifest.yaml"
+    asset_manifest = AssetManifest.model_validate(read_yaml(manifest_path))
+
+    semantic_decision = evaluate_invalidation(
+        [ArtifactChange(path=Path("assets/evidence-r01.svg"), json_pointers=frozenset())],
+        asset_manifest,
+    )
+    assert semantic_decision.level is InvalidationLevel.MEDICAL
+    assert semantic_decision.target_state is WorkflowState.NEEDS_MEDICAL_REVISION
+
+    package_decision = evaluate_invalidation(
+        [
+            ArtifactChange(
+                path=Path("publish/metadata.yaml"),
+                json_pointers=frozenset({"/posting/visibility"}),
+            )
+        ],
+        asset_manifest,
+    )
+    assert package_decision.level is InvalidationLevel.PACKAGE
+    assert package_decision.target_state is None
+
+    after = {
+        path: path.read_bytes()
+        for source in GOLDEN_PROJECTS
+        for path in source.rglob("*")
+        if path.is_file()
     }
     assert after == before
