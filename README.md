@@ -24,6 +24,14 @@ MVP complete: vertical slice từ author brief, evidence, kịch bản và story
 M1 complete: kernel workflow v2 và migration sibling v1→v2 đã vượt acceptance
 offline; migration không sửa nguồn, không overwrite đích và không tự duyệt gate.
 
+M2 complete: review gate v2 cho cả y khoa và video đã hoàn thành (approve,
+reject audit trail lặp lại được, resume, static HTML review packet, CLI adapter
+và `.gitignore` cho HTML). Không đổi hành vi của v1 (`review medical`/`review video`).
+Toàn bộ 407 tests pass offline trên Windows/PowerShell (11-09-2026). Các commit:
+M2.1 (`38321a6`), M2.2 (`78fe1fb`), M2.3 (`3ffcae8`), M2.4 (`10ba3da`), M2.5 (`feat: expose v2 review gate approve, reject, open and resume`).
+Gói review HTML giữ đúng giới hạn model hiện tại (chưa model hóa population, certainty,
+applicability, per-claim doctor notes — hoãn sang M3).
+
 ## Tiến độ nhiệm vụ
 
 | Task | Deliverable | Status | Tests | Commit |
@@ -56,6 +64,7 @@ offline; migration không sửa nguồn, không overwrite đích và không tự
 | M2.2 | Medical gate v2 (`approve_gate`, `reject_gate`, `resume_gate`). Khớp artifact hash (`medical_reviewed_paths` hash ledger, script, storyboard, asset-manifest và byte asset `semantic=true`), bắt buộc `validate_asset_manifest` trước khi approve. Ghi `reviews/medical-approval.yaml` một lần mỗi revision (`write_yaml_once`), từ chối ký lại; reject ghi audit trail timestamp và chuyển `needs_medical_revision`, resume đưa về `draft_ready`. Dual-golden copy xác nhận không sửa fixture tracked. | complete | `tests/workflows/test_gate_review.py` (5 passed); `tests/e2e/test_golden_workflow_versions.py` (10 passed); `python -m pytest -q` (397 passed); `python -m ruff check src tests tools`; `git diff --exit-code -- tests/fixtures`; `git diff --check` | `feat: add v2 medical gate approve, reject and resume` |
 | M2.3 | Video gate v2 (`approve_gate`, `reject_gate`, `resume_gate` với `GateKind.VIDEO`). Hash `renders/render-manifest.json` và `renders/video.mp4`; reject cho phép quay lại `production_in_progress` hoặc `draft_ready` (yêu cầu reason class `semantic_issue`). Chạy trên synthetic render fixture; chưa có pipeline production v2 thật (M6). | complete | `tests/workflows/test_gate_review.py` (8 passed); `tests/e2e/test_golden_workflow_versions.py` (10 passed); `python -m pytest -q` (400 passed); `python -m ruff check src tests tools`; `git diff --check` | `feat: wire the v2 video gate onto the same approve/reject/resume core` |
 | M2.4 | Render static review packet HTML (`render_medical_packet`, `render_video_packet`). Hàm thuần + `html.escape`, không thêm dependency runtime (không Jinja2/web framework), không tự mở trình duyệt, không tự ký. Medical packet chỉ hiển thị field hiện có trong model (`text_public`, `text_technical`, `sources`), có ghi chú rõ các field spec §14 chưa có trong hệ thống (population, certainty, applicability, quan điểm bác sĩ theo claim). Video packet nhúng thẻ video trỏ path tương đối `../renders/video.mp4` và dump manifest/QA. | complete | `tests/workflows/test_review_html.py` (3 passed); `python -m pytest -q` (403 passed); `python -m ruff check src tests tools`; `git diff --check` | `feat: render static medical and video review packets` |
+| M2.5 | CLI review gate v2 (`review approve`, `review reject`, `review open`, `review resume` với flag `--gate medical|video`), `.gitignore` cho packet HTML và acceptance M2 offline. Lệnh v1 (`review medical`, `review video`) giữ nguyên không đổi. Reject yêu cầu gõ `REJECT` xác nhận (hoặc `--yes`); approve yêu cầu gõ `APPROVE` (hoặc `--yes`). `review open` ghi HTML bằng `write_text_atomic` và in đường dẫn, không tự mở trình duyệt. | complete | `tests/test_cli.py` (4 passed); `tests/workflows/test_gate_review.py` (8 passed); `tests/workflows/test_review_html.py` (3 passed); dual-golden E2E (10 passed); `python -m pytest -q` (407 passed); `python -m ruff check src tests tools`; `git diff --check` | `feat: expose v2 review gate approve, reject, open and resume` |
 
 ## Kiến trúc
 
@@ -82,6 +91,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install/doctor.ps1
 # M1: xem plan không ghi dữ liệu, rồi migrate sang sibling `<project>-v2`.
 & .venv\Scripts\healthvideo.exe project migrate projects/2026/09/muoi-va-huyet-ap --dry-run
 & .venv\Scripts\healthvideo.exe project migrate projects/2026/09/muoi-va-huyet-ap
+
+# M2: mở gói HTML review, duyệt cổng y khoa/video hoặc từ chối và nối lại.
+& .venv\Scripts\healthvideo.exe review open projects/2026/09/muoi-va-huyet-ap-v2 --gate medical
+& .venv\Scripts\healthvideo.exe review approve projects/2026/09/muoi-va-huyet-ap-v2 --gate medical --reviewer "BS An" --yes
 ```
 
 Smoke test fixture golden độc lập (không thay thế render của dự án thật, không tạo
@@ -168,7 +181,11 @@ snapshot ledger/script/storyboard đã đối chiếu với medical approval, n�
 
 ## Kiểm thử gần nhất
 
-Ngày chạy gần nhất: **08-09-2026**. `python -m pytest -v` (124 passed);
+Ngày chạy M2 gần nhất: **11-09-2026**. `python -m pytest -q` (407 passed);
+`python -m ruff check src tests tools`; `git diff --check`. Golden v1 giữ nguyên 100%
+hành vi; dual-golden test xác nhận cổng v2 chạy hoàn toàn offline không sửa fixture.
+
+Ngày chạy MVP ban đầu: **08-09-2026**. `python -m pytest -v` (124 passed);
 `python -m ruff check src tests tools`; `pnpm --dir video test` (12 passed);
 `pnpm --dir video typecheck`; `install/doctor.ps1`. Golden project
 (`tests/fixtures/golden-project`) chạy hết luồng từ duyệt y khoa, sản xuất, duyệt

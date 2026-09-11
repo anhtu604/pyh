@@ -6,12 +6,19 @@ from typer.testing import CliRunner
 
 from healthvideo import __version__
 from healthvideo.cli import app, main
+from healthvideo.domain.project_v2 import WorkflowState
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.tts.silent import SilentTTS
 from healthvideo.workflows.doctor import CheckResult
 from healthvideo.workflows.produce import produce_project
 from healthvideo.workflows.review import approve_medical
-from tests.helpers import create_project_fixture, synthesize_fixture_audio
+from tests.helpers import (
+    create_project_fixture,
+    create_v2_project_fixture,
+    synthesize_fixture_audio,
+)
+
+runner = CliRunner()
 
 
 def test_version_command() -> None:
@@ -333,3 +340,73 @@ def test_status_reports_state_and_a_stale_approval(tmp_path) -> None:
     assert "BS An" in approved.stdout
     assert stale.exit_code == 0
     assert "approval_stale=true" in stale.stdout
+
+
+def test_review_approve_medical_requires_gate_flag_and_confirmation(tmp_path: Path) -> None:
+    project_dir = create_v2_project_fixture(tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW)
+
+    result = runner.invoke(
+        app,
+        [
+            "review",
+            "approve",
+            str(project_dir),
+            "--gate",
+            "medical",
+            "--reviewer",
+            "BS Nguyễn Văn An",
+            "--yes",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Đã duyệt" in result.stdout
+
+
+def test_review_reject_then_resume_round_trip(tmp_path: Path) -> None:
+    project_dir = create_v2_project_fixture(tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW)
+
+    reject_result = runner.invoke(
+        app,
+        [
+            "review",
+            "reject",
+            str(project_dir),
+            "--gate",
+            "medical",
+            "--reviewer",
+            "BS Nguyễn Văn An",
+            "--reason",
+            "Thiếu nguồn.",
+            "--resume-to",
+            "draft_ready",
+            "--yes",
+        ],
+    )
+    assert reject_result.exit_code == 0
+
+    resume_result = runner.invoke(
+        app, ["review", "resume", str(project_dir), "--gate", "medical", "--to", "draft_ready"]
+    )
+    assert resume_result.exit_code == 0
+
+
+def test_review_open_writes_html_and_prints_path(tmp_path: Path) -> None:
+    project_dir = create_v2_project_fixture(tmp_path)
+
+    result = runner.invoke(app, ["review", "open", str(project_dir), "--gate", "medical"])
+
+    assert result.exit_code == 0
+    packet_path = project_dir / "revisions" / "001" / "reviews" / "medical-packet.html"
+    assert packet_path.is_file()
+    assert str(packet_path) in result.stdout
+
+
+def test_review_v1_commands_are_unaffected(tmp_path: Path) -> None:
+    project_dir = create_project_fixture(tmp_path, state="awaiting_medical_review")
+
+    result = runner.invoke(
+        app,
+        ["review", "medical", str(project_dir), "--reviewer", "BS Nguyễn Văn An", "--yes"],
+    )
+    assert result.exit_code == 0
