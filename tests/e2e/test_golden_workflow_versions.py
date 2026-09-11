@@ -4,6 +4,7 @@ from pathlib import Path
 from uuid import UUID
 
 from healthvideo.domain.asset_manifest import AssetManifest, validate_asset_manifest
+from healthvideo.domain.gate_review import GateKind
 from healthvideo.domain.invalidation import (
     ArtifactChange,
     InvalidationLevel,
@@ -17,7 +18,9 @@ from healthvideo.storage.files import read_yaml
 from healthvideo.storage.project_layout import resolve_project_layout
 from healthvideo.storage.revisions import create_revision
 from healthvideo.storage.stages import append_stage_manifest
+from healthvideo.workflows.gate_review import approve_gate
 from healthvideo.workflows.migrate import migrate_project, plan_migration
+from tests.helpers import _advance_v2_state
 
 GOLDEN_PROJECTS = [
     Path("tests/fixtures/golden-project"),
@@ -289,3 +292,28 @@ def test_dual_golden_accepts_a_newly_migrated_v1_copy(tmp_path: Path) -> None:
         for path in source.rglob("*")
         if path.is_file()
     } == source_before
+
+
+def _snapshot_tree(root: Path) -> dict[Path, bytes]:
+    return {
+        path.relative_to(root): path.read_bytes()
+        for path in root.rglob("*")
+        if path.is_file()
+    }
+
+
+def test_dual_golden_medical_gate_approves_on_a_copy_without_touching_the_tracked_fixture(
+    tmp_path: Path,
+) -> None:
+    v2_source = GOLDEN_PROJECTS[1]
+    before = _snapshot_tree(v2_source)
+    copy_dir = tmp_path / "copy"
+    shutil.copytree(v2_source, copy_dir)
+    _advance_v2_state(copy_dir, WorkflowState.AWAITING_MEDICAL_REVIEW)
+
+    record = approve_gate(
+        copy_dir, GateKind.MEDICAL, reviewer="BS Nguyễn Văn An", now=GOLDEN_ENTERED_AT
+    )
+
+    assert record.artifact_hashes
+    assert _snapshot_tree(v2_source) == before

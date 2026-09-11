@@ -3,6 +3,8 @@ from pathlib import Path
 from typing import Any
 
 from healthvideo.domain.project import ORDER, ProjectState
+from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
+from healthvideo.domain.state_graph import TransitionContext, transition_v2
 from healthvideo.domain.storyboard import Storyboard
 from healthvideo.render.input import build_render_input
 from healthvideo.render.run import (
@@ -213,3 +215,180 @@ def synthesize_fixture_audio(project_dir: Path) -> Path:
         .synthesize(TTSRequest(text=narration, language=script["language"]), output)
         .audio_file
     )
+
+
+def create_v2_project_fixture(
+    root: Path, *, state: WorkflowState = WorkflowState.DRAFT_READY
+) -> Path:
+    """Build a synthetic schema-2.0 project at `revisions/001`, ready for gate tests."""
+    project_dir = root / "muoi-va-huyet-ap-v2"
+    revision_root = project_dir / "revisions" / "001"
+    for name in ("topic", "author", "evidence", "script", "storyboard", "assets"):
+        (revision_root / name).mkdir(parents=True, exist_ok=True)
+
+    asset_bytes = b"<svg xmlns='http://www.w3.org/2000/svg'><text>synthetic</text></svg>"
+    (revision_root / "assets" / "evidence-r01.svg").write_bytes(asset_bytes)
+    asset_sha256 = sha256_file(revision_root / "assets" / "evidence-r01.svg")
+
+    write_yaml_atomic(
+        revision_root / "topic" / "card.yaml",
+        {
+            "schema_version": "2.0",
+            "synthetic_test_record": True,
+            "slug": "muoi-va-huyet-ap",
+            "title": "Ăn mặn và tăng huyết áp",
+            "origin": "test_fixture",
+        },
+    )
+    write_yaml_atomic(
+        revision_root / "author" / "brief.yaml",
+        {
+            "schema_version": "1.0",
+            "title": "Ăn mặn và tăng huyết áp",
+            "personal_position": "Giảm muối là một bước thực tế.",
+            "reasoning": "Huyết áp thường đáp ứng với lượng muối.",
+            "emotion": "bình tĩnh",
+            "audience_concern": "Người trưởng thành quan tâm huyết áp.",
+            "phrases_to_keep": [],
+        },
+    )
+    write_yaml_atomic(
+        revision_root / "evidence" / "ledger.yaml",
+        {
+            "schema_version": "1.0",
+            "records": [
+                {
+                    "id": "R01",
+                    "title": "Bản ghi tổng hợp cho test: giảm muối và huyết áp",
+                    "authors": ["Nguyen A", "Tran B"],
+                    "year": 2020,
+                    "study_design": "tổng quan hệ thống",
+                    "doi": "10.0000/synthetic-salt-bp",
+                    "synthetic_test_record": True,
+                }
+            ],
+            "claims": [
+                {
+                    "id": "C01",
+                    "text_public": "Giảm muối giúp hạ huyết áp ở nhiều người.",
+                    "text_technical": "Giảm natri ăn vào liên quan tới hạ huyết áp.",
+                    "type": "evidence",
+                    "sources": ["R01"],
+                    "synthetic_test_record": True,
+                }
+            ],
+        },
+    )
+    write_yaml_atomic(
+        revision_root / "script" / "script.yaml",
+        {
+            "schema_version": "1.0",
+            "title": "Ăn mặn và tăng huyết áp",
+            "language": "vi",
+            "lines": [
+                {
+                    "id": "L01",
+                    "text": "Ăn mặn có thể làm huyết áp tăng.",
+                    "claim_id": "C01",
+                    "source_marker": "[1]",
+                    "delivery": {"intent": "explain"},
+                }
+            ],
+        },
+    )
+    write_yaml_atomic(
+        revision_root / "storyboard" / "storyboard.yaml",
+        {
+            "schema_version": "1.0",
+            "title": "Ăn mặn và tăng huyết áp",
+            "scenes": [
+                {
+                    "id": "S01",
+                    "start_frame": 0,
+                    "duration_frames": 225,
+                    "narration": "Ăn mặn có thể làm huyết áp tăng.",
+                    "claim_id": "C01",
+                    "source_marker": "[1]",
+                    "visual": "evidence_highlight",
+                    "evidence_highlight": {
+                        "image": "assets/evidence-r01.svg",
+                        "quote": "Synthetic evidence fixture for tests only.",
+                        "x": 0.1,
+                        "y": 0.2,
+                        "width": 0.8,
+                        "height": 0.2,
+                    },
+                }
+            ],
+        },
+    )
+    write_yaml_atomic(
+        revision_root / "assets" / "asset-manifest.yaml",
+        {
+            "schema_version": "2.0",
+            "assets": [
+                {
+                    "path": "assets/evidence-r01.svg",
+                    "kind": "evidence_highlight",
+                    "semantic": True,
+                    "classification_reason": "Evidence highlight changes the medical meaning.",
+                    "sha256": asset_sha256,
+                    "source": "synthetic_test_fixture",
+                    "license": "synthetic_test_only",
+                    "creator": "repository_fixture",
+                    "revision": "001",
+                }
+            ],
+        },
+    )
+    write_yaml_atomic(
+        project_dir / "project.yaml",
+        {
+            "schema_version": "2.0",
+            "slug": "muoi-va-huyet-ap",
+            "language": "vi",
+            "state": WorkflowState.DRAFT_READY.value,
+            "active_revision": "001",
+            "artifact_hashes": {},
+        },
+    )
+    if state is not WorkflowState.DRAFT_READY:
+        _advance_v2_state(project_dir, state)
+    return project_dir
+
+
+_V2_MAIN_SEQUENCE = [
+    WorkflowState.IDEA,
+    WorkflowState.TOPIC_SELECTED,
+    WorkflowState.AUTHOR_BRIEF_READY,
+    WorkflowState.RESEARCH_IN_PROGRESS,
+    WorkflowState.EVIDENCE_READY,
+    WorkflowState.DRAFT_READY,
+    WorkflowState.AWAITING_MEDICAL_REVIEW,
+]
+
+
+def _advance_v2_state(project_dir: Path, state: WorkflowState) -> None:
+    manifest = ProjectManifestV2.model_validate(read_yaml(project_dir / "project.yaml"))
+    context = TransitionContext(
+        active_revision="001",
+        current_input_hash="0" * 64,
+        validated_artifacts=frozenset(
+            {
+                "topic/card.yaml",
+                "author/brief.yaml",
+                "evidence/ledger.yaml",
+                "script/script.yaml",
+                "storyboard/storyboard.yaml",
+                "assets/asset-manifest.yaml",
+            }
+        ),
+    )
+    if manifest.state in _V2_MAIN_SEQUENCE and state in _V2_MAIN_SEQUENCE:
+        start_idx = _V2_MAIN_SEQUENCE.index(manifest.state)
+        end_idx = _V2_MAIN_SEQUENCE.index(state)
+        for i in range(start_idx, end_idx):
+            manifest = transition_v2(manifest, _V2_MAIN_SEQUENCE[i + 1], context)
+    else:
+        manifest = transition_v2(manifest, state, context)
+    write_yaml_atomic(project_dir / "project.yaml", manifest.model_dump(mode="json"))
