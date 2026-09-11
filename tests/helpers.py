@@ -1,7 +1,9 @@
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from healthvideo.domain.gate_review import GateKind
 from healthvideo.domain.project import ORDER, ProjectState
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
@@ -17,6 +19,7 @@ from healthvideo.render.run import (
 from healthvideo.storage.files import read_yaml, sha256_file, write_yaml_atomic
 from healthvideo.tts.base import TTSRequest
 from healthvideo.tts.silent import SilentTTS
+from healthvideo.workflows.gate_review import approve_gate
 from healthvideo.workflows.review import approve_medical, approve_video
 
 FIXTURE_PRODUCTION_HASH = "synthetic-production-run"
@@ -391,4 +394,51 @@ def _advance_v2_state(project_dir: Path, state: WorkflowState) -> None:
             manifest = transition_v2(manifest, _V2_MAIN_SEQUENCE[i + 1], context)
     else:
         manifest = transition_v2(manifest, state, context)
+    write_yaml_atomic(project_dir / "project.yaml", manifest.model_dump(mode="json"))
+
+
+def advance_v2_project_to_video_review(project_dir: Path, *, now: datetime) -> None:
+    """Push a draft_ready v2 fixture through to awaiting_video_review with synthetic renders."""
+    revision_root = project_dir / "revisions" / "001"
+    manifest = ProjectManifestV2.model_validate(read_yaml(project_dir / "project.yaml"))
+    context = TransitionContext(
+        active_revision="001",
+        current_input_hash="0" * 64,
+        validated_artifacts=frozenset(
+            {
+                "script/script.yaml",
+                "storyboard/storyboard.yaml",
+                "assets/asset-manifest.yaml",
+            }
+        ),
+    )
+    manifest = transition_v2(manifest, WorkflowState.AWAITING_MEDICAL_REVIEW, context)
+    write_yaml_atomic(project_dir / "project.yaml", manifest.model_dump(mode="json"))
+    approve_gate(project_dir, GateKind.MEDICAL, reviewer="BS Nguyễn Văn An", now=now)
+
+    manifest = ProjectManifestV2.model_validate(read_yaml(project_dir / "project.yaml"))
+    (revision_root / "renders").mkdir(parents=True, exist_ok=True)
+    _write_json(
+        revision_root / "renders" / "render-manifest.json",
+        {"provider": "silent", "frames": 225},
+    )
+    (revision_root / "renders" / "video.mp4").write_bytes(b"synthetic-mp4")
+    (revision_root / "reviews").mkdir(parents=True, exist_ok=True)
+    _write_json(
+        revision_root / "reviews" / "video-qa.json",
+        {"codec": "h264", "issues": []},
+    )
+    context = TransitionContext(
+        active_revision="001",
+        current_input_hash="0" * 64,
+        validated_artifacts=frozenset(
+            {
+                "reviews/medical-approval.yaml",
+                "renders/render-manifest.json",
+                "reviews/video-qa.json",
+            }
+        ),
+    )
+    manifest = transition_v2(manifest, WorkflowState.PRODUCTION_IN_PROGRESS, context)
+    manifest = transition_v2(manifest, WorkflowState.AWAITING_VIDEO_REVIEW, context)
     write_yaml_atomic(project_dir / "project.yaml", manifest.model_dump(mode="json"))

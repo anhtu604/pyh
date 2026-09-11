@@ -14,7 +14,7 @@ from healthvideo.workflows.gate_review import (
     reject_gate,
     resume_gate,
 )
-from tests.helpers import create_v2_project_fixture
+from tests.helpers import advance_v2_project_to_video_review, create_v2_project_fixture
 
 REVIEWER = "BS Nguyễn Văn An"
 NOW = datetime(2026, 9, 11, 9, 0, tzinfo=UTC)
@@ -117,3 +117,63 @@ def test_reject_gate_requires_non_blank_reason(tmp_path: Path) -> None:
             resume_state=WorkflowState.DRAFT_READY,
             now=NOW,
         )
+
+
+def test_approve_video_hashes_render_manifest_and_mp4(tmp_path: Path) -> None:
+    project_dir = create_v2_project_fixture(tmp_path)
+    advance_v2_project_to_video_review(project_dir, now=NOW)
+
+    record = approve_gate(project_dir, GateKind.VIDEO, reviewer=REVIEWER, now=NOW)
+
+    assert set(record.artifact_hashes) == {"renders/render-manifest.json", "renders/video.mp4"}
+    manifest = ProjectManifestV2.model_validate(read_yaml(project_dir / "project.yaml"))
+    assert manifest.state is WorkflowState.VIDEO_APPROVED
+
+
+def test_reject_video_with_semantic_issue_must_resume_to_draft_ready_with_that_reason_class(
+    tmp_path: Path,
+) -> None:
+    project_dir = create_v2_project_fixture(tmp_path)
+    advance_v2_project_to_video_review(project_dir, now=NOW)
+
+    reject_gate(
+        project_dir,
+        GateKind.VIDEO,
+        reviewer=REVIEWER,
+        reason="Phát hiện câu thoại sai claim khi xem lại video.",
+        resume_state=WorkflowState.DRAFT_READY,
+        now=NOW,
+    )
+
+    with pytest.raises(Exception, match=r"reason (class|code)"):
+        resume_gate(project_dir, GateKind.VIDEO, target=WorkflowState.DRAFT_READY, now=NOW)
+
+    resume_gate(
+        project_dir,
+        GateKind.VIDEO,
+        target=WorkflowState.DRAFT_READY,
+        reason_code="semantic_issue",
+        now=NOW,
+    )
+    manifest = ProjectManifestV2.model_validate(read_yaml(project_dir / "project.yaml"))
+    assert manifest.state is WorkflowState.DRAFT_READY
+
+
+def test_reject_video_without_semantic_issue_resumes_to_production_in_progress(
+    tmp_path: Path,
+) -> None:
+    project_dir = create_v2_project_fixture(tmp_path)
+    advance_v2_project_to_video_review(project_dir, now=NOW)
+
+    reject_gate(
+        project_dir,
+        GateKind.VIDEO,
+        reviewer=REVIEWER,
+        reason="Âm lượng chưa chuẩn hoá.",
+        resume_state=WorkflowState.PRODUCTION_IN_PROGRESS,
+        now=NOW,
+    )
+    resume_gate(project_dir, GateKind.VIDEO, target=WorkflowState.PRODUCTION_IN_PROGRESS, now=NOW)
+
+    manifest = ProjectManifestV2.model_validate(read_yaml(project_dir / "project.yaml"))
+    assert manifest.state is WorkflowState.PRODUCTION_IN_PROGRESS
