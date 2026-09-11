@@ -128,6 +128,29 @@ def test_storyboard_change_forces_medical_review(asset_manifest: AssetManifest) 
 # ---------------------------------------------------------------------------
 
 
+def test_publish_metadata_allowlist_is_exactly_the_eight_documented_pointers() -> None:
+    """Pin the allowlist to a literal set independent of the production constant.
+
+    The parametrized test below reads PUBLISH_METADATA_PACKAGE_ALLOWLIST to
+    build its own cases, so it would pass silently even if the constant
+    drifted (an accidental addition or substitution). This is the
+    independent regression guard for the one table that lets a
+    publish-metadata change bypass the medical gate.
+    """
+    assert PUBLISH_METADATA_PACKAGE_ALLOWLIST == frozenset(
+        {
+            "/posting/platform",
+            "/posting/account_handle",
+            "/posting/scheduled_at",
+            "/posting/visibility",
+            "/posting/allow_comments",
+            "/posting/allow_duet",
+            "/posting/allow_stitch",
+            "/tracking/campaign_id",
+        }
+    )
+
+
 @pytest.mark.parametrize("pointer", sorted(PUBLISH_METADATA_PACKAGE_ALLOWLIST))
 def test_every_allowlisted_metadata_pointer_only_requires_package_rebuild(
     pointer: str, asset_manifest: AssetManifest
