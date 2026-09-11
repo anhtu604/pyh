@@ -225,6 +225,35 @@ def test_review_medical_reports_the_state_gate(tmp_path) -> None:
     assert "awaiting_medical_review" in result.stdout
 
 
+def test_revision_create_rejects_v1_project(tmp_path: Path) -> None:
+    fixture = Path(__file__).parent / "fixtures" / "golden-project"
+    project_dir = tmp_path / "golden-project"
+    shutil.copytree(fixture, project_dir)
+
+    result = CliRunner().invoke(
+        app, ["revision", "create", str(project_dir), "--reason", "Sửa"]
+    )
+
+    assert result.exit_code == 1
+    assert "migrate" in result.stdout
+
+
+def test_revision_create_switches_the_active_revision(tmp_path: Path) -> None:
+    fixture = Path(__file__).parent / "fixtures" / "golden-project-v2"
+    project_dir = tmp_path / "golden-project-v2"
+    shutil.copytree(fixture, project_dir)
+
+    result = CliRunner().invoke(
+        app,
+        ["revision", "create", str(project_dir), "--reason", "Sửa luận điểm"],
+    )
+
+    assert result.exit_code == 0
+    assert "002" in result.stdout
+    assert read_yaml(project_dir / "project.yaml")["active_revision"] == "002"
+    assert (project_dir / "revisions" / "002" / "workflow.yaml").is_file()
+
+
 def test_status_reports_state_and_a_stale_approval(tmp_path) -> None:
     project_dir = create_project_fixture(tmp_path, state="awaiting_medical_review")
     runner = CliRunner()

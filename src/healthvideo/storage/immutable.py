@@ -24,3 +24,23 @@ def write_yaml_once(path: Path, payload: Mapping[str, Any]) -> None:
         stream.write(serialized)
         stream.flush()
         os.fsync(stream.fileno())
+
+
+def promote_directory_once(source_dir: Path, destination_dir: Path) -> None:
+    """Publish a staged directory at ``destination_dir`` with a single rename.
+
+    Refuses to replace an existing destination: if ``destination_dir`` already
+    exists this raises ``FileExistsError`` before anything is touched, leaving
+    both ``source_dir`` and ``destination_dir`` byte-unchanged. This is the
+    directory-level counterpart to ``write_yaml_once`` — a completed record
+    can never be silently overwritten by a second promotion.
+
+    ``source_dir`` must be a sibling of ``destination_dir`` (same parent, same
+    volume) so the promotion is one atomic rename rather than a copy.
+    """
+    if destination_dir.exists():
+        raise FileExistsError(
+            f"Refusing to replace an existing directory: {destination_dir}"
+        )
+    destination_dir.parent.mkdir(parents=True, exist_ok=True)
+    os.rename(source_dir, destination_dir)

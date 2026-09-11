@@ -13,6 +13,7 @@ from healthvideo.domain.review import ReviewKind, ReviewRecord
 from healthvideo.process import resolve_pnpm_argv
 from healthvideo.render.remotion import build_render_argv
 from healthvideo.storage.files import read_yaml
+from healthvideo.storage.revisions import create_revision
 from healthvideo.tts.silent import SilentTTS
 from healthvideo.workflows.create_project import create_project
 from healthvideo.workflows.doctor import (
@@ -33,8 +34,10 @@ CONFIRMATION = "APPROVE"
 app = typer.Typer(no_args_is_help=True)
 project_app = typer.Typer(no_args_is_help=True)
 review_app = typer.Typer(no_args_is_help=True)
+revision_app = typer.Typer(no_args_is_help=True)
 app.add_typer(project_app, name="project")
 app.add_typer(review_app, name="review")
+app.add_typer(revision_app, name="revision")
 
 ProjectDir = Annotated[Path, typer.Argument(help="Thư mục dự án")]
 Reviewer = Annotated[str, typer.Option("--reviewer", help="Tên bác sĩ duyệt")]
@@ -196,6 +199,20 @@ def status(project_dir: ProjectDir) -> None:
             f"({record.reviewed_at.isoformat()})"
         )
     typer.echo(f"approval_stale={'true' if stale else 'false'}")
+
+
+@revision_app.command("create")
+def revision_create(
+    project_dir: ProjectDir,
+    reason: Annotated[str, typer.Option("--reason", help="Lý do tạo revision mới")],
+) -> None:
+    """Tạo một revision workflow mới, bất biến, từ revision đang active."""
+    try:
+        revision = create_revision(project_dir, reason, now=datetime.now().astimezone())
+    except (FileNotFoundError, FileExistsError, TypeError, ValueError) as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
+    typer.echo(f"Created revision: {revision}")
 
 
 def _record_approval(

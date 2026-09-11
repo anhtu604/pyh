@@ -7,6 +7,7 @@ from healthvideo.domain.project_v2 import WorkflowState
 from healthvideo.domain.stage import StageManifest, StageStatus
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
 from healthvideo.storage.project_layout import resolve_project_layout
+from healthvideo.storage.revisions import create_revision
 from healthvideo.storage.stages import append_stage_manifest
 
 GOLDEN_PROJECTS = [
@@ -110,6 +111,46 @@ def test_dual_golden_appends_a_stage_manifest_without_touching_the_tracked_fixtu
 
     assert path.is_relative_to(revision_root / "workflow" / "stages")
     assert path.is_file()
+    after = {
+        candidate: candidate.read_bytes()
+        for candidate in v2_source.rglob("*")
+        if candidate.is_file()
+    }
+    assert after == before
+
+
+def test_dual_golden_creates_a_revision_without_touching_the_tracked_fixture(
+    tmp_path: Path,
+) -> None:
+    v2_source = GOLDEN_PROJECTS[1]
+    before = {
+        path: path.read_bytes() for path in v2_source.rglob("*") if path.is_file()
+    }
+
+    copy_dir = tmp_path / "golden-project-v2"
+    shutil.copytree(v2_source, copy_dir)
+    parent_revision_before = {
+        path: path.read_bytes()
+        for path in (copy_dir / "revisions" / "001").rglob("*")
+        if path.is_file()
+    }
+
+    revision = create_revision(
+        copy_dir, "Sửa luận điểm sau phản biện", now=GOLDEN_ENTERED_AT
+    )
+
+    assert revision == "002"
+    layout = resolve_project_layout(copy_dir)
+    assert layout.manifest.active_revision == "002"
+    assert (copy_dir / "revisions" / "002" / "topic" / "card.yaml").is_file()
+    assert (copy_dir / "revisions" / "002" / "workflow.yaml").is_file()
+    parent_revision_after = {
+        path: path.read_bytes()
+        for path in (copy_dir / "revisions" / "001").rglob("*")
+        if path.is_file()
+    }
+    assert parent_revision_after == parent_revision_before
+
     after = {
         candidate: candidate.read_bytes()
         for candidate in v2_source.rglob("*")
