@@ -254,6 +254,65 @@ def test_revision_create_switches_the_active_revision(tmp_path: Path) -> None:
     assert (project_dir / "revisions" / "002" / "workflow.yaml").is_file()
 
 
+def test_project_migrate_dry_run_is_read_only(tmp_path: Path) -> None:
+    fixture = Path(__file__).parent / "fixtures" / "golden-project"
+    source = tmp_path / "golden-project"
+    shutil.copytree(fixture, source)
+    before = {
+        path.relative_to(source): path.read_bytes()
+        for path in source.rglob("*")
+        if path.is_file()
+    }
+
+    result = CliRunner().invoke(
+        app, ["project", "migrate", str(source), "--dry-run"]
+    )
+
+    assert result.exit_code == 0
+    assert "revisions/001" in result.stdout
+    assert "script_approved -> medically_approved" in result.stdout
+    assert {
+        path.relative_to(source): path.read_bytes()
+        for path in source.rglob("*")
+        if path.is_file()
+    } == before
+    assert not source.with_name("golden-project-v2").exists()
+
+
+def test_project_migrate_creates_sibling_and_keeps_source(tmp_path: Path) -> None:
+    fixture = Path(__file__).parent / "fixtures" / "golden-project"
+    source = tmp_path / "golden-project"
+    shutil.copytree(fixture, source)
+    before = {
+        path.relative_to(source): path.read_bytes()
+        for path in source.rglob("*")
+        if path.is_file()
+    }
+
+    result = CliRunner().invoke(app, ["project", "migrate", str(source)])
+
+    assert result.exit_code == 0
+    assert "Migrated project:" in result.stdout
+    assert source.with_name("golden-project-v2").is_dir()
+    assert {
+        path.relative_to(source): path.read_bytes()
+        for path in source.rglob("*")
+        if path.is_file()
+    } == before
+
+
+def test_project_migrate_reports_existing_destination(tmp_path: Path) -> None:
+    fixture = Path(__file__).parent / "fixtures" / "golden-project"
+    source = tmp_path / "golden-project"
+    shutil.copytree(fixture, source)
+    source.with_name("golden-project-v2").mkdir()
+
+    result = CliRunner().invoke(app, ["project", "migrate", str(source)])
+
+    assert result.exit_code == 1
+    assert "existing destination" in result.stdout
+
+
 def test_status_reports_state_and_a_stale_approval(tmp_path) -> None:
     project_dir = create_project_fixture(tmp_path, state="awaiting_medical_review")
     runner = CliRunner()

@@ -4,6 +4,7 @@ from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated
+from uuid import uuid4
 
 import typer
 
@@ -20,6 +21,11 @@ from healthvideo.workflows.doctor import (
     check_environment,
     has_mandatory_failure,
     run_command,
+)
+from healthvideo.workflows.migrate import (
+    MigrationPlan,
+    migrate_project,
+    plan_migration,
 )
 from healthvideo.workflows.package import package_project
 from healthvideo.workflows.produce import produce_project
@@ -146,6 +152,46 @@ def new_project(
         typer.echo(str(error))
         raise typer.Exit(code=1) from error
     typer.echo(f"Created project: {project_dir}")
+
+
+@project_app.command("migrate")
+def migrate_project_command(
+    project_dir: ProjectDir,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="In migration plan, không ghi dữ liệu")
+    ] = False,
+) -> None:
+    """Migrate project v1 sang một sibling v2 mới, không sửa nguồn."""
+    try:
+        plan = plan_migration(project_dir)
+        if dry_run:
+            typer.echo(_format_migration_plan(plan))
+            return
+        destination = migrate_project(
+            project_dir,
+            now=datetime.now().astimezone(),
+            migration_id=uuid4(),
+        )
+    except (FileNotFoundError, FileExistsError, OSError, TypeError, ValueError) as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
+    typer.echo(f"Migrated project: {destination}")
+
+
+def _format_migration_plan(plan: MigrationPlan) -> str:
+    lines = [
+        f"Source: {plan.source}",
+        f"Destination: {plan.destination}",
+        f"State: {plan.source_state.value} -> {plan.proposed_state.value}",
+        f"Approval: {plan.approval_disposition.value}",
+        f"Destination conflict: {'yes' if plan.destination_conflict else 'no'}",
+        "Files:",
+    ]
+    for item in plan.files:
+        source = item.source.as_posix() if item.source is not None else "<derived>"
+        destination = item.destination.as_posix()
+        lines.append(f"  {source} -> {destination} [{plan.hashes[destination]}]")
+    return "\n".join(lines)
 
 
 def default_project_root() -> Path:

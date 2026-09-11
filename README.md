@@ -10,15 +10,19 @@ thành video y tế dự phòng tiếng Việt dọc 1080 × 1920.
 MVP đã hoàn thành: project scaffold, claim ledger, author-owned script,
 read-aloud QA, Remotion vertical preview, production cache, hai cổng duyệt của
 bác sĩ, gói xuất bản, Windows installer và environment doctor. Thiết kế workflow
-khép kín A–Z đã được duyệt tại `8a2b9a7`. Implementation plan hiện chỉ chi tiết
-M1 workflow kernel đã được duyệt; hai contract về synthetic topic card và ánh xạ
-path migration đã được khóa trước Task 1. M2–M7 được giữ ở mức deliverable
-để tránh lỗi thời. MVP hiện tại vẫn là đường chạy ổn định.
+khép kín A–Z đã được duyệt tại `8a2b9a7`. M1 workflow kernel đã hoàn tất trên
+nhánh triển khai: contract/layout v2, state graph, revision và stage bất biến,
+semantic asset manifest, invalidation xác định và migration v1→v2 không phá dữ
+liệu. M2–M7 được giữ ở mức deliverable để tránh lỗi thời. MVP v1 vẫn là đường
+chạy tương thích ổn định; review experience v2 thuộc M2.
 
 ## Milestone
 
 MVP complete: vertical slice từ author brief, evidence, kịch bản và storyboard
 đến TTS giả lập, render, hai cổng duyệt, gói xuất bản và kiểm tra Windows.
+
+M1 complete: kernel workflow v2 và migration sibling v1→v2 đã vượt acceptance
+offline; migration không sửa nguồn, không overwrite đích và không tự duyệt gate.
 
 ## Tiến độ nhiệm vụ
 
@@ -47,6 +51,7 @@ MVP complete: vertical slice từ author brief, evidence, kịch bản và story
 | M1.7 | Invalidation engine xác định, thuần dữ liệu (`src/healthvideo/domain/invalidation.py`), không đụng filesystem và không tự gọi state graph. `InvalidationLevel` (`IntEnum`) `none < package < video < medical`. `ArtifactChange(path, json_pointers)` và `InvalidationDecision(level, target_state, reason_codes)` đều là dataclass bất biến (`frozen=True`). `evaluate_invalidation(changes, asset_manifest)` phân loại từng change độc lập rồi lấy mức cao nhất (không phải match đầu/cuối) làm quyết định chung; `reason_codes` chỉ giữ lý do của các change đạt đúng mức cao nhất đó. Thứ tự phân loại: (1) path khớp asset trong `AssetManifest` → `semantic=true` là `medical`, `semantic=false` là `video`; (2) đúng `publish/metadata.yaml` → chỉ `package` khi *mọi* JSON pointer nằm trong allowlist đúng 8 phần tử `/posting/platform`, `/posting/account_handle`, `/posting/scheduled_at`, `/posting/visibility`, `/posting/allow_comments`, `/posting/allow_duet`, `/posting/allow_stitch`, `/tracking/campaign_id` — pointer rỗng, pointer lạ (vd. caption/hashtag/disclaimer/source list/thumbnail text/pinned comment) hoặc trộn lẫn allowlist với pointer lạ đều trả `medical`; (3) tiền tố thư mục đã biết — `evidence/`, `script/`, `storyboard/` → `medical`; `audio/`, `timing/`, `renders/` → `video`; (4) path không nhận diện được (kể cả path rỗng) fail-closed về `medical`, không bao giờ hạ xuống `none`/`package` một cách âm thầm. `target_state` là `needs_medical_revision`/`needs_production_revision` ở hai mức nặng, `None` ở `none`/`package` (không đổi gate). Không có change nào → `none`, `target_state=None`, `reason_codes` rỗng. Dual-golden mới xác nhận engine chỉ đọc `asset-manifest.yaml` của golden v2, fail-closed đúng cho path lạ, và không đổi byte của cả hai fixture — golden v1 không có khái niệm asset manifest nên chưa bao giờ bị áp policy v2 này. Review Task 7 thêm một test độc lập chốt đúng 8 phần tử allowlist bằng literal set (không đọc lại từ hằng số production), vì test parametrize cũ tự tham chiếu hằng số nên sẽ không phát hiện một drift âm thầm trong `PUBLISH_METADATA_PACKAGE_ALLOWLIST`. | complete | `python -m pytest tests/domain/test_invalidation.py tests/e2e/test_golden_workflow_versions.py -v` (47 passed); `python -m pytest -q` (356 passed); `python -m ruff check src tests tools`; `git diff --check` | `feat: evaluate deterministic gate invalidation`; `test: pin the publish-metadata package allowlist independent of the constant` |
 | M1.8 | Migration planner v1→v2 thuần read-only. `plan_migration` validate đúng schema v1, ánh xạ đủ 10 state (loại `rendered` về `awaiting_video_review`), khóa đúng tám path nguồn/đích của contract, hash YAML/JSON theo canonical JSON và asset theo byte SHA-256. Topic card và semantic asset manifest được dựng trong bộ nhớ để lập plan, chưa ghi filesystem; approval chỉ mang nhãn `retain_candidate`, chưa được coi là giữ hợp lệ trước equivalence Task 9. Đích mặc định là sibling `<source>-v2`; đích tồn tại chỉ được báo `destination_conflict=true`, planner không ghi đè, không tạo staging và không sửa byte project nguồn. Nguồn schema v2 bị từ chối. | complete | `python -m pytest tests/workflows/test_migrate_plan.py tests/e2e/test_golden_workflow_versions.py -v` (22 passed); `python -m pytest -q` (371 passed); `python -m ruff check src tests tools`; `git diff --check` | `feat: plan non-destructive project migration` |
 | M1.9 | Migration transaction v1→v2 không phá dữ liệu: dựng sibling staging `.<destination>.migrate-<uuid>`, canonicalize YAML, copy asset/render đúng byte, tạo topic + semantic asset manifest, validate Pydantic/layout/hash asset và mọi output trong plan rồi promote một lần bằng `promote_directory_once`; không có in-place/overwrite. Copy, validation hoặc promotion lỗi đều dọn đúng staging của migration, giữ source byte-identical và không để destination bán phần; chạy lần hai fail bằng `FileExistsError`. Approval equivalence đối chiếu cả binding nguồn hiện hành và hash artifact tại revision đích: medical không chứng minh được → `awaiting_medical_review`; medical đúng + render hỏng → `medically_approved`; medical đúng + render hợp lệ nhưng video chưa đúng → `awaiting_video_review`; cả hai gate đúng → tối đa `video_approved` (không tự giữ `published_manual` khi thiếu receipt). Chỉ review record chứng minh tương đương mới được copy vào `revisions/001/reviews/`; không tự ký lại approval. | complete | `python -m pytest tests/workflows/test_migrate_execute.py tests/e2e/test_golden_workflow_versions.py -v` (21 passed); `python -m pytest -q` (384 passed); `python -m ruff check src tests tools`; `git diff --check` | `feat: migrate v1 projects atomically` |
+| M1.10 | CLI `healthvideo project migrate <project> [--dry-run]`. Dry-run in source, sibling destination, state map, approval disposition, conflict và từng path/hash mà không ghi filesystem. Execute inject timezone-aware time + UUID, gọi transaction Task 9 và in destination; lỗi nguồn/đích/validation/integrity trả exit 1 có thông báo. Không có `--in-place`, `--force`, overwrite hay auto approval. Acceptance xác nhận golden v1 cũ và v2/migrated chạy song song, schema export deterministic; review packet/gate-native v2 được hoãn đúng sang M2. | complete | CLI migrate/revision (5 passed); dual-golden E2E (27 passed); `python -m pytest -q` (387 passed); `python -m ruff check src tests tools`; `python tools/export_schemas.py`; `git diff --exit-code -- schemas`; `git diff --check` | `feat: expose safe project migration` |
 
 ## Kiến trúc
 
@@ -69,6 +74,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install/doctor.ps1
 & .venv\Scripts\healthvideo.exe review video projects/2026/09/muoi-va-huyet-ap --reviewer "BS An"
 & .venv\Scripts\healthvideo.exe package projects/2026/09/muoi-va-huyet-ap
 & .venv\Scripts\healthvideo.exe status projects/2026/09/muoi-va-huyet-ap
+
+# M1: xem plan không ghi dữ liệu, rồi migrate sang sibling `<project>-v2`.
+& .venv\Scripts\healthvideo.exe project migrate projects/2026/09/muoi-va-huyet-ap --dry-run
+& .venv\Scripts\healthvideo.exe project migrate projects/2026/09/muoi-va-huyet-ap
 ```
 
 Smoke test fixture golden độc lập (không thay thế render của dự án thật, không tạo
