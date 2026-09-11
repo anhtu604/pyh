@@ -1,10 +1,13 @@
+import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 
 from healthvideo.domain.project import ProjectState, transition
 from healthvideo.domain.project_v2 import WorkflowState
+from healthvideo.domain.stage import StageManifest, StageStatus
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
 from healthvideo.storage.project_layout import resolve_project_layout
+from healthvideo.storage.stages import append_stage_manifest
 
 GOLDEN_PROJECTS = [
     Path("tests/fixtures/golden-project"),
@@ -75,3 +78,41 @@ def test_dual_golden_keeps_v1_side_state_free_while_v2_pauses_and_resumes() -> N
     assert transition(v1_project, ProjectState.PRODUCING).state is (
         ProjectState.PRODUCING
     )
+
+
+def test_dual_golden_appends_a_stage_manifest_without_touching_the_tracked_fixture(
+    tmp_path: Path,
+) -> None:
+    v2_source = GOLDEN_PROJECTS[1]
+    before = {
+        path: path.read_bytes() for path in v2_source.rglob("*") if path.is_file()
+    }
+
+    copy_dir = tmp_path / "golden-project-v2"
+    shutil.copytree(v2_source, copy_dir)
+    revision_root = copy_dir / "revisions" / "001"
+
+    manifest = StageManifest(
+        stage="evidence_ledger",
+        status=StageStatus.COMPLETE,
+        input_hash="a" * 64,
+        output_hash="b" * 64,
+        tool_version="1.0.0",
+        agent="claude",
+        model="claude-sonnet-5",
+        started_at=GOLDEN_ENTERED_AT,
+        completed_at=GOLDEN_ENTERED_AT,
+        estimated_input_tokens=100,
+        estimated_output_tokens=200,
+    )
+
+    path = append_stage_manifest(revision_root, manifest)
+
+    assert path.is_relative_to(revision_root / "workflow" / "stages")
+    assert path.is_file()
+    after = {
+        candidate: candidate.read_bytes()
+        for candidate in v2_source.rglob("*")
+        if candidate.is_file()
+    }
+    assert after == before

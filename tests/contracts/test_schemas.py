@@ -19,6 +19,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
         ("script.schema.json", True),
         ("storyboard.schema.json", True),
         ("render-input.schema.json", True),
+        ("stage-manifest.schema.json", True),
     ],
 )
 def test_exported_schema_has_versioned_contract(

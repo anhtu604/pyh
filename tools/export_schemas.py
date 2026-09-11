@@ -9,6 +9,7 @@ from healthvideo.domain.author import AuthorBrief
 from healthvideo.domain.evidence import EvidenceClaim
 from healthvideo.domain.project_v2 import ProjectManifestV2
 from healthvideo.domain.script import Script
+from healthvideo.domain.stage import StageManifest
 from healthvideo.domain.storyboard import Storyboard
 from healthvideo.render.input import RenderInput
 
@@ -21,6 +22,7 @@ SCHEMAS: dict[str, type[BaseModel]] = {
     "script.schema.json": Script,
     "storyboard.schema.json": Storyboard,
     "render-input.schema.json": RenderInput,
+    "stage-manifest.schema.json": StageManifest,
 }
 
 
