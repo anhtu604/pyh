@@ -1,6 +1,7 @@
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
+from uuid import UUID
 
 from healthvideo.domain.asset_manifest import AssetManifest, validate_asset_manifest
 from healthvideo.domain.invalidation import (
@@ -16,7 +17,7 @@ from healthvideo.storage.files import read_yaml
 from healthvideo.storage.project_layout import resolve_project_layout
 from healthvideo.storage.revisions import create_revision
 from healthvideo.storage.stages import append_stage_manifest
-from healthvideo.workflows.migrate import plan_migration
+from healthvideo.workflows.migrate import migrate_project, plan_migration
 
 GOLDEN_PROJECTS = [
     Path("tests/fixtures/golden-project"),
@@ -262,3 +263,29 @@ def test_dual_golden_migration_plan_matches_the_v2_fixture_without_writing() -> 
         if path.is_file()
     }
     assert after == before
+
+
+def test_dual_golden_accepts_a_newly_migrated_v1_copy(tmp_path: Path) -> None:
+    source = tmp_path / "golden-project"
+    shutil.copytree(GOLDEN_PROJECTS[0], source)
+    source_before = {
+        path.relative_to(source): path.read_bytes()
+        for path in source.rglob("*")
+        if path.is_file()
+    }
+
+    migrated = migrate_project(
+        source,
+        now=GOLDEN_ENTERED_AT,
+        migration_id=UUID("22222222-2222-2222-2222-222222222222"),
+    )
+
+    v1_layout = resolve_project_layout(source)
+    v2_layout = resolve_project_layout(migrated)
+    assert v1_layout.schema_version == "1.0"
+    assert v2_layout.schema_version == "2.0"
+    assert {
+        path.relative_to(source): path.read_bytes()
+        for path in source.rglob("*")
+        if path.is_file()
+    } == source_before
