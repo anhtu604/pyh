@@ -16,6 +16,7 @@ from healthvideo.storage.files import read_yaml
 from healthvideo.storage.project_layout import resolve_project_layout
 from healthvideo.storage.revisions import create_revision
 from healthvideo.storage.stages import append_stage_manifest
+from healthvideo.workflows.migrate import plan_migration
 
 GOLDEN_PROJECTS = [
     Path("tests/fixtures/golden-project"),
@@ -220,6 +221,39 @@ def test_dual_golden_invalidation_engine_only_evaluates_v2_assets() -> None:
     )
     assert package_decision.level is InvalidationLevel.PACKAGE
     assert package_decision.target_state is None
+
+    after = {
+        path: path.read_bytes()
+        for source in GOLDEN_PROJECTS
+        for path in source.rglob("*")
+        if path.is_file()
+    }
+    assert after == before
+
+
+def test_dual_golden_migration_plan_matches_the_v2_fixture_without_writing() -> None:
+    before = {
+        path: path.read_bytes()
+        for source in GOLDEN_PROJECTS
+        for path in source.rglob("*")
+        if path.is_file()
+    }
+
+    plan = plan_migration(GOLDEN_PROJECTS[0])
+
+    expected_destinations = {
+        "project.yaml",
+        "revisions/001/author/brief.yaml",
+        "revisions/001/evidence/ledger.yaml",
+        "revisions/001/script/script.yaml",
+        "revisions/001/storyboard/storyboard.yaml",
+        "revisions/001/assets/evidence-r01.svg",
+        "revisions/001/topic/card.yaml",
+        "revisions/001/assets/asset-manifest.yaml",
+    }
+    assert {item.destination.as_posix() for item in plan.files} == expected_destinations
+    assert plan.destination == GOLDEN_PROJECTS[1]
+    assert plan.destination_conflict is True
 
     after = {
         path: path.read_bytes()
