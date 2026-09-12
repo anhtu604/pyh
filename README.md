@@ -1,5 +1,17 @@
 # Protect Your Health
 
+## Bắt đầu với `/pyh`
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File install/install.ps1
+# Trong Codex hoặc Claude Code:
+# /pyh tìm chủ đề                  # xem/tạo topic card trong inbox cục bộ
+# /pyh chọn chủ đề                 # chọn card, tạo project v2, chốt author brief
+# /pyh tiếp tục                    # nghiên cứu, soạn và dừng tại cổng duyệt y khoa
+```
+
+Mở packet bằng `healthvideo review open <project> --gate medical`; bác sĩ duyệt rõ ràng bằng lệnh `healthvideo review approve`. Sau khi `/pyh tiếp tục` dựng video, mở packet `--gate video` và duyệt lần hai. `/pyh tạo gói đăng` tạo `revisions/<active_revision>/publish/` để đăng thủ công. Dùng `/pyh trạng thái` để xem bước tiếp theo. Discovery trực tuyến có giám sát và TTS thật chưa thuộc acceptance offline hiện tại.
+
 ## Mục tiêu
 
 Xây dựng luồng có thể kiểm tra để biến hồ sơ và luận điểm đã được bác sĩ duyệt
@@ -13,8 +25,8 @@ bác sĩ, gói xuất bản, Windows installer và environment doctor. Thiết k
 khép kín A–Z đã được duyệt tại `8a2b9a7`. M1 workflow kernel đã hoàn tất trên
 nhánh triển khai: contract/layout v2, state graph, revision và stage bất biến,
 semantic asset manifest, invalidation xác định và migration v1→v2 không phá dữ
-liệu. M2–M7 được giữ ở mức deliverable để tránh lỗi thời. MVP v1 vẫn là đường
-chạy tương thích ổn định; review experience v2 thuộc M2.
+liệu. M2 review gate và M3 topic/evidence đã hoàn tất. MVP v1 vẫn là đường
+chạy tương thích ổn định; `/pyh` vận hành project v2 qua hai cổng duyệt.
 
 ## Milestone
 
@@ -76,13 +88,14 @@ applicability, per-claim doctor notes — hoãn sang M3).
 | PYH.3 | Mở rộng `produce_project` và `package_project` qua compatibility boundary: v2 dùng active revision, gate record M2, cache render hiện có và atomic package promotion; v1 giữ nguyên đường chạy. | complete | `python -m pytest tests/workflows/test_produce.py tests/workflows/test_package.py tests/e2e/test_golden_project.py tests/e2e/test_golden_workflow_versions.py tests/workflows/test_gate_review.py -v` (65 passed); `python -m ruff check src tests tools` | `feat: produce and package approved v2 projects` |
 | PYH.4 | Chứng minh lifecycle offline từ chọn topic, brief, evidence đến package qua hai cổng duyệt; xác nhận invalidation y khoa/video. | complete | `python -m pytest tests/e2e tests/workflows/test_gate_review.py tests/domain/test_invalidation.py -q` (79 passed); `python -m ruff check src tests tools` | `test: prove pyh lifecycle across both review gates` |
 | PYH.5 | Thêm CLI `operator new/status/select/brief` cho v2 và một skill `/pyh` chuẩn dùng chung với Claude Code; giữ nguyên lệnh v1 và các cổng duyệt hiện có. | complete | `python -m pytest tests/test_cli.py tests/contracts/test_pyh_skill.py tests/workflows/test_operator.py -q` (51 passed); `python -m ruff check src tests tools` | `feat: expose shared pyh operator workflow` |
+| PYH.6 | Quick Start `/pyh` và acceptance toàn hệ thống, giữ v1, không thêm auto-publishing. | complete | `python -m pytest -q` (475 passed); Ruff; schema export/diff; video test (12 passed)/typecheck; operator smoke | `docs: complete pyh operator milestone` |
 
 ## Kiến trúc
 
 Python CLI điều phối artifact YAML/JSON theo schema. Domain thuần Python tách
 khỏi TTS và renderer; Remotion nhận `render-input.json` bất biến.
 
-## Quick start
+## Lệnh kỹ thuật và tương thích v1
 
 ```powershell
 # Cài lại an toàn được: chỉ tạo/cập nhật .venv và dependencies trong repo.

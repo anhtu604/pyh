@@ -1,7 +1,7 @@
 # Thiết kế trải nghiệm vận hành `/pyh`
 
 **Ngày:** 12-09-2026  
-**Trạng thái:** Đã duyệt trong trao đổi; chờ người dùng duyệt bản đặc tả  
+**Trạng thái:** Implemented (offline operator milestone, 12-09-2026)
 **Phạm vi:** Tối giản cách vận hành Protect Your Health trên Codex và Claude Code, tận dụng M1–M3
 
 ## 1. Mục tiêu
