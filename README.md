@@ -6,11 +6,12 @@
 powershell -NoProfile -ExecutionPolicy Bypass -File install/install.ps1
 # Trong Codex hoặc Claude Code:
 # /pyh tìm chủ đề                  # xem/tạo topic card trong inbox cục bộ
-# /pyh chọn chủ đề                 # chọn card, tạo project v2, chốt author brief
+# /pyh chọn chủ đề                 # chọn card; tạo project v2 nếu chưa có
+# /pyh chốt brief                  # xem và xác nhận brief riêng trước nghiên cứu
 # /pyh tiếp tục                    # nghiên cứu, soạn và dừng tại cổng duyệt y khoa
 ```
 
-Mở packet bằng `healthvideo review open <project> --gate medical`; bác sĩ duyệt rõ ràng bằng lệnh `healthvideo review approve`. Sau khi `/pyh tiếp tục` dựng video, mở packet `--gate video` và duyệt lần hai. `/pyh tạo gói đăng` tạo `revisions/<active_revision>/publish/` để đăng thủ công. Dùng `/pyh trạng thái` để xem bước tiếp theo. Discovery trực tuyến có giám sát và TTS thật chưa thuộc acceptance offline hiện tại.
+Yêu cầu `/pyh làm video ... về <chủ đề>` cũng tạo/chọn topic card rồi dừng để bác sĩ xác nhận brief. Mở packet bằng `healthvideo review open <project> --gate medical`; bác sĩ duyệt rõ ràng bằng lệnh `healthvideo review approve` với tên người duyệt. Sau khi `/pyh tiếp tục` dựng video, mở packet `--gate video` và duyệt lần hai. `/pyh tạo gói đăng` tạo `revisions/<active_revision>/publish/` để đăng thủ công. Dùng `/pyh trạng thái` để xem bước tiếp theo. Discovery trực tuyến có giám sát và TTS thật chưa thuộc acceptance offline hiện tại.
 
 ## Mục tiêu
 
@@ -89,6 +90,7 @@ applicability, per-claim doctor notes — hoãn sang M3).
 | PYH.4 | Chứng minh lifecycle offline từ chọn topic, brief, evidence đến package qua hai cổng duyệt; xác nhận invalidation y khoa/video. | complete | `python -m pytest tests/e2e tests/workflows/test_gate_review.py tests/domain/test_invalidation.py -q` (79 passed); `python -m ruff check src tests tools` | `test: prove pyh lifecycle across both review gates` |
 | PYH.5 | Thêm CLI `operator new/status/select/brief` cho v2 và một skill `/pyh` chuẩn dùng chung với Claude Code; giữ nguyên lệnh v1 và các cổng duyệt hiện có. | complete | `python -m pytest tests/test_cli.py tests/contracts/test_pyh_skill.py tests/workflows/test_operator.py -q` (51 passed); `python -m ruff check src tests tools` | `feat: expose shared pyh operator workflow` |
 | PYH.6 | Quick Start `/pyh` và acceptance toàn hệ thống, giữ v1, không thêm auto-publishing. | complete | `python -m pytest -q` (475 passed); Ruff; schema export/diff; video test (12 passed)/typecheck; operator smoke | `docs: complete pyh operator milestone` |
+| PYH review | Làm rõ hai đường bắt đầu topic và ý định duyệt trong skill chuẩn; Quick Start tách chọn topic khỏi xác nhận brief. | complete | Contract/CLI/operator/E2E; full Python/Ruff/schema/video gates | `docs: clarify pyh entry and doctor approval boundaries` |
 
 ## Kiến trúc
 
