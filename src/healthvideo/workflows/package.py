@@ -1,8 +1,9 @@
-"""Assemble four payload files and their manifest for a video-approved project.
+"""Assemble a reviewed video's upload payload and audit manifest.
 
 Packaging is the last step before a human uploads the video by hand: it copies
 the approved MP4 next to the caption, the full source list and an audit
-manifest. It never calls a publishing API and never moves the project state.
+manifest. It never calls a publishing API; v2 advances to ``packaged`` only
+after the payload directory is atomically promoted.
 """
 
 import json
@@ -15,9 +16,12 @@ from typing import Any, TypeVar
 from pydantic import BaseModel
 
 from healthvideo.domain.evidence import EvidenceClaim, SourceRecord
+from healthvideo.domain.gate_review import GateApprovalRecord, GateKind
 from healthvideo.domain.project import ProjectManifest, ProjectState
+from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.review import ReviewKind, ReviewRecord
 from healthvideo.domain.script import Script
+from healthvideo.domain.state_graph import TransitionContext, transition_v2
 from healthvideo.domain.storyboard import Storyboard
 from healthvideo.render.input import RenderInput
 from healthvideo.render.run import (
@@ -32,6 +36,15 @@ from healthvideo.storage.files import (
     replace_directory_atomic,
     sha256_file,
     write_text_atomic,
+    write_yaml_atomic,
+)
+from healthvideo.storage.project_layout import ProjectLayout, resolve_project_layout
+from healthvideo.workflows.gate_review import (
+    MEDICAL_APPROVAL_ARTIFACT,
+    VIDEO_APPROVAL_ARTIFACT,
+    hash_reviewed_artifacts,
+    medical_reviewed_paths,
+    video_reviewed_paths,
 )
 from healthvideo.workflows.review import ensure_approval_current
 
@@ -56,9 +69,16 @@ def package_project(project_dir: Path) -> Path:
     video gate, and refuses an approval that is missing or stale, so no package
     leaves the machine without an auditable doctor approval behind it.
     """
-    project = ProjectManifest.model_validate(
-        read_yaml(project_dir / PROJECT_MANIFEST_NAME)
-    )
+    layout = resolve_project_layout(project_dir)
+    if layout.schema_version == "2.0":
+        return _package_v2(layout)
+    return _package_v1(layout)
+
+
+def _package_v1(layout: ProjectLayout) -> Path:
+    project_dir = layout.project_dir
+    project = layout.manifest
+    assert isinstance(project, ProjectManifest)
     if project.state is not ProjectState.APPROVED_TO_PUBLISH:
         raise ValueError(
             "Packaging requires project state "
@@ -128,6 +148,162 @@ def package_project(project_dir: Path) -> Path:
     return publish_dir
 
 
+def _package_v2(layout: ProjectLayout) -> Path:
+    project = layout.manifest
+    assert isinstance(project, ProjectManifestV2)
+    if project.state is not WorkflowState.VIDEO_APPROVED:
+        raise ValueError(
+            "Packaging requires v2 project state video_approved, "
+            f"not {project.state.value}"
+        )
+
+    medical_approval = _ensure_v2_gate_approval(
+        layout.artifact_root, GateKind.MEDICAL
+    )
+    video_approval = _ensure_v2_gate_approval(
+        layout.artifact_root, GateKind.VIDEO
+    )
+    ledger, script, _storyboard = _approved_v2_medical_snapshots(
+        layout.artifact_root, medical_approval
+    )
+
+    renders_dir = layout.artifact_root / "renders"
+    video = renders_dir / OUTPUT_NAME
+    render_input_path = renders_dir / RENDER_INPUT_NAME
+    render_manifest_path = renders_dir / "render-manifest.json"
+    if not video.is_file():
+        raise FileNotFoundError(f"Approved video is missing: {video}")
+    if not render_input_path.is_file():
+        raise FileNotFoundError(
+            f"Approved render input is missing: {render_input_path}"
+        )
+    render_manifest = json.loads(
+        render_manifest_path.read_text(encoding="utf-8")
+    )
+    render_input_data = json.loads(
+        render_input_path.read_text(encoding="utf-8")
+    )
+    approved_render_input_hash = render_manifest.get("render_input_sha256")
+    if approved_render_input_hash != canonical_json_hash(render_input_data):
+        raise ValueError(
+            "render input does not match the approved video render manifest"
+        )
+    render_input = RenderInput.model_validate(render_input_data)
+    citations = _citations(script, ledger, render_input)
+
+    publish_dir = layout.artifact_root / PUBLISH_DIRECTORY
+    staging_dir = Path(
+        mkdtemp(
+            prefix=f".{project.slug}.package-", dir=layout.artifact_root
+        )
+    )
+    try:
+        shutil.copy2(video, staging_dir / OUTPUT_NAME)
+        shutil.copy2(render_input_path, staging_dir / RENDER_INPUT_NAME)
+        _validate_staged_v2_video_artifacts(
+            staging_dir, video_approval, approved_render_input_hash
+        )
+        write_text_atomic(staging_dir / CAPTION_NAME, _caption(script, citations))
+        write_text_atomic(staging_dir / SOURCES_NAME, _sources(script, citations))
+        write_text_atomic(
+            staging_dir / PACKAGE_MANIFEST_NAME,
+            _manifest_json(
+                project=project,
+                script=script,
+                medical_approval=medical_approval,
+                video_approval=video_approval,
+                staging_dir=staging_dir,
+                citations=citations,
+            ),
+        )
+        replace_directory_atomic(staging_dir, publish_dir)
+        package_manifest = json.loads(
+            (publish_dir / PACKAGE_MANIFEST_NAME).read_text(encoding="utf-8")
+        )
+        context = TransitionContext(
+            active_revision=project.active_revision,
+            current_input_hash=canonical_json_hash(package_manifest),
+            validated_artifacts=frozenset({"publish/manifest.json"}),
+        )
+        changed = transition_v2(project, WorkflowState.PACKAGED, context)
+        write_yaml_atomic(
+            layout.project_dir / PROJECT_MANIFEST_NAME,
+            changed.model_dump(mode="json"),
+        )
+    except Exception:
+        shutil.rmtree(staging_dir, ignore_errors=True)
+        raise
+    return publish_dir
+
+
+def _ensure_v2_gate_approval(
+    revision_root: Path, kind: GateKind
+) -> GateApprovalRecord:
+    approval_name = {
+        GateKind.MEDICAL: MEDICAL_APPROVAL_ARTIFACT,
+        GateKind.VIDEO: VIDEO_APPROVAL_ARTIFACT,
+    }[kind]
+    approval_path = revision_root / approval_name
+    if not approval_path.is_file():
+        raise FileNotFoundError(
+            f"Packaging requires a {kind.value} approval record for the active revision"
+        )
+    approval = GateApprovalRecord.model_validate(read_yaml(approval_path))
+    if approval.kind is not kind:
+        raise ValueError(f"Packaging requires a {kind.value} approval record")
+    reviewed_paths = {
+        GateKind.MEDICAL: medical_reviewed_paths,
+        GateKind.VIDEO: video_reviewed_paths,
+    }[kind](revision_root)
+    current_hashes = hash_reviewed_artifacts(reviewed_paths)
+    if current_hashes != approval.artifact_hashes:
+        raise ValueError(
+            f"Packaging requires a current {kind.value} approval"
+        )
+    return approval
+
+
+def _approved_v2_medical_snapshots(
+    revision_root: Path, approval: GateApprovalRecord
+) -> tuple[dict[str, Any], Script, Storyboard]:
+    ledger = read_yaml(revision_root / "evidence" / "ledger.yaml")
+    script_data = read_yaml(revision_root / "script" / "script.yaml")
+    storyboard_data = read_yaml(
+        revision_root / "storyboard" / "storyboard.yaml"
+    )
+    for name, data in (
+        ("evidence/ledger.yaml", ledger),
+        ("script/script.yaml", script_data),
+        ("storyboard/storyboard.yaml", storyboard_data),
+    ):
+        _require_approved_hash(approval, name, canonical_json_hash(data))
+    return (
+        ledger,
+        Script.model_validate(script_data),
+        Storyboard.model_validate(storyboard_data),
+    )
+
+
+def _validate_staged_v2_video_artifacts(
+    staging_dir: Path,
+    approval: GateApprovalRecord,
+    approved_render_input_hash: str,
+) -> None:
+    _require_approved_hash(
+        approval,
+        "renders/video.mp4",
+        sha256_file(staging_dir / OUTPUT_NAME),
+        staged=True,
+    )
+    staged_render_input = json.loads(
+        (staging_dir / RENDER_INPUT_NAME).read_text(encoding="utf-8")
+    )
+    if canonical_json_hash(staged_render_input) != approved_render_input_hash:
+        raise ValueError(
+            "staged render_input does not match the approved video render manifest"
+        )
+
+
 def _approved_medical_snapshots(
     project_dir: Path, approval: ReviewRecord
 ) -> tuple[dict[str, Any], Script, Storyboard]:
@@ -166,7 +342,7 @@ def _validate_staged_video_artifacts(
 
 
 def _require_approved_hash(
-    approval: ReviewRecord,
+    approval: ReviewRecord | GateApprovalRecord,
     name: str,
     actual_hash: str,
     *,
@@ -328,10 +504,10 @@ def _source_fields(record: SourceRecord) -> list[str]:
 
 def _manifest_json(
     *,
-    project: ProjectManifest,
+    project: ProjectManifest | ProjectManifestV2,
     script: Script,
-    medical_approval: ReviewRecord,
-    video_approval: ReviewRecord,
+    medical_approval: ReviewRecord | GateApprovalRecord,
+    video_approval: ReviewRecord | GateApprovalRecord,
     staging_dir: Path,
     citations: Mapping[str, list[SourceRecord]],
 ) -> str:
@@ -361,12 +537,16 @@ def _manifest_json(
     return json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
 
 
-def _approval_binding(approval: ReviewRecord) -> dict[str, Any]:
+def _approval_binding(
+    approval: ReviewRecord | GateApprovalRecord,
+) -> dict[str, Any]:
     """Make approval identity distinct from hashes of package payload bytes."""
-    return {
+    binding = {
         "approval_sha256": canonical_json_hash(approval.model_dump(mode="json")),
-        "id": str(approval.id),
         "reviewer": approval.reviewer,
         "reviewed_at": approval.reviewed_at.isoformat(),
         "artifact_hashes": approval.artifact_hashes,
     }
+    if isinstance(approval, ReviewRecord):
+        binding["id"] = str(approval.id)
+    return binding

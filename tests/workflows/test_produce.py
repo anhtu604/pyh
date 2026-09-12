@@ -1,17 +1,23 @@
 import json
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 import healthvideo.workflows.produce as produce_workflow
+from healthvideo.domain.gate_review import GateKind
+from healthvideo.domain.project_v2 import WorkflowState
 from healthvideo.domain.script import Script
 from healthvideo.domain.storyboard import Storyboard
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.tts.base import TTSRequest, TTSResult
 from healthvideo.tts.silent import SilentTTS
+from healthvideo.workflows.gate_review import approve_gate
 from healthvideo.workflows.produce import _input_hash, produce_project
-from tests.helpers import create_project_fixture
+from tests.helpers import create_project_fixture, create_v2_project_fixture
+
+V2_REVIEWED_AT = datetime(2026, 9, 12, 8, 0, tzinfo=UTC)
 
 
 def test_produce_reuses_matching_artifact_hash(tmp_path) -> None:
@@ -30,6 +36,66 @@ def test_produce_reuses_matching_artifact_hash(tmp_path) -> None:
     assert first == _active_run(project_dir) / "video.mp4"
     assert len(calls) == 1
     assert read_yaml(project_dir / "project.yaml")["state"] == "awaiting_video_review"
+
+
+def test_v2_produce_refuses_before_medical_approval(tmp_path: Path) -> None:
+    project_dir = create_v2_project_fixture(
+        tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW
+    )
+    calls: list[list[str]] = []
+
+    with pytest.raises(ValueError, match="medically_approved|medical approval"):
+        produce_project(project_dir, SilentTTS(), calls.append)
+
+    assert calls == []
+
+
+def test_v2_produce_requires_current_medical_approval(tmp_path: Path) -> None:
+    project_dir = _v2_medically_approved_project(tmp_path)
+    script_path = project_dir / "revisions" / "001" / "script" / "script.yaml"
+    script = read_yaml(script_path)
+    script["lines"][0]["text"] = "Nội dung đã đổi sau khi bác sĩ duyệt."
+    write_yaml_atomic(script_path, script)
+    calls: list[list[str]] = []
+
+    with pytest.raises(ValueError, match="medical approval"):
+        produce_project(project_dir, SilentTTS(), calls.append)
+
+    assert calls == []
+
+
+def test_v2_produce_uses_active_revision_and_reuses_its_cache(
+    tmp_path: Path, monkeypatch
+) -> None:
+    project_dir = _v2_medically_approved_project(tmp_path)
+    calls: list[list[str]] = []
+    resolutions = 0
+    real_resolve = produce_workflow.resolve_project_layout
+
+    def counting_resolve(path: Path):
+        nonlocal resolutions
+        resolutions += 1
+        return real_resolve(path)
+
+    def fake_runner(argv: list[str]) -> int:
+        calls.append(argv)
+        _write_synthetic_output(argv)
+        return 0
+
+    monkeypatch.setattr(produce_workflow, "resolve_project_layout", counting_resolve)
+
+    first = produce_project(project_dir, SilentTTS(), fake_runner)
+    second = produce_project(project_dir, SilentTTS(), fake_runner)
+
+    revision_root = project_dir / "revisions" / "001"
+    assert first == second == revision_root / "renders" / "video.mp4"
+    assert len(calls) == 1
+    assert resolutions == 2
+    assert (revision_root / "renders" / "render-manifest.json").is_file()
+    assert (revision_root / "reviews" / "video-qa.json").is_file()
+    assert read_yaml(project_dir / "project.yaml")["state"] == (
+        WorkflowState.AWAITING_VIDEO_REVIEW.value
+    )
 
 
 @pytest.mark.parametrize("dry_run", [False, True])
@@ -458,6 +524,25 @@ def _write_synthetic_output(argv: list[str]) -> None:
     output = Path(argv[argv.index("--output") + 1])
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_bytes(b"synthetic-mp4")
+
+
+def _v2_medically_approved_project(tmp_path: Path) -> Path:
+    project_dir = create_v2_project_fixture(
+        tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW
+    )
+    storyboard_path = (
+        project_dir / "revisions" / "001" / "storyboard" / "storyboard.yaml"
+    )
+    storyboard = read_yaml(storyboard_path)
+    storyboard["scenes"][0]["duration_frames"] = 1350
+    write_yaml_atomic(storyboard_path, storyboard)
+    approve_gate(
+        project_dir,
+        GateKind.MEDICAL,
+        reviewer="BS Nguyễn Văn An",
+        now=V2_REVIEWED_AT,
+    )
+    return project_dir
 
 
 def _active_run(project_dir: Path) -> Path:

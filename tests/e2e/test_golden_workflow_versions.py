@@ -18,8 +18,11 @@ from healthvideo.storage.files import read_yaml
 from healthvideo.storage.project_layout import resolve_project_layout
 from healthvideo.storage.revisions import create_revision
 from healthvideo.storage.stages import append_stage_manifest
+from healthvideo.tts.silent import SilentTTS
 from healthvideo.workflows.gate_review import approve_gate
 from healthvideo.workflows.migrate import migrate_project, plan_migration
+from healthvideo.workflows.package import package_project
+from healthvideo.workflows.produce import produce_project
 from tests.helpers import _advance_v2_state
 
 GOLDEN_PROJECTS = [
@@ -317,3 +320,45 @@ def test_dual_golden_medical_gate_approves_on_a_copy_without_touching_the_tracke
 
     assert record.artifact_hashes
     assert _snapshot_tree(v2_source) == before
+
+
+def test_v2_golden_copy_produces_and_packages_without_touching_either_fixture(
+    tmp_path: Path,
+) -> None:
+    before = {
+        source: _snapshot_tree(source)
+        for source in GOLDEN_PROJECTS
+    }
+    project_dir = tmp_path / "golden-project-v2"
+    shutil.copytree(GOLDEN_PROJECTS[1], project_dir)
+    _advance_v2_state(project_dir, WorkflowState.AWAITING_MEDICAL_REVIEW)
+    approve_gate(
+        project_dir,
+        GateKind.MEDICAL,
+        reviewer="BS Nguyễn Văn An",
+        now=GOLDEN_ENTERED_AT,
+    )
+
+    video = produce_project(project_dir, SilentTTS(), _write_golden_video)
+    approve_gate(
+        project_dir,
+        GateKind.VIDEO,
+        reviewer="BS Nguyễn Văn An",
+        now=GOLDEN_ENTERED_AT,
+    )
+    package = package_project(project_dir)
+
+    assert video == project_dir / "revisions" / "001" / "renders" / "video.mp4"
+    assert (package / "manifest.json").is_file()
+    assert read_yaml(project_dir / "project.yaml")["state"] == "packaged"
+    assert {
+        source: _snapshot_tree(source)
+        for source in GOLDEN_PROJECTS
+    } == before
+
+
+def _write_golden_video(argv: list[str]) -> int:
+    output = Path(argv[argv.index("--output") + 1])
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_bytes(b"golden-v2-mp4")
+    return 0
