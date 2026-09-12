@@ -44,135 +44,6 @@ class OperatorAction:
     suggested_command: str
 
 
-@dataclass(frozen=True)
-class _ActionTemplate:
-    kind: OperatorActionKind
-    message: str
-    artifact_path: str | None
-    suggested_command: str
-
-
-_MAIN_ACTIONS: dict[WorkflowState, _ActionTemplate] = {
-    WorkflowState.IDEA: _ActionTemplate(
-        OperatorActionKind.CHOOSE_TOPIC,
-        "Choose a topic before continuing.",
-        "topic/card.yaml",
-        "/pyh chọn chủ đề",
-    ),
-    WorkflowState.TOPIC_SELECTED: _ActionTemplate(
-        OperatorActionKind.CONFIRM_BRIEF,
-        "Confirm the author brief before research begins.",
-        "author/brief.yaml",
-        "/pyh chốt nội dung",
-    ),
-    WorkflowState.AUTHOR_BRIEF_READY: _ActionTemplate(
-        OperatorActionKind.RESEARCH,
-        "Research and validate the evidence for the confirmed brief.",
-        "evidence/ledger.yaml",
-        "/pyh tiếp tục",
-    ),
-    WorkflowState.RESEARCH_IN_PROGRESS: _ActionTemplate(
-        OperatorActionKind.RESEARCH,
-        "Continue research and validate the evidence ledger.",
-        "evidence/ledger.yaml",
-        "/pyh tiếp tục",
-    ),
-    WorkflowState.EVIDENCE_READY: _ActionTemplate(
-        OperatorActionKind.DRAFT,
-        "Draft the script and storyboard from validated evidence.",
-        "script/script.yaml",
-        "/pyh tiếp tục",
-    ),
-    WorkflowState.DRAFT_READY: _ActionTemplate(
-        OperatorActionKind.PREPARE_MEDICAL_REVIEW,
-        "Prepare the medical review packet; do not approve it automatically.",
-        "reviews/medical-approval.yaml",
-        "/pyh mở bản duyệt y khoa",
-    ),
-    WorkflowState.AWAITING_MEDICAL_REVIEW: _ActionTemplate(
-        OperatorActionKind.AWAIT_MEDICAL_APPROVAL,
-        "Await the doctor's explicit medical approval.",
-        "reviews/medical-approval.yaml",
-        "/pyh mở bản duyệt y khoa",
-    ),
-    WorkflowState.MEDICALLY_APPROVED: _ActionTemplate(
-        OperatorActionKind.PRODUCE,
-        "Produce the approved video revision.",
-        "reviews/medical-approval.yaml",
-        "/pyh tiếp tục",
-    ),
-    WorkflowState.PRODUCTION_IN_PROGRESS: _ActionTemplate(
-        OperatorActionKind.PRODUCE,
-        "Continue producing the approved video revision.",
-        "renders/render-manifest.json",
-        "/pyh tiếp tục",
-    ),
-    WorkflowState.AWAITING_VIDEO_REVIEW: _ActionTemplate(
-        OperatorActionKind.AWAIT_VIDEO_APPROVAL,
-        "Await the doctor's explicit video approval.",
-        "reviews/video-approval.yaml",
-        "/pyh mở bản duyệt video",
-    ),
-    WorkflowState.VIDEO_APPROVED: _ActionTemplate(
-        OperatorActionKind.PACKAGE,
-        "Create the posting package; publishing remains manual.",
-        "publish/manifest.json",
-        "/pyh tạo gói đăng",
-    ),
-    WorkflowState.PACKAGED: _ActionTemplate(
-        OperatorActionKind.COMPLETE,
-        "The posting package is ready for manual publishing.",
-        "publish/manifest.json",
-        "/pyh trạng thái",
-    ),
-    WorkflowState.PUBLISHED_MANUAL: _ActionTemplate(
-        OperatorActionKind.COMPLETE,
-        "The project has been recorded as manually published.",
-        "publish/receipt.yaml",
-        "/pyh trạng thái",
-    ),
-}
-
-_SIDE_ACTIONS: dict[WorkflowState, _ActionTemplate] = {
-    WorkflowState.AWAITING_BROWSER_LOGIN: _ActionTemplate(
-        OperatorActionKind.AWAIT_BROWSER_LOGIN,
-        "Sign in to the required browser session before resuming.",
-        None,
-        "/pyh tiếp tục",
-    ),
-    WorkflowState.AWAITING_SECOND_MODEL_REVIEW: _ActionTemplate(
-        OperatorActionKind.AWAIT_SECOND_MODEL_REVIEW,
-        "Await the required second-model review before resuming.",
-        None,
-        "/pyh tiếp tục",
-    ),
-    WorkflowState.NEEDS_MEDICAL_REVISION: _ActionTemplate(
-        OperatorActionKind.REVISE_MEDICAL,
-        "Revise medical content and return through the medical gate.",
-        "reviews",
-        "/pyh sửa nội dung",
-    ),
-    WorkflowState.NEEDS_PRODUCTION_REVISION: _ActionTemplate(
-        OperatorActionKind.REVISE_PRODUCTION,
-        "Revise the production output and return through the video gate.",
-        "reviews",
-        "/pyh sửa video",
-    ),
-    WorkflowState.BLOCKED: _ActionTemplate(
-        OperatorActionKind.RESOLVE_BLOCKER,
-        "Resolve the recorded blocker before resuming.",
-        None,
-        "/pyh tiếp tục",
-    ),
-    WorkflowState.TOPIC_REJECTED: _ActionTemplate(
-        OperatorActionKind.REOPEN_TOPIC,
-        "Choose a new topic or reopen this one in a new revision.",
-        "topic/card.yaml",
-        "/pyh chọn chủ đề",
-    ),
-}
-
-
 def _validated_layout(project_dir: Path) -> ProjectLayout:
     manifest_path = project_dir / "project.yaml"
     try:
@@ -181,27 +52,29 @@ def _validated_layout(project_dir: Path) -> ProjectLayout:
         raise ValueError(f"Invalid project manifest at {manifest_path}: {error}") from error
 
 
-def _action_from_template(
+def _action(
     project_dir: Path,
     artifact_root: Path,
-    template: _ActionTemplate,
+    kind: OperatorActionKind,
+    message: str,
+    artifact_path: str | None,
+    suggested_command: str,
     *,
     reason_code: str | None = None,
 ) -> OperatorAction:
-    message = template.message
     if reason_code is not None:
         message = f"{message} Reason: {reason_code}."
     artifact = (
-        artifact_root / template.artifact_path
-        if template.artifact_path is not None
+        artifact_root / artifact_path
+        if artifact_path is not None
         else None
     )
     return OperatorAction(
-        kind=template.kind,
+        kind=kind,
         project_dir=project_dir,
         message=message,
         artifact=artifact,
-        suggested_command=template.suggested_command,
+        suggested_command=suggested_command,
     )
 
 
@@ -220,16 +93,190 @@ def get_next_action(project_dir: Path) -> OperatorAction:
     if not isinstance(manifest, ProjectManifestV2):
         raise TypeError(f"Unsupported validated project manifest at {project_dir / 'project.yaml'}")
 
-    template = _MAIN_ACTIONS.get(manifest.state) or _SIDE_ACTIONS.get(manifest.state)
-    if template is None:
-        raise ValueError(f"Unknown v2 workflow state at {project_dir / 'project.yaml'}: {manifest.state!r}")
     reason_code = manifest.side_state.reason_code if manifest.side_state is not None else None
-    return _action_from_template(
-        layout.project_dir,
-        layout.artifact_root,
-        template,
-        reason_code=reason_code,
-    )
+    match manifest.state:
+        case WorkflowState.IDEA:
+            return _action(
+                layout.project_dir,
+                layout.artifact_root,
+                OperatorActionKind.CHOOSE_TOPIC,
+                "Choose a topic before continuing.",
+                "topic/card.yaml",
+                "/pyh chọn chủ đề",
+            )
+        case WorkflowState.TOPIC_SELECTED:
+            return _action(
+                layout.project_dir,
+                layout.artifact_root,
+                OperatorActionKind.CONFIRM_BRIEF,
+                "Confirm the author brief before research begins.",
+                "author/brief.yaml",
+                "/pyh chốt nội dung",
+            )
+        case WorkflowState.AUTHOR_BRIEF_READY:
+            return _action(
+                layout.project_dir,
+                layout.artifact_root,
+                OperatorActionKind.RESEARCH,
+                "Research and validate the evidence for the confirmed brief.",
+                "evidence/ledger.yaml",
+                "/pyh tiếp tục",
+            )
+        case WorkflowState.RESEARCH_IN_PROGRESS:
+            return _action(
+                layout.project_dir,
+                layout.artifact_root,
+                OperatorActionKind.RESEARCH,
+                "Continue research and validate the evidence ledger.",
+                "evidence/ledger.yaml",
+                "/pyh tiếp tục",
+            )
+        case WorkflowState.EVIDENCE_READY:
+            return _action(
+                layout.project_dir,
+                layout.artifact_root,
+                OperatorActionKind.DRAFT,
+                "Draft the script and storyboard from validated evidence.",
+                "script/script.yaml",
+                "/pyh tiếp tục",
+            )
+        case WorkflowState.DRAFT_READY:
+            return _action(
+                layout.project_dir,
+                layout.artifact_root,
+                OperatorActionKind.PREPARE_MEDICAL_REVIEW,
+                "Prepare the medical review packet; do not approve it automatically.",
+                "reviews/medical-approval.yaml",
+                "/pyh mở bản duyệt y khoa",
+            )
+        case WorkflowState.AWAITING_MEDICAL_REVIEW:
+            return _action(
+                layout.project_dir,
+                layout.artifact_root,
+                OperatorActionKind.AWAIT_MEDICAL_APPROVAL,
+                "Await the doctor's explicit medical approval.",
+                "reviews/medical-approval.yaml",
+                "/pyh mở bản duyệt y khoa",
+            )
+        case WorkflowState.MEDICALLY_APPROVED:
+            return _action(
+                layout.project_dir,
+                layout.artifact_root,
+                OperatorActionKind.PRODUCE,
+                "Produce the approved video revision.",
+                "reviews/medical-approval.yaml",
+                "/pyh tiếp tục",
+            )
+        case WorkflowState.PRODUCTION_IN_PROGRESS:
+            return _action(
+                layout.project_dir,
+                layout.artifact_root,
+                OperatorActionKind.PRODUCE,
+                "Continue producing the approved video revision.",
+                "renders/render-manifest.json",
+                "/pyh tiếp tục",
+            )
+        case WorkflowState.AWAITING_VIDEO_REVIEW:
+            return _action(
+                layout.project_dir,
+                layout.artifact_root,
+                OperatorActionKind.AWAIT_VIDEO_APPROVAL,
+                "Await the doctor's explicit video approval.",
+                "reviews/video-approval.yaml",
+                "/pyh mở bản duyệt video",
+            )
+        case WorkflowState.VIDEO_APPROVED:
+            return _action(
+                layout.project_dir,
+                layout.artifact_root,
+                OperatorActionKind.PACKAGE,
+                "Create the posting package; publishing remains manual.",
+                "publish/manifest.json",
+                "/pyh tạo gói đăng",
+            )
+        case WorkflowState.PACKAGED:
+            return _action(
+                layout.project_dir,
+                layout.artifact_root,
+                OperatorActionKind.COMPLETE,
+                "The posting package is ready for manual publishing.",
+                "publish/manifest.json",
+                "/pyh trạng thái",
+            )
+        case WorkflowState.PUBLISHED_MANUAL:
+            return _action(
+                layout.project_dir,
+                layout.artifact_root,
+                OperatorActionKind.COMPLETE,
+                "The project has been recorded as manually published.",
+                "publish/receipt.yaml",
+                "/pyh trạng thái",
+            )
+        case WorkflowState.AWAITING_BROWSER_LOGIN:
+            return _action(
+                layout.project_dir,
+                layout.artifact_root,
+                OperatorActionKind.AWAIT_BROWSER_LOGIN,
+                "Sign in to the required browser session before resuming.",
+                None,
+                "/pyh tiếp tục",
+                reason_code=reason_code,
+            )
+        case WorkflowState.AWAITING_SECOND_MODEL_REVIEW:
+            return _action(
+                layout.project_dir,
+                layout.artifact_root,
+                OperatorActionKind.AWAIT_SECOND_MODEL_REVIEW,
+                "Await the required second-model review before resuming.",
+                None,
+                "/pyh tiếp tục",
+                reason_code=reason_code,
+            )
+        case WorkflowState.NEEDS_MEDICAL_REVISION:
+            return _action(
+                layout.project_dir,
+                layout.artifact_root,
+                OperatorActionKind.REVISE_MEDICAL,
+                "Revise medical content and return through the medical gate.",
+                "reviews",
+                "/pyh sửa nội dung",
+                reason_code=reason_code,
+            )
+        case WorkflowState.NEEDS_PRODUCTION_REVISION:
+            return _action(
+                layout.project_dir,
+                layout.artifact_root,
+                OperatorActionKind.REVISE_PRODUCTION,
+                "Revise the production output and return through the video gate.",
+                "reviews",
+                "/pyh sửa video",
+                reason_code=reason_code,
+            )
+        case WorkflowState.BLOCKED:
+            return _action(
+                layout.project_dir,
+                layout.artifact_root,
+                OperatorActionKind.RESOLVE_BLOCKER,
+                "Resolve the recorded blocker before resuming.",
+                None,
+                "/pyh tiếp tục",
+                reason_code=reason_code,
+            )
+        case WorkflowState.TOPIC_REJECTED:
+            return _action(
+                layout.project_dir,
+                layout.artifact_root,
+                OperatorActionKind.REOPEN_TOPIC,
+                "Choose a new topic or reopen this one in a new revision.",
+                "topic/card.yaml",
+                "/pyh chọn chủ đề",
+                reason_code=reason_code,
+            )
+        case _:
+            raise ValueError(
+                f"Unknown v2 workflow state at {project_dir / 'project.yaml'}: "
+                f"{manifest.state!r}"
+            )
 
 
 def render_status(project_dir: Path) -> str:
