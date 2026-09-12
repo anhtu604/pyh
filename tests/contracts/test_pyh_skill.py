@@ -28,3 +28,12 @@ def test_pyh_approval_requires_explicit_doctor_decision_and_identity() -> None:
     assert "reviewer identity" in skill
     assert "healthvideo review approve" in skill
     assert "không suy đoán reviewer" in skill.lower()
+
+
+def test_pyh_second_model_review_waits_for_real_response_and_keeps_doctor_gates() -> None:
+    skill = Path(".agents/skills/pyh/SKILL.md").read_text(encoding="utf-8")
+    assert "agent review-request" in skill
+    assert "awaiting_second_model_review" in skill
+    assert "agent review-complete" in skill
+    assert "response.yaml" in skill
+    assert "không thay thế hai cổng duyệt" in skill

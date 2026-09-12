@@ -5,6 +5,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
+from healthvideo.domain.agent_review import AgentReviewResponse
 from healthvideo.domain.asset_manifest import AssetManifest
 from healthvideo.domain.author import AuthorBrief
 from healthvideo.domain.evidence import EvidenceClaim
@@ -27,6 +28,7 @@ SCHEMAS: dict[str, type[BaseModel]] = {
     "render-input.schema.json": RenderInput,
     "stage-manifest.schema.json": StageManifest,
     "asset-manifest.schema.json": AssetManifest,
+    "agent-review-response.schema.json": AgentReviewResponse,
 }
 
 

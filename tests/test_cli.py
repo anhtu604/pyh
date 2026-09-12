@@ -60,6 +60,41 @@ def test_operator_help_preserves_existing_cli_commands() -> None:
         assert name in result.stdout
 
 
+def test_agent_review_cli_requests_and_completes_without_model_call(tmp_path) -> None:
+    from datetime import UTC, datetime
+
+    from healthvideo.storage.files import canonical_json_hash
+
+    project = create_v2_project_fixture(tmp_path)
+    requested = runner.invoke(app, ["agent", "review-request", str(project), "--reason", "conflicting_evidence"])
+    assert requested.exit_code == 0, requested.stdout
+    request_dir = Path(requested.stdout.strip())
+    request = read_yaml(request_dir / "request.yaml")
+    response_file = tmp_path / "review-response.yaml"
+    write_yaml_atomic(response_file, {
+        "schema_version": "2.0",
+        "request_id": request["request_id"],
+        "revision": request["revision"],
+        "request_hash": canonical_json_hash(request),
+        "reviewer": "Second model",
+        "model": "fixture",
+        "reviewed_at": datetime(2026, 9, 12, tzinfo=UTC).isoformat(),
+        "issues": [],
+        "summary": "No blocking issue",
+    })
+    completed = runner.invoke(app, ["agent", "review-complete", str(project), "--file", str(response_file)])
+    assert completed.exit_code == 0, completed.stdout
+    assert read_yaml(project / "project.yaml")["state"] == "draft_ready"
+
+
+def test_agent_review_cli_fails_closed_for_invalid_state_or_response(tmp_path) -> None:
+    project = create_v2_project_fixture(tmp_path)
+    invalid_file = tmp_path / "invalid.yaml"
+    write_yaml_atomic(invalid_file, {"bad": True})
+    result = runner.invoke(app, ["agent", "review-complete", str(project), "--file", str(invalid_file)])
+    assert result.exit_code != 0
+
+
 def test_cli_configures_windows_stdio_for_vietnamese_output(monkeypatch) -> None:
     configured: list[str] = []
 

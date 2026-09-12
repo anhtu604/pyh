@@ -1,0 +1,107 @@
+{
+  "$defs": {
+    "AgentReviewIssue": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Artifact",
+          "type": "string"
+        },
+        "problem": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Problem",
+          "type": "string"
+        },
+        "severity": {
+          "enum": [
+            "info",
+            "warning",
+            "blocking"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
+        "suggested_patch": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Suggested Patch",
+          "type": "string"
+        }
+      },
+      "required": [
+        "severity",
+        "artifact",
+        "problem",
+        "suggested_patch"
+      ],
+      "title": "AgentReviewIssue",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "issues": {
+      "items": {
+        "$ref": "#/$defs/AgentReviewIssue"
+      },
+      "title": "Issues",
+      "type": "array"
+    },
+    "model": {
+      "pattern": "\\S",
+      "title": "Model",
+      "type": "string"
+    },
+    "request_hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Request Hash",
+      "type": "string"
+    },
+    "request_id": {
+      "pattern": "^[0-9]{8}T[0-9]{12}Z-[0-9a-f]{12}$",
+      "title": "Request Id",
+      "type": "string"
+    },
+    "reviewed_at": {
+      "format": "date-time",
+      "title": "Reviewed At",
+      "type": "string"
+    },
+    "reviewer": {
+      "pattern": "\\S",
+      "title": "Reviewer",
+      "type": "string"
+    },
+    "revision": {
+      "pattern": "^[0-9]{3}$",
+      "title": "Revision",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "2.0",
+      "default": "2.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "summary": {
+      "pattern": "\\S",
+      "title": "Summary",
+      "type": "string"
+    }
+  },
+  "required": [
+    "request_id",
+    "revision",
+    "request_hash",
+    "reviewer",
+    "model",
+    "reviewed_at",
+    "summary"
+  ],
+  "title": "AgentReviewResponse",
+  "type": "object"
+}

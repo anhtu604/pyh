@@ -11,6 +11,7 @@ import typer
 
 from healthvideo import __version__
 from healthvideo.commands.operator import app as operator_app
+from healthvideo.domain.agent_review import AgentReviewResponse
 from healthvideo.domain.evidence import (
     EvidenceClaim,
     EvidenceQuestion,
@@ -28,6 +29,10 @@ from healthvideo.render.remotion import build_render_argv
 from healthvideo.storage.files import read_yaml, write_text_atomic
 from healthvideo.storage.revisions import create_revision
 from healthvideo.tts.silent import SilentTTS
+from healthvideo.workflows.agent_review import (
+    complete_second_model_review,
+    request_second_model_review,
+)
 from healthvideo.workflows.create_project import create_project
 from healthvideo.workflows.doctor import (
     check_environment,
@@ -69,12 +74,47 @@ review_app = typer.Typer(no_args_is_help=True)
 revision_app = typer.Typer(no_args_is_help=True)
 topic_app = typer.Typer(no_args_is_help=True)
 evidence_app = typer.Typer(no_args_is_help=True)
+agent_app = typer.Typer(no_args_is_help=True)
 app.add_typer(project_app, name="project")
 app.add_typer(review_app, name="review")
 app.add_typer(revision_app, name="revision")
 app.add_typer(topic_app, name="topic")
 app.add_typer(evidence_app, name="evidence")
 app.add_typer(operator_app, name="operator")
+app.add_typer(agent_app, name="agent")
+
+
+@agent_app.command("review-request")
+def agent_review_request(
+    project_dir: Annotated[Path, typer.Argument(help="Thư mục dự án")],
+    reason: Annotated[str, typer.Option("--reason", help="Lý do yêu cầu phản biện")],
+) -> None:
+    """Tạo gói phản biện mô hình thứ hai để chuyển thủ công."""
+    try:
+        request_dir = request_second_model_review(
+            project_dir, reason_code=reason, now=datetime.now().astimezone()
+        )
+    except (OSError, TypeError, ValueError) as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
+    typer.echo(str(request_dir))
+
+
+@agent_app.command("review-complete")
+def agent_review_complete(
+    project_dir: Annotated[Path, typer.Argument(help="Thư mục dự án")],
+    file: Annotated[Path, typer.Option("--file", help="Response YAML đã nhận")],
+) -> None:
+    """Xác minh response và tiếp tục từ side state hiện có."""
+    try:
+        response = AgentReviewResponse.model_validate(read_yaml(file))
+        changed = complete_second_model_review(
+            project_dir, response, now=datetime.now().astimezone()
+        )
+    except (OSError, TypeError, ValueError) as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
+    typer.echo(changed.state.value)
 
 ProjectDir = Annotated[Path, typer.Argument(help="Thư mục dự án")]
 Reviewer = Annotated[str, typer.Option("--reviewer", help="Tên bác sĩ duyệt")]

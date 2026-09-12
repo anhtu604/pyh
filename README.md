@@ -13,6 +13,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install/install.ps1
 
 Yêu cầu `/pyh làm video ... về <chủ đề>` cũng tạo/chọn topic card rồi dừng để bác sĩ xác nhận brief. Mở packet bằng `healthvideo review open <project> --gate medical`; bác sĩ duyệt rõ ràng bằng lệnh `healthvideo review approve` với tên người duyệt. Sau khi `/pyh tiếp tục` dựng video, mở packet `--gate video` và duyệt lần hai. `/pyh tạo gói đăng` tạo `revisions/<active_revision>/publish/` để đăng thủ công. Dùng `/pyh trạng thái` để xem bước tiếp theo. Discovery trực tuyến có giám sát và TTS thật chưa thuộc acceptance offline hiện tại.
 
+Với chủ đề rủi ro cao cần phản biện bổ sung, `healthvideo agent review-request <project> --reason <code>` tạo gói XML cục bộ để gửi thủ công; `healthvideo agent review-complete <project> --file <response.yaml>` chỉ nhận phản hồi gắn đúng request và revision. Bước này không gọi mô hình, không thay thế hai cổng duyệt của bác sĩ.
+
 ## Mục tiêu
 
 Xây dựng luồng có thể kiểm tra để biến hồ sơ và luận điểm đã được bác sĩ duyệt
@@ -91,6 +93,7 @@ applicability, per-claim doctor notes — hoãn sang M3).
 | PYH.5 | Thêm CLI `operator new/status/select/brief` cho v2 và một skill `/pyh` chuẩn dùng chung với Claude Code; giữ nguyên lệnh v1 và các cổng duyệt hiện có. | complete | `python -m pytest tests/test_cli.py tests/contracts/test_pyh_skill.py tests/workflows/test_operator.py -q` (51 passed); `python -m ruff check src tests tools` | `feat: expose shared pyh operator workflow` |
 | PYH.6 | Quick Start `/pyh` và acceptance toàn hệ thống, giữ v1, không thêm auto-publishing. | complete | `python -m pytest -q` (475 passed); Ruff; schema export/diff; video test (12 passed)/typecheck; operator smoke | `docs: complete pyh operator milestone` |
 | PYH review | Làm rõ hai đường bắt đầu topic và ý định duyệt trong skill chuẩn; Quick Start tách chọn topic khỏi xác nhận brief. | complete | Contract/CLI/operator/E2E; full Python/Ruff/schema/video gates | `docs: clarify pyh entry and doctor approval boundaries` |
+| M4.1 | Gói phản biện mô hình thứ hai thủ công, bất biến, gắn response với request/revision/source hashes; nhánh blocking về medical revision, nhánh sạch trở lại state trước đó. | complete | Domain/workflow/CLI/schema/skill contracts; full Python/Ruff/schema/video gates | `feat: add bound manual second-model review handoff` |
 
 ## Kiến trúc
 
