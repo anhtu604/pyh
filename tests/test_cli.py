@@ -29,6 +29,37 @@ def test_version_command() -> None:
     assert result.stdout.strip() == __version__
 
 
+def test_operator_new_status_select_and_confirm_brief(tmp_path) -> None:
+    import json
+
+    from healthvideo.domain.topic import TopicCard
+
+    created = runner.invoke(app, ["operator", "new", str(tmp_path), "--slug", "muoi-va-huyet-ap", "--title", "Ăn mặn"])
+    project = tmp_path / "muoi-va-huyet-ap"
+    assert created.exit_code == 0, created.stdout
+    assert read_yaml(project / "project.yaml")["schema_version"] == "2.0"
+    initial = runner.invoke(app, ["operator", "status", str(project), "--json"])
+    assert json.loads(initial.stdout)["kind"] == "choose_topic"
+
+    card_file = tmp_path / "card.yaml"
+    write_yaml_atomic(card_file, TopicCard(slug="muoi-va-huyet-ap", title="Ăn mặn", question="Ăn mặn ảnh hưởng huyết áp?", synthetic_test_record=True).model_dump(mode="json"))
+    selected = runner.invoke(app, ["operator", "select", str(project), "--file", str(card_file)])
+    assert selected.exit_code == 0, selected.stdout
+    draft = runner.invoke(app, ["operator", "brief", str(project), "--title", "Ăn mặn"])
+    assert draft.exit_code == 0, draft.stdout
+    assert read_yaml(project / "project.yaml")["state"] == "topic_selected"
+    confirmed = runner.invoke(app, ["operator", "brief", str(project), "--title", "Ăn mặn", "--confirm"])
+    assert confirmed.exit_code == 0, confirmed.stdout
+    assert read_yaml(project / "project.yaml")["state"] == "author_brief_ready"
+
+
+def test_operator_help_preserves_existing_cli_commands() -> None:
+    result = runner.invoke(app, ["--help"])
+    assert result.exit_code == 0
+    for name in ("operator", "project", "review", "topic", "evidence", "produce", "package"):
+        assert name in result.stdout
+
+
 def test_cli_configures_windows_stdio_for_vietnamese_output(monkeypatch) -> None:
     configured: list[str] = []
 

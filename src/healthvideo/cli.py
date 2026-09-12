@@ -10,6 +10,7 @@ from uuid import uuid4
 import typer
 
 from healthvideo import __version__
+from healthvideo.commands.operator import app as operator_app
 from healthvideo.domain.evidence import (
     EvidenceClaim,
     EvidenceQuestion,
@@ -73,6 +74,7 @@ app.add_typer(review_app, name="review")
 app.add_typer(revision_app, name="revision")
 app.add_typer(topic_app, name="topic")
 app.add_typer(evidence_app, name="evidence")
+app.add_typer(operator_app, name="operator")
 
 ProjectDir = Annotated[Path, typer.Argument(help="Thư mục dự án")]
 Reviewer = Annotated[str, typer.Option("--reviewer", help="Tên bác sĩ duyệt")]
