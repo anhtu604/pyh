@@ -78,12 +78,15 @@ xạ đúng một cảnh theo đúng thứ tự, không có dòng/cảnh thoại
 `brand_outro` chỉ hợp lệ với `Script.format_profile=hook_outro_v1`, phải là cảnh
 cuối và tham chiếu dòng `purpose=outro` duy nhất. `narration` phải khớp chính xác
 câu kết đã pin; không có `claim_id`, `source_marker` hoặc `evidence_highlight`.
-Chỉ cho ref `role=brand` và mascot reaction decorative `role=mascot`. Cảnh này
+Phải có đúng một ref logo `role=brand`; mascot reaction decorative `role=mascot`
+là tùy chọn. Không cho role khác. Cảnh này
 bắt đầu ngay sau cảnh nội dung cuối và có `duration_frames > 0`. Renderer dispatch
 `visual=brand_outro` sang `OutroScene`; enum visual cũ không đổi. Cảnh đầu bắt đầu
 ở frame 0 và tham chiếu dòng đầu, tức hook. Không suy đoán ý nghĩa y khoa bằng
 NLP: tác giả phải khai báo claim/source binding theo contract hiện có; validator
-và cổng duyệt kiểm tra chúng như mọi cảnh nội dung.
+và cổng duyệt kiểm tra chúng như mọi cảnh nội dung. Riêng hook có `claim_id`
+phải có `source_marker` hiển thị; cảnh nội dung về sau vẫn có thể có claim mà
+không có marker theo contract v2 cũ. Marker không có claim bị từ chối.
 
 Để bảo toàn fixture và dự án cũ, các trường mới là tùy chọn khi parse. Validator
 nghiêm ngặt áp dụng khi `format_profile=hook_outro_v1`, kể cả nếu script bị
