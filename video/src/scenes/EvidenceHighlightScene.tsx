@@ -2,6 +2,7 @@ import React from 'react';
 import {Img, interpolate, staticFile, useCurrentFrame} from 'remotion';
 import {Captions} from '../components/Captions';
 import type {Scene} from '../types';
+import {highlightImageLayout, highlightObjectFit, localHighlightRect} from './highlightGeometry';
 
 type EvidenceHighlightSceneProps = {
   scene: Scene;
@@ -14,7 +15,10 @@ export const EvidenceHighlightScene: React.FC<EvidenceHighlightSceneProps> = ({s
     throw new Error('evidence_highlight scene requires an evidence highlight');
   }
 
-  const highlightedWidth = interpolate(frame, [0, 18], [0, highlight.width * 100], {
+  const local = localHighlightRect(highlight);
+  const imageLayout = highlightImageLayout(highlight);
+
+  const highlightedWidth = interpolate(frame, [0, 18], [0, local.width * imageLayout.width], {
     extrapolateRight: 'clamp',
   });
 
@@ -22,16 +26,16 @@ export const EvidenceHighlightScene: React.FC<EvidenceHighlightSceneProps> = ({s
     <>
       <Img
         src={staticFile(highlight.image)}
-        style={{height: '100%', objectFit: 'cover', position: 'absolute', width: '100%'}}
+        style={{...imageLayout, objectFit: highlightObjectFit(highlight), position: 'absolute'}}
       />
       <div
         style={{
           backgroundColor: 'rgba(250, 204, 21, 0.72)',
-          height: `${highlight.height * 100}%`,
-          left: `${highlight.x * 100}%`,
+          height: local.height * imageLayout.height,
+          left: imageLayout.left + local.x * imageLayout.width,
           position: 'absolute',
-          top: `${highlight.y * 100}%`,
-          width: `${highlightedWidth}%`,
+          top: imageLayout.top + local.y * imageLayout.height,
+          width: highlightedWidth,
         }}
       />
       <div

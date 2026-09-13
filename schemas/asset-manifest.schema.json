@@ -53,6 +53,11 @@
           "title": "Revision",
           "type": "string"
         },
+        "rights_required": {
+          "default": false,
+          "title": "Rights Required",
+          "type": "boolean"
+        },
         "semantic": {
           "title": "Semantic",
           "type": "boolean"

@@ -46,6 +46,28 @@ def render_medical_packet(revision_root: Path) -> str:
             markers_by_claim.setdefault(scene.claim_id, []).append(scene.source_marker)
 
     rows = []
+    highlight_rows = []
+    for scene in storyboard.scenes:
+        highlight = scene.evidence_highlight
+        if (
+            scene.visual != "evidence_highlight"
+            or highlight is None
+            or highlight.source_id is None
+        ):
+            continue
+        source = sources.get(highlight.source_id)
+        source_title = (
+            source.title if source is not None else "nguồn không có trong ledger"
+        )
+        coords = f"({highlight.x:g}, {highlight.y:g}, {highlight.width:g}, {highlight.height:g})"
+        highlight_rows.append(
+            "<tr>"
+            f"<td>{escape(scene.id)}</td><td>{escape(scene.source_marker or '')}</td>"
+            f"<td>{escape(highlight.source_id)}: {escape(source_title)}</td>"
+            f"<td>{highlight.page}</td><td>{escape(highlight.quote)}</td>"
+            f"<td>{escape(coords)}</td><td>{escape(highlight.image)}</td>"
+            "</tr>"
+        )
     has_unmodeled = False
     for claim in claims:
         source_titles = ", ".join(
@@ -94,6 +116,13 @@ def render_medical_packet(revision_root: Path) -> str:
         "</tr></thead><tbody>"
         + "".join(rows)
         + "</tbody></table>"
+        + (
+            '<h2>Paper highlights</h2><table border="1"><thead><tr><th>Scene</th><th>Marker</th><th>Source</th><th>Page</th><th>Quote</th><th>Source-page rectangle (x,y,w,h)</th><th>Crop asset</th></tr></thead><tbody>'
+            + "".join(highlight_rows)
+            + "</tbody></table>"
+            if highlight_rows
+            else ""
+        )
         + note_paragraph
         + "</body></html>"
     )

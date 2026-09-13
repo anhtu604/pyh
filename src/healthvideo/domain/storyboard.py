@@ -17,6 +17,14 @@ class EvidenceHighlight(BaseModel):
     schema_version: str = "1.0"
     image: str = Field(json_schema_extra={"pattern": r"\S"})
     quote: str = Field(json_schema_extra={"pattern": r"\S"})
+    source_id: str | None = None
+    page: int | None = Field(default=None, ge=1)
+    crop_x: float | None = Field(default=None, ge=0, le=1)
+    crop_y: float | None = Field(default=None, ge=0, le=1)
+    crop_width: float | None = Field(default=None, gt=0, le=1)
+    crop_height: float | None = Field(default=None, gt=0, le=1)
+    crop_pixel_width: int | None = Field(default=None, gt=0)
+    crop_pixel_height: int | None = Field(default=None, gt=0)
     x: float = Field(ge=0, le=1)
     y: float = Field(ge=0, le=1)
     width: float = Field(ge=0, le=1)
@@ -28,10 +36,38 @@ class EvidenceHighlight(BaseModel):
             raise ValueError("Evidence highlight image is required")
         if not self.quote.strip():
             raise ValueError("Evidence highlight quote is required")
+        if (self.source_id is None) != (self.page is None):
+            raise ValueError("Evidence highlight source_id and page must be paired")
+        if self.source_id is not None and not self.source_id.strip():
+            raise ValueError("Evidence highlight source_id must be nonblank")
         if self.x + self.width > 1:
             raise ValueError("Evidence highlight x + width must be at most 1")
         if self.y + self.height > 1:
             raise ValueError("Evidence highlight y + height must be at most 1")
+        crop = (
+            self.crop_x,
+            self.crop_y,
+            self.crop_width,
+            self.crop_height,
+            self.crop_pixel_width,
+            self.crop_pixel_height,
+        )
+        if any(value is not None for value in crop):
+            if any(value is None for value in crop):
+                raise ValueError("Evidence highlight crop rectangle must be complete")
+            assert self.crop_x is not None and self.crop_y is not None
+            assert self.crop_width is not None and self.crop_height is not None
+            if self.source_id is None or self.page is None:
+                raise ValueError("Evidence highlight crop needs source_id and page")
+            if (
+                self.crop_x + self.crop_width > 1
+                or self.crop_y + self.crop_height > 1
+                or self.x < self.crop_x
+                or self.y < self.crop_y
+                or self.x + self.width > self.crop_x + self.crop_width + 1e-9
+                or self.y + self.height > self.crop_y + self.crop_height + 1e-9
+            ):
+                raise ValueError("Evidence highlight must be contained within crop")
         return self
 
 

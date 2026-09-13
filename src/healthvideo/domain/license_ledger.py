@@ -68,7 +68,8 @@ def validate_license_ledger(
             )
     covered = {entry.path for entry in ledger.entries}
     if any(
-        asset.kind.value == "data_chart" and asset.path not in covered
+        (asset.kind.value == "data_chart" or asset.rights_required)
+        and asset.path not in covered
         for asset in manifest.assets
     ):
-        raise ValueError("license ledger must cover every data chart")
+        raise ValueError("license ledger must cover every rights-required asset")

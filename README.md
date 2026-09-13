@@ -62,8 +62,21 @@ chưa duyệt y khoa; nó kiểm nguồn thuộc claim, đăng ký `data_chart` 
 `semantic: true`, hash bytes trong `assets/asset-manifest.yaml` và ghi
 `assets/license-ledger.yaml` từ license/căn cứ quyền do operator nhập tường
 minh. Code không suy đoán giấy phép, không tạo số liệu, không đổi state; medical
-gate hash cả asset và license ledger. Chưa nối chart vào Remotion hoặc CLI;
-paper highlight, mascot, signature, visual budget và Veo nằm ở các lát M6 sau.
+gate hash cả asset và license ledger. Chưa nối chart vào Remotion hoặc CLI.
+
+M6.2 cung cấp API Python `create_evidence_highlight_asset` cho project v2 trước
+cổng duyệt y khoa. Operator chuẩn bị ảnh trang PNG/JPEG **ngoài project**, ghi
+`source_id`, số trang, câu trích nguyên văn, marker và hình chữ nhật chuẩn hóa
+trong storyboard, rồi khai tường minh license, căn cứ quyền dùng và creator.
+API kiểm source–claim–marker, crop vùng nhỏ quanh hình chữ nhật bằng Pillow
+12.3.0 ([PyPI](https://pypi.org/project/pillow/), MIT-CMU), chỉ lưu PNG crop;
+không đưa trang đầy đủ/PDF/full text hay đường dẫn máy vào project. Metadata
+crop giữ tọa độ trang gốc và kích thước pixel của ảnh cắt; renderer đặt ảnh
+theo `contain` và vẽ overlay trong cùng hộp nên không lệch trên crop vuông hoặc
+ngang. Asset semantic, hash và rights ledger được medical gate ràng buộc;
+retry sau lỗi promotion hội tụ an toàn. Không OCR hoặc xác nhận tự động
+quote có thật trong ảnh. PDF rasterization, mascot, signature, visual budget và
+Veo vẫn ở lát sau. Không đổi hai cổng duyệt hoặc đăng thủ công.
 
 ## Milestone
 
@@ -135,6 +148,7 @@ applicability, per-claim doctor notes — hoãn sang M3).
 | M5.4 | ASR back-check `CommandASR` + `word_error_rate` (faster-whisper 1.2.1, MIT; wrapper `tools/tts/whisper_transcribe.py`); `NormalizedTTS` FFmpeg loudnorm; `tts-benchmark --asr-*`/`--max-wer`; `produce --tts vieneu --voice`; sửa `build_render_argv` dùng đường dẫn tuyệt đối. Chạy thật: WER 13 case (10/13 ≤ 0,2), produce golden v2 bằng VieNeu đến `awaiting_video_review`. Voice chính thức và ElevenLabs chưa làm. | complete | `python -m pytest -q` (548 passed); `ruff check src tests tools`; `git diff --check`; benchmark + produce thật | `feat: add ASR back-check and loudnorm to VieNeu production` |
 | M5 handoff 2 | Chốt M5: kỹ thuật xong tại `c4a500c`; còn chờ bác sĩ chọn voice và bổ sung từ điển tên thuốc; ElevenLabs chờ key. M6 bắt đầu từ HEAD này. | complete | README review; `git diff --check` | `docs: hand off M5 completion` |
 | M6.1 | Chart SVG count-of-total xác định từ datum explicit trong evidence ledger; asset semantic hash và license/right ledger cùng revision, medical gate ràng buộc bytes/metadata; không đổi v1/state. Các visual/render khác theo plan M6. | complete; C2C review DONE | `python -m pytest -q` (585 passed); Ruff; schema export; video test (12 passed)/typecheck; `git diff --check` | `feat: register evidence-bound charts and asset rights` |
+| M6.2 | Crop paper highlight từ ảnh trang PNG/JPEG cục bộ ngoài project; source/page/marker/quote/tọa độ gốc, kích thước pixel crop, quyền dùng explicit, semantic hash/medical gate; renderer `contain` và remap overlay trên crop; retry crash-safe. Không PDF/OCR/full page. | complete; C2C review DONE | `python -m pytest -q` (599 passed); Ruff; schema export/diff; video test (16 passed)/typecheck; `git diff --check` | `feat: add provenance-safe paper highlights` |
 
 ## Kiến trúc
 

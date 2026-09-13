@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from PIL import Image
 
 from healthvideo.domain.asset_manifest import (
     AssetIntegrityError,
@@ -13,12 +14,16 @@ from healthvideo.domain.asset_manifest import (
 from healthvideo.domain.gate_review import GateKind
 from healthvideo.domain.license_ledger import LicenseLedger, validate_license_ledger
 from healthvideo.storage.files import read_yaml, sha256_file, write_yaml_atomic
+from healthvideo.workflows import visual_assets
 from healthvideo.workflows.gate_review import (
     approve_gate,
     hash_reviewed_artifacts,
     medical_reviewed_paths,
 )
-from healthvideo.workflows.visual_assets import create_evidence_chart
+from healthvideo.workflows.visual_assets import (
+    create_evidence_chart,
+    create_evidence_highlight_asset,
+)
 
 
 @pytest.fixture
@@ -35,11 +40,11 @@ def project(tmp_path: Path) -> Path:
             "id": "bp-count",
             "source_id": "R01",
             "label": "Mẫu thử tổng hợp",
-        "value": 12,
+            "value": 12,
             "denominator": 40,
             "unit": "người",
-        "ci_low": 10,
-        "ci_high": 15,
+            "ci_low": 10,
+            "ci_high": 15,
         }
     ]
     write_yaml_atomic(ledger_path, ledger)
@@ -102,8 +107,10 @@ def test_refuses_overwrite_or_missing_source_and_rights(project: Path) -> None:
         make_chart(project)
     assert chart.is_file()
     for changes in (
-        {"claim_id": "missing"}, {"datum_id": "missing"},
-        {"license": " "}, {"rights_basis": " "},
+        {"claim_id": "missing"},
+        {"datum_id": "missing"},
+        {"license": " "},
+        {"rights_basis": " "},
     ):
         with pytest.raises(ValueError):
             make_chart(project, asset_name="other", **changes)
@@ -148,7 +155,9 @@ def test_medical_gate_refuses_chart_without_license_ledger(project: Path) -> Non
     data["state"] = "awaiting_medical_review"
     write_yaml_atomic(project / "project.yaml", data)
     with pytest.raises(FileNotFoundError, match="license ledger"):
-        approve_gate(project, GateKind.MEDICAL, reviewer="test doctor", now=datetime.now(UTC))
+        approve_gate(
+            project, GateKind.MEDICAL, reviewer="test doctor", now=datetime.now(UTC)
+        )
     assert not (revision / "reviews/medical-approval.yaml").exists()
 
 
@@ -186,3 +195,270 @@ def test_tampered_existing_license_ledger_refuses_new_chart(project: Path) -> No
         make_chart(project, asset_name="chart-two")
     assert manifest_path.read_bytes() == before
     assert not (asset_dir / "chart-two.svg").exists()
+
+
+def test_register_cropped_highlight_with_source_page_rights(
+    project: Path, tmp_path: Path
+) -> None:
+    revision = project / "revisions/001"
+    storyboard_path = revision / "storyboard/storyboard.yaml"
+    storyboard = read_yaml(storyboard_path)
+    highlight = storyboard["scenes"][2]["evidence_highlight"]
+    highlight.update(
+        {
+            "image": "assets/paper-excerpt.png",
+            "source_id": "R01",
+            "page": 2,
+            "x": 0.4,
+            "y": 0.4,
+            "width": 0.1,
+            "height": 0.1,
+        }
+    )
+    write_yaml_atomic(storyboard_path, storyboard)
+    source = tmp_path / "full-page.png"
+    Image.new("RGB", (100, 100), "white").save(source)
+    before = (project / "project.yaml").read_bytes()
+    output = create_evidence_highlight_asset(
+        project,
+        scene_id="S03",
+        page_image=source,
+        asset_name="paper-excerpt",
+        license="synthetic_test_only",
+        rights_basis="fixture nội bộ",
+        creator="repository_fixture",
+    )
+    with Image.open(output) as cropped:
+        assert cropped.width < 50 and cropped.height < 50
+    manifest = load_asset_manifest(revision / "assets/asset-manifest.yaml")
+    record = next(a for a in manifest.assets if a.path == "assets/paper-excerpt.png")
+    assert record.kind is AssetKind.EVIDENCE_HIGHLIGHT and record.semantic
+    assert record.source == "R01" and record.sha256 == sha256_file(output)
+    rights = LicenseLedger.model_validate(
+        read_yaml(revision / "assets/license-ledger.yaml")
+    )
+    assert any(
+        e.path == record.path and e.sha256 == record.sha256 for e in rights.entries
+    )
+    assert str(source) not in (revision / "assets/asset-manifest.yaml").read_text(
+        encoding="utf-8"
+    )
+    assert (project / "project.yaml").read_bytes() == before
+
+
+def test_highlight_rejects_oversized_excerpt(project: Path, tmp_path: Path) -> None:
+    revision = project / "revisions/001"
+    storyboard_path = revision / "storyboard/storyboard.yaml"
+    storyboard = read_yaml(storyboard_path)
+    highlight = storyboard["scenes"][2]["evidence_highlight"]
+    highlight.update(
+        {"image": "assets/paper-excerpt.png", "source_id": "R01", "page": 2}
+    )
+    write_yaml_atomic(storyboard_path, storyboard)
+    source = tmp_path / "full-page.png"
+    Image.new("RGB", (100, 100), "white").save(source)
+    with pytest.raises(ValueError, match="crop|excerpt"):
+        create_evidence_highlight_asset(
+            project,
+            scene_id="S03",
+            page_image=source,
+            asset_name="paper-excerpt",
+            license="synthetic_test_only",
+            rights_basis="fixture nội bộ",
+            creator="repository_fixture",
+        )
+    assert not (revision / "assets/paper-excerpt.png").exists()
+
+
+def test_highlight_source_marker_and_rights_are_required(
+    project: Path, tmp_path: Path
+) -> None:
+    revision = project / "revisions/001"
+    storyboard_path = revision / "storyboard/storyboard.yaml"
+    storyboard = read_yaml(storyboard_path)
+    highlight = storyboard["scenes"][2]["evidence_highlight"]
+    highlight.update(
+        {
+            "image": "assets/paper-excerpt.png",
+            "source_id": "R01",
+            "page": 2,
+            "x": 0.4,
+            "y": 0.4,
+            "width": 0.1,
+            "height": 0.1,
+        }
+    )
+    source = tmp_path / "full-page.png"
+    Image.new("RGB", (100, 100), "white").save(source)
+    args = {
+        "scene_id": "S03",
+        "page_image": source,
+        "asset_name": "paper-excerpt",
+        "license": "synthetic_test_only",
+        "rights_basis": "fixture nội bộ",
+        "creator": "repository_fixture",
+    }
+    storyboard["scenes"][2]["source_marker"] = "[2]"
+    write_yaml_atomic(storyboard_path, storyboard)
+    with pytest.raises(ValueError, match="marker"):
+        create_evidence_highlight_asset(project, **args)
+    storyboard["scenes"][2]["source_marker"] = "[1]"
+    highlight["source_id"] = "unknown"
+    write_yaml_atomic(storyboard_path, storyboard)
+    with pytest.raises(ValueError, match="source"):
+        create_evidence_highlight_asset(project, **args)
+    highlight["source_id"] = "R01"
+    write_yaml_atomic(storyboard_path, storyboard)
+    with pytest.raises(ValueError, match="explicit"):
+        create_evidence_highlight_asset(project, **(args | {"rights_basis": " "}))
+    assert not (revision / "assets/paper-excerpt.png").exists()
+
+
+def test_registered_highlight_requires_rights_at_medical_gate(
+    project: Path, tmp_path: Path
+) -> None:
+    revision = project / "revisions/001"
+    storyboard_path = revision / "storyboard/storyboard.yaml"
+    storyboard = read_yaml(storyboard_path)
+    storyboard["scenes"][2]["evidence_highlight"].update(
+        {
+            "image": "assets/paper-excerpt.png",
+            "source_id": "R01",
+            "page": 2,
+            "x": 0.4,
+            "y": 0.4,
+            "width": 0.1,
+            "height": 0.1,
+        }
+    )
+    write_yaml_atomic(storyboard_path, storyboard)
+    source = tmp_path / "full-page.png"
+    Image.new("RGB", (100, 100), "white").save(source)
+    output = create_evidence_highlight_asset(
+        project,
+        scene_id="S03",
+        page_image=source,
+        asset_name="paper-excerpt",
+        license="synthetic_test_only",
+        rights_basis="fixture nội bộ",
+        creator="repository_fixture",
+    )
+    updated = read_yaml(storyboard_path)["scenes"][2]["evidence_highlight"]
+    assert updated["crop_x"] < updated["x"]
+    assert updated["crop_width"] < 0.5
+    with Image.open(output) as cropped:
+        assert (updated["crop_pixel_width"], updated["crop_pixel_height"]) == cropped.size
+    manifest = load_asset_manifest(revision / "assets/asset-manifest.yaml")
+    assert next(
+        a for a in manifest.assets if a.path == "assets/paper-excerpt.png"
+    ).rights_required
+    (revision / "assets/license-ledger.yaml").unlink()
+    state = read_yaml(project / "project.yaml")
+    state["state"] = "awaiting_medical_review"
+    write_yaml_atomic(project / "project.yaml", state)
+    with pytest.raises(FileNotFoundError, match="license ledger"):
+        approve_gate(
+            project, GateKind.MEDICAL, reviewer="test doctor", now=datetime.now(UTC)
+        )
+    output.write_bytes(b"changed")
+    with pytest.raises(AssetIntegrityError):
+        validate_asset_manifest(revision, manifest)
+
+
+def test_highlight_retry_repairs_storyboard_after_asset_promotion(
+    project: Path, tmp_path: Path
+) -> None:
+    revision = project / "revisions/001"
+    storyboard_path = revision / "storyboard/storyboard.yaml"
+    storyboard = read_yaml(storyboard_path)
+    storyboard["scenes"][2]["evidence_highlight"].update(
+        {
+            "image": "assets/paper-excerpt.png",
+            "source_id": "R01",
+            "page": 2,
+            "x": 0.4,
+            "y": 0.4,
+            "width": 0.1,
+            "height": 0.1,
+        }
+    )
+    write_yaml_atomic(storyboard_path, storyboard)
+    source = tmp_path / "full-page.png"
+    Image.new("RGB", (100, 100), "white").save(source)
+    args = {
+        "scene_id": "S03",
+        "page_image": source,
+        "asset_name": "paper-excerpt",
+        "license": "synthetic_test_only",
+        "rights_basis": "fixture nội bộ",
+        "creator": "repository_fixture",
+    }
+    output = create_evidence_highlight_asset(project, **args)
+    crop_hash = sha256_file(output)
+    write_yaml_atomic(
+        storyboard_path, storyboard
+    )  # interrupted before storyboard write
+    with pytest.raises(ValueError, match="crop provenance"):
+        state = read_yaml(project / "project.yaml")
+        state["state"] = "awaiting_medical_review"
+        write_yaml_atomic(project / "project.yaml", state)
+        approve_gate(
+            project, GateKind.MEDICAL, reviewer="test doctor", now=datetime.now(UTC)
+        )
+    assert create_evidence_highlight_asset(project, **args) == output
+    assert sha256_file(output) == crop_hash
+    assert read_yaml(storyboard_path)["scenes"][2]["evidence_highlight"]["crop_x"] < 0.4
+
+
+def test_highlight_retry_after_promotion_failure_is_gate_safe(
+    project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    revision = project / "revisions/001"
+    storyboard_path = revision / "storyboard/storyboard.yaml"
+    storyboard = read_yaml(storyboard_path)
+    storyboard["scenes"][2]["evidence_highlight"].update(
+        {
+            "image": "assets/paper-excerpt.png",
+            "source_id": "R01",
+            "page": 2,
+            "x": 0.4,
+            "y": 0.4,
+            "width": 0.1,
+            "height": 0.1,
+        }
+    )
+    write_yaml_atomic(storyboard_path, storyboard)
+    source = tmp_path / "full-page.png"
+    Image.new("RGB", (100, 100), "white").save(source)
+    args = {
+        "scene_id": "S03",
+        "page_image": source,
+        "asset_name": "paper-excerpt",
+        "license": "synthetic_test_only",
+        "rights_basis": "fixture nội bộ",
+        "creator": "repository_fixture",
+    }
+    real_promote = visual_assets.replace_directory_atomic
+
+    def fail_once(*_args: object) -> None:
+        raise OSError("simulated promotion failure")
+
+    monkeypatch.setattr(visual_assets, "replace_directory_atomic", fail_once)
+    with pytest.raises(OSError, match="simulated"):
+        create_evidence_highlight_asset(project, **args)
+    assert read_yaml(storyboard_path)["scenes"][2]["evidence_highlight"]["crop_x"] < 0.4
+    assert not (revision / "assets/paper-excerpt.png").exists()
+    state = read_yaml(project / "project.yaml")
+    state["state"] = "awaiting_medical_review"
+    write_yaml_atomic(project / "project.yaml", state)
+    with pytest.raises(ValueError, match="crop provenance"):
+        approve_gate(
+            project, GateKind.MEDICAL, reviewer="test doctor", now=datetime.now(UTC)
+        )
+    monkeypatch.setattr(visual_assets, "replace_directory_atomic", real_promote)
+    output = create_evidence_highlight_asset(project, **args)
+    assert output.is_file()
+    rights = LicenseLedger.model_validate(
+        read_yaml(revision / "assets/license-ledger.yaml")
+    )
+    assert len([e for e in rights.entries if e.path == "assets/paper-excerpt.png"]) == 1

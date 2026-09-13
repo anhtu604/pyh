@@ -22,6 +22,18 @@ describe('EvidenceHighlightSchema', () => {
       false,
     );
   });
+
+  it('requires pixel dimensions with crop provenance', () => {
+    expect(EvidenceHighlightSchema.safeParse({
+      ...validHighlight,
+      source_id: 'R01',
+      page: 2,
+      crop_x: 0.05,
+      crop_y: 0.15,
+      crop_width: 0.7,
+      crop_height: 0.4,
+    }).success).toBe(false);
+  });
 });
 
 describe('SceneSchema', () => {

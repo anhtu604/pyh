@@ -11,6 +11,14 @@ export const EvidenceHighlightSchema = z
     y: unitCoordinate,
     width: unitCoordinate,
     height: unitCoordinate,
+    source_id: z.string().nullable().optional(),
+    page: z.number().int().positive().nullable().optional(),
+    crop_x: unitCoordinate.nullable().optional(),
+    crop_y: unitCoordinate.nullable().optional(),
+    crop_width: unitCoordinate.nullable().optional(),
+    crop_height: unitCoordinate.nullable().optional(),
+    crop_pixel_width: z.number().int().positive().nullable().optional(),
+    crop_pixel_height: z.number().int().positive().nullable().optional(),
   })
   .superRefine((highlight, context) => {
     if (highlight.x + highlight.width > 1) {
@@ -26,6 +34,24 @@ export const EvidenceHighlightSchema = z
         path: ['height'],
         message: 'Evidence highlight y + height must be at most 1',
       });
+    }
+    if ((highlight.source_id == null) !== (highlight.page == null)) {
+      context.addIssue({code: 'custom', path: ['page'], message: 'source_id and page must be paired'});
+    }
+    const crop = [highlight.crop_x, highlight.crop_y, highlight.crop_width, highlight.crop_height,
+      highlight.crop_pixel_width, highlight.crop_pixel_height];
+    if (crop.some((value) => value !== null && value !== undefined)) {
+      if (crop.some((value) => value === null || value === undefined) ||
+          !highlight.crop_width || !highlight.crop_height ||
+          highlight.crop_x === null || highlight.crop_x === undefined ||
+          highlight.crop_y === null || highlight.crop_y === undefined ||
+          highlight.crop_x + highlight.crop_width > 1 ||
+          highlight.crop_y + highlight.crop_height > 1 ||
+          highlight.x < highlight.crop_x || highlight.y < highlight.crop_y ||
+          highlight.x + highlight.width > highlight.crop_x + highlight.crop_width + 1e-9 ||
+          highlight.y + highlight.height > highlight.crop_y + highlight.crop_height + 1e-9) {
+        context.addIssue({code: 'custom', path: ['crop_width'], message: 'highlight must be contained within complete crop'});
+      }
     }
   });
 

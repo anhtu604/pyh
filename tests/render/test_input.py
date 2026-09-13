@@ -37,6 +37,74 @@ def test_build_render_input_keeps_evidence_highlight_in_vertical_contract() -> N
     assert result.scenes[0].evidence_highlight.quote == "giảm huyết áp tâm thu"
 
 
+def test_cropped_highlight_keeps_source_page_coordinates_in_render_input() -> None:
+    highlight = EvidenceHighlight(
+        image="assets/paper-crop.png",
+        quote="nguyên văn",
+        source_id="R01",
+        page=3,
+        x=0.4,
+        y=0.4,
+        width=0.1,
+        height=0.1,
+        crop_x=0.35,
+        crop_y=0.35,
+        crop_width=0.2,
+        crop_height=0.2,
+        crop_pixel_width=200,
+        crop_pixel_height=200,
+    )
+    board = Storyboard(
+        title="Muối", scenes=[valid_highlight_scene(evidence_highlight=highlight)]
+    )
+    rendered = build_render_input(board, audio_file="audio/narration.wav")
+    assert rendered.scenes[0].evidence_highlight == highlight
+    assert rendered.scenes[0].evidence_highlight.page == 3
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"source_id": "R01"},
+        {"page": 1},
+        {"source_id": "R01", "page": 0},
+        {"source_id": "R01", "page": 1, "crop_x": 0.3},
+        {
+            "source_id": "R01",
+            "page": 1,
+            "crop_x": 0.3,
+            "crop_y": 0.3,
+            "crop_width": 0.2,
+            "crop_height": 0.2,
+        },
+        {
+            "source_id": "R01",
+            "page": 1,
+            "crop_x": 0.6,
+            "crop_y": 0.3,
+            "crop_width": 0.2,
+            "crop_height": 0.3,
+            "crop_pixel_width": 200,
+            "crop_pixel_height": 300,
+        },
+    ],
+)
+def test_highlight_rejects_incomplete_provenance_or_outside_crop(
+    changes: dict[str, object],
+) -> None:
+    values = {
+        "image": "assets/crop.png",
+        "quote": "q",
+        "x": 0.4,
+        "y": 0.4,
+        "width": 0.1,
+        "height": 0.1,
+    }
+    values.update(changes)
+    with pytest.raises(ValidationError):
+        EvidenceHighlight(**values)
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [("start_frame", -1), ("duration_frames", 0)],

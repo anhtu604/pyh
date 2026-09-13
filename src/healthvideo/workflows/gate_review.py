@@ -24,6 +24,7 @@ from healthvideo.domain.gate_review import (
 from healthvideo.domain.license_ledger import LicenseLedger, validate_license_ledger
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
+from healthvideo.domain.storyboard import Storyboard
 from healthvideo.storage.files import (
     canonical_json_hash,
     read_yaml,
@@ -144,12 +145,49 @@ def approve_gate(
     if kind is GateKind.MEDICAL:
         manifest = load_asset_manifest(revision_root / "assets" / "asset-manifest.yaml")
         validate_asset_manifest(revision_root, manifest)
+        hardened_highlights = [
+            asset
+            for asset in manifest.assets
+            if asset.kind is AssetKind.EVIDENCE_HIGHLIGHT and asset.rights_required
+        ]
+        storyboard = Storyboard.model_validate(
+            read_yaml(revision_root / "storyboard/storyboard.yaml")
+        )
+        for asset in hardened_highlights:
+            if not any(
+                scene.evidence_highlight is not None
+                and scene.evidence_highlight.image == asset.path
+                and scene.evidence_highlight.source_id == asset.source
+                and scene.evidence_highlight.page is not None
+                and scene.evidence_highlight.crop_x is not None
+                for scene in storyboard.scenes
+            ):
+                raise ValueError(
+                    "medical gate needs complete highlight crop provenance"
+                )
+        for scene in storyboard.scenes:
+            highlight = scene.evidence_highlight
+            if highlight is None or highlight.crop_x is None:
+                continue
+            if not any(
+                asset.path == highlight.image
+                and asset.kind is AssetKind.EVIDENCE_HIGHLIGHT
+                and asset.rights_required
+                and asset.source == highlight.source_id
+                for asset in hardened_highlights
+            ):
+                raise ValueError(
+                    "medical gate needs complete highlight crop provenance"
+                )
         rights_path = revision_root / "assets/license-ledger.yaml"
         if (
-            any(asset.kind is AssetKind.DATA_CHART for asset in manifest.assets)
+            any(
+                asset.kind is AssetKind.DATA_CHART or asset.rights_required
+                for asset in manifest.assets
+            )
             and not rights_path.is_file()
         ):
-            raise FileNotFoundError("medical gate needs chart license ledger")
+            raise FileNotFoundError("medical gate needs asset license ledger")
         if rights_path.is_file():
             validate_license_ledger(
                 manifest,

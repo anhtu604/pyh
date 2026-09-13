@@ -82,6 +82,7 @@ class AssetRecord(BaseModel):
     license: str = Field(pattern=r"\S")
     creator: str = Field(pattern=r"\S")
     revision: str = Field(pattern=_REVISION_ID_PATTERN)
+    rights_required: bool = False
 
     @model_validator(mode="after")
     def _validate_path_shape(self) -> AssetRecord:
