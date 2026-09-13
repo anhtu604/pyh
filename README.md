@@ -30,6 +30,19 @@ nhánh triển khai: contract/layout v2, state graph, revision và stage bất b
 semantic asset manifest, invalidation xác định và migration v1→v2 không phá dữ
 liệu. M2 review gate và M3 topic/evidence đã hoàn tất. MVP v1 vẫn là đường
 chạy tương thích ổn định; `/pyh` vận hành project v2 qua hai cổng duyệt.
+PYH.1–6 đã hoàn tất và được kiểm tra end-to-end offline. M4.1 đã thêm gói
+phản biện mô hình thứ hai để gửi/nhận thủ công, không thay thế duyệt của bác sĩ.
+M5.1–M5.2 đã thêm từ điển phát âm tiếng Việt được ràng buộc với medical gate,
+adapter TTS dạng lệnh cục bộ, kiểm tra WAV trước render và harness benchmark
+offline. M5.2 ở commit `1376663` trên nhánh `codex/m1-workflow-kernel`;
+525 test Python, 12 test video, Ruff và video typecheck đã qua ở M5.2.
+
+M5 vẫn đang triển khai: chưa cài/chọn model TTS thật, chưa chạy benchmark âm
+thanh thật, chưa có ASR, chuẩn hóa audio hay ElevenLabs fallback. CLI vẫn dùng
+`SilentTTS`; adapter lệnh chỉ được cấu hình qua Python. Bước kế tiếp là xác
+minh môi trường, giấy phép và nguồn model/provider cụ thể, rồi lập kế hoạch
+M5.3 có tiêu chí đo khách quan trước khi tích hợp. Không đưa audio/model/cache,
+credential hoặc bản render tạm vào Git; không vượt hai cổng duyệt hoặc tự đăng.
 
 ## Milestone
 
@@ -95,7 +108,8 @@ applicability, per-claim doctor notes — hoãn sang M3).
 | PYH review | Làm rõ hai đường bắt đầu topic và ý định duyệt trong skill chuẩn; Quick Start tách chọn topic khỏi xác nhận brief. | complete | Contract/CLI/operator/E2E; full Python/Ruff/schema/video gates | `docs: clarify pyh entry and doctor approval boundaries` |
 | M4.1 | Gói phản biện mô hình thứ hai thủ công, bất biến, gắn response với request/revision/source hashes; nhánh blocking về medical revision, nhánh sạch trở lại state trước đó. | complete | Domain/workflow/CLI/schema/skill contracts; full Python/Ruff/schema/video gates | `feat: add bound manual second-model review handoff` |
 | M5.1 | Từ điển phát âm tiếng Việt có phiên bản cho production v2: thay thế literal chỉ trong yêu cầu TTS, profile được medical gate hash/duyệt; cache, render manifest và video gate ràng buộc kết quả; v1 giữ nguyên. Profile mặc định rỗng, chưa có benchmark VieNeu, ASR hay ElevenLabs. | complete | `python -m pytest -q`; Ruff; schema export; video test/typecheck | `feat: bind versioned pronunciation to v2 production` |
-| M5.2 | Adapter lệnh TTS cục bộ cấu hình rõ ràng, kiểm tra cấu trúc/tín hiệu WAV, nhận diện voice/runtime trong cache v2 và harness benchmark offline không chấm điểm chủ quan. Chưa chọn model hay chạy benchmark thật. | complete | `python -m pytest -q`; Ruff; video test/typecheck | `feat: add local TTS adapter and audio benchmark contract` |
+| M5.2 | Adapter lệnh TTS cục bộ cấu hình rõ ràng, kiểm tra cấu trúc/tín hiệu WAV, nhận diện voice/runtime trong cache v2 và harness benchmark offline không chấm điểm chủ quan. Chưa chọn model hay chạy benchmark thật. | complete; C2C review DONE | `python -m pytest -q` (525 passed); Ruff; video test (12 passed)/typecheck; `git diff --check` | `1376663` |
+| M5 handoff | Đồng bộ báo cáo tiến độ, giới hạn còn mở và đầu vào M5.3 để tiếp tục từ HEAD hiện tại. | complete | README review; `git diff --check` | `docs: hand off pyh M5 progress` |
 
 ## Kiến trúc
 
