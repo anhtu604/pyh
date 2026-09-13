@@ -9,7 +9,9 @@
         "background",
         "texture",
         "flourish",
-        "transition"
+        "transition",
+        "mascot_reaction",
+        "mascot_medical_annotation"
       ],
       "title": "AssetKind",
       "type": "string"

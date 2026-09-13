@@ -2,6 +2,7 @@
 
 from pathlib import Path, PurePosixPath
 
+from healthvideo.domain.asset_manifest import AssetKind, AssetManifest
 from healthvideo.domain.storyboard import Storyboard
 from healthvideo.storage.files import sha256_file
 
@@ -36,6 +37,56 @@ def evidence_asset_hashes(project_dir: Path, storyboard: Storyboard) -> dict[str
             "Referenced evidence assets are missing: " + ", ".join(sorted(missing))
         )
     return {relative: sha256_file(path) for relative, path in paths.items()}
+
+
+def referenced_storyboard_assets(
+    revision_root: Path, storyboard: Storyboard, manifest: AssetManifest
+) -> dict[str, Path]:
+    """Resolve declared scene visuals and verify kind, location, and all bytes."""
+    root = revision_root.resolve()
+    records = {record.path: record for record in manifest.assets}
+    allowed = {
+        "mascot": {
+            AssetKind.MASCOT_REACTION,
+            AssetKind.MASCOT_MEDICAL_ANNOTATION,
+        },
+        "whiteboard": {
+            AssetKind.BACKGROUND,
+            AssetKind.TEXTURE,
+            AssetKind.FLOURISH,
+            AssetKind.TRANSITION,
+            AssetKind.MEDICAL_DIAGRAM,
+            AssetKind.MEDICAL_TEXT,
+        },
+    }
+    resolved_assets: dict[str, Path] = {}
+    for scene in storyboard.scenes:
+        for reference in scene.visual_assets:
+            relative = _relative_posix_path(reference.path, scene.id)
+            record = records.get(relative.as_posix())
+            if record is None:
+                raise ValueError(
+                    f"Scene {scene.id}: visual asset is not declared: {reference.path}"
+                )
+            if record.kind not in allowed[reference.role]:
+                raise ValueError(
+                    f"Scene {scene.id}: visual role {reference.role!r} does not match "
+                    f"asset kind {record.kind.value!r}"
+                )
+            candidate = root.joinpath(*relative.parts)
+            resolved = candidate.resolve(strict=False)
+            if not resolved.is_relative_to(root):
+                raise ValueError(f"Scene {scene.id}: visual asset escapes revision")
+            if not candidate.is_file():
+                raise FileNotFoundError(f"visual asset is missing: {reference.path}")
+            actual = sha256_file(candidate)
+            if actual != record.sha256:
+                raise ValueError(
+                    f"visual asset sha256 mismatch for {reference.path}: "
+                    f"expected {record.sha256}, found {actual}"
+                )
+            resolved_assets[relative.as_posix()] = candidate
+    return resolved_assets
 
 
 def _relative_posix_path(value: str, scene_id: str) -> PurePosixPath:

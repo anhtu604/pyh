@@ -1,7 +1,12 @@
 import pytest
 from pydantic import ValidationError
 
-from healthvideo.domain.storyboard import EvidenceHighlight, Scene, Storyboard
+from healthvideo.domain.storyboard import (
+    EvidenceHighlight,
+    Scene,
+    Storyboard,
+    VisualAssetRef,
+)
 from healthvideo.render.input import build_render_input
 
 
@@ -171,6 +176,42 @@ def test_build_render_input_rejects_gap_with_scene_id() -> None:
     with pytest.raises(ValueError, match="S02"):
         build_render_input(board, audio_file="audio/narration.wav")
 
+
+def test_visual_asset_ref_validates_path_role_pose_and_duplicates() -> None:
+    mascot = VisualAssetRef(
+        path="assets/guide.svg", role="mascot", pose="welcome"
+    )
+    assert mascot.pose.value == "welcome"
+    with pytest.raises(ValueError):
+        VisualAssetRef(path="../guide.svg", role="mascot", pose="welcome")
+    with pytest.raises(ValueError, match="whiteboard.*pose"):
+        VisualAssetRef(path="assets/board.svg", role="whiteboard", pose="welcome")
+    with pytest.raises(ValueError, match="duplicate visual asset"):
+        Scene(
+            id="S01",
+            start_frame=0,
+            duration_frames=1350,
+            narration="Legacy compatible.",
+            visual="whiteboard",
+            visual_assets=(mascot, mascot),
+        )
+
+
+def test_visual_assets_round_trip_through_render_input() -> None:
+    scene = Scene(
+        id="S01",
+        start_frame=0,
+        duration_frames=1350,
+        narration="Declared visual.",
+        visual="whiteboard",
+        visual_assets=(
+            VisualAssetRef(
+                path="assets/guide.svg", role="mascot", pose="explain"
+            ),
+        ),
+    )
+    result = build_render_input(Storyboard(title="PHY", scenes=(scene,)), "audio/a.wav")
+    assert result.scenes[0].visual_assets == scene.visual_assets
 
 @pytest.mark.parametrize(
     "audio_file", ["audio\\narration.wav", "/audio/narration.wav", ".", "./"]

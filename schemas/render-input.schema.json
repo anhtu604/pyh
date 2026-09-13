@@ -164,6 +164,15 @@
         "y_plus_height": "y + height <= 1"
       }
     },
+    "MascotPose": {
+      "enum": [
+        "welcome",
+        "explain",
+        "caution"
+      ],
+      "title": "MascotPose",
+      "type": "string"
+    },
     "Scene": {
       "allOf": [
         {
@@ -263,6 +272,14 @@
           ],
           "title": "Visual",
           "type": "string"
+        },
+        "visual_assets": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/VisualAssetRef"
+          },
+          "title": "Visual Assets",
+          "type": "array"
         }
       },
       "required": [
@@ -273,6 +290,40 @@
         "visual"
       ],
       "title": "Scene",
+      "type": "object"
+    },
+    "VisualAssetRef": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "pose": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MascotPose"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "role": {
+          "enum": [
+            "whiteboard",
+            "mascot"
+          ],
+          "title": "Role",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "role"
+      ],
+      "title": "VisualAssetRef",
       "type": "object"
     }
   },

@@ -68,6 +68,18 @@ def test_medical_asset_kinds_accept_semantic_true(kind: AssetKind) -> None:
     assert record.semantic is True
 
 
+def test_mascot_reaction_must_be_decorative() -> None:
+    with pytest.raises(ValidationError, match="mascot_reaction.*semantic=false"):
+        AssetRecord(**asset_payload(kind="mascot_reaction", semantic=True))
+
+
+def test_mascot_annotation_must_be_semantic() -> None:
+    with pytest.raises(ValidationError, match="semantic=true"):
+        AssetRecord(
+            **asset_payload(kind="mascot_medical_annotation", semantic=False)
+        )
+
+
 @pytest.mark.parametrize("kind", sorted(DECORATIVE_KINDS))
 def test_decorative_kinds_may_be_marked_non_semantic(kind: AssetKind) -> None:
     record = AssetRecord(
@@ -82,7 +94,9 @@ def test_decorative_kinds_may_be_marked_non_semantic(kind: AssetKind) -> None:
     assert record.semantic is False
 
 
-@pytest.mark.parametrize("kind", sorted(DECORATIVE_KINDS))
+@pytest.mark.parametrize(
+    "kind", sorted(DECORATIVE_KINDS - {AssetKind.MASCOT_REACTION})
+)
 def test_decorative_kinds_may_still_be_marked_semantic(kind: AssetKind) -> None:
     record = AssetRecord(**asset_payload(path="assets/bg-01.svg", kind=kind, semantic=True))
     assert record.semantic is True

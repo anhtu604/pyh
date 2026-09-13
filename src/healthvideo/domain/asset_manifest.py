@@ -32,6 +32,8 @@ class AssetKind(StrEnum):
     TEXTURE = "texture"
     FLOURISH = "flourish"
     TRANSITION = "transition"
+    MASCOT_REACTION = "mascot_reaction"
+    MASCOT_MEDICAL_ANNOTATION = "mascot_medical_annotation"
 
 
 # §7: an evidence highlight, any chart that plots data or backs a claim, a
@@ -43,6 +45,7 @@ SEMANTIC_REQUIRED_KINDS: frozenset[AssetKind] = frozenset(
         AssetKind.DATA_CHART,
         AssetKind.MEDICAL_DIAGRAM,
         AssetKind.MEDICAL_TEXT,
+        AssetKind.MASCOT_MEDICAL_ANNOTATION,
     }
 )
 
@@ -54,6 +57,7 @@ DECORATIVE_KINDS: frozenset[AssetKind] = frozenset(
         AssetKind.TEXTURE,
         AssetKind.FLOURISH,
         AssetKind.TRANSITION,
+        AssetKind.MASCOT_REACTION,
     }
 )
 
@@ -91,6 +95,8 @@ class AssetRecord(BaseModel):
 
     @model_validator(mode="after")
     def _enforce_semantic_policy(self) -> AssetRecord:
+        if self.kind is AssetKind.MASCOT_REACTION and self.semantic:
+            raise ValueError("asset kind 'mascot_reaction' must be semantic=false")
         if self.kind in SEMANTIC_REQUIRED_KINDS and not self.semantic:
             raise ValueError(
                 f"asset kind {self.kind.value!r} always changes medical meaning "

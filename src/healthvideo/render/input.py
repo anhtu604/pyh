@@ -33,6 +33,8 @@ def build_render_input(storyboard: Storyboard, audio_file: str) -> RenderInput:
             raise ValueError(f"Scene {scene.id}: must start at frame {expected_start}")
         if scene.evidence_highlight is not None:
             _validate_relative_posix_path(scene.evidence_highlight.image, scene.id)
+        for asset in scene.visual_assets:
+            _validate_relative_posix_path(asset.path, scene.id)
         expected_start += scene.duration_frames
 
     if not storyboard.scenes:

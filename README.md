@@ -85,6 +85,12 @@ template whiteboard hữu hạn. SVG lặp byte, không script/filter/external r
 generator chỉ bố trí giá trị operator cung cấp. Intro, outro và chuyển động
 signature vẫn thuộc M6.4.
 
+Checkpoint B thêm `mascot_reaction` chỉ trang trí và
+`mascot_medical_annotation` luôn semantic. Scene v2 có thể khai báo
+`visual_assets`; resolver kiểm đường dẫn, loại asset và SHA-256 cho cả asset
+trang trí trước khi production dùng. Scene cũ không có trường này vẫn giữ
+fallback hiện tại.
+
 ## Milestone
 
 MVP complete: vertical slice từ author brief, evidence, kịch bản và storyboard

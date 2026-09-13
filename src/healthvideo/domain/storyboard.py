@@ -1,6 +1,35 @@
+from pathlib import PurePosixPath
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from healthvideo.domain.brand import MascotPose
+
+
+class VisualAssetRef(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    path: str
+    role: Literal["whiteboard", "mascot"]
+    pose: MascotPose | None = None
+
+    @model_validator(mode="after")
+    def _validate_reference(self) -> "VisualAssetRef":
+        path = PurePosixPath(self.path)
+        if (
+            not self.path
+            or not path.parts
+            or "\\" in self.path
+            or path.is_absolute()
+            or ".." in path.parts
+            or ":" in path.parts[0]
+        ):
+            raise ValueError("visual asset path must be safe relative POSIX")
+        if self.role == "mascot" and self.pose is None:
+            raise ValueError("mascot visual asset requires pose")
+        if self.role == "whiteboard" and self.pose is not None:
+            raise ValueError("whiteboard visual asset cannot have pose")
+        return self
 
 
 class EvidenceHighlight(BaseModel):
@@ -85,6 +114,7 @@ class Scene(BaseModel):
     )
     visual: Literal["whiteboard", "chart", "evidence_highlight", "ai_clip"]
     evidence_highlight: EvidenceHighlight | None = None
+    visual_assets: tuple[VisualAssetRef, ...] = ()
 
     @field_validator("source_marker")
     @classmethod
@@ -108,6 +138,9 @@ class Scene(BaseModel):
                 raise ValueError(
                     f"Scene {self.id}: evidence_highlight requires image and quote"
                 )
+        paths = [asset.path for asset in self.visual_assets]
+        if len(paths) != len(set(paths)):
+            raise ValueError(f"Scene {self.id}: duplicate visual asset path")
         return self
 
 
