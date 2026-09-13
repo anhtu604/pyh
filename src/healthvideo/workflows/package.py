@@ -39,6 +39,7 @@ from healthvideo.storage.files import (
     write_yaml_atomic,
 )
 from healthvideo.storage.project_layout import ProjectLayout, resolve_project_layout
+from healthvideo.workflows.citations import resolve_citations
 from healthvideo.workflows.gate_review import (
     MEDICAL_APPROVAL_ARTIFACT,
     VIDEO_APPROVAL_ARTIFACT,
@@ -375,6 +376,10 @@ def _citations(
     least one record here; a marker no record backs is refused rather than
     published as evidence.
     """
+    if script.format_profile == "hook_outro_v1":
+        return resolve_citations(
+            script, ledger, render_input.scenes, strict_line_ids=True
+        )
     records = {
         record.id: record
         for record in _validated(SourceRecord, ledger.get("records", []))

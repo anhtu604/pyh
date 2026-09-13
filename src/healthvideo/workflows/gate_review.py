@@ -22,8 +22,10 @@ from healthvideo.domain.gate_review import (
     GateKind,
     GateRejectionRecord,
 )
+from healthvideo.domain.hook_outro import validate_hook_outro
 from healthvideo.domain.license_ledger import LicenseLedger, validate_license_ledger
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
+from healthvideo.domain.script import Script
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
 from healthvideo.domain.storyboard import Storyboard
 from healthvideo.storage.files import (
@@ -34,6 +36,7 @@ from healthvideo.storage.files import (
 )
 from healthvideo.storage.immutable import write_yaml_once
 from healthvideo.tts import pronunciation as pronunciation_module
+from healthvideo.workflows.citations import resolve_citations
 
 MEDICAL_APPROVAL_ARTIFACT = "reviews/medical-approval.yaml"
 VIDEO_APPROVAL_ARTIFACT = "reviews/video-approval.yaml"
@@ -144,6 +147,8 @@ def approve_gate(
         raise ValueError(f"{kind.value} gate requires project state {expected.value}")
 
     if kind is GateKind.MEDICAL:
+        if (revision_root / "workflow/pending-hook-outro.yaml").exists():
+            raise ValueError("medical gate refuses pending hook/outro authoring")
         manifest = load_asset_manifest(revision_root / "assets" / "asset-manifest.yaml")
         validate_asset_manifest(revision_root, manifest)
         hardened_highlights = [
@@ -154,7 +159,16 @@ def approve_gate(
         storyboard = Storyboard.model_validate(
             read_yaml(revision_root / "storyboard/storyboard.yaml")
         )
+        script = Script.model_validate(read_yaml(revision_root / "script/script.yaml"))
+        validate_hook_outro(script, storyboard, require_brand=True)
         referenced_storyboard_assets(revision_root, storyboard, manifest)
+        if script.format_profile == "hook_outro_v1":
+            resolve_citations(
+                script,
+                read_yaml(revision_root / "evidence/ledger.yaml"),
+                storyboard.scenes,
+                strict_line_ids=True,
+            )
         for asset in hardened_highlights:
             if not any(
                 scene.evidence_highlight is not None

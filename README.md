@@ -172,6 +172,7 @@ applicability, per-claim doctor notes — hoãn sang M3).
 | M6.4 design | Đặc tả hook ở frame 0 không intro; câu kết pin trong script và storyboard trước duyệt; brand asset khai báo; v2 không giới hạn tổng thời lượng, audio phải khớp timeline; v1 giữ nguyên. Chưa triển khai. | ChatGPT delegated spec review iteration 3 DONE; ready for implementation planning | C2C planning/spec review; 22 contract tests; Ruff; `git diff --check` | `docs: design M6.4 hook and reviewed outro` |
 | M6.4 plan | Kế hoạch triển khai sáu lát: contract, authoring/gate, logo khai báo, timing/audio QA, Remotion, tích hợp/acceptance. Chưa sửa code. | ChatGPT planning review iteration 2 DONE; ready to execute | 22 contract tests; Ruff; plan/spec self-review; `git diff --check` | `docs: plan M6.4 hook and outro implementation` |
 | M6.4 contract | Profile `hook_outro_v1`, câu kết cố định, scene–line binding và yêu cầu logo ở cổng duyệt; dữ liệu legacy giữ mặc định riêng. | Implemented; authoring, asset, timing và render còn tiếp tục | 24 domain/contract tests; schema export; Ruff; `git diff --check` | `feat: define M6.4 script storyboard contract` |
+| M6.4 authoring/gate | Lệnh `outro author` ghi script và storyboard có intent phục hồi; cổng duyệt y khoa từ chối intent dở hoặc thiếu logo, kiểm tra hook–claim–marker–source; packet hiển thị hook/outro. | Implemented; logo, timing và render còn tiếp tục | 63 workflow/CLI tests; Ruff; `git diff --check` | `feat: author reviewed PHY outro before medical gate` |
 
 ## Kiến trúc
 

@@ -56,6 +56,7 @@ from healthvideo.workflows.evidence import (
     search_literature,
 )
 from healthvideo.workflows.gate_review import approve_gate, reject_gate, resume_gate
+from healthvideo.workflows.hook_outro import author_hook_outro
 from healthvideo.workflows.migrate import (
     MigrationPlan,
     migrate_project,
@@ -106,6 +107,7 @@ revision_app = typer.Typer(no_args_is_help=True)
 topic_app = typer.Typer(no_args_is_help=True)
 evidence_app = typer.Typer(no_args_is_help=True)
 agent_app = typer.Typer(no_args_is_help=True)
+outro_app = typer.Typer(no_args_is_help=True)
 app.add_typer(project_app, name="project")
 app.add_typer(review_app, name="review")
 app.add_typer(revision_app, name="revision")
@@ -113,6 +115,21 @@ app.add_typer(topic_app, name="topic")
 app.add_typer(evidence_app, name="evidence")
 app.add_typer(operator_app, name="operator")
 app.add_typer(agent_app, name="agent")
+app.add_typer(outro_app, name="outro")
+
+
+@outro_app.command("author")
+def outro_author(
+    project_dir: Annotated[Path, typer.Argument(help="Thư mục dự án v2")],
+    duration_frames: Annotated[int, typer.Option("--duration-frames", help="Số frame của câu kết")],
+) -> None:
+    """Thêm câu kết PHY cố định trước cổng duyệt y khoa."""
+    try:
+        author_hook_outro(project_dir, duration_frames=duration_frames)
+    except (OSError, TypeError, ValueError) as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
+    typer.echo("Đã chuẩn bị câu kết để duyệt y khoa.")
 
 
 @agent_app.command("review-request")

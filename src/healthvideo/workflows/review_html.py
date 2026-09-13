@@ -106,6 +106,20 @@ def render_medical_packet(revision_root: Path) -> str:
         )
 
     note_paragraph = f"<p>{escape(_NOT_YET_MODELED)}</p>" if has_unmodeled else ""
+    hook_outro_section = ""
+    if script.format_profile == "hook_outro_v1":
+        final = storyboard.scenes[-1]
+        brand_paths = ", ".join(
+            escape(ref.path) for ref in final.visual_assets if ref.role == "brand"
+        )
+        hook_outro_section = (
+            '<section><h2>Hook và outro đã khai báo</h2>'
+            f"<p>Profile: {escape(script.format_profile)}</p>"
+            f"<p>Hook: {escape(script.lines[0].text)}</p>"
+            f"<p>Outro: {escape(script.lines[-1].text)}</p>"
+            f"<p>Timeline outro: {final.start_frame}–{final.start_frame + final.duration_frames} frame</p>"
+            f"<p>Brand asset: {brand_paths or 'chưa khai báo'}</p></section>"
+        )
     return (
         '<!doctype html><html lang="vi"><head><meta charset="utf-8">'
         "<title>Gói duyệt y khoa</title></head><body>"
@@ -124,6 +138,7 @@ def render_medical_packet(revision_root: Path) -> str:
             else ""
         )
         + note_paragraph
+        + hook_outro_section
         + "</body></html>"
     )
 
