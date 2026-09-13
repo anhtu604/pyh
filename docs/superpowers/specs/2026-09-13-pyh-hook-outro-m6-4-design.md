@@ -71,12 +71,16 @@ cuối danh sách. Dòng kết có text đúng bản author trong revision, khô
 chính xác câu đã pin ở §1. Thay câu kết là thay đổi thiết kế riêng, không phải
 chỉnh sửa tự do trong M6.4.
 
-Thêm `Scene.script_line_id` tùy chọn và loại cảnh `brand_outro` cho v2 M6.4.
+Thêm `Scene.script_line_id` tùy chọn và mở rộng enum `Scene.visual` bằng
+`brand_outro` cho v2 M6.4; không tạo một trường scene type thứ hai.
 Mọi cảnh có thoại do M6.4 author tham chiếu ID dòng script; mỗi dòng thoại ánh
 xạ đúng một cảnh theo đúng thứ tự, không có dòng/cảnh thoại mồ côi. Cảnh cuối
-`brand_outro` tham chiếu dòng `purpose=outro`; `narration` phải khớp chính xác
-text của dòng đó, không có claim/marker hay evidence highlight. Cảnh này bắt
-đầu ngay sau cảnh nội dung cuối và có `duration_frames > 0`. Cảnh đầu bắt đầu
+`brand_outro` chỉ hợp lệ với `Script.format_profile=hook_outro_v1`, phải là cảnh
+cuối và tham chiếu dòng `purpose=outro` duy nhất. `narration` phải khớp chính xác
+câu kết đã pin; không có `claim_id`, `source_marker` hoặc `evidence_highlight`.
+Chỉ cho ref `role=brand` và mascot reaction decorative `role=mascot`. Cảnh này
+bắt đầu ngay sau cảnh nội dung cuối và có `duration_frames > 0`. Renderer dispatch
+`visual=brand_outro` sang `OutroScene`; enum visual cũ không đổi. Cảnh đầu bắt đầu
 ở frame 0 và tham chiếu dòng đầu, tức hook. Không suy đoán ý nghĩa y khoa bằng
 NLP: tác giả phải khai báo claim/source binding theo contract hiện có; validator
 và cổng duyệt kiểm tra chúng như mọi cảnh nội dung.
@@ -88,11 +92,15 @@ outro vẫn đọc và chạy được. v1 không phải đổi schema hay hành
 
 ## 4. Brand asset và renderer
 
-Logo PHY SVG tạo xác định từ M6.3 được đăng ký như một `AssetRecord` decorative,
-`semantic=false`, với role mới `brand`; không giả làm `whiteboard`. Scene ref
-có `role=brand`. Mascot tùy chọn là `mascot_reaction` decorative ở một trong
-ba pose M6.3. Asset có chữ, số hoặc annotation y khoa không được phân loại là
-decorative; nó phải theo đường semantic và claim/source binding hiện có.
+Logo PHY SVG tạo xác định từ M6.3 được đăng ký như một `AssetRecord` có
+`kind=FLOURISH`, `semantic=false` và `storyboard_role=brand`; không giả làm
+`whiteboard`. Mở rộng `VisualAssetRef.role` bằng `brand`. Resolver chỉ chấp nhận
+`role=brand` với `AssetKind.FLOURISH`; logo đã khai báo `storyboard_role=brand`
+không được tham chiếu bằng role khác. `FLOURISH` whiteboard cũ vẫn hợp lệ với
+`role=whiteboard`. Không thêm `AssetKind` mới chỉ cho logo. Mascot tùy chọn
+là `mascot_reaction` decorative ở một trong ba pose M6.3. Asset có chữ, số hoặc
+annotation y khoa không được phân loại là decorative; nó phải theo đường
+semantic và claim/source binding hiện có.
 
 Workflow đăng ký asset theo kiểu intent-first, promotion an toàn khi retry của
 M6.3. Resolver và medical gate kiểm tra hai chiều giữa scene ref và manifest
@@ -156,7 +164,9 @@ thay vì ghi đè artifact khác.
 - Render timing: v2 20 giây và 140 giây đều hợp lệ; gap/overlap/zero duration
   vẫn bị chặn; v1 20/140 giây vẫn bị chặn; Python và Remotion cho cùng end frame.
 - Asset/gate: logo và mascot ref được render một lần, quyền/hash/role và reverse
-  manifest được xác minh; đổi text, timing hoặc ref sau duyệt làm gate stale;
+  manifest được xác minh; `role=brand` với kind khác `FLOURISH` và
+  logo-owned `FLOURISH` với role sai bị từ chối; `brand_outro` ngoài profile M6.4 hoặc không
+  là cảnh cuối bị từ chối; đổi text, timing hoặc ref sau duyệt làm gate stale;
   semantic annotation không thể đi đường decorative.
 - Audio/production: TTS input kết bằng đúng câu kết một lần; so sánh độ dài
   bằng công thức `30*A > 1000*(F+1)`, gồm test tại biên; WAV vượt timeline dừng
