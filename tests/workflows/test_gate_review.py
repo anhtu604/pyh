@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+import healthvideo.tts.pronunciation as pronunciation_module
 from healthvideo.domain.gate_review import GateKind
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
@@ -48,6 +49,7 @@ def test_medical_reviewed_paths_includes_ledger_script_storyboard_manifest_and_s
         "script/script.yaml",
         "storyboard/storyboard.yaml",
         "assets/asset-manifest.yaml",
+        "profiles/pronunciation.vi.yaml",
         "asset:assets/evidence-r01.svg",
     }
 
@@ -58,6 +60,23 @@ def test_approve_medical_rejects_missing_semantic_asset_bytes(tmp_path: Path) ->
 
     with pytest.raises(Exception, match="sha256"):
         approve_gate(project_dir, GateKind.MEDICAL, reviewer=REVIEWER, now=NOW)
+
+
+def test_approve_medical_rejects_invalid_pronunciation_profile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project_dir = create_v2_project_fixture(
+        tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW
+    )
+    profile = tmp_path / "pronunciation.vi.yaml"
+    profile.write_text(
+        "schema_version: '1.0'\nlanguage: en\nversion: '1'\nentries: []\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(pronunciation_module, "PRONUNCIATION_PROFILE_PATH", profile)
+    with pytest.raises(ValueError):
+        approve_gate(project_dir, GateKind.MEDICAL, reviewer=REVIEWER, now=NOW)
+    assert read_yaml(project_dir / "project.yaml")["state"] == "awaiting_medical_review"
 
 
 def test_approve_medical_writes_record_once_and_advances_state(tmp_path: Path) -> None:
@@ -71,6 +90,7 @@ def test_approve_medical_writes_record_once_and_advances_state(tmp_path: Path) -
     manifest = ProjectManifestV2.model_validate(read_yaml(project_dir / "project.yaml"))
     assert manifest.state is WorkflowState.MEDICALLY_APPROVED
     assert record.artifact_hashes
+    assert "profiles/pronunciation.vi.yaml" in record.artifact_hashes
 
     with pytest.raises(FileExistsError):
         approve_gate(project_dir, GateKind.MEDICAL, reviewer=REVIEWER, now=NOW)

@@ -94,6 +94,7 @@ applicability, per-claim doctor notes — hoãn sang M3).
 | PYH.6 | Quick Start `/pyh` và acceptance toàn hệ thống, giữ v1, không thêm auto-publishing. | complete | `python -m pytest -q` (475 passed); Ruff; schema export/diff; video test (12 passed)/typecheck; operator smoke | `docs: complete pyh operator milestone` |
 | PYH review | Làm rõ hai đường bắt đầu topic và ý định duyệt trong skill chuẩn; Quick Start tách chọn topic khỏi xác nhận brief. | complete | Contract/CLI/operator/E2E; full Python/Ruff/schema/video gates | `docs: clarify pyh entry and doctor approval boundaries` |
 | M4.1 | Gói phản biện mô hình thứ hai thủ công, bất biến, gắn response với request/revision/source hashes; nhánh blocking về medical revision, nhánh sạch trở lại state trước đó. | complete | Domain/workflow/CLI/schema/skill contracts; full Python/Ruff/schema/video gates | `feat: add bound manual second-model review handoff` |
+| M5.1 | Từ điển phát âm tiếng Việt có phiên bản cho production v2: thay thế literal chỉ trong yêu cầu TTS, profile được medical gate hash/duyệt; cache, render manifest và video gate ràng buộc kết quả; v1 giữ nguyên. Profile mặc định rỗng, chưa có benchmark VieNeu, ASR hay ElevenLabs. | complete | `python -m pytest -q`; Ruff; schema export; video test/typecheck | `feat: bind versioned pronunciation to v2 production` |
 
 ## Kiến trúc
 

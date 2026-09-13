@@ -29,6 +29,7 @@ from healthvideo.storage.files import (
     write_yaml_atomic,
 )
 from healthvideo.storage.immutable import write_yaml_once
+from healthvideo.tts import pronunciation as pronunciation_module
 
 MEDICAL_APPROVAL_ARTIFACT = "reviews/medical-approval.yaml"
 VIDEO_APPROVAL_ARTIFACT = "reviews/video-approval.yaml"
@@ -58,6 +59,7 @@ def medical_reviewed_paths(revision_root: Path) -> dict[str, Path]:
         "script/script.yaml": revision_root / "script" / "script.yaml",
         "storyboard/storyboard.yaml": revision_root / "storyboard" / "storyboard.yaml",
         "assets/asset-manifest.yaml": revision_root / "assets" / "asset-manifest.yaml",
+        "profiles/pronunciation.vi.yaml": pronunciation_module.PRONUNCIATION_PROFILE_PATH,
     }
     manifest_path = paths["assets/asset-manifest.yaml"]
     if manifest_path.is_file():
@@ -133,6 +135,9 @@ def approve_gate(
     if kind is GateKind.MEDICAL:
         manifest = load_asset_manifest(revision_root / "assets" / "asset-manifest.yaml")
         validate_asset_manifest(revision_root, manifest)
+        pronunciation_module.load_pronunciation_lexicon(
+            pronunciation_module.PRONUNCIATION_PROFILE_PATH
+        )
 
     paths = _REVIEWED_PATHS[kind](revision_root)
     missing = [name for name, path in paths.items() if not path.is_file()]

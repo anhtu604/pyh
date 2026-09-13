@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+import healthvideo.tts.pronunciation as pronunciation_module
 import healthvideo.workflows.produce as produce_workflow
 from healthvideo.domain.gate_review import GateKind
 from healthvideo.domain.project_v2 import WorkflowState
@@ -13,11 +14,94 @@ from healthvideo.domain.storyboard import Storyboard
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.tts.base import TTSRequest, TTSResult
 from healthvideo.tts.silent import SilentTTS
-from healthvideo.workflows.gate_review import approve_gate
+from healthvideo.workflows.gate_review import approve_gate, video_reviewed_paths
+from healthvideo.workflows.package import package_project
 from healthvideo.workflows.produce import _input_hash, produce_project
 from tests.helpers import create_project_fixture, create_v2_project_fixture
 
 V2_REVIEWED_AT = datetime(2026, 9, 12, 8, 0, tzinfo=UTC)
+
+
+def test_v2_pronunciation_is_cache_bound_and_preserves_approved_script(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project_dir = create_v2_project_fixture(
+        tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW
+    )
+    revision = project_dir / "revisions" / "001"
+    script_path = revision / "script" / "script.yaml"
+    script_before = script_path.read_bytes()
+    storyboard_path = revision / "storyboard" / "storyboard.yaml"
+    storyboard = read_yaml(storyboard_path)
+    storyboard["scenes"][0]["duration_frames"] = 1350
+    write_yaml_atomic(storyboard_path, storyboard)
+    profile = tmp_path / "pronunciation.vi.yaml"
+    monkeypatch.setattr(pronunciation_module, "PRONUNCIATION_PROFILE_PATH", profile)
+    profile.write_text(
+        "schema_version: '1.0'\nlanguage: vi\nversion: '1'\n"
+        "entries:\n  - written: huyết áp\n    spoken: áp huyết\n",
+        encoding="utf-8",
+    )
+    approve_gate(project_dir, GateKind.MEDICAL, reviewer="BS Nguyễn Văn An", now=V2_REVIEWED_AT)
+    requests: list[TTSRequest] = []
+
+    class SpyTTS(SilentTTS):
+        def synthesize(self, request: TTSRequest, output: Path) -> TTSResult:
+            requests.append(request)
+            return super().synthesize(request, output)
+
+    def fake_runner(argv: list[str]) -> int:
+        _write_synthetic_output(argv)
+        return 0
+
+    approved_project = (project_dir / "project.yaml").read_bytes()
+    profile.write_text(
+        profile.read_text(encoding="utf-8").replace("version: '1'", "version: '2'"),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="current medical approval"):
+        produce_project(project_dir, SpyTTS(), fake_runner)
+    assert requests == []
+    assert (project_dir / "project.yaml").read_bytes() == approved_project
+    profile.write_text(
+        profile.read_text(encoding="utf-8").replace("version: '2'", "version: '1'"),
+        encoding="utf-8",
+    )
+
+    first = produce_project(project_dir, SpyTTS(), fake_runner)
+    first_manifest = json.loads((revision / "renders" / "render-manifest.json").read_text(encoding="utf-8"))
+    assert first == revision / "renders" / "video.mp4"
+    assert first_manifest["pronunciation_version"] == "1"
+    assert first_manifest["pronunciation_sha256"]
+    assert "áp huyết" in requests[0].text
+    assert "huyết áp" in script_before.decode("utf-8")
+    assert script_path.read_bytes() == script_before
+    assert read_yaml(project_dir / "project.yaml")["state"] == "awaiting_video_review"
+
+    video_approval = approve_gate(
+        project_dir, GateKind.VIDEO,
+        reviewer="BS Nguyễn Văn An", now=V2_REVIEWED_AT,
+    )
+    assert "renders/render-manifest.json" in video_approval.artifact_hashes
+    assert set(video_approval.artifact_hashes) == set(video_reviewed_paths(revision))
+
+    profile.write_text(profile.read_text(encoding="utf-8").replace("version: '1'", "version: '2'"), encoding="utf-8")
+    with pytest.raises(ValueError, match="current medical approval"):
+        package_project(project_dir)
+    assert len(requests) == 1
+
+
+def test_v2_invalid_pronunciation_fails_before_tts_and_state_change(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project_dir = _v2_medically_approved_project(tmp_path)
+    profile = tmp_path / "pronunciation.vi.yaml"
+    profile.write_text("schema_version: '1.0'\nlanguage: en\nversion: '1'\nentries: []\n", encoding="utf-8")
+    monkeypatch.setattr(pronunciation_module, "PRONUNCIATION_PROFILE_PATH", profile)
+    before = (project_dir / "project.yaml").read_bytes()
+    with pytest.raises(ValueError):
+        produce_project(project_dir, SilentTTS(), lambda _: pytest.fail("render invoked"))
+    assert (project_dir / "project.yaml").read_bytes() == before
 
 
 def test_produce_reuses_matching_artifact_hash(tmp_path) -> None:

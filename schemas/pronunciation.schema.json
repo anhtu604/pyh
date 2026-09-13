@@ -1,0 +1,61 @@
+{
+  "$defs": {
+    "PronunciationEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "note": {
+          "default": "",
+          "title": "Note",
+          "type": "string"
+        },
+        "spoken": {
+          "title": "Spoken",
+          "type": "string"
+        },
+        "written": {
+          "title": "Written",
+          "type": "string"
+        }
+      },
+      "required": [
+        "written",
+        "spoken"
+      ],
+      "title": "PronunciationEntry",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "entries": {
+      "items": {
+        "$ref": "#/$defs/PronunciationEntry"
+      },
+      "title": "Entries",
+      "type": "array"
+    },
+    "language": {
+      "const": "vi",
+      "title": "Language",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "language",
+    "version",
+    "entries"
+  ],
+  "title": "PronunciationLexicon",
+  "type": "object"
+}
