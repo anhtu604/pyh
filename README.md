@@ -47,10 +47,12 @@ với tiêu chí đo khách quan và đã chạy benchmark thật trên máy nà
 model ~8 s. M5.4 thêm ASR back-check (faster-whisper, MIT) với WER khách quan, chuẩn hóa
 loudness bằng FFmpeg (`NormalizedTTS`) và `produce --tts vieneu --voice <preset>`;
 đã chạy thật: 10/13 case WER ≤ 0,2 và một video golden v2 dựng xong bằng VieNeu
-(82 s, −16,7 LUFS) dừng ở `awaiting_video_review`. Chưa chọn voice chính thức
-(bác sĩ nghe), chưa có ElevenLabs fallback (không key). Không đưa
-audio/model/cache, credential hoặc bản render tạm vào Git; không vượt hai cổng
-duyệt hoặc tự đăng.
+(82 s, −16,7 LUFS) dừng ở `awaiting_video_review`. M5 hoàn tất phần kỹ thuật
+tại `c4a500c` (548 test Python, 12 test video, Ruff, typecheck). Hai việc M5 còn
+chờ con người: bác sĩ nghe 13 WAV benchmark để chọn preset voice chính thức và bổ
+sung từ điển phát âm cho tên thuốc; ElevenLabs fallback chỉ làm khi có key.
+Không đưa audio/model/cache, credential hoặc bản render tạm vào Git; không vượt
+hai cổng duyệt hoặc tự đăng.
 
 ## Milestone
 
@@ -120,6 +122,7 @@ applicability, per-claim doctor notes — hoãn sang M3).
 | M5 handoff | Đồng bộ báo cáo tiến độ, giới hạn còn mở và đầu vào M5.3 để tiếp tục từ HEAD hiện tại. | complete | README review; `git diff --check` | `docs: hand off pyh M5 progress` |
 | M5.3 | Xác minh môi trường (RTX 3060, Python 3.11, ffmpeg 8.1.1) và nguồn/giấy phép VieNeu-TTS v3 Turbo (`vieneu==3.6.4`, HF revision `8b7e9cf`, Apache-2.0); wrapper `tools/tts/vieneu_synth.py`; `evaluate_benchmark` với ngưỡng khách quan; lệnh `healthvideo tts-benchmark`; bộ 13 case; benchmark thật fp32/int8 ghi trong plan. Voice chính thức, ASR, ElevenLabs và `produce --tts vieneu` chưa làm. | complete | `python -m pytest -q` (532 passed); `ruff check src tests tools`; `git diff --check`; benchmark thật 2×13 case | `feat: benchmark VieNeu-TTS with objective gates` |
 | M5.4 | ASR back-check `CommandASR` + `word_error_rate` (faster-whisper 1.2.1, MIT; wrapper `tools/tts/whisper_transcribe.py`); `NormalizedTTS` FFmpeg loudnorm; `tts-benchmark --asr-*`/`--max-wer`; `produce --tts vieneu --voice`; sửa `build_render_argv` dùng đường dẫn tuyệt đối. Chạy thật: WER 13 case (10/13 ≤ 0,2), produce golden v2 bằng VieNeu đến `awaiting_video_review`. Voice chính thức và ElevenLabs chưa làm. | complete | `python -m pytest -q` (548 passed); `ruff check src tests tools`; `git diff --check`; benchmark + produce thật | `feat: add ASR back-check and loudnorm to VieNeu production` |
+| M5 handoff 2 | Chốt M5: kỹ thuật xong tại `c4a500c`; còn chờ bác sĩ chọn voice và bổ sung từ điển tên thuốc; ElevenLabs chờ key. M6 bắt đầu từ HEAD này. | complete | README review; `git diff --check` | `docs: hand off M5 completion` |
 
 ## Kiến trúc
 
