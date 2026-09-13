@@ -32,7 +32,8 @@ from healthvideo.storage.files import (
 )
 from healthvideo.storage.project_layout import ProjectLayout, resolve_project_layout
 from healthvideo.tts import pronunciation as pronunciation_module
-from healthvideo.tts.base import TTSProvider, TTSRequest
+from healthvideo.tts.audio_checks import inspect_wav
+from healthvideo.tts.base import TTSProvider, TTSRequest, provider_identity
 from healthvideo.tts.pronunciation import (
     apply_pronunciation,
     load_pronunciation_lexicon,
@@ -193,6 +194,7 @@ def _produce_v2(
     pronunciation_sha256 = pronunciation_hash(pronunciation)
     narration = " ".join(line.text for line in script.lines)
     provider_name = _provider_name(tts)
+    provider_identity_data = provider_identity(tts)
     asset_hashes = evidence_asset_hashes(layout.artifact_root, storyboard)
     input_hash = canonical_json_hash(
         {
@@ -200,6 +202,7 @@ def _produce_v2(
                 script, storyboard, author_profile, provider_name, asset_hashes
             ),
             "pronunciation_sha256": pronunciation_sha256,
+            "provider_identity": provider_identity_data,
         }
     )
     render_input = build_render_input(storyboard, audio_file="audio/narration.wav")
@@ -208,6 +211,7 @@ def _produce_v2(
     cache_valid = _v2_run_is_valid(
         renders_dir, input_hash, provider_name, asset_hashes,
         pronunciation_sha256=pronunciation_sha256,
+        provider_identity=provider_identity_data,
     )
 
     if project.state is WorkflowState.AWAITING_VIDEO_REVIEW:
@@ -249,6 +253,7 @@ def _produce_v2(
             ),
             staged_audio,
         )
+        inspect_wav(staged_audio, require_signal=getattr(tts, "require_signal", False))
         render_input_data = render_input.model_dump(mode="json")
         staged_render_input = staging_dir / RENDER_INPUT_NAME
         _write_json_atomic(staged_render_input, render_input_data)
@@ -271,6 +276,7 @@ def _produce_v2(
                 "render_input_sha256": canonical_json_hash(render_input_data),
                 "pronunciation_version": pronunciation.version,
                 "pronunciation_sha256": pronunciation_sha256,
+                "provider_identity": provider_identity_data,
             },
         )
         _write_json_atomic(
@@ -285,6 +291,7 @@ def _produce_v2(
         _validate_v2_staged_run(
             staging_dir, input_hash, provider_name, asset_hashes,
             pronunciation_sha256=pronunciation_sha256,
+            provider_identity=provider_identity_data,
         )
         _promote_run(staging_dir, renders_dir)
         _promote_v2_video_qa_if_needed(layout.artifact_root, input_hash)
@@ -324,6 +331,7 @@ def _v2_run_is_valid(
     asset_hashes: Mapping[str, str],
     *,
     pronunciation_sha256: str,
+    provider_identity: Mapping[str, str],
 ) -> bool:
     required_paths = (
         run_dir / "audio" / "narration.wav",
@@ -348,6 +356,7 @@ def _v2_run_is_valid(
         and manifest.get("provider") == provider_name
         and manifest.get("asset_sha256") == dict(asset_hashes)
         and manifest.get("pronunciation_sha256") == pronunciation_sha256
+        and manifest.get("provider_identity") == dict(provider_identity)
         and manifest.get("render_input_sha256")
         == canonical_json_hash(render_input)
     ):
@@ -366,10 +375,12 @@ def _validate_v2_staged_run(
     asset_hashes: Mapping[str, str],
     *,
     pronunciation_sha256: str,
+    provider_identity: Mapping[str, str],
 ) -> None:
     if not _v2_run_is_valid(
         staging_dir, input_hash, provider_name, asset_hashes,
         pronunciation_sha256=pronunciation_sha256,
+        provider_identity=provider_identity,
     ):
         raise ValueError("Staged v2 production run is incomplete")
 

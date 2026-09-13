@@ -22,6 +22,53 @@ from tests.helpers import create_project_fixture, create_v2_project_fixture
 V2_REVIEWED_AT = datetime(2026, 9, 12, 8, 0, tzinfo=UTC)
 
 
+def test_v2_provider_identity_changes_cache_with_same_provider_name(tmp_path: Path) -> None:
+    project_dir = _v2_medically_approved_project(tmp_path)
+    revision = project_dir / "revisions" / "001"
+    calls: list[list[str]] = []
+
+    class NamedSilent(SilentTTS):
+        def __init__(self, voice: str) -> None:
+            self.voice = voice
+
+        def cache_identity(self) -> dict[str, str]:
+            return {"provider": "silent", "voice_id": self.voice}
+
+    def runner(argv: list[str]) -> int:
+        calls.append(argv)
+        _write_synthetic_output(argv)
+        return 0
+
+    produce_project(project_dir, NamedSilent("a"), runner)
+    first = json.loads((revision / "renders" / "render-manifest.json").read_text(encoding="utf-8"))
+    project = read_yaml(project_dir / "project.yaml")
+    project["state"] = "medically_approved"
+    write_yaml_atomic(project_dir / "project.yaml", project)
+    produce_project(project_dir, NamedSilent("b"), runner)
+    second = json.loads((revision / "renders" / "render-manifest.json").read_text(encoding="utf-8"))
+    assert first["input_hash"] != second["input_hash"]
+    assert second["provider_identity"]["voice_id"] == "b"
+    assert len(calls) == 2
+
+
+def test_v2_rejects_bad_staged_audio_before_render(tmp_path: Path) -> None:
+    project_dir = _v2_medically_approved_project(tmp_path)
+    before = (project_dir / "project.yaml").read_bytes()
+
+    class BadTTS:
+        provider_name = "bad"
+        require_signal = True
+
+        def synthesize(self, request: TTSRequest, output: Path) -> TTSResult:
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_bytes(b"not wav")
+            return TTSResult(provider="bad", audio_file=output, duration_ms=1000)
+
+    with pytest.raises(ValueError, match="WAV"):
+        produce_project(project_dir, BadTTS(), lambda _: pytest.fail("render called"))
+    assert (project_dir / "project.yaml").read_bytes() == before
+
+
 def test_v2_pronunciation_is_cache_bound_and_preserves_approved_script(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -95,6 +95,7 @@ applicability, per-claim doctor notes — hoãn sang M3).
 | PYH review | Làm rõ hai đường bắt đầu topic và ý định duyệt trong skill chuẩn; Quick Start tách chọn topic khỏi xác nhận brief. | complete | Contract/CLI/operator/E2E; full Python/Ruff/schema/video gates | `docs: clarify pyh entry and doctor approval boundaries` |
 | M4.1 | Gói phản biện mô hình thứ hai thủ công, bất biến, gắn response với request/revision/source hashes; nhánh blocking về medical revision, nhánh sạch trở lại state trước đó. | complete | Domain/workflow/CLI/schema/skill contracts; full Python/Ruff/schema/video gates | `feat: add bound manual second-model review handoff` |
 | M5.1 | Từ điển phát âm tiếng Việt có phiên bản cho production v2: thay thế literal chỉ trong yêu cầu TTS, profile được medical gate hash/duyệt; cache, render manifest và video gate ràng buộc kết quả; v1 giữ nguyên. Profile mặc định rỗng, chưa có benchmark VieNeu, ASR hay ElevenLabs. | complete | `python -m pytest -q`; Ruff; schema export; video test/typecheck | `feat: bind versioned pronunciation to v2 production` |
+| M5.2 | Adapter lệnh TTS cục bộ cấu hình rõ ràng, kiểm tra cấu trúc/tín hiệu WAV, nhận diện voice/runtime trong cache v2 và harness benchmark offline không chấm điểm chủ quan. Chưa chọn model hay chạy benchmark thật. | complete | `python -m pytest -q`; Ruff; video test/typecheck | `feat: add local TTS adapter and audio benchmark contract` |
 
 ## Kiến trúc
 
@@ -258,6 +259,21 @@ cài driver hay ghi secret. `SilentTTS` chỉ ghi WAV im lặng, xác định
 tra luồng chứ chưa đăng được. Chưa có intake nguồn hay TTS thực; đăng video vẫn là
 thao tác thủ công của con người từ thư mục `publish/`. CUDA không bắt buộc cho MVP;
 GPU acceleration và Linux installer thuộc các plan tiếp theo.
+
+M5.2 thêm `CommandTTS` cho lệnh TTS cục bộ do operator cung cấp qua Python.
+Lệnh nhận file văn bản UTF-8 và ghi WAV qua các tham số `{input}`, `{output}`;
+không chạy qua shell. Ví dụ cấu hình dùng `CommandTTS(executable="local-tts",
+arguments=("--input", "{input}", "--output", "{output}"),
+model_id="candidate", voice_id="generic", runtime_id="revision")` sau khi đã
+xác minh riêng lệnh, model và quyền sử dụng trên máy. Các
+định danh provider/model/voice/runtime chỉ nhận alias công khai dài tối đa 128 ký tự,
+bắt đầu bằng chữ hoặc số ASCII, các ký tự còn lại là chữ, số, dấu `.`, `_`, `-`.
+`run_benchmark` nhận các
+`BenchmarkCase` tiếng Việt và provider được cấp, ghi WAV vào thư mục output cục
+bộ (nên đặt dưới `cache/`); record chỉ chứa thời gian, trạng thái và kiểm tra
+WAV khách quan, không suy ra chất lượng giọng. Không commit audio, model hay
+credential. CLI hiện vẫn chỉ chọn `silent`; VieNeu/ElevenLabs và ASR chưa được
+kích hoạt trong workflow.
 
 ## Remotion preview
 
