@@ -245,6 +245,18 @@
           "title": "Schema Version",
           "type": "string"
         },
+        "script_line_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Script Line Id"
+        },
         "source_marker": {
           "anyOf": [
             {
@@ -268,7 +280,8 @@
             "whiteboard",
             "chart",
             "evidence_highlight",
-            "ai_clip"
+            "ai_clip",
+            "brand_outro"
           ],
           "title": "Visual",
           "type": "string"
@@ -313,7 +326,8 @@
         "role": {
           "enum": [
             "whiteboard",
-            "mascot"
+            "mascot",
+            "brand"
           ],
           "title": "Role",
           "type": "string"

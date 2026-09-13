@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -15,6 +17,7 @@ class ScriptLine(BaseModel):
     schema_version: str = "1.0"
     id: str
     text: str
+    purpose: Literal["content", "outro"] = "content"
     claim_id: str | None = None
     source_marker: str | None = None
     delivery: Delivery
@@ -23,5 +26,6 @@ class ScriptLine(BaseModel):
 class Script(BaseModel):
     schema_version: str = "1.0"
     title: str
+    format_profile: Literal["legacy", "hook_outro_v1"] = "legacy"
     language: str = "vi"
     lines: list[ScriptLine] = Field(default_factory=list)

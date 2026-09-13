@@ -66,6 +66,15 @@
           "title": "Id",
           "type": "string"
         },
+        "purpose": {
+          "default": "content",
+          "enum": [
+            "content",
+            "outro"
+          ],
+          "title": "Purpose",
+          "type": "string"
+        },
         "schema_version": {
           "default": "1.0",
           "title": "Schema Version",
@@ -99,6 +108,15 @@
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
+    "format_profile": {
+      "default": "legacy",
+      "enum": [
+        "legacy",
+        "hook_outro_v1"
+      ],
+      "title": "Format Profile",
+      "type": "string"
+    },
     "language": {
       "default": "vi",
       "title": "Language",

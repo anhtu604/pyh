@@ -10,7 +10,7 @@ class VisualAssetRef(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     path: str
-    role: Literal["whiteboard", "mascot"]
+    role: Literal["whiteboard", "mascot", "brand"]
     pose: MascotPose | None = None
 
     @model_validator(mode="after")
@@ -29,8 +29,8 @@ class VisualAssetRef(BaseModel):
             raise ValueError("visual asset path must be safe relative POSIX")
         if self.role == "mascot" and self.pose is None:
             raise ValueError("mascot visual asset requires pose")
-        if self.role == "whiteboard" and self.pose is not None:
-            raise ValueError("whiteboard visual asset cannot have pose")
+        if self.role in {"whiteboard", "brand"} and self.pose is not None:
+            raise ValueError(f"{self.role} visual asset cannot have pose")
         return self
 
 
@@ -110,11 +110,12 @@ class Scene(BaseModel):
     start_frame: int = Field(json_schema_extra={"minimum": 0})
     duration_frames: int = Field(json_schema_extra={"exclusiveMinimum": 0})
     narration: str
+    script_line_id: str | None = None
     claim_id: str | None = None
     source_marker: str | None = Field(
         default=None, json_schema_extra={"pattern": r"\S"}
     )
-    visual: Literal["whiteboard", "chart", "evidence_highlight", "ai_clip"]
+    visual: Literal["whiteboard", "chart", "evidence_highlight", "ai_clip", "brand_outro"]
     evidence_highlight: EvidenceHighlight | None = None
     visual_assets: tuple[VisualAssetRef, ...] = ()
 
