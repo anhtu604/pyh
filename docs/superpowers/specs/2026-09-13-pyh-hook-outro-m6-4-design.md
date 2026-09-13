@@ -18,7 +18,8 @@ dùng chọn là:
 > Nếu mình có gì sai sót, hoặc bạn có bất kỳ câu hỏi nào, hãy để lại phản hồi
 > dưới phần bình luận nhé. Cảm ơn bạn đã xem video.
 
-Dòng kết được author trước cổng duyệt y khoa. Nó không nằm trong brand profile,
+Dòng kết được author trước cổng duyệt y khoa. M6.4 pin chính xác câu trên;
+không hỗ trợ biến thể lời kết trong lát này. Nó không nằm trong brand profile,
 không được renderer tự chèn và không được tổng hợp thành audio thứ hai. Thời lượng
 cảnh kết theo nhịp đọc đã author; không ấn định 2–3 giây. Video v2 không có giới
 hạn cứng 45–90 giây: composition kết thúc đúng frame cuối storyboard.
@@ -56,11 +57,19 @@ kết, timing hoặc asset, duyệt y khoa cũ hết hiệu lực theo revision/
 
 ## 3. Contract script và storyboard
 
+Thêm `Script.format_profile` tùy chọn với giá trị `legacy` (mặc định khi file
+cũ thiếu trường) hoặc `hook_outro_v1`. Đường authoring M6.4 cho dự án v2 mới
+ghi `hook_outro_v1` vào script; production đọc trường này để chọn validator.
+Không suy ra profile từ sự có mặt của outro. Script v2 cũ không có marker vẫn
+chạy theo contract legacy; không tự nâng cấp hoặc tự chèn câu kết. Marker đã
+ghi phải được giữ khi sửa revision và nằm trong medical hash của script.
+
 Thêm trường tùy chọn, tương thích ngược `ScriptLine.purpose` với giá trị
 `content` (mặc định) hoặc `outro`. Một script M6.4 có đúng một dòng `outro`, ở
 cuối danh sách. Dòng kết có text đúng bản author trong revision, không mang
-`claim_id` hoặc `source_marker`; không dùng nó để chở một mệnh đề y khoa. Nếu
-người dùng muốn sửa lời kết, sửa script trước duyệt hoặc tạo revision mới.
+`claim_id` hoặc `source_marker`; validator `hook_outro_v1` yêu cầu text khớp
+chính xác câu đã pin ở §1. Thay câu kết là thay đổi thiết kế riêng, không phải
+chỉnh sửa tự do trong M6.4.
 
 Thêm `Scene.script_line_id` tùy chọn và loại cảnh `brand_outro` cho v2 M6.4.
 Mọi cảnh có thoại do M6.4 author tham chiếu ID dòng script; mỗi dòng thoại ánh
@@ -73,9 +82,9 @@ NLP: tác giả phải khai báo claim/source binding theo contract hiện có; 
 và cổng duyệt kiểm tra chúng như mọi cảnh nội dung.
 
 Để bảo toàn fixture và dự án cũ, các trường mới là tùy chọn khi parse. Validator
-M6.4 nghiêm ngặt chỉ áp dụng cho đường authoring/production v2 có outro; v2 cũ
-không outro vẫn đọc được, không tự được thêm lời kết. v1 không phải đổi schema
-hay hành vi.
+nghiêm ngặt áp dụng khi `format_profile=hook_outro_v1`, kể cả nếu script bị
+xóa mất outro; không thể rơi về legacy bằng cách xóa dòng kết. v2 legacy không
+outro vẫn đọc và chạy được. v1 không phải đổi schema hay hành vi.
 
 ## 4. Brand asset và renderer
 
@@ -111,12 +120,15 @@ hạn, nhưng `calculateMetadata` phải trả duration thật của storyboard 
 Không có Sequence outro ngoài storyboard.
 
 Production tổng hợp một WAV từ toàn bộ `script.lines`, gồm câu kết đúng một lần.
-Sau TTS, đọc duration từ WAV thực tế. Nếu WAV dài hơn composition, kể cả dung
-sai cho chuyển đổi millisecond sang frame (tối đa một frame ở 30 fps), dừng
-trước render và báo cần sửa timing rồi duyệt lại. Không cắt/pad WAV, không
-auto-retime cảnh, không sửa storyboard sau duyệt. Audio ngắn hơn timeline có
-thể dành nhịp hình ảnh cuối; QA cần ghi khoảng lặng cuối để người duyệt video
-nhìn thấy, không âm thầm thêm lời.
+Sau TTS, đọc `audio_duration_ms` từ WAV thực tế và đặt `F` là end frame cuối.
+Tại 30 fps, dừng trước render nếu `30 * audio_duration_ms > 1000 * (F + 1)`;
+vế `+1` chỉ cho dung sai tối đa một frame khi đổi millisecond sang frame.
+Không cắt/pad WAV, auto-retime cảnh hoặc sửa storyboard sau duyệt. Ghi ba
+trường quan sát xác định vào `video-qa.json` của v2:
+`audio_duration_ms`, `composition_duration_ms = ceil(1000 * F / 30)` và
+`trailing_visual_ms = max(0, composition_duration_ms - audio_duration_ms)`.
+Chúng không phải lệnh kéo dài audio hoặc thay timeline; người duyệt video nhìn
+thấy khoảng hình không còn tiếng ở cuối.
 
 ## 6. Cổng duyệt, lỗi và khả năng chạy lại
 
@@ -136,17 +148,21 @@ thay vì ghi đè artifact khác.
 
 ## 7. Kiểm chứng
 
-- Domain/schema: default `purpose=content` đọc dữ liệu cũ; một outro cuối hợp
-  lệ; không cuối/nhân đôi/claim hoặc marker trên outro bị từ chối; mapping ID,
-  text và thứ tự scene–line phải khớp; hook ở frame 0.
+- Domain/schema: thiếu `format_profile` mặc định legacy và không tự nâng cấp;
+  `hook_outro_v1` thiếu outro bị từ chối; default `purpose=content` đọc dữ liệu
+  cũ; một outro cuối với câu pin chính xác hợp lệ; khác câu, không cuối, nhân
+  đôi, claim hoặc marker trên outro bị từ chối; mapping ID, text và thứ tự
+  scene–line phải khớp; hook ở frame 0.
 - Render timing: v2 20 giây và 140 giây đều hợp lệ; gap/overlap/zero duration
   vẫn bị chặn; v1 20/140 giây vẫn bị chặn; Python và Remotion cho cùng end frame.
 - Asset/gate: logo và mascot ref được render một lần, quyền/hash/role và reverse
   manifest được xác minh; đổi text, timing hoặc ref sau duyệt làm gate stale;
   semantic annotation không thể đi đường decorative.
-- Audio/production: TTS input kết bằng đúng câu kết một lần; WAV vượt timeline
-  dừng trước render, WAV phù hợp đi tiếp; không mutate storyboard post-gate;
-  cache đổi khi text/timing/logo bytes đổi.
+- Audio/production: TTS input kết bằng đúng câu kết một lần; so sánh độ dài
+  bằng công thức `30*A > 1000*(F+1)`, gồm test tại biên; WAV vượt timeline dừng
+  trước render, WAV phù hợp đi tiếp; ba trường audio/timeline/tail ở
+  `video-qa.json` đúng công thức; không mutate storyboard post-gate; cache đổi
+  khi text/timing/logo bytes đổi.
 - Renderer/package: frame đầu là hook chứ không phải intro; chuyển động outro
   xác định, caption không bị che; caption upload dùng hook, citations không chứa
   nguồn giả; scene legacy và fixture v1/v2 vẫn tương thích.
