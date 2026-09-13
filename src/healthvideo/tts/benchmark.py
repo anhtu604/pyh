@@ -1,11 +1,12 @@
 """Offline benchmark records measurements, never voice-quality judgments."""
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
 
-from healthvideo.storage.files import canonical_json_hash
+from healthvideo.storage.files import canonical_json_hash, read_yaml
 from healthvideo.tts.audio_checks import AudioReport, inspect_wav
 from healthvideo.tts.base import TTSProvider, TTSRequest, provider_identity
 
@@ -18,6 +19,16 @@ class BenchmarkCase:
     def __post_init__(self) -> None:
         if not re.fullmatch(r"[A-Za-z0-9_-]+", self.case_id) or not self.text.strip():
             raise ValueError("Benchmark case needs a safe ID and nonblank text")
+
+
+def load_benchmark_cases(path: Path) -> list[BenchmarkCase]:
+    raw = read_yaml(path).get("cases")
+    if not isinstance(raw, list) or not raw:
+        raise ValueError("Benchmark cases file needs a nonempty `cases` list")
+    cases = [BenchmarkCase(case_id=str(item["id"]), text=str(item["text"])) for item in raw]
+    if len({case.case_id for case in cases}) != len(cases):
+        raise ValueError("Benchmark cases contain duplicate ids")
+    return cases
 
 
 @dataclass(frozen=True)
@@ -63,3 +74,55 @@ def run_benchmark(
                     )
                 )
     return tuple(records)
+
+
+@dataclass(frozen=True)
+class BenchmarkThresholds:
+    """Objective gates only; pronunciation and naturalness need ASR and a doctor."""
+
+    max_realtime_factor: float = 1.0
+    min_words_per_second: float = 1.5
+    max_words_per_second: float = 5.0
+
+
+@dataclass(frozen=True)
+class CaseVerdict:
+    case_id: str
+    provider_identity: dict[str, str]
+    passed: bool
+    failures: tuple[str, ...]
+    realtime_factor: float | None
+    words_per_second: float | None
+
+
+def evaluate_benchmark(
+    records: Sequence[BenchmarkRecord],
+    cases: Sequence[BenchmarkCase],
+    thresholds: BenchmarkThresholds | None = None,
+) -> tuple[CaseVerdict, ...]:
+    thresholds = thresholds or BenchmarkThresholds()
+    word_counts = {case.case_id: len(case.text.split()) for case in cases}
+    verdicts: list[CaseVerdict] = []
+    for record in records:
+        failures: list[str] = []
+        rtf = wps = None
+        if not record.ok or record.audio is None:
+            failures.append(f"synthesis_failed:{record.error_type or 'unknown'}")
+        else:
+            rtf = round(record.elapsed_ms / record.audio.duration_ms, 3)
+            wps = round(word_counts[record.case_id] * 1000 / record.audio.duration_ms, 3)
+            if not record.audio.has_signal:
+                failures.append("no_signal")
+            if rtf > thresholds.max_realtime_factor:
+                failures.append("realtime_factor")
+            if wps < thresholds.min_words_per_second:
+                failures.append("speech_rate_low")
+            if wps > thresholds.max_words_per_second:
+                failures.append("speech_rate_high")
+        verdicts.append(
+            CaseVerdict(
+                record.case_id, dict(record.provider_identity), not failures,
+                tuple(failures), rtf, wps,
+            )
+        )
+    return tuple(verdicts)

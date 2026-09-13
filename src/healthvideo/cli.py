@@ -28,6 +28,13 @@ from healthvideo.process import resolve_pnpm_argv
 from healthvideo.render.remotion import build_render_argv
 from healthvideo.storage.files import read_yaml, write_text_atomic
 from healthvideo.storage.revisions import create_revision
+from healthvideo.tts.benchmark import (
+    BenchmarkThresholds,
+    evaluate_benchmark,
+    load_benchmark_cases,
+    run_benchmark,
+)
+from healthvideo.tts.command import CommandTTS
 from healthvideo.tts.silent import SilentTTS
 from healthvideo.workflows.agent_review import (
     complete_second_model_review,
@@ -216,6 +223,47 @@ def produce(
         typer.echo(subprocess.list2cmdline(resolve_pnpm_argv(logical[1:])))
         return
     typer.echo(f"Rendered video: {output}")
+
+
+@app.command("tts-benchmark")
+def tts_benchmark(
+    cases_file: Annotated[Path, typer.Argument(help="YAML `cases: [{id, text}]` tiếng Việt")],
+    output_dir: Annotated[Path, typer.Option("--output", help="Thư mục WAV/báo cáo (nên dưới cache/)")],
+    command: Annotated[str, typer.Option("--command", help="Lệnh TTS cục bộ, không qua shell")],
+    args: Annotated[list[str], typer.Option("--arg", help="Tham số, cần một {input} và một {output}")],
+    model_id: Annotated[str, typer.Option("--model-id", help="Alias công khai của model")],
+    voice_id: Annotated[str, typer.Option("--voice-id", help="Alias công khai của giọng")],
+    runtime_id: Annotated[str, typer.Option("--runtime-id")] = "operator-configured",
+    max_rtf: Annotated[float, typer.Option("--max-rtf", help="Ngưỡng realtime factor")] = 1.0,
+) -> None:
+    """Chạy benchmark TTS khách quan (WAV, thời gian, tốc độ đọc); không chấm chất lượng giọng."""
+    import json
+    from dataclasses import asdict
+
+    try:
+        cases = load_benchmark_cases(cases_file)
+        provider = CommandTTS(
+            executable=command, arguments=tuple(args), model_id=model_id,
+            voice_id=voice_id, runtime_id=runtime_id,
+        )
+    except (KeyError, TypeError, ValueError, OSError) as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
+    records = run_benchmark(cases, [provider], output_dir)
+    verdicts = evaluate_benchmark(
+        records, cases, BenchmarkThresholds(max_realtime_factor=max_rtf)
+    )
+    report = {
+        "thresholds": asdict(BenchmarkThresholds(max_realtime_factor=max_rtf)),
+        "records": [asdict(record) for record in records],
+        "verdicts": [asdict(verdict) for verdict in verdicts],
+        "summary": {"passed": sum(v.passed for v in verdicts), "total": len(verdicts)},
+    }
+    text = json.dumps(report, ensure_ascii=False, indent=2)
+    write_text_atomic(output_dir / "benchmark.json", text)
+    typer.echo(text)
+    if report["summary"]["passed"] != report["summary"]["total"]:
+        raise typer.Exit(code=1)
 
 
 @app.command()

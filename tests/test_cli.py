@@ -709,3 +709,52 @@ def test_cli_evidence_ingest(tmp_path: Path) -> None:
     assert ingest_res.exit_code == 0
     assert "Đã nạp 1 lựa chọn bằng chứng" in ingest_res.stdout
     assert (rev_dir / "evidence" / "included-sources.yaml").is_file()
+
+
+def test_tts_benchmark_runs_command_provider_and_reports_objective_verdicts(tmp_path) -> None:
+    import json
+
+    fake = tmp_path / "fake_tts.py"
+    fake.write_text(
+        "import sys, wave\n"
+        "text = open(sys.argv[1], encoding='utf-8').read()\n"
+        "words = len(text.split())\n"
+        "with wave.open(sys.argv[2], 'wb') as w:\n"
+        "    w.setnchannels(1); w.setsampwidth(2); w.setframerate(48000)\n"
+        "    w.writeframes(bytes([16, 0]) * (48000 * words // 3))\n",
+        encoding="utf-8",
+    )
+    cases = tmp_path / "cases.yaml"
+    cases.write_text(
+        "cases:\n  - id: so-lieu\n    text: Huyết áp một trăm bốn mươi trên chín mươi\n",
+        encoding="utf-8",
+    )
+    result = runner.invoke(
+        app,
+        [
+            "tts-benchmark", str(cases), "--output", str(tmp_path / "out"),
+            "--command", sys.executable, "--arg", str(fake), "--arg", "{input}",
+            "--arg", "{output}", "--model-id", "fake-model", "--voice-id", "fake-voice",
+        ],
+    )
+    assert result.exit_code == 0, result.stdout
+    report = json.loads((tmp_path / "out" / "benchmark.json").read_text(encoding="utf-8"))
+    assert report["summary"] == {"passed": 1, "total": 1}
+    assert report["verdicts"][0]["passed"] is True
+    assert report["verdicts"][0]["provider_identity"]["model_id"] == "fake-model"
+    assert str(fake) not in json.dumps(report)
+
+
+def test_tts_benchmark_exits_nonzero_when_a_case_fails(tmp_path) -> None:
+    cases = tmp_path / "cases.yaml"
+    cases.write_text("cases:\n  - id: a\n    text: Xin chào\n", encoding="utf-8")
+    result = runner.invoke(
+        app,
+        [
+            "tts-benchmark", str(cases), "--output", str(tmp_path / "out"),
+            "--command", sys.executable, "--arg", "-c", "--arg", "raise SystemExit(3)",
+            "--arg", "{input}", "--arg", "{output}", "--model-id", "m", "--voice-id", "v",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "synthesis_failed:RuntimeError" in result.stdout

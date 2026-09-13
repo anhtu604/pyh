@@ -37,11 +37,15 @@ adapter TTS dạng lệnh cục bộ, kiểm tra WAV trước render và harness
 offline. M5.2 ở commit `1376663` trên nhánh `codex/m1-workflow-kernel`;
 525 test Python, 12 test video, Ruff và video typecheck đã qua ở M5.2.
 
-M5 vẫn đang triển khai: chưa cài/chọn model TTS thật, chưa chạy benchmark âm
-thanh thật, chưa có ASR, chuẩn hóa audio hay ElevenLabs fallback. CLI vẫn dùng
-`SilentTTS`; adapter lệnh chỉ được cấu hình qua Python. Bước kế tiếp là xác
-minh môi trường, giấy phép và nguồn model/provider cụ thể, rồi lập kế hoạch
-M5.3 có tiêu chí đo khách quan trước khi tích hợp. Không đưa audio/model/cache,
+M5.3 đã xác minh môi trường và giấy phép ứng viên (VieNeu-TTS v3 Turbo,
+`vieneu==3.6.4`, model card Apache-2.0 cho phép audio thương mại từ preset voice),
+thêm wrapper cục bộ `tools/tts/vieneu_synth.py`, lệnh `healthvideo tts-benchmark`
+với tiêu chí đo khách quan và đã chạy benchmark thật trên máy này (xem
+`docs/superpowers/plans/2026-09-13-tts-m5-3-vieneu-benchmark.md`). Kết luận đo
+được: 13/13 case tổng hợp thành công, tốc độ đọc 2,7–4,8 từ/s; bài ~50 s đạt RTF
+0,55 (fp32) / 0,46 (int8) trên CPU; câu lẻ trượt RTF ≤ 1,0 vì mỗi lần gọi nạp
+model ~8 s. Chưa chọn voice chính thức, chưa có ASR, chuẩn hóa audio hay
+ElevenLabs fallback; `produce` vẫn dùng `SilentTTS`. Không đưa audio/model/cache,
 credential hoặc bản render tạm vào Git; không vượt hai cổng duyệt hoặc tự đăng.
 
 ## Milestone
@@ -110,6 +114,7 @@ applicability, per-claim doctor notes — hoãn sang M3).
 | M5.1 | Từ điển phát âm tiếng Việt có phiên bản cho production v2: thay thế literal chỉ trong yêu cầu TTS, profile được medical gate hash/duyệt; cache, render manifest và video gate ràng buộc kết quả; v1 giữ nguyên. Profile mặc định rỗng, chưa có benchmark VieNeu, ASR hay ElevenLabs. | complete | `python -m pytest -q`; Ruff; schema export; video test/typecheck | `feat: bind versioned pronunciation to v2 production` |
 | M5.2 | Adapter lệnh TTS cục bộ cấu hình rõ ràng, kiểm tra cấu trúc/tín hiệu WAV, nhận diện voice/runtime trong cache v2 và harness benchmark offline không chấm điểm chủ quan. Chưa chọn model hay chạy benchmark thật. | complete; C2C review DONE | `python -m pytest -q` (525 passed); Ruff; video test (12 passed)/typecheck; `git diff --check` | `1376663` |
 | M5 handoff | Đồng bộ báo cáo tiến độ, giới hạn còn mở và đầu vào M5.3 để tiếp tục từ HEAD hiện tại. | complete | README review; `git diff --check` | `docs: hand off pyh M5 progress` |
+| M5.3 | Xác minh môi trường (RTX 3060, Python 3.11, ffmpeg 8.1.1) và nguồn/giấy phép VieNeu-TTS v3 Turbo (`vieneu==3.6.4`, HF revision `8b7e9cf`, Apache-2.0); wrapper `tools/tts/vieneu_synth.py`; `evaluate_benchmark` với ngưỡng khách quan; lệnh `healthvideo tts-benchmark`; bộ 13 case; benchmark thật fp32/int8 ghi trong plan. Voice chính thức, ASR, ElevenLabs và `produce --tts vieneu` chưa làm. | complete | `python -m pytest -q` (532 passed); `ruff check src tests tools`; `git diff --check`; benchmark thật 2×13 case | `feat: benchmark VieNeu-TTS with objective gates` |
 
 ## Kiến trúc
 
@@ -286,8 +291,21 @@ bắt đầu bằng chữ hoặc số ASCII, các ký tự còn lại là chữ,
 `BenchmarkCase` tiếng Việt và provider được cấp, ghi WAV vào thư mục output cục
 bộ (nên đặt dưới `cache/`); record chỉ chứa thời gian, trạng thái và kiểm tra
 WAV khách quan, không suy ra chất lượng giọng. Không commit audio, model hay
-credential. CLI hiện vẫn chỉ chọn `silent`; VieNeu/ElevenLabs và ASR chưa được
+credential. `produce` hiện vẫn chỉ chọn `silent`; ElevenLabs và ASR chưa được
 kích hoạt trong workflow.
+
+M5.3 nối VieNeu-TTS v3 Turbo qua `CommandTTS` mà không thêm adapter mới: môi
+trường riêng `cache/tts-venv` (`uv venv --python 3.11 cache/tts-venv` rồi
+`uv pip install --python cache/tts-venv/Scripts/python.exe vieneu==3.6.4`,
+ONNX/CPU, không torch), wrapper `tools/tts/vieneu_synth.py --input {input}
+--output {output} [--voice Adam] [--precision fp32|int8]` ghi PCM16 48 kHz mono.
+Lệnh `healthvideo tts-benchmark <cases.yaml> --output cache/<dir> --command <exe>
+--arg ... --model-id ... --voice-id ...` chạy `tests/fixtures/tts-benchmark-cases.yaml`
+(12 câu khó + 1 bài ghép 185 từ), ghi `benchmark.json` và trả exit 1 nếu có case
+trượt ngưỡng khách quan: WAV PCM16 24/48 kHz có tín hiệu, RTF ≤ `--max-rtf`
+(mặc định 1,0), tốc độ đọc 1,5–5,0 từ/s. Lệnh này không chấm phát âm hay độ tự
+nhiên; kết quả đo thật và cách đọc ghi trong plan M5.3. Lần đầu chạy wrapper sẽ
+tải model từ Hugging Face vào cache người dùng, ngoài Git.
 
 ## Remotion preview
 

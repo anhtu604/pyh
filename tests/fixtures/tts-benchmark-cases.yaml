@@ -1,0 +1,30 @@
+# Câu benchmark TTS tiếng Việt cho M5.3. Chỉ dùng để đo khách quan (WAV, thời gian,
+# tốc độ đọc); không phải nội dung y khoa đã duyệt và không chứa số liệu nghiên cứu.
+cases:
+  - id: so-huyet-ap
+    text: Huyết áp của bạn hôm nay là 140 trên 90 mi-li-mét thủy ngân.
+  - id: ten-thuoc
+    text: Bác sĩ có thể kê amlodipine, losartan hoặc metformin tùy tình trạng.
+  - id: viet-tat
+    text: Chỉ số BMI, HbA1c và LDL cần được theo dõi định kỳ.
+  - id: anh-viet
+    text: Nhiều người gọi đây là silent killer vì bệnh thường không có triệu chứng.
+  - id: so-thap-phan
+    text: Mỗi ngày không nên ăn quá 5 gam muối, tương đương khoảng 2,3 gam natri.
+  - id: phan-tram
+    text: Giảm 10 phần trăm cân nặng có thể tạo khác biệt rõ rệt.
+  - id: cau-dai
+    text: Nếu bạn đã trên bốn mươi tuổi, có người thân bị tăng huyết áp, hút thuốc hoặc ít vận động, hãy đo huyết áp ít nhất mỗi năm một lần và ghi lại kết quả để mang theo khi đi khám.
+  - id: cau-hoi
+    text: Bạn có biết vì sao ăn mặn lại liên quan đến huyết áp không?
+  - id: cam-xuc
+    text: Tin vui là phần lớn những thay đổi này hoàn toàn nằm trong tầm tay bạn.
+  - id: liet-ke
+    text: Rau xanh, trái cây tươi, cá, đậu và ngũ cốc nguyên hạt là những lựa chọn tốt.
+  - id: don-vi
+    text: Một cốc 250 mi-li-lít, đi bộ 30 phút, năm ngày mỗi tuần.
+  - id: cau-ngan
+    text: Hãy đo lại sau năm phút.
+  # Ghép 12 câu trên: hình dạng gần với một lần gọi TTS cho cả bài trong produce.
+  - id: bai-ghep
+    text: Huyết áp của bạn hôm nay là 140 trên 90 mi-li-mét thủy ngân. Bác sĩ có thể kê amlodipine, losartan hoặc metformin tùy tình trạng. Chỉ số BMI, HbA1c và LDL cần được theo dõi định kỳ. Nhiều người gọi đây là silent killer vì bệnh thường không có triệu chứng. Mỗi ngày không nên ăn quá 5 gam muối, tương đương khoảng 2,3 gam natri. Giảm 10 phần trăm cân nặng có thể tạo khác biệt rõ rệt. Nếu bạn đã trên bốn mươi tuổi, có người thân bị tăng huyết áp, hút thuốc hoặc ít vận động, hãy đo huyết áp ít nhất mỗi năm một lần và ghi lại kết quả để mang theo khi đi khám. Bạn có biết vì sao ăn mặn lại liên quan đến huyết áp không? Tin vui là phần lớn những thay đổi này hoàn toàn nằm trong tầm tay bạn. Rau xanh, trái cây tươi, cá, đậu và ngũ cốc nguyên hạt là những lựa chọn tốt. Một cốc 250 mi-li-lít, đi bộ 30 phút, năm ngày mỗi tuần. Hãy đo lại sau năm phút.
