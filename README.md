@@ -78,6 +78,11 @@ retry sau lỗi promotion hội tụ an toàn. Không OCR hoặc xác nhận t�
 quote có thật trong ảnh. PDF rasterization, mascot, signature, visual budget và
 Veo vẫn ở lát sau. Không đổi hai cổng duyệt hoặc đăng thủ công.
 
+M6.3 đang triển khai theo đặc tả nhận diện PHY đã duyệt. Checkpoint A1 đã khóa
+brand profile xác định (navy, teal, vàng, trắng ngà, charcoal), ba pose mascot
+`welcome`/`explain`/`caution` và logo hình học PHY không phụ thuộc font. Intro,
+outro và chuyển động signature vẫn thuộc M6.4.
+
 ## Milestone
 
 MVP complete: vertical slice từ author brief, evidence, kịch bản và storyboard

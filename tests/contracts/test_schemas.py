@@ -13,6 +13,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 @pytest.mark.parametrize(
     ("filename", "has_nested_models"),
     [
+        ("brand.schema.json", True),
         ("project-v2.schema.json", True),
         ("pronunciation.schema.json", True),
         ("topic-card.schema.json", True),

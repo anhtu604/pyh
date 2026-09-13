@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from healthvideo.domain.agent_review import AgentReviewResponse
 from healthvideo.domain.asset_manifest import AssetManifest
 from healthvideo.domain.author import AuthorBrief
+from healthvideo.domain.brand import BrandProfile
 from healthvideo.domain.evidence import EvidenceClaim
 from healthvideo.domain.license_ledger import LicenseLedger
 from healthvideo.domain.project_v2 import ProjectManifestV2
@@ -21,6 +22,7 @@ from healthvideo.render.input import RenderInput
 JSON_SCHEMA_DIALECT = "https://json-schema.org/draft/2020-12/schema"
 DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parents[1] / "schemas"
 SCHEMAS: dict[str, type[BaseModel]] = {
+    "brand.schema.json": BrandProfile,
     "pronunciation.schema.json": PronunciationLexicon,
     "project-v2.schema.json": ProjectManifestV2,
     "topic-card.schema.json": TopicCard,

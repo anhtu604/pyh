@@ -4,6 +4,16 @@ canvas:
   height: 1920
   fps: 30
 colors:
-  background: "#FFFDF7"
-  text: "#202124"
-  highlight: "#F4C430"
+  navy: "#12304A"
+  teal: "#18A6A6"
+  yellow: "#F4B942"
+  off_white: "#F7F4EC"
+  charcoal: "#263238"
+assets:
+  creator: "Protect Your Health"
+  license: "PHY internal original artwork"
+mascot:
+  poses:
+    - welcome
+    - explain
+    - caution

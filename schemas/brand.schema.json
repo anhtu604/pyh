@@ -1,0 +1,145 @@
+{
+  "$defs": {
+    "BrandAssets": {
+      "additionalProperties": false,
+      "properties": {
+        "creator": {
+          "pattern": "\\S",
+          "title": "Creator",
+          "type": "string"
+        },
+        "license": {
+          "pattern": "\\S",
+          "title": "License",
+          "type": "string"
+        }
+      },
+      "required": [
+        "creator",
+        "license"
+      ],
+      "title": "BrandAssets",
+      "type": "object"
+    },
+    "BrandCanvas": {
+      "additionalProperties": false,
+      "properties": {
+        "fps": {
+          "const": 30,
+          "default": 30,
+          "title": "Fps",
+          "type": "integer"
+        },
+        "height": {
+          "const": 1920,
+          "default": 1920,
+          "title": "Height",
+          "type": "integer"
+        },
+        "width": {
+          "const": 1080,
+          "default": 1080,
+          "title": "Width",
+          "type": "integer"
+        }
+      },
+      "title": "BrandCanvas",
+      "type": "object"
+    },
+    "BrandColors": {
+      "additionalProperties": false,
+      "properties": {
+        "charcoal": {
+          "pattern": "^#[0-9A-F]{6}$",
+          "title": "Charcoal",
+          "type": "string"
+        },
+        "navy": {
+          "pattern": "^#[0-9A-F]{6}$",
+          "title": "Navy",
+          "type": "string"
+        },
+        "off_white": {
+          "pattern": "^#[0-9A-F]{6}$",
+          "title": "Off White",
+          "type": "string"
+        },
+        "teal": {
+          "pattern": "^#[0-9A-F]{6}$",
+          "title": "Teal",
+          "type": "string"
+        },
+        "yellow": {
+          "pattern": "^#[0-9A-F]{6}$",
+          "title": "Yellow",
+          "type": "string"
+        }
+      },
+      "required": [
+        "navy",
+        "teal",
+        "yellow",
+        "off_white",
+        "charcoal"
+      ],
+      "title": "BrandColors",
+      "type": "object"
+    },
+    "MascotIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "poses": {
+          "items": {
+            "$ref": "#/$defs/MascotPose"
+          },
+          "title": "Poses",
+          "type": "array"
+        }
+      },
+      "required": [
+        "poses"
+      ],
+      "title": "MascotIdentity",
+      "type": "object"
+    },
+    "MascotPose": {
+      "enum": [
+        "welcome",
+        "explain",
+        "caution"
+      ],
+      "title": "MascotPose",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "assets": {
+      "$ref": "#/$defs/BrandAssets"
+    },
+    "canvas": {
+      "$ref": "#/$defs/BrandCanvas"
+    },
+    "colors": {
+      "$ref": "#/$defs/BrandColors"
+    },
+    "mascot": {
+      "$ref": "#/$defs/MascotIdentity"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "canvas",
+    "colors",
+    "assets",
+    "mascot"
+  ],
+  "title": "BrandProfile",
+  "type": "object"
+}
