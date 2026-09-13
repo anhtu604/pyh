@@ -65,3 +65,34 @@ def test_storyboard_asset_resolver_validates_role_and_all_bytes(tmp_path: Path) 
     (tmp_path / ref.path).write_bytes(b"tampered")
     with pytest.raises(ValueError, match="sha256"):
         referenced_storyboard_assets(tmp_path, board(ref), AssetManifest(assets=(right,)))
+
+
+def test_storyboard_asset_resolver_rejects_orphan_scene_asset(tmp_path: Path) -> None:
+    orphan = record(
+        "assets/orphan.svg", b"<svg/>", tmp_path, AssetKind.MASCOT_REACTION
+    ).model_copy(update={"storyboard_role": "mascot"})
+    empty = Storyboard(
+        title="PHY",
+        scenes=(
+            Scene(
+                id="S01",
+                start_frame=0,
+                duration_frames=1350,
+                narration="Legacy",
+                visual="whiteboard",
+            ),
+        ),
+    )
+    with pytest.raises(ValueError, match="not referenced"):
+        referenced_storyboard_assets(tmp_path, empty, AssetManifest(assets=(orphan,)))
+
+
+def test_storyboard_asset_resolver_keeps_legacy_unowned_records_compatible(
+    tmp_path: Path,
+) -> None:
+    legacy = record(
+        "assets/legacy.svg", b"<svg/>", tmp_path, AssetKind.MASCOT_REACTION
+    )
+    assert referenced_storyboard_assets(
+        tmp_path, Storyboard(title="PHY"), AssetManifest(assets=(legacy,))
+    ) == {}

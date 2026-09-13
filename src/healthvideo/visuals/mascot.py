@@ -1,5 +1,7 @@
 """Deterministic, non-clinical PHY mascot SVG rig."""
 
+from html import escape
+
 from healthvideo.domain.brand import BrandProfile, MascotPose
 
 _ARMS = {
@@ -41,3 +43,22 @@ def render_mascot(brand: BrandProfile, pose: MascotPose) -> bytes:
         f'<path id="mascot-y-check" stroke="{colors.yellow}" stroke-width="18" d="M430 684l20 20 42-48"/>\n'
         '</g>\n</svg>\n'
     ).encode()
+
+
+def render_mascot_annotation(
+    brand: BrandProfile, pose: MascotPose, annotation: str
+) -> bytes:
+    """Bake operator-supplied semantic text into a distinct mascot asset."""
+    if not annotation.strip() or len(annotation) > 240:
+        raise ValueError("mascot annotation must be visible and at most 240 characters")
+    if any(ord(character) < 32 and character not in "\t\n\r" for character in annotation):
+        raise ValueError("mascot annotation cannot contain control characters")
+    base = render_mascot(brand, pose).decode()
+    bubble = (
+        f'<g id="mascot-medical-annotation"><rect x="470" y="80" width="270" '
+        f'height="220" rx="30" fill="{brand.colors.off_white}" stroke="{brand.colors.navy}" '
+        f'stroke-width="12"/><text x="605" y="180" fill="{brand.colors.charcoal}" '
+        'font-family="Arial, sans-serif" font-size="28" text-anchor="middle">'
+        f'{escape(annotation, quote=True)}</text></g>\n'
+    )
+    return base.replace("</svg>\n", f"{bubble}</svg>\n").encode()

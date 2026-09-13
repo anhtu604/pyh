@@ -6,7 +6,12 @@ from pathlib import Path
 from tempfile import mkdtemp
 from typing import Any
 
-from healthvideo.assets import evidence_asset_hashes, referenced_evidence_assets
+from healthvideo.assets import (
+    evidence_asset_hashes,
+    referenced_evidence_assets,
+    referenced_storyboard_assets,
+)
+from healthvideo.domain.asset_manifest import load_asset_manifest
 from healthvideo.domain.gate_review import GateApprovalRecord, GateKind
 from healthvideo.domain.project import ProjectManifest, ProjectState, transition
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
@@ -196,6 +201,14 @@ def _produce_v2(
     provider_name = _provider_name(tts)
     provider_identity_data = provider_identity(tts)
     asset_hashes = evidence_asset_hashes(layout.artifact_root, storyboard)
+    visual_paths = referenced_storyboard_assets(
+        layout.artifact_root,
+        storyboard,
+        load_asset_manifest(layout.artifact_root / "assets/asset-manifest.yaml"),
+    )
+    asset_hashes.update(
+        {relative: sha256_file(path) for relative, path in visual_paths.items()}
+    )
     input_hash = canonical_json_hash(
         {
             "production": _input_hash(
@@ -239,9 +252,7 @@ def _produce_v2(
         )
     )
     try:
-        _copy_project_assets(
-            layout.artifact_root, staging_dir, storyboard, asset_hashes
-        )
+        _copy_v2_assets(layout.artifact_root, staging_dir, storyboard, asset_hashes)
         staged_audio = staging_dir / "audio" / "narration.wav"
         tts.synthesize(
             TTSRequest(
@@ -545,6 +556,28 @@ def _copy_project_assets(
             raise ValueError(
                 f"Evidence asset changed while staging production: {relative}"
             )
+
+
+def _copy_v2_assets(
+    revision_root: Path,
+    staging_dir: Path,
+    storyboard: Storyboard,
+    expected_hashes: Mapping[str, str],
+) -> None:
+    paths = referenced_evidence_assets(revision_root, storyboard)
+    paths.update(
+        referenced_storyboard_assets(
+            revision_root,
+            storyboard,
+            load_asset_manifest(revision_root / "assets/asset-manifest.yaml"),
+        )
+    )
+    for relative, source in paths.items():
+        destination = staging_dir.joinpath(*Path(relative).parts)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+        if sha256_file(destination) != expected_hashes[relative]:
+            raise ValueError(f"Visual asset changed while staging: {relative}")
 
 
 def _validate_staged_run(

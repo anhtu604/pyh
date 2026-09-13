@@ -33,10 +33,11 @@ export const WhiteboardScene: React.FC<WhiteboardSceneProps> = ({scene}) => {
   const dashOffset = interpolate(frame, [0, 45], [1, 0], {
     extrapolateRight: 'clamp',
   });
+  const visualAssets = scene.visual_assets ?? [];
 
   return (
     <>
-      <svg
+      {visualAssets.length === 0 ? <svg
         aria-label="Nét vẽ whiteboard"
         style={{height: '100%', left: 0, position: 'absolute', top: 0, width: '100%'}}
         viewBox="0 0 1080 1920"
@@ -50,7 +51,7 @@ export const WhiteboardScene: React.FC<WhiteboardSceneProps> = ({scene}) => {
           strokeWidth="20"
           style={{strokeDasharray: 1, strokeDashoffset: dashOffset}}
         />
-      </svg>
+      </svg> : null}
       <div
         style={{
           color: '#202124',

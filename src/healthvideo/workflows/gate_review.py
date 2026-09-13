@@ -11,6 +11,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+from healthvideo.assets import referenced_storyboard_assets
 from healthvideo.domain.asset_manifest import (
     AssetKind,
     load_asset_manifest,
@@ -153,6 +154,7 @@ def approve_gate(
         storyboard = Storyboard.model_validate(
             read_yaml(revision_root / "storyboard/storyboard.yaml")
         )
+        referenced_storyboard_assets(revision_root, storyboard, manifest)
         for asset in hardened_highlights:
             if not any(
                 scene.evidence_highlight is not None

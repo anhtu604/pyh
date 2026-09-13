@@ -2,6 +2,23 @@ import {z} from 'zod';
 
 const unitCoordinate = z.number().min(0).max(1);
 
+const safeRelativePath = z.string().regex(/^(?!\.?\/?$)(?![A-Za-z]:)(?!\/)(?!.*\\)(?!.*(?:^|\/)\.\.(?:\/|$))\S+$/);
+
+export const VisualAssetRefSchema = z
+  .object({
+    path: safeRelativePath,
+    role: z.enum(['whiteboard', 'mascot']),
+    pose: z.enum(['welcome', 'explain', 'caution']).nullable().optional(),
+  })
+  .superRefine((asset, context) => {
+    if (asset.role === 'mascot' && !asset.pose) {
+      context.addIssue({code: 'custom', path: ['pose'], message: 'mascot requires pose'});
+    }
+    if (asset.role === 'whiteboard' && asset.pose) {
+      context.addIssue({code: 'custom', path: ['pose'], message: 'whiteboard cannot have pose'});
+    }
+  });
+
 export const EvidenceHighlightSchema = z
   .object({
     schema_version: z.string().default('1.0'),
@@ -66,8 +83,17 @@ export const SceneSchema = z
     source_marker: z.string().regex(/\S/).nullable().optional(),
     visual: z.enum(['whiteboard', 'chart', 'evidence_highlight', 'ai_clip']),
     evidence_highlight: EvidenceHighlightSchema.nullable().optional(),
+    visual_assets: z.array(VisualAssetRefSchema).default([]),
   })
   .superRefine((scene, context) => {
+    const paths = scene.visual_assets.map((asset) => asset.path);
+    if (new Set(paths).size !== paths.length) {
+      context.addIssue({
+        code: 'custom',
+        path: ['visual_assets'],
+        message: 'scene visual asset paths must be unique',
+      });
+    }
     if (scene.visual !== 'evidence_highlight') {
       return;
     }
@@ -97,8 +123,9 @@ export const RenderInputSchema = z.object({
   fps: z.literal(30).default(30),
 });
 
-export type EvidenceHighlight = z.output<typeof EvidenceHighlightSchema>;
-export type Scene = z.output<typeof SceneSchema>;
+export type EvidenceHighlight = z.input<typeof EvidenceHighlightSchema>;
+export type VisualAssetRef = z.input<typeof VisualAssetRefSchema>;
+export type Scene = z.input<typeof SceneSchema>;
 export type SceneTiming = Pick<Scene, 'id' | 'start_frame' | 'duration_frames'>;
 export type RenderInput = z.output<typeof RenderInputSchema>;
 

@@ -78,18 +78,24 @@ retry sau lỗi promotion hội tụ an toàn. Không OCR hoặc xác nhận t�
 quote có thật trong ảnh. PDF rasterization, mascot, signature, visual budget và
 Veo vẫn ở lát sau. Không đổi hai cổng duyệt hoặc đăng thủ công.
 
-M6.3 đang triển khai theo đặc tả nhận diện PHY đã duyệt. Checkpoint A đã khóa
-brand profile xác định (navy, teal, vàng, trắng ngà, charcoal), ba pose mascot
+M6.3 hoàn tất theo đặc tả nhận diện PHY đã duyệt. Brand profile khóa
+bảng màu xác định (navy, teal, vàng, trắng ngà, charcoal), ba pose mascot
 `welcome`/`explain`/`caution`, logo hình học PHY không phụ thuộc font và bốn
 template whiteboard hữu hạn. SVG lặp byte, không script/filter/external raster;
-generator chỉ bố trí giá trị operator cung cấp. Intro, outro và chuyển động
-signature vẫn thuộc M6.4.
+generator chỉ bố trí giá trị operator cung cấp. Mascot tóc ngắn, dáng đầy đặn,
+đeo kính và mặc áo khoác chuyên nghiệp navy–teal; không áo blouse, ống nghe hay
+hành vi khám/chẩn đoán/kê đơn. Intro, outro và chuyển động signature vẫn thuộc
+M6.4.
 
 Checkpoint B thêm `mascot_reaction` chỉ trang trí và
 `mascot_medical_annotation` luôn semantic. Scene v2 có thể khai báo
 `visual_assets`; resolver kiểm đường dẫn, loại asset và SHA-256 cho cả asset
-trang trí trước khi production dùng. Scene cũ không có trường này vẫn giữ
-fallback hiện tại.
+trang trí trước medical gate và production. Workflow đăng ký ghi intent trước,
+promotion nguyên tử và retry hội tụ; annotation/whiteboard semantic bắt buộc
+claim–source–marker hợp lệ. Remotion chỉ render asset đã khai báo qua
+`staticFile`, stage đúng byte và đưa hash cả asset trang trí vào cache identity.
+Scene cũ không có trường này vẫn giữ fallback hiện tại. M6.4–M6.6 chưa được
+triển khai; hai cổng duyệt và đăng thủ công giữ nguyên.
 
 ## Milestone
 
@@ -162,6 +168,7 @@ applicability, per-claim doctor notes — hoãn sang M3).
 | M5 handoff 2 | Chốt M5: kỹ thuật xong tại `c4a500c`; còn chờ bác sĩ chọn voice và bổ sung từ điển tên thuốc; ElevenLabs chờ key. M6 bắt đầu từ HEAD này. | complete | README review; `git diff --check` | `docs: hand off M5 completion` |
 | M6.1 | Chart SVG count-of-total xác định từ datum explicit trong evidence ledger; asset semantic hash và license/right ledger cùng revision, medical gate ràng buộc bytes/metadata; không đổi v1/state. Các visual/render khác theo plan M6. | complete; C2C review DONE | `python -m pytest -q` (585 passed); Ruff; schema export; video test (12 passed)/typecheck; `git diff --check` | `feat: register evidence-bound charts and asset rights` |
 | M6.2 | Crop paper highlight từ ảnh trang PNG/JPEG cục bộ ngoài project; source/page/marker/quote/tọa độ gốc, kích thước pixel crop, quyền dùng explicit, semantic hash/medical gate; renderer `contain` và remap overlay trên crop; retry crash-safe. Không PDF/OCR/full page. | complete; C2C review DONE | `python -m pytest -q` (599 passed); Ruff; schema export/diff; video test (16 passed)/typecheck; `git diff --check` | `feat: add provenance-safe paper highlights` |
+| M6.3 | Nhận diện PHY xác định: logo/palette, mascot phi lâm sàng ba pose và bốn whiteboard template; asset khai báo, phân loại decorative/semantic, rights/hash, retry crash-safe, medical/production preflight và Remotion `staticFile`; giữ fallback cũ. Không intro/outro, budget hay Veo. | complete; C2C review iteration 3 DONE | `python -m pytest -q` (642 passed); Ruff; schema export/diff; video test (21 passed)/typecheck; compatibility (55 passed); `git diff --check` | `feat: add the PHY visual identity and mascot` |
 
 ## Kiến trúc
 

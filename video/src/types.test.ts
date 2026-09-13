@@ -37,6 +37,27 @@ describe('EvidenceHighlightSchema', () => {
 });
 
 describe('SceneSchema', () => {
+  it('accepts declared mascot refs and defaults legacy scenes', () => {
+    const legacy = SceneSchema.parse({
+      id: 'S01', start_frame: 0, duration_frames: 90,
+      narration: 'Legacy', visual: 'whiteboard',
+    });
+    expect(legacy.visual_assets).toEqual([]);
+    const current = SceneSchema.parse({...legacy, visual_assets: [
+      {path: 'assets/guide.svg', role: 'mascot', pose: 'welcome'},
+    ]});
+    expect(current.visual_assets).toHaveLength(1);
+    expect(SceneSchema.safeParse({...legacy, visual_assets: [
+      {path: '../guide.svg', role: 'mascot', pose: 'welcome'},
+    ]}).success).toBe(false);
+    expect(SceneSchema.safeParse({...legacy, visual_assets: [
+      {path: '.', role: 'mascot', pose: 'welcome'},
+    ]}).success).toBe(false);
+    expect(SceneSchema.safeParse({...legacy, visual_assets: [
+      {path: 'assets/same.svg', role: 'mascot', pose: 'welcome'},
+      {path: 'assets/same.svg', role: 'mascot', pose: 'welcome'},
+    ]}).success).toBe(false);
+  });
   it('requires a source marker for evidence scenes', () => {
     expect(
       SceneSchema.safeParse({

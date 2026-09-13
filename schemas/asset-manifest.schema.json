@@ -73,6 +73,22 @@
           "pattern": "\\S",
           "title": "Source",
           "type": "string"
+        },
+        "storyboard_role": {
+          "anyOf": [
+            {
+              "enum": [
+                "whiteboard",
+                "mascot"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Storyboard Role"
         }
       },
       "required": [

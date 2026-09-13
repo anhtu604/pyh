@@ -18,6 +18,8 @@ class VisualAssetRef(BaseModel):
         path = PurePosixPath(self.path)
         if (
             not self.path
+            or not self.path.strip()
+            or self.path in {".", "./"}
             or not path.parts
             or "\\" in self.path
             or path.is_absolute()

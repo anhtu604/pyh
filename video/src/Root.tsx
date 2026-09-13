@@ -18,6 +18,7 @@ const defaultProps: RenderInput = {
       duration_frames: MIN_DURATION_IN_FRAMES,
       narration: 'Bản xem trước video y tế dự phòng.',
       visual: 'whiteboard',
+      visual_assets: [],
     },
   ],
   width: 1080,

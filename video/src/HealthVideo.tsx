@@ -2,6 +2,7 @@ import React from 'react';
 import {AbsoluteFill, Audio, Sequence, staticFile} from 'remotion';
 import {EvidenceHighlightScene} from './scenes/EvidenceHighlightScene';
 import {WhiteboardScene} from './scenes/WhiteboardScene';
+import {VisualAsset} from './components/VisualAsset';
 import {parseRenderInput} from './types';
 import type {RenderInput, SceneTiming} from './types';
 
@@ -23,6 +24,9 @@ export const HealthVideo: React.FC<RenderInput> = (rawInput) => {
           ) : (
             <WhiteboardScene scene={scene} />
           )}
+          {scene.visual_assets.map((asset) => (
+            <VisualAsset asset={asset} key={asset.path} />
+          ))}
         </Sequence>
       ))}
     </AbsoluteFill>

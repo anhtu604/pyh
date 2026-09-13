@@ -11,9 +11,12 @@ from healthvideo.domain.asset_manifest import (
     load_asset_manifest,
     validate_asset_manifest,
 )
+from healthvideo.domain.brand import MascotPose
 from healthvideo.domain.gate_review import GateKind
 from healthvideo.domain.license_ledger import LicenseLedger, validate_license_ledger
+from healthvideo.domain.storyboard import Storyboard
 from healthvideo.storage.files import read_yaml, sha256_file, write_yaml_atomic
+from healthvideo.visuals.whiteboard import WhiteboardPayload, WhiteboardTemplate
 from healthvideo.workflows import visual_assets
 from healthvideo.workflows.gate_review import (
     approve_gate,
@@ -23,6 +26,9 @@ from healthvideo.workflows.gate_review import (
 from healthvideo.workflows.visual_assets import (
     create_evidence_chart,
     create_evidence_highlight_asset,
+    create_mascot_annotation_asset,
+    create_mascot_reaction_asset,
+    create_whiteboard_asset,
 )
 
 
@@ -62,6 +68,200 @@ def make_chart(project: Path, **changes: str) -> Path:
     }
     args.update(changes)
     return create_evidence_chart(project, **args)
+
+
+def test_register_mascot_reaction_and_semantic_annotation(project: Path) -> None:
+    revision = project / "revisions/001"
+    before = (project / "project.yaml").read_bytes()
+    reaction = create_mascot_reaction_asset(
+        project, scene_id="S01", asset_name="phy-welcome", pose=MascotPose.WELCOME
+    )
+    annotation = create_mascot_annotation_asset(
+        project,
+        scene_id="S01",
+        asset_name="phy-note",
+        pose=MascotPose.EXPLAIN,
+        annotation="Ăn mặn có thể làm huyết áp tăng.",
+        claim_id="C01",
+        source_id="R01",
+        source_marker="[1]",
+    )
+    manifest = load_asset_manifest(revision / "assets/asset-manifest.yaml")
+    records = {item.path: item for item in manifest.assets}
+    assert records["assets/phy-welcome.svg"].kind is AssetKind.MASCOT_REACTION
+    assert records["assets/phy-welcome.svg"].semantic is False
+    assert records["assets/phy-welcome.svg"].storyboard_role == "mascot"
+    assert records["assets/phy-welcome.svg"].classification_reason == (
+        "Fixed mascot reaction with no content fields."
+    )
+    assert records["assets/phy-note.svg"].kind is AssetKind.MASCOT_MEDICAL_ANNOTATION
+    assert records["assets/phy-note.svg"].semantic is True
+    assert records["assets/phy-note.svg"].classification_reason == (
+        "Mascot carries source-bound medical annotation."
+    )
+    assert reaction.is_file() and annotation.is_file()
+    storyboard = Storyboard.model_validate(read_yaml(revision / "storyboard/storyboard.yaml"))
+    assert [ref.path for ref in storyboard.scenes[0].visual_assets] == [
+        "assets/phy-welcome.svg",
+        "assets/phy-note.svg",
+    ]
+    assert (project / "project.yaml").read_bytes() == before
+
+
+def test_mascot_annotation_rejects_invalid_binding(project: Path) -> None:
+    with pytest.raises(ValueError, match="claim|source|marker"):
+        create_mascot_annotation_asset(
+            project,
+            scene_id="S01",
+            asset_name="bad-note",
+            pose=MascotPose.EXPLAIN,
+            annotation="Không được đăng ký.",
+            claim_id="missing",
+            source_id="R01",
+            source_marker="[1]",
+        )
+    assert not (project / "revisions/001/assets/bad-note.svg").exists()
+
+
+def test_register_decorative_and_semantic_whiteboards(project: Path) -> None:
+    revision = project / "revisions/001"
+    decorative = create_whiteboard_asset(
+        project,
+        scene_id="S01",
+        asset_name="phy-connector",
+        template=WhiteboardTemplate.CONNECTOR,
+        payload=WhiteboardPayload(),
+        semantic=False,
+    )
+    semantic = create_whiteboard_asset(
+        project,
+        scene_id="S01",
+        asset_name="phy-callout",
+        template=WhiteboardTemplate.CALLOUT,
+        payload=WhiteboardPayload(labels=("Giảm muối",)),
+        semantic=True,
+        claim_id="C01",
+        source_id="R01",
+        source_marker="[1]",
+    )
+    manifest = load_asset_manifest(revision / "assets/asset-manifest.yaml")
+    records = {item.path: item for item in manifest.assets}
+    assert records["assets/phy-connector.svg"].kind is AssetKind.FLOURISH
+    assert records["assets/phy-connector.svg"].semantic is False
+    assert records["assets/phy-connector.svg"].classification_reason == (
+        "Fixed decorative whiteboard geometry."
+    )
+    assert records["assets/phy-callout.svg"].kind is AssetKind.MEDICAL_TEXT
+    assert records["assets/phy-callout.svg"].semantic is True
+    assert records["assets/phy-callout.svg"].classification_reason == (
+        "Source-bound semantic whiteboard content."
+    )
+    assert decorative.is_file() and semantic.is_file()
+
+
+@pytest.mark.parametrize(
+    ("semantic", "binding"),
+    [
+        (True, {}),
+        (False, {"claim_id": "C01", "source_id": "R01", "source_marker": "[1]"}),
+    ],
+)
+def test_whiteboard_requires_explicit_semantic_classification(
+    project: Path, semantic: bool, binding: dict[str, str]
+) -> None:
+    with pytest.raises(ValueError, match="semantic|decorative"):
+        create_whiteboard_asset(
+            project,
+            scene_id="S01",
+            asset_name="bad-whiteboard",
+            template=WhiteboardTemplate.CALLOUT,
+            payload=WhiteboardPayload(labels=("Không đăng ký",)),
+            semantic=semantic,
+            **binding,
+        )
+
+
+def test_mascot_retry_after_asset_promotion_failure_is_gate_safe(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    revision = project / "revisions/001"
+    original = visual_assets.replace_directory_atomic
+
+    def fail_once(*args, **kwargs):
+        raise OSError("synthetic interruption")
+
+    monkeypatch.setattr(visual_assets, "replace_directory_atomic", fail_once)
+    with pytest.raises(OSError, match="interruption"):
+        create_mascot_reaction_asset(
+            project,
+            scene_id="S01",
+            asset_name="phy-welcome",
+            pose=MascotPose.WELCOME,
+        )
+    state = read_yaml(project / "project.yaml")
+    state["state"] = "awaiting_medical_review"
+    write_yaml_atomic(project / "project.yaml", state)
+    with pytest.raises(ValueError, match="not declared"):
+        approve_gate(
+            project, GateKind.MEDICAL, reviewer="test doctor", now=datetime.now(UTC)
+        )
+    monkeypatch.setattr(visual_assets, "replace_directory_atomic", original)
+    output = create_mascot_reaction_asset(
+        project,
+        scene_id="S01",
+        asset_name="phy-welcome",
+        pose=MascotPose.WELCOME,
+    )
+    assert output.is_file()
+    storyboard = Storyboard.model_validate(
+        read_yaml(revision / "storyboard/storyboard.yaml")
+    )
+    assert sum(
+        ref.path == "assets/phy-welcome.svg"
+        for ref in storyboard.scenes[0].visual_assets
+    ) == 1
+
+
+@pytest.mark.parametrize("asset_kind", ["reaction", "annotation", "whiteboard"])
+def test_medical_gate_rejects_registered_visual_after_ref_is_removed(
+    project: Path, asset_kind: str
+) -> None:
+    if asset_kind == "reaction":
+        create_mascot_reaction_asset(
+            project, scene_id="S01", asset_name="orphan", pose=MascotPose.WELCOME
+        )
+    elif asset_kind == "annotation":
+        create_mascot_annotation_asset(
+            project,
+            scene_id="S01",
+            asset_name="orphan",
+            pose=MascotPose.EXPLAIN,
+            annotation="Giảm muối.",
+            claim_id="C01",
+            source_id="R01",
+            source_marker="[1]",
+        )
+    else:
+        create_whiteboard_asset(
+            project,
+            scene_id="S01",
+            asset_name="orphan",
+            template=WhiteboardTemplate.CONNECTOR,
+            payload=WhiteboardPayload(),
+            semantic=False,
+        )
+    storyboard_path = project / "revisions/001/storyboard/storyboard.yaml"
+    storyboard = read_yaml(storyboard_path)
+    storyboard["scenes"][0]["visual_assets"] = []
+    write_yaml_atomic(storyboard_path, storyboard)
+    state = read_yaml(project / "project.yaml")
+    state["state"] = "awaiting_medical_review"
+    write_yaml_atomic(project / "project.yaml", state)
+
+    with pytest.raises(ValueError, match="not referenced"):
+        approve_gate(
+            project, GateKind.MEDICAL, reviewer="test doctor", now=datetime.now(UTC)
+        )
 
 
 def test_register_chart_and_rights_without_state_change(project: Path) -> None:

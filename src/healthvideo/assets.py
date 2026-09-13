@@ -60,6 +60,7 @@ def referenced_storyboard_assets(
         },
     }
     resolved_assets: dict[str, Path] = {}
+    referenced_roles: dict[str, str] = {}
     for scene in storyboard.scenes:
         for reference in scene.visual_assets:
             relative = _relative_posix_path(reference.path, scene.id)
@@ -86,6 +87,18 @@ def referenced_storyboard_assets(
                     f"expected {record.sha256}, found {actual}"
                 )
             resolved_assets[relative.as_posix()] = candidate
+            referenced_roles[relative.as_posix()] = reference.role
+    for record in manifest.assets:
+        if record.storyboard_role is None:
+            continue
+        actual_role = referenced_roles.get(record.path)
+        if actual_role is None:
+            raise ValueError(f"visual asset is not referenced by storyboard: {record.path}")
+        if actual_role != record.storyboard_role:
+            raise ValueError(
+                f"visual asset storyboard role mismatch for {record.path}: "
+                f"expected {record.storyboard_role!r}, found {actual_role!r}"
+            )
     return resolved_assets
 
 

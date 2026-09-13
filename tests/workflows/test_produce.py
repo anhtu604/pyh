@@ -7,6 +7,7 @@ import pytest
 
 import healthvideo.tts.pronunciation as pronunciation_module
 import healthvideo.workflows.produce as produce_workflow
+from healthvideo.domain.brand import MascotPose
 from healthvideo.domain.gate_review import GateKind
 from healthvideo.domain.project_v2 import WorkflowState
 from healthvideo.domain.script import Script
@@ -17,9 +18,52 @@ from healthvideo.tts.silent import SilentTTS
 from healthvideo.workflows.gate_review import approve_gate, video_reviewed_paths
 from healthvideo.workflows.package import package_project
 from healthvideo.workflows.produce import _input_hash, produce_project
+from healthvideo.workflows.visual_assets import create_mascot_reaction_asset
 from tests.helpers import create_project_fixture, create_v2_project_fixture
 
 V2_REVIEWED_AT = datetime(2026, 9, 12, 8, 0, tzinfo=UTC)
+
+
+def test_v2_produce_stages_declared_mascot_asset(tmp_path: Path) -> None:
+    project_dir = create_v2_project_fixture(
+        tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW
+    )
+    revision = project_dir / "revisions" / "001"
+    storyboard_path = revision / "storyboard" / "storyboard.yaml"
+    storyboard = read_yaml(storyboard_path)
+    storyboard["scenes"][0]["duration_frames"] = 1350
+    write_yaml_atomic(storyboard_path, storyboard)
+    source_asset = create_mascot_reaction_asset(
+        project_dir,
+        scene_id="S01",
+        asset_name="phy-welcome",
+        pose=MascotPose.WELCOME,
+    )
+    approve_gate(
+        project_dir,
+        GateKind.MEDICAL,
+        reviewer="BS Nguyễn Văn An",
+        now=V2_REVIEWED_AT,
+    )
+
+    render_inputs: list[dict] = []
+
+    def runner(argv: list[str]) -> int:
+        props = Path(argv[argv.index("--props") + 1])
+        render_inputs.append(json.loads(props.read_text(encoding="utf-8")))
+        assert (props.parent / "assets" / "phy-welcome.svg").read_bytes() == source_asset.read_bytes()
+        _write_synthetic_output(argv)
+        return 0
+
+    produce_project(project_dir, SilentTTS(), runner)
+
+    assert render_inputs[0]["scenes"][0]["visual_assets"] == [
+        {"path": "assets/phy-welcome.svg", "role": "mascot", "pose": "welcome"}
+    ]
+    manifest = json.loads(
+        (revision / "renders" / "render-manifest.json").read_text(encoding="utf-8")
+    )
+    assert "assets/phy-welcome.svg" in manifest["asset_sha256"]
 
 
 def test_v2_provider_identity_changes_cache_with_same_provider_name(tmp_path: Path) -> None:
