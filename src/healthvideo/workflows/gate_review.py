@@ -75,7 +75,7 @@ def medical_reviewed_paths(revision_root: Path) -> dict[str, Path]:
         if rights_path.is_file():
             paths["assets/license-ledger.yaml"] = rights_path
         for asset in manifest.assets:
-            if asset.semantic:
+            if asset.semantic or asset.storyboard_role == "brand":
                 paths[f"asset:{asset.path}"] = revision_root / asset.path
     return paths
 

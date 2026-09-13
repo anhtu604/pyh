@@ -6,6 +6,7 @@ import pytest
 from typer.testing import CliRunner
 
 from healthvideo.cli import app
+from healthvideo.domain.brand import LogoVariant
 from healthvideo.domain.gate_review import GateKind
 from healthvideo.domain.hook_outro import OUTRO_TEXT
 from healthvideo.domain.script import Script
@@ -13,9 +14,10 @@ from healthvideo.domain.storyboard import Storyboard
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.workflows import hook_outro as hook_outro_module
 from healthvideo.workflows.citations import resolve_citations
-from healthvideo.workflows.gate_review import approve_gate
+from healthvideo.workflows.gate_review import approve_gate, medical_reviewed_paths
 from healthvideo.workflows.hook_outro import author_hook_outro
 from healthvideo.workflows.review_html import render_medical_packet
+from healthvideo.workflows.visual_assets import create_brand_logo_asset
 
 
 @pytest.fixture
@@ -144,3 +146,17 @@ def test_retry_preserves_operator_edit_after_interruption(
     with pytest.raises(ValueError, match="refusing overwrite"):
         author_hook_outro(project, duration_frames=90)
     assert script_path.read_bytes() == before
+
+
+def test_declared_logo_unblocks_medical_review(project: Path) -> None:
+    author_hook_outro(project, duration_frames=90)
+    path = create_brand_logo_asset(
+        project, scene_id="OUTRO", asset_name="phy-logo", variant=LogoVariant.MONOGRAM
+    )
+    assert path.is_file()
+    assert create_brand_logo_asset(
+        project, scene_id="OUTRO", asset_name="phy-logo", variant=LogoVariant.MONOGRAM
+    ) == path
+    approve_gate(project, GateKind.MEDICAL, reviewer="doctor", now=datetime.now(UTC))
+    assert (project / "revisions/001/reviews/medical-approval.yaml").is_file()
+    assert "asset:assets/phy-logo.svg" in medical_reviewed_paths(project / "revisions/001")

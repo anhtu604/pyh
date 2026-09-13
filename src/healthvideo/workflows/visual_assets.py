@@ -14,7 +14,7 @@ from healthvideo.domain.asset_manifest import (
     load_asset_manifest,
     validate_asset_manifest,
 )
-from healthvideo.domain.brand import MascotPose, load_brand_profile
+from healthvideo.domain.brand import LogoVariant, MascotPose, load_brand_profile
 from healthvideo.domain.evidence import EvidenceClaim, SourceRecord
 from healthvideo.domain.license_ledger import (
     LicenseEntry,
@@ -31,6 +31,7 @@ from healthvideo.storage.files import (
     sha256_file,
     write_yaml_atomic,
 )
+from healthvideo.visuals.brand import render_phy_logo
 from healthvideo.visuals.charts import render_count_chart
 from healthvideo.visuals.highlights import crop_highlight
 from healthvideo.visuals.mascot import render_mascot, render_mascot_annotation
@@ -390,6 +391,30 @@ def create_mascot_reaction_asset(
     )
 
 
+def create_brand_logo_asset(
+    project_dir: Path, *, scene_id: str, asset_name: str, variant: LogoVariant
+) -> Path:
+    """Register a fixed decorative PHY logo on the approved outro scene path."""
+    project = ProjectManifestV2.model_validate(read_yaml(project_dir / "project.yaml"))
+    revision = project_dir / "revisions" / project.active_revision
+    if (revision / "workflow/pending-hook-outro.yaml").exists():
+        raise ValueError("cannot register logo while outro authoring is pending")
+    script = Script.model_validate(read_yaml(revision / "script/script.yaml"))
+    board = Storyboard.model_validate(read_yaml(revision / "storyboard/storyboard.yaml"))
+    scene = next((item for item in board.scenes if item.id == scene_id), None)
+    if script.format_profile != "hook_outro_v1" or scene is None or scene.visual != "brand_outro":
+        raise ValueError("brand logo requires an M6.4 brand_outro scene")
+    brand = load_brand_profile(BRAND_PROFILE_PATH)
+    return _register_generated_svg(
+        project_dir, scene_id=scene_id, asset_name=asset_name,
+        svg_bytes=render_phy_logo(brand, variant), kind=AssetKind.FLOURISH,
+        semantic=False, pose=None, source="built_in:phy-logo",
+        creator=brand.assets.creator, license=brand.assets.license,
+        rights_basis=brand.assets.license, role="brand",
+        classification_reason="Fixed decorative PHY logo geometry.",
+    )
+
+
 def create_mascot_annotation_asset(
     project_dir: Path,
     *,
@@ -529,7 +554,7 @@ def _register_generated_svg(
     creator: str,
     license: str,
     rights_basis: str,
-    role: Literal["whiteboard", "mascot"],
+    role: Literal["whiteboard", "mascot", "brand"],
     classification_reason: str,
 ) -> Path:
     project = ProjectManifestV2.model_validate(read_yaml(project_dir / "project.yaml"))

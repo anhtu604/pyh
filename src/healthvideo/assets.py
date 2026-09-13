@@ -46,6 +46,7 @@ def referenced_storyboard_assets(
     root = revision_root.resolve()
     records = {record.path: record for record in manifest.assets}
     allowed = {
+        "brand": {AssetKind.FLOURISH},
         "mascot": {
             AssetKind.MASCOT_REACTION,
             AssetKind.MASCOT_MEDICAL_ANNOTATION,
@@ -74,6 +75,18 @@ def referenced_storyboard_assets(
                     f"Scene {scene.id}: visual role {reference.role!r} does not match "
                     f"asset kind {record.kind.value!r}"
                 )
+            if reference.role == "brand" and (
+                scene.visual != "brand_outro"
+                or record.storyboard_role != "brand"
+                or record.semantic
+            ):
+                raise ValueError(f"Scene {scene.id}: brand logo ownership or classification mismatch")
+            if scene.visual == "brand_outro" and reference.role == "mascot" and (
+                record.kind is not AssetKind.MASCOT_REACTION
+                or record.semantic
+                or record.storyboard_role != "mascot"
+            ):
+                raise ValueError(f"Scene {scene.id}: outro mascot must be decorative reaction")
             candidate = root.joinpath(*relative.parts)
             resolved = candidate.resolve(strict=False)
             if not resolved.is_relative_to(root):

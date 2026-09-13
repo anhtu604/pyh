@@ -173,6 +173,7 @@ applicability, per-claim doctor notes — hoãn sang M3).
 | M6.4 plan | Kế hoạch triển khai sáu lát: contract, authoring/gate, logo khai báo, timing/audio QA, Remotion, tích hợp/acceptance. Chưa sửa code. | ChatGPT planning review iteration 2 DONE; ready to execute | 22 contract tests; Ruff; plan/spec self-review; `git diff --check` | `docs: plan M6.4 hook and outro implementation` |
 | M6.4 contract | Profile `hook_outro_v1`, câu kết cố định, scene–line binding và yêu cầu logo ở cổng duyệt; dữ liệu legacy giữ mặc định riêng. | Implemented; authoring, asset, timing và render còn tiếp tục | 24 domain/contract tests; schema export; Ruff; `git diff --check` | `feat: define M6.4 script storyboard contract` |
 | M6.4 authoring/gate | Lệnh `outro author` ghi script và storyboard có intent phục hồi; cổng duyệt y khoa từ chối intent dở hoặc thiếu logo, kiểm tra hook–claim–marker–source; packet hiển thị hook/outro. | Implemented; logo, timing và render còn tiếp tục | 63 workflow/CLI tests; Ruff; `git diff --check` | `feat: author reviewed PHY outro before medical gate` |
+| M6.4 logo | Logo PHY decorative được khai báo `FLOURISH`/`brand`, có hash và rights ledger; cổng duyệt kiểm tra role/kind/file và đưa bytes logo vào hash duyệt. | Implemented; timing và render còn tiếp tục | 83 domain/workflow tests; schema export; Ruff; `git diff --check` | `feat: register declared PHY logo for outro` |
 
 ## Kiến trúc
 

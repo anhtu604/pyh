@@ -87,7 +87,7 @@ class AssetRecord(BaseModel):
     creator: str = Field(pattern=r"\S")
     revision: str = Field(pattern=_REVISION_ID_PATTERN)
     rights_required: bool = False
-    storyboard_role: Literal["whiteboard", "mascot"] | None = None
+    storyboard_role: Literal["whiteboard", "mascot", "brand"] | None = None
 
     @model_validator(mode="after")
     def _validate_path_shape(self) -> AssetRecord:

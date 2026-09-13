@@ -79,7 +79,8 @@
             {
               "enum": [
                 "whiteboard",
-                "mascot"
+                "mascot",
+                "brand"
               ],
               "type": "string"
             },
