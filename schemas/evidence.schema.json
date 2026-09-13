@@ -1,4 +1,87 @@
 {
+  "$defs": {
+    "ChartDatum": {
+      "additionalProperties": false,
+      "description": "An explicitly recorded count, never extracted or estimated by the renderer.",
+      "properties": {
+        "ci_high": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ci High"
+        },
+        "ci_low": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ci Low"
+        },
+        "denominator": {
+          "exclusiveMinimum": 0,
+          "maximum": 1000000000,
+          "title": "Denominator",
+          "type": "integer"
+        },
+        "id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "count_of_total",
+          "default": "count_of_total",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "source_id": {
+          "minLength": 1,
+          "title": "Source Id",
+          "type": "string"
+        },
+        "unit": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Unit",
+          "type": "string"
+        },
+        "value": {
+          "minimum": 0,
+          "title": "Value",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "source_id",
+        "label",
+        "value",
+        "denominator",
+        "unit"
+      ],
+      "title": "ChartDatum",
+      "type": "object"
+    }
+  },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
     "applicability": {
@@ -17,6 +100,13 @@
       ],
       "title": "Certainty",
       "type": "string"
+    },
+    "chart_data": {
+      "items": {
+        "$ref": "#/$defs/ChartDatum"
+      },
+      "title": "Chart Data",
+      "type": "array"
     },
     "doctor_notes": {
       "default": "",

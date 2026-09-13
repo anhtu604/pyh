@@ -12,6 +12,7 @@ from datetime import datetime
 from pathlib import Path
 
 from healthvideo.domain.asset_manifest import (
+    AssetKind,
     load_asset_manifest,
     validate_asset_manifest,
 )
@@ -20,6 +21,7 @@ from healthvideo.domain.gate_review import (
     GateKind,
     GateRejectionRecord,
 )
+from healthvideo.domain.license_ledger import LicenseLedger, validate_license_ledger
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
 from healthvideo.storage.files import (
@@ -64,6 +66,9 @@ def medical_reviewed_paths(revision_root: Path) -> dict[str, Path]:
     manifest_path = paths["assets/asset-manifest.yaml"]
     if manifest_path.is_file():
         manifest = load_asset_manifest(manifest_path)
+        rights_path = revision_root / "assets" / "license-ledger.yaml"
+        if rights_path.is_file():
+            paths["assets/license-ledger.yaml"] = rights_path
         for asset in manifest.assets:
             if asset.semantic:
                 paths[f"asset:{asset.path}"] = revision_root / asset.path
@@ -73,7 +78,9 @@ def medical_reviewed_paths(revision_root: Path) -> dict[str, Path]:
 def video_reviewed_paths(revision_root: Path) -> dict[str, Path]:
     """Name the artifacts the video gate covers: the render manifest and the MP4."""
     return {
-        "renders/render-manifest.json": revision_root / "renders" / "render-manifest.json",
+        "renders/render-manifest.json": revision_root
+        / "renders"
+        / "render-manifest.json",
         "renders/video.mp4": revision_root / "renders" / "video.mp4",
     }
 
@@ -91,7 +98,9 @@ def hash_reviewed_artifacts(paths: dict[str, Path]) -> dict[str, str]:
     tolerates gaps, since "an asset is missing" can itself be the rejection
     reason and must not crash the audit trail.
     """
-    return {name: _hash_artifact(path) for name, path in paths.items() if path.is_file()}
+    return {
+        name: _hash_artifact(path) for name, path in paths.items() if path.is_file()
+    }
 
 
 def _hash_artifact(path: Path) -> str:
@@ -135,6 +144,18 @@ def approve_gate(
     if kind is GateKind.MEDICAL:
         manifest = load_asset_manifest(revision_root / "assets" / "asset-manifest.yaml")
         validate_asset_manifest(revision_root, manifest)
+        rights_path = revision_root / "assets/license-ledger.yaml"
+        if (
+            any(asset.kind is AssetKind.DATA_CHART for asset in manifest.assets)
+            and not rights_path.is_file()
+        ):
+            raise FileNotFoundError("medical gate needs chart license ledger")
+        if rights_path.is_file():
+            validate_license_ledger(
+                manifest,
+                LicenseLedger.model_validate(read_yaml(rights_path)),
+                revision_root.name,
+            )
         pronunciation_module.load_pronunciation_lexicon(
             pronunciation_module.PRONUNCIATION_PROFILE_PATH
         )
@@ -142,11 +163,17 @@ def approve_gate(
     paths = _REVIEWED_PATHS[kind](revision_root)
     missing = [name for name, path in paths.items() if not path.is_file()]
     if missing:
-        raise FileNotFoundError(f"{kind.value} gate needs artifacts: {', '.join(sorted(missing))}")
+        raise FileNotFoundError(
+            f"{kind.value} gate needs artifacts: {', '.join(sorted(missing))}"
+        )
     artifact_hashes = hash_reviewed_artifacts(paths)
 
     record = GateApprovalRecord(
-        kind=kind, reviewer=reviewer, reviewed_at=now, artifact_hashes=artifact_hashes, note=note
+        kind=kind,
+        reviewer=reviewer,
+        reviewed_at=now,
+        artifact_hashes=artifact_hashes,
+        note=note,
     )
     write_yaml_once(approval_path, record.model_dump(mode="json"))
 
@@ -227,7 +254,9 @@ def resume_gate(
     project = _load_project(project_dir)
     context = TransitionContext(
         active_revision=project.active_revision,
-        current_input_hash=canonical_json_hash({"resume": target.value, "at": now.isoformat()}),
+        current_input_hash=canonical_json_hash(
+            {"resume": target.value, "at": now.isoformat()}
+        ),
         validated_artifacts=frozenset(),
         reason_code=reason_code,
     )

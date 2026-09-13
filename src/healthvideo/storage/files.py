@@ -62,7 +62,7 @@ def replace_directory_atomic(source_dir: Path, destination_dir: Path) -> None:
     existing destination is renamed aside first and deleted only once the new
     directory is in place; a failed rename puts the old directory back.
     """
-    _recover_missing_destination(destination_dir)
+    recover_directory_promotion(destination_dir)
     if not destination_dir.exists():
         os.replace(source_dir, destination_dir)
         return
@@ -86,7 +86,8 @@ def replace_directory_atomic(source_dir: Path, destination_dir: Path) -> None:
     shutil.rmtree(superseded, ignore_errors=True)
 
 
-def _recover_missing_destination(destination_dir: Path) -> None:
+def recover_directory_promotion(destination_dir: Path) -> None:
+    """Restore the one preserved predecessor after an interrupted promotion."""
     """Restore the one preserved predecessor before attempting a new promotion."""
     if destination_dir.exists():
         return

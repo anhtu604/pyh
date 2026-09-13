@@ -54,6 +54,17 @@ sung từ điển phát âm cho tên thuốc; ElevenLabs fallback chỉ làm khi
 Không đưa audio/model/cache, credential hoặc bản render tạm vào Git; không vượt
 hai cổng duyệt hoặc tự đăng.
 
+M6 bắt đầu theo [kế hoạch visual](docs/superpowers/plans/2026-09-13-visuals-m6.md).
+M6.1 chỉ tạo chart SVG tĩnh từ `chart_data` dạng `count_of_total` được ghi rõ
+trong claim của `evidence/ledger.yaml`: số đếm nguyên, mẫu số, đơn vị, nhãn,
+source ID và CI tùy chọn. API Python `create_evidence_chart` chỉ nhận project v2
+chưa duyệt y khoa; nó kiểm nguồn thuộc claim, đăng ký `data_chart` với
+`semantic: true`, hash bytes trong `assets/asset-manifest.yaml` và ghi
+`assets/license-ledger.yaml` từ license/căn cứ quyền do operator nhập tường
+minh. Code không suy đoán giấy phép, không tạo số liệu, không đổi state; medical
+gate hash cả asset và license ledger. Chưa nối chart vào Remotion hoặc CLI;
+paper highlight, mascot, signature, visual budget và Veo nằm ở các lát M6 sau.
+
 ## Milestone
 
 MVP complete: vertical slice từ author brief, evidence, kịch bản và storyboard
@@ -123,6 +134,7 @@ applicability, per-claim doctor notes — hoãn sang M3).
 | M5.3 | Xác minh môi trường (RTX 3060, Python 3.11, ffmpeg 8.1.1) và nguồn/giấy phép VieNeu-TTS v3 Turbo (`vieneu==3.6.4`, HF revision `8b7e9cf`, Apache-2.0); wrapper `tools/tts/vieneu_synth.py`; `evaluate_benchmark` với ngưỡng khách quan; lệnh `healthvideo tts-benchmark`; bộ 13 case; benchmark thật fp32/int8 ghi trong plan. Voice chính thức, ASR, ElevenLabs và `produce --tts vieneu` chưa làm. | complete | `python -m pytest -q` (532 passed); `ruff check src tests tools`; `git diff --check`; benchmark thật 2×13 case | `feat: benchmark VieNeu-TTS with objective gates` |
 | M5.4 | ASR back-check `CommandASR` + `word_error_rate` (faster-whisper 1.2.1, MIT; wrapper `tools/tts/whisper_transcribe.py`); `NormalizedTTS` FFmpeg loudnorm; `tts-benchmark --asr-*`/`--max-wer`; `produce --tts vieneu --voice`; sửa `build_render_argv` dùng đường dẫn tuyệt đối. Chạy thật: WER 13 case (10/13 ≤ 0,2), produce golden v2 bằng VieNeu đến `awaiting_video_review`. Voice chính thức và ElevenLabs chưa làm. | complete | `python -m pytest -q` (548 passed); `ruff check src tests tools`; `git diff --check`; benchmark + produce thật | `feat: add ASR back-check and loudnorm to VieNeu production` |
 | M5 handoff 2 | Chốt M5: kỹ thuật xong tại `c4a500c`; còn chờ bác sĩ chọn voice và bổ sung từ điển tên thuốc; ElevenLabs chờ key. M6 bắt đầu từ HEAD này. | complete | README review; `git diff --check` | `docs: hand off M5 completion` |
+| M6.1 | Chart SVG count-of-total xác định từ datum explicit trong evidence ledger; asset semantic hash và license/right ledger cùng revision, medical gate ràng buộc bytes/metadata; không đổi v1/state. Các visual/render khác theo plan M6. | complete; C2C review DONE | `python -m pytest -q` (585 passed); Ruff; schema export; video test (12 passed)/typecheck; `git diff --check` | `feat: register evidence-bound charts and asset rights` |
 
 ## Kiến trúc
 

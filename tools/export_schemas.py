@@ -9,6 +9,7 @@ from healthvideo.domain.agent_review import AgentReviewResponse
 from healthvideo.domain.asset_manifest import AssetManifest
 from healthvideo.domain.author import AuthorBrief
 from healthvideo.domain.evidence import EvidenceClaim
+from healthvideo.domain.license_ledger import LicenseLedger
 from healthvideo.domain.project_v2 import ProjectManifestV2
 from healthvideo.domain.pronunciation import PronunciationLexicon
 from healthvideo.domain.script import Script
@@ -30,6 +31,7 @@ SCHEMAS: dict[str, type[BaseModel]] = {
     "render-input.schema.json": RenderInput,
     "stage-manifest.schema.json": StageManifest,
     "asset-manifest.schema.json": AssetManifest,
+    "license-ledger.schema.json": LicenseLedger,
     "agent-review-response.schema.json": AgentReviewResponse,
 }
 

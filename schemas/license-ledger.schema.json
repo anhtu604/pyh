@@ -1,0 +1,70 @@
+{
+  "$defs": {
+    "LicenseEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "creator": {
+          "title": "Creator",
+          "type": "string"
+        },
+        "license": {
+          "title": "License",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "revision": {
+          "pattern": "^[0-9]{3}$",
+          "title": "Revision",
+          "type": "string"
+        },
+        "rights_basis": {
+          "title": "Rights Basis",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "source",
+        "creator",
+        "license",
+        "rights_basis",
+        "revision",
+        "sha256"
+      ],
+      "title": "LicenseEntry",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "entries": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/LicenseEntry"
+      },
+      "title": "Entries",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "2.0",
+      "default": "2.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "title": "LicenseLedger",
+  "type": "object"
+}
