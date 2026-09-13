@@ -5,7 +5,10 @@ RemotionRunner = Callable[[list[str]], int]
 
 
 def build_render_argv(render_input: Path, output: Path, public_dir: Path) -> list[str]:
-    """Build the cross-platform argv used to render the HealthVideo composition."""
+    """Build the cross-platform argv used to render the HealthVideo composition.
+
+    Paths are absolute because ``pnpm --dir`` runs Remotion from ``video/``.
+    """
     repository_root = Path(__file__).resolve().parents[3]
     return [
         "pnpm",
@@ -13,9 +16,9 @@ def build_render_argv(render_input: Path, output: Path, public_dir: Path) -> lis
         str(repository_root / "video"),
         "render",
         "--props",
-        str(render_input),
+        str(render_input.resolve()),
         "--output",
-        str(output),
+        str(output.resolve()),
         "--public-dir",
-        str(public_dir),
+        str(public_dir.resolve()),
     ]

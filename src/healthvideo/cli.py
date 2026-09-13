@@ -28,6 +28,8 @@ from healthvideo.process import resolve_pnpm_argv
 from healthvideo.render.remotion import build_render_argv
 from healthvideo.storage.files import read_yaml, write_text_atomic
 from healthvideo.storage.revisions import create_revision
+from healthvideo.tts.asr import CommandASR
+from healthvideo.tts.base import TTSProvider
 from healthvideo.tts.benchmark import (
     BenchmarkThresholds,
     evaluate_benchmark,
@@ -35,6 +37,7 @@ from healthvideo.tts.benchmark import (
     run_benchmark,
 )
 from healthvideo.tts.command import CommandTTS
+from healthvideo.tts.normalize import NormalizedTTS
 from healthvideo.tts.silent import SilentTTS
 from healthvideo.workflows.agent_review import (
     complete_second_model_review,
@@ -75,6 +78,27 @@ from healthvideo.workflows.topic import (
 )
 
 CONFIRMATION = "APPROVE"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_TTS_PYTHON = REPO_ROOT / "cache" / "tts-venv" / "Scripts" / "python.exe"
+VIENEU_WRAPPER = REPO_ROOT / "tools" / "tts" / "vieneu_synth.py"
+
+
+def build_vieneu_tts(*, python: Path, voice: str, precision: str) -> NormalizedTTS:
+    """VieNeu v3 Turbo through the local wrapper, then FFmpeg loudnorm; no paths in identity."""
+    voice_alias = re.sub(r"[^A-Za-z0-9._-]", "-", voice).strip("-").lower() or "voice"
+    inner = CommandTTS(
+        executable=str(python),
+        arguments=(
+            str(VIENEU_WRAPPER), "--input", "{input}", "--output", "{output}",
+            "--backend", "onnx", "--voice", voice, "--precision", precision,
+        ),
+        model_id="vieneu-v3-turbo",
+        voice_id=voice_alias,
+        runtime_id=f"onnx-cpu-{precision}",
+    )
+    return NormalizedTTS(inner)
+
+
 app = typer.Typer(no_args_is_help=True)
 project_app = typer.Typer(no_args_is_help=True)
 review_app = typer.Typer(no_args_is_help=True)
@@ -192,7 +216,14 @@ def produce(
     project_dir: Annotated[
         Path, typer.Argument(help="Thư mục dự án đã duyệt kịch bản")
     ],
-    tts: Annotated[str, typer.Option("--tts", help="Nhà cung cấp TTS")] = "silent",
+    tts: Annotated[str, typer.Option("--tts", help="Nhà cung cấp TTS: silent | vieneu")] = "silent",
+    voice: Annotated[
+        str | None, typer.Option("--voice", help="Preset voice VieNeu do bác sĩ chọn")
+    ] = None,
+    tts_python: Annotated[
+        Path, typer.Option("--tts-python", help="Python của môi trường TTS riêng")
+    ] = DEFAULT_TTS_PYTHON,
+    precision: Annotated[str, typer.Option("--precision", help="fp32 | int8")] = "fp32",
     dry_run: Annotated[
         bool,
         typer.Option(
@@ -201,7 +232,18 @@ def produce(
     ] = False,
 ) -> None:
     """Tạo video từ script/storyboard đã duyệt y khoa."""
-    if tts != "silent":
+    if tts == "silent":
+        provider: TTSProvider = SilentTTS()
+    elif tts == "vieneu":
+        if not voice:
+            typer.echo("--tts vieneu cần --voice <preset> do bác sĩ chọn")
+            raise typer.Exit(code=1)
+        try:
+            provider = build_vieneu_tts(python=tts_python, voice=voice, precision=precision)
+        except ValueError as error:
+            typer.echo(str(error))
+            raise typer.Exit(code=1) from error
+    else:
         typer.echo(f"Unsupported TTS provider: {tts}")
         raise typer.Exit(code=1)
 
@@ -210,9 +252,7 @@ def produce(
         return subprocess.run(resolved, check=False, shell=False).returncode
 
     try:
-        output = produce_project(
-            project_dir, SilentTTS(), run_remotion, dry_run=dry_run
-        )
+        output = produce_project(project_dir, provider, run_remotion, dry_run=dry_run)
     except (FileNotFoundError, RuntimeError, ValueError) as error:
         typer.echo(str(error))
         raise typer.Exit(code=1) from error
@@ -235,26 +275,40 @@ def tts_benchmark(
     voice_id: Annotated[str, typer.Option("--voice-id", help="Alias công khai của giọng")],
     runtime_id: Annotated[str, typer.Option("--runtime-id")] = "operator-configured",
     max_rtf: Annotated[float, typer.Option("--max-rtf", help="Ngưỡng realtime factor")] = 1.0,
+    asr_command: Annotated[
+        str | None, typer.Option("--asr-command", help="Lệnh ASR cục bộ để back-check")
+    ] = None,
+    asr_args: Annotated[
+        list[str] | None, typer.Option("--asr-arg", help="Tham số ASR, một {input} và một {output}")
+    ] = None,
+    asr_model_id: Annotated[str, typer.Option("--asr-model-id")] = "asr",
+    max_wer: Annotated[float, typer.Option("--max-wer", help="Ngưỡng word error rate")] = 0.2,
 ) -> None:
-    """Chạy benchmark TTS khách quan (WAV, thời gian, tốc độ đọc); không chấm chất lượng giọng."""
+    """Chạy benchmark TTS khách quan (WAV, thời gian, tốc độ đọc, WER); không chấm chất lượng giọng."""
     import json
     from dataclasses import asdict
 
+    thresholds = BenchmarkThresholds(max_realtime_factor=max_rtf, max_wer=max_wer)
     try:
         cases = load_benchmark_cases(cases_file)
         provider = CommandTTS(
             executable=command, arguments=tuple(args), model_id=model_id,
             voice_id=voice_id, runtime_id=runtime_id,
         )
+        asr = (
+            CommandASR(
+                executable=asr_command, arguments=tuple(asr_args or ()), model_id=asr_model_id
+            )
+            if asr_command
+            else None
+        )
     except (KeyError, TypeError, ValueError, OSError) as error:
         typer.echo(str(error))
         raise typer.Exit(code=1) from error
-    records = run_benchmark(cases, [provider], output_dir)
-    verdicts = evaluate_benchmark(
-        records, cases, BenchmarkThresholds(max_realtime_factor=max_rtf)
-    )
+    records = run_benchmark(cases, [provider], output_dir, asr=asr)
+    verdicts = evaluate_benchmark(records, cases, thresholds)
     report = {
-        "thresholds": asdict(BenchmarkThresholds(max_realtime_factor=max_rtf)),
+        "thresholds": asdict(thresholds),
         "records": [asdict(record) for record in records],
         "verdicts": [asdict(verdict) for verdict in verdicts],
         "summary": {"passed": sum(v.passed for v in verdicts), "total": len(verdicts)},

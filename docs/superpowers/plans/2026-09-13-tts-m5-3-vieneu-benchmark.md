@@ -1,4 +1,4 @@
-# M5.3 — Xác minh VieNeu-TTS v3 Turbo và benchmark khách quan
+# M5.3–M5.4 — Xác minh VieNeu-TTS v3 Turbo, benchmark khách quan, ASR back-check và chuẩn hóa audio
 
 Ngày: 13-09-2026. Phạm vi: nối provider thật vào `CommandTTS` (M5.2) qua một
 wrapper cục bộ, chạy benchmark có tiêu chí đo được, ghi kết quả thật. Không đổi
@@ -103,3 +103,80 @@ Không commit WAV, model, `cache/tts-venv` hay `benchmark.json`.
 `produce --tts vieneu`, chọn preset voice chính thức, ASR mismatch, loudness/khoảng
 lặng FFmpeg, ElevenLabs fallback, GPU backend, engine thường trú để bỏ chi phí nạp
 model mỗi lần gọi (chỉ cần nếu production chuyển sang gọi TTS theo câu).
+
+## 7. M5.4 — ASR back-check, loudnorm và `produce --tts vieneu` (13-09-2026)
+
+### 7.1 Nguồn/giấy phép ASR
+
+| Thành phần | Định danh | Giấy phép |
+|---|---|---|
+| `faster-whisper==1.2.1` (PyPI) | requires-python >=3.9; deps ctranslate2, onnxruntime, av, tokenizers | MIT |
+| HF `Systran/faster-whisper-small` | revision `536b066` | MIT |
+| HF `Systran/faster-whisper-medium` | revision `08e178d` | MIT |
+
+Cài vào cùng `cache/tts-venv`. Wrapper `tools/tts/whisper_transcribe.py --input {input}
+--output {output} [--model small] [--device cpu] [--compute-type int8]` ghi JSON
+`{"text": ...}`; `language="vi"` cố định.
+
+### 7.2 Thay đổi code
+
+- `healthvideo/tts/asr.py`: `normalize_transcript` (NFC, casefold, bỏ dấu câu),
+  `word_error_rate` (Levenshtein theo từ, stdlib), `CommandASR` (lệnh cục bộ,
+  identity chỉ `provider`/`model_id`).
+- `run_benchmark(..., asr=)` ghi `transcript`, `wer`, `asr_identity`,
+  `asr_error_type`; lỗi ASR không che kết quả TTS. `BenchmarkThresholds.max_wer`
+  (mặc định 0,2) thêm failure `asr_wer` / `asr_failed:<Type>`.
+- `healthvideo/tts/normalize.py`: `NormalizedTTS(inner)` gọi FFmpeg
+  `loudnorm=I=-16:TP=-1.5:LRA=11`, 48 kHz mono PCM16, fail-closed; identity =
+  identity của inner với `runtime_id` + `-loudnorm`.
+- CLI: `tts-benchmark --asr-command/--asr-arg/--asr-model-id/--max-wer`;
+  `produce --tts vieneu --voice <preset> [--tts-python] [--precision]` dựng
+  `NormalizedTTS(CommandTTS(vieneu_synth))` qua `build_vieneu_tts`. `--voice`
+  bắt buộc: bác sĩ chọn, code không mặc định.
+- Sửa lỗi có sẵn: `build_render_argv` truyền đường dẫn tương đối nên Remotion
+  (chạy với `pnpm --dir video`) không đọc được `--props`; nay resolve tuyệt đối.
+
+### 7.3 Kết quả thật — WER (fp32, voice `Adam`, faster-whisper small int8 CPU)
+
+| case | WER | Ghi chú transcript |
+|---|---|---|
+| so-huyet-ap | 0,40 | ASR ghi "140x90mm" thay vì chữ |
+| ten-thuoc | 0,83 | amlodipine/losartan/metformin được ghi theo âm Việt ("âm là đi pin", "lo sát tần", "mét phó minh") |
+| viet-tat | 0,17 | "HPA1C", "đến kỳ" |
+| anh-viet | 0,00 | |
+| so-thap-phan | 0,19 | "từng đường", "natree" |
+| phan-tram | 0,15 | "10%" |
+| cau-dai | 0,10 | "con người thân", "đò" |
+| cau-hoi | 0,07 | "ăn mạng" |
+| cam-xuc | 0,06 | "Sinh vui" |
+| liet-ke | 0,00 | |
+| don-vi | 0,36 | "gốc", "250 ml", "5 ngày" |
+| cau-ngan | 0,17 | "5 phút" |
+| bai-ghep | 0,15 | 185 từ; tên thuốc "Amle Dipin, Lozatan, Metformin" |
+
+Đọc kết quả:
+
+- WER đo lỗi gộp TTS+ASR. Whisper chuẩn hóa số/đơn vị sang ký hiệu ("5", "10%",
+  "ml") nên phạt oan các case số; `normalize_transcript` chưa quy đổi số–chữ.
+- `ten-thuoc` cho thấy tên thuốc Latin được đọc theo âm Việt hoặc ASR không nhận.
+  Đây là đầu vào cho từ điển phát âm (M5.1) và phải do bác sĩ nghe kết luận; WER
+  không phân biệt lỗi TTS với lỗi ASR.
+- Gate `--max-wer 0.2`: 10/13 case đạt; 3 case trượt (`so-huyet-ap`, `ten-thuoc`,
+  `don-vi`). Chưa tính là "đạt" hay "không đạt" về giọng; là danh sách câu cần
+  bác sĩ nghe trước.
+
+### 7.4 Kết quả thật — `produce --tts vieneu --voice Adam`
+
+Chạy trên bản sao golden v2 ở `medically_approved` (trong `cache/`): TTS +
+loudnorm + Remotion render xong sau 82 s; `render-manifest.json` ghi
+`provider_identity = {provider: command, model_id: vieneu-v3-turbo, voice_id: adam,
+runtime_id: onnx-cpu-fp32-loudnorm}`; audio 12,4 s, 48 kHz mono PCM16, đo lại
+bằng FFmpeg: I = −16,66 LUFS, TP = −1,50 dBTP; state sau produce là
+`awaiting_video_review` (cổng video vẫn phải duyệt tay). Không commit output.
+
+### 7.5 Còn mở sau M5.4
+
+- Chọn preset voice chính thức: bác sĩ nghe 13 WAV trong `cache/tts-benchmark-asr/`.
+- Quy đổi số–chữ trong `normalize_transcript` để WER bớt phạt oan.
+- ElevenLabs fallback: chưa có key nên chưa triển khai (không kiểm chứng được).
+- GPU backend / engine thường trú: chỉ khi cần tổng hợp theo câu.

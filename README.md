@@ -44,9 +44,13 @@ với tiêu chí đo khách quan và đã chạy benchmark thật trên máy nà
 `docs/superpowers/plans/2026-09-13-tts-m5-3-vieneu-benchmark.md`). Kết luận đo
 được: 13/13 case tổng hợp thành công, tốc độ đọc 2,7–4,8 từ/s; bài ~50 s đạt RTF
 0,55 (fp32) / 0,46 (int8) trên CPU; câu lẻ trượt RTF ≤ 1,0 vì mỗi lần gọi nạp
-model ~8 s. Chưa chọn voice chính thức, chưa có ASR, chuẩn hóa audio hay
-ElevenLabs fallback; `produce` vẫn dùng `SilentTTS`. Không đưa audio/model/cache,
-credential hoặc bản render tạm vào Git; không vượt hai cổng duyệt hoặc tự đăng.
+model ~8 s. M5.4 thêm ASR back-check (faster-whisper, MIT) với WER khách quan, chuẩn hóa
+loudness bằng FFmpeg (`NormalizedTTS`) và `produce --tts vieneu --voice <preset>`;
+đã chạy thật: 10/13 case WER ≤ 0,2 và một video golden v2 dựng xong bằng VieNeu
+(82 s, −16,7 LUFS) dừng ở `awaiting_video_review`. Chưa chọn voice chính thức
+(bác sĩ nghe), chưa có ElevenLabs fallback (không key). Không đưa
+audio/model/cache, credential hoặc bản render tạm vào Git; không vượt hai cổng
+duyệt hoặc tự đăng.
 
 ## Milestone
 
@@ -115,6 +119,7 @@ applicability, per-claim doctor notes — hoãn sang M3).
 | M5.2 | Adapter lệnh TTS cục bộ cấu hình rõ ràng, kiểm tra cấu trúc/tín hiệu WAV, nhận diện voice/runtime trong cache v2 và harness benchmark offline không chấm điểm chủ quan. Chưa chọn model hay chạy benchmark thật. | complete; C2C review DONE | `python -m pytest -q` (525 passed); Ruff; video test (12 passed)/typecheck; `git diff --check` | `1376663` |
 | M5 handoff | Đồng bộ báo cáo tiến độ, giới hạn còn mở và đầu vào M5.3 để tiếp tục từ HEAD hiện tại. | complete | README review; `git diff --check` | `docs: hand off pyh M5 progress` |
 | M5.3 | Xác minh môi trường (RTX 3060, Python 3.11, ffmpeg 8.1.1) và nguồn/giấy phép VieNeu-TTS v3 Turbo (`vieneu==3.6.4`, HF revision `8b7e9cf`, Apache-2.0); wrapper `tools/tts/vieneu_synth.py`; `evaluate_benchmark` với ngưỡng khách quan; lệnh `healthvideo tts-benchmark`; bộ 13 case; benchmark thật fp32/int8 ghi trong plan. Voice chính thức, ASR, ElevenLabs và `produce --tts vieneu` chưa làm. | complete | `python -m pytest -q` (532 passed); `ruff check src tests tools`; `git diff --check`; benchmark thật 2×13 case | `feat: benchmark VieNeu-TTS with objective gates` |
+| M5.4 | ASR back-check `CommandASR` + `word_error_rate` (faster-whisper 1.2.1, MIT; wrapper `tools/tts/whisper_transcribe.py`); `NormalizedTTS` FFmpeg loudnorm; `tts-benchmark --asr-*`/`--max-wer`; `produce --tts vieneu --voice`; sửa `build_render_argv` dùng đường dẫn tuyệt đối. Chạy thật: WER 13 case (10/13 ≤ 0,2), produce golden v2 bằng VieNeu đến `awaiting_video_review`. Voice chính thức và ElevenLabs chưa làm. | complete | `python -m pytest -q` (548 passed); `ruff check src tests tools`; `git diff --check`; benchmark + produce thật | `feat: add ASR back-check and loudnorm to VieNeu production` |
 
 ## Kiến trúc
 
@@ -306,6 +311,18 @@ trượt ngưỡng khách quan: WAV PCM16 24/48 kHz có tín hiệu, RTF ≤ `--
 (mặc định 1,0), tốc độ đọc 1,5–5,0 từ/s. Lệnh này không chấm phát âm hay độ tự
 nhiên; kết quả đo thật và cách đọc ghi trong plan M5.3. Lần đầu chạy wrapper sẽ
 tải model từ Hugging Face vào cache người dùng, ngoài Git.
+
+M5.4: `tts-benchmark` nhận thêm `--asr-command <exe> --asr-arg ... --asr-model-id
+... --max-wer 0.2`; `tools/tts/whisper_transcribe.py` (faster-whisper trong cùng
+`cache/tts-venv`, `uv pip install --python cache/tts-venv/Scripts/python.exe
+faster-whisper==1.2.1`) ghi transcript JSON; record thêm `transcript`, `wer`.
+WER là lỗi gộp TTS+ASR và chưa quy đổi số–chữ, chỉ dùng để khoanh câu cần bác sĩ
+nghe. `healthvideo produce <project> --tts vieneu --voice <preset> [--precision
+fp32|int8] [--tts-python <python của tts-venv>]` dựng `NormalizedTTS(CommandTTS)`:
+VieNeu tổng hợp rồi FFmpeg `loudnorm I=-16 TP=-1.5 LRA=11` về 48 kHz mono PCM16;
+`runtime_id` trong manifest/cache mang hậu tố `-loudnorm`. `--voice` bắt buộc và
+do bác sĩ chọn; `--tts silent` giữ nguyên. Mọi lần tổng hợp lại vẫn dừng ở cổng
+duyệt video.
 
 ## Remotion preview
 

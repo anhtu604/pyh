@@ -758,3 +758,58 @@ def test_tts_benchmark_exits_nonzero_when_a_case_fails(tmp_path) -> None:
     )
     assert result.exit_code == 1
     assert "synthesis_failed:RuntimeError" in result.stdout
+
+
+def test_tts_benchmark_accepts_asr_command_and_reports_wer(tmp_path) -> None:
+    import json
+
+    fake_tts = tmp_path / "fake_tts.py"
+    fake_tts.write_text(
+        "import sys, wave\n"
+        "with wave.open(sys.argv[2], 'wb') as w:\n"
+        "    w.setnchannels(1); w.setsampwidth(2); w.setframerate(48000)\n"
+        "    w.writeframes(bytes([16, 0]) * 96000)\n",
+        encoding="utf-8",
+    )
+    fake_asr = tmp_path / "fake_asr.py"
+    fake_asr.write_text(
+        "import sys, json\n"
+        "json.dump({'text': 'Hãy đo lại sau năm phút.'}, open(sys.argv[2], 'w', encoding='utf-8'))\n",
+        encoding="utf-8",
+    )
+    cases = tmp_path / "cases.yaml"
+    cases.write_text("cases:\n  - id: a\n    text: Hãy đo lại sau năm phút.\n", encoding="utf-8")
+    result = runner.invoke(
+        app,
+        [
+            "tts-benchmark", str(cases), "--output", str(tmp_path / "out"),
+            "--command", sys.executable, "--arg", str(fake_tts), "--arg", "{input}",
+            "--arg", "{output}", "--model-id", "m", "--voice-id", "v",
+            "--asr-command", sys.executable, "--asr-arg", str(fake_asr),
+            "--asr-arg", "{input}", "--asr-arg", "{output}", "--asr-model-id", "fake-asr",
+        ],
+    )
+    assert result.exit_code == 0, result.stdout
+    report = json.loads((tmp_path / "out" / "benchmark.json").read_text(encoding="utf-8"))
+    assert report["records"][0]["wer"] == 0.0
+    assert report["records"][0]["asr_identity"] == {"provider": "command", "model_id": "fake-asr"}
+
+
+def test_produce_vieneu_requires_voice_and_builds_normalized_command_provider(tmp_path) -> None:
+    from healthvideo.cli import build_vieneu_tts
+
+    result = runner.invoke(app, ["produce", str(tmp_path), "--tts", "vieneu"])
+    assert result.exit_code == 1
+    assert "--voice" in result.stdout
+
+    provider = build_vieneu_tts(
+        python=Path("C:/private/tts-venv/python.exe"), voice="Adam", precision="int8"
+    )
+    identity = provider.cache_identity()
+    assert identity == {
+        "provider": "command", "model_id": "vieneu-v3-turbo",
+        "voice_id": "adam", "runtime_id": "onnx-cpu-int8-loudnorm",
+    }
+    assert "private" not in str(identity)
+    assert provider.inner.arguments[-2:] == ("--precision", "int8")
+    assert "--voice" in provider.inner.arguments and "Adam" in provider.inner.arguments

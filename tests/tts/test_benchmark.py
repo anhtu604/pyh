@@ -88,3 +88,44 @@ def test_load_benchmark_cases_rejects_duplicates(tmp_path: Path) -> None:
         load_benchmark_cases(path)
     path.write_text("cases:\n  - id: a\n    text: Xin chào\n", encoding="utf-8")
     assert load_benchmark_cases(path) == [BenchmarkCase("a", "Xin chào")]
+
+
+def test_benchmark_records_asr_transcript_and_wer_gate(tmp_path: Path) -> None:
+    from healthvideo.tts.benchmark import BenchmarkThresholds, evaluate_benchmark
+
+    class EchoASR:
+        def identity(self):
+            return {"provider": "command", "model_id": "fake-asr"}
+
+        def transcribe(self, wav):
+            return "xin chào các bạn"
+
+    cases = [
+        BenchmarkCase(case_id="ok", text="Xin chào các bạn"),
+        BenchmarkCase(case_id="bad", text="Một câu hoàn toàn khác hẳn"),
+    ]
+    records = run_benchmark(cases, [SilentTTS()], tmp_path, asr=EchoASR())
+    assert records[0].transcript == "xin chào các bạn"
+    assert records[0].wer == 0.0
+    assert records[1].wer == 1.0
+    assert records[0].asr_identity == {"provider": "command", "model_id": "fake-asr"}
+    verdicts = evaluate_benchmark(records, cases, BenchmarkThresholds(max_wer=0.2))
+    assert "asr_wer" in verdicts[1].failures and "asr_wer" not in verdicts[0].failures
+
+
+def test_benchmark_asr_failure_is_recorded_not_raised(tmp_path: Path) -> None:
+    from healthvideo.tts.benchmark import evaluate_benchmark
+
+    class BrokenASR:
+        def identity(self):
+            return {"provider": "command", "model_id": "fake-asr"}
+
+        def transcribe(self, wav):
+            raise RuntimeError("private path C:/x")
+
+    case = BenchmarkCase(case_id="a", text="Xin chào")
+    records = run_benchmark([case], [SilentTTS()], tmp_path, asr=BrokenASR())
+    assert records[0].ok is True and records[0].wer is None
+    assert records[0].asr_error_type == "RuntimeError"
+    assert "private" not in str(records)
+    assert "asr_failed:RuntimeError" in evaluate_benchmark(records, [case])[0].failures

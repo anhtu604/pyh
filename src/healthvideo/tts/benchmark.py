@@ -5,8 +5,10 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
+from typing import Protocol
 
 from healthvideo.storage.files import canonical_json_hash, read_yaml
+from healthvideo.tts.asr import word_error_rate
 from healthvideo.tts.audio_checks import AudioReport, inspect_wav
 from healthvideo.tts.base import TTSProvider, TTSRequest, provider_identity
 
@@ -39,10 +41,38 @@ class BenchmarkRecord:
     elapsed_ms: int
     audio: AudioReport | None
     error_type: str | None
+    asr_identity: dict[str, str] | None = None
+    transcript: str | None = None
+    wer: float | None = None
+    asr_error_type: str | None = None
+
+
+class ASRProvider(Protocol):
+    def identity(self) -> dict[str, str]: ...
+
+    def transcribe(self, wav: Path) -> str: ...
+
+
+def _back_check(asr: ASRProvider | None, case: BenchmarkCase, wav: Path) -> dict[str, object]:
+    if asr is None:
+        return {}
+    try:
+        transcript = asr.transcribe(wav)
+        return {
+            "asr_identity": asr.identity(),
+            "transcript": transcript,
+            "wer": round(word_error_rate(case.text, transcript), 4),
+        }
+    except Exception as error:  # noqa: BLE001 - ASR failure must not hide TTS result
+        return {"asr_identity": asr.identity(), "asr_error_type": type(error).__name__}
 
 
 def run_benchmark(
-    cases: list[BenchmarkCase], providers: list[TTSProvider], output_dir: Path
+    cases: list[BenchmarkCase],
+    providers: list[TTSProvider],
+    output_dir: Path,
+    *,
+    asr: ASRProvider | None = None,
 ) -> tuple[BenchmarkRecord, ...]:
     output_dir.mkdir(parents=True, exist_ok=True)
     records: list[BenchmarkRecord] = []
@@ -67,10 +97,11 @@ def run_benchmark(
                     )
                 )
             else:
+                elapsed_ms = round((perf_counter() - started) * 1000)
                 records.append(
                     BenchmarkRecord(
-                        case.case_id, identity, True,
-                        round((perf_counter() - started) * 1000), audio, None,
+                        case.case_id, identity, True, elapsed_ms, audio, None,
+                        **_back_check(asr, case, output),
                     )
                 )
     return tuple(records)
@@ -83,6 +114,7 @@ class BenchmarkThresholds:
     max_realtime_factor: float = 1.0
     min_words_per_second: float = 1.5
     max_words_per_second: float = 5.0
+    max_wer: float = 0.2
 
 
 @dataclass(frozen=True)
@@ -119,6 +151,10 @@ def evaluate_benchmark(
                 failures.append("speech_rate_low")
             if wps > thresholds.max_words_per_second:
                 failures.append("speech_rate_high")
+            if record.asr_error_type is not None:
+                failures.append(f"asr_failed:{record.asr_error_type}")
+            elif record.wer is not None and record.wer > thresholds.max_wer:
+                failures.append("asr_wer")
         verdicts.append(
             CaseVerdict(
                 record.case_id, dict(record.provider_identity), not failures,
