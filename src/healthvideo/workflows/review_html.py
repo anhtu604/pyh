@@ -17,12 +17,50 @@ from healthvideo.domain.asset_manifest import AssetManifest
 from healthvideo.domain.evidence import EvidenceClaim, SourceRecord
 from healthvideo.domain.script import Script
 from healthvideo.domain.storyboard import Storyboard
+from healthvideo.domain.visual_budget import VisualCategory, calculate_visual_budget
 from healthvideo.storage.files import read_yaml
 
 _NOT_YET_MODELED = (
     "chưa có trong hệ thống: population, certainty, applicability, "
     "quan điểm bác sĩ theo từng claim."
 )
+
+
+def _render_visual_budget_section(storyboard: Storyboard) -> str:
+    if storyboard.visual_budget_profile != "m6_5_v1":
+        return ""
+    report = calculate_visual_budget(storyboard)
+    rows = []
+    for category in VisualCategory:
+        frames = report.category_frames[category]
+        basis_points = report.category_basis_points[category]
+        bounds = report.effective_bounds[category]
+        percentage = f"{basis_points // 100}.{basis_points % 100:02d}%"
+        rows.append(
+            "<tr>"
+            f"<td>{escape(category.value)}</td><td>{frames}</td>"
+            f"<td>{basis_points} bp ({percentage})</td>"
+            f"<td>{bounds.min_percent}–{bounds.max_percent}%</td>"
+            "</tr>"
+        )
+    override = storyboard.visual_budget_override
+    rationale = (
+        f"<p>Lý do override: {escape(override.rationale)}</p>"
+        if override is not None
+        else ""
+    )
+    return (
+        '<section><h2>Ngân sách visual M6.5</h2>'
+        f"<p>Profile: {escape(report.profile)}</p>"
+        f"<p>Tổng timeline: {report.total_frames} frame</p>"
+        f"<p>Override: {'có' if report.override_active else 'không'}</p>"
+        + rationale
+        + '<table border="1"><thead><tr><th>Nhóm</th><th>Frame</th>'
+        "<th>Tỷ lệ</th><th>Giới hạn hiệu lực</th></tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table>"
+        f"<p>Kết quả: {'đạt' if report.passed else 'không đạt'}</p></section>"
+    )
 
 
 def render_medical_packet(revision_root: Path) -> str:
@@ -107,6 +145,7 @@ def render_medical_packet(revision_root: Path) -> str:
         )
 
     note_paragraph = f"<p>{escape(_NOT_YET_MODELED)}</p>" if has_unmodeled else ""
+    visual_budget_section = _render_visual_budget_section(storyboard)
     hook_outro_section = ""
     if script.format_profile == "hook_outro_v1":
         final = storyboard.scenes[-1]
@@ -156,6 +195,7 @@ def render_medical_packet(revision_root: Path) -> str:
             else ""
         )
         + note_paragraph
+        + visual_budget_section
         + hook_outro_section
         + "</body></html>"
     )

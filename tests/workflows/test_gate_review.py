@@ -1,3 +1,4 @@
+from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -11,11 +12,16 @@ from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.workflows.gate_review import (
     MEDICAL_APPROVAL_ARTIFACT,
     approve_gate,
+    hash_reviewed_artifacts,
     medical_reviewed_paths,
     reject_gate,
     resume_gate,
 )
-from tests.helpers import advance_v2_project_to_video_review, create_v2_project_fixture
+from tests.helpers import (
+    advance_v2_project_to_video_review,
+    create_project_fixture,
+    create_v2_project_fixture,
+)
 
 REVIEWER = "BS Nguyễn Văn An"
 NOW = datetime(2026, 9, 11, 9, 0, tzinfo=UTC)
@@ -36,6 +42,63 @@ def _advance_to_awaiting_medical_review(project_dir: Path) -> None:
     )
     changed = transition_v2(manifest, WorkflowState.AWAITING_MEDICAL_REVIEW, context)
     write_yaml_atomic(project_dir / "project.yaml", changed.model_dump(mode="json"))
+
+
+def _enable_visual_budget(
+    project_dir: Path,
+    *,
+    passing_default: bool = True,
+    override: dict[str, object] | None = None,
+) -> Path:
+    storyboard_path = (
+        project_dir / "revisions" / "001" / "storyboard" / "storyboard.yaml"
+    )
+    board = read_yaml(storyboard_path)
+    board["visual_budget_profile"] = "m6_5_v1"
+    highlight = deepcopy(board["scenes"][0])
+    whiteboard_frames = 900 if passing_default else 800
+    highlight_frames = 300 if passing_default else 400
+    board["scenes"] = [
+        {
+            "id": "S01",
+            "start_frame": 0,
+            "duration_frames": whiteboard_frames,
+            "narration": "Visual whiteboard synthetic.",
+            "claim_id": "C01",
+            "source_marker": "[1]",
+            "visual": "whiteboard",
+        },
+        {
+            **highlight,
+            "id": "S02",
+            "start_frame": whiteboard_frames,
+            "duration_frames": highlight_frames,
+        },
+    ]
+    if override is not None:
+        board["visual_budget_override"] = override
+    write_yaml_atomic(storyboard_path, board)
+    return storyboard_path
+
+
+def _override(
+    *,
+    rationale: str = "Fixture cần tỷ lệ chart cao hơn mặc định.",
+    whiteboard: tuple[int, int] = (60, 70),
+    chart: tuple[int, int] = (30, 40),
+) -> dict[str, object]:
+    return {
+        "rationale": rationale,
+        "whiteboard_svg": {
+            "min_percent": whiteboard[0],
+            "max_percent": whiteboard[1],
+        },
+        "chart_crop": {
+            "min_percent": chart[0],
+            "max_percent": chart[1],
+        },
+        "ai_clip": {"min_percent": 0, "max_percent": 0},
+    }
 
 
 def test_medical_reviewed_paths_includes_ledger_script_storyboard_manifest_and_semantic_assets(
@@ -94,6 +157,106 @@ def test_approve_medical_writes_record_once_and_advances_state(tmp_path: Path) -
 
     with pytest.raises(FileExistsError):
         approve_gate(project_dir, GateKind.MEDICAL, reviewer=REVIEWER, now=NOW)
+
+
+def test_m6_5_default_budget_allows_normal_manual_medical_approval(
+    tmp_path: Path,
+) -> None:
+    project_dir = create_v2_project_fixture(
+        tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW
+    )
+    _enable_visual_budget(project_dir)
+
+    approve_gate(project_dir, GateKind.MEDICAL, reviewer=REVIEWER, now=NOW)
+
+    revision = project_dir / "revisions/001"
+    assert (revision / MEDICAL_APPROVAL_ARTIFACT).is_file()
+    assert read_yaml(project_dir / "project.yaml")["state"] == "medically_approved"
+    assert not (revision / "reviews/visual-budget-approval.yaml").exists()
+
+
+def test_m6_5_invalid_default_budget_refuses_before_approval_or_state_change(
+    tmp_path: Path,
+) -> None:
+    project_dir = create_v2_project_fixture(
+        tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW
+    )
+    _enable_visual_budget(project_dir, passing_default=False)
+
+    with pytest.raises(ValueError, match="visual budget failed"):
+        approve_gate(project_dir, GateKind.MEDICAL, reviewer=REVIEWER, now=NOW)
+
+    revision = project_dir / "revisions/001"
+    assert not (revision / MEDICAL_APPROVAL_ARTIFACT).exists()
+    assert read_yaml(project_dir / "project.yaml")["state"] == (
+        "awaiting_medical_review"
+    )
+
+
+def test_m6_5_reviewed_override_changes_bounds_but_still_enforces_them(
+    tmp_path: Path,
+) -> None:
+    passing = create_v2_project_fixture(
+        tmp_path / "passing", state=WorkflowState.AWAITING_MEDICAL_REVIEW
+    )
+    _enable_visual_budget(passing, passing_default=False, override=_override())
+    approve_gate(passing, GateKind.MEDICAL, reviewer=REVIEWER, now=NOW)
+
+    failing = create_v2_project_fixture(
+        tmp_path / "failing", state=WorkflowState.AWAITING_MEDICAL_REVIEW
+    )
+    _enable_visual_budget(
+        failing,
+        passing_default=False,
+        override=_override(whiteboard=(70, 80), chart=(20, 30)),
+    )
+    with pytest.raises(ValueError, match="visual budget failed"):
+        approve_gate(failing, GateKind.MEDICAL, reviewer=REVIEWER, now=NOW)
+
+
+@pytest.mark.parametrize("mutation", ["timing", "profile", "bounds", "rationale"])
+def test_m6_5_storyboard_policy_changes_make_medical_hash_stale(
+    tmp_path: Path, mutation: str
+) -> None:
+    project_dir = create_v2_project_fixture(
+        tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW
+    )
+    storyboard_path = _enable_visual_budget(
+        project_dir, passing_default=False, override=_override()
+    )
+    record = approve_gate(
+        project_dir, GateKind.MEDICAL, reviewer=REVIEWER, now=NOW
+    )
+    board = read_yaml(storyboard_path)
+    if mutation == "timing":
+        board["scenes"][0]["duration_frames"] += 1
+    elif mutation == "profile":
+        board["visual_budget_profile"] = "legacy"
+        del board["visual_budget_override"]
+    elif mutation == "bounds":
+        board["visual_budget_override"]["chart_crop"]["max_percent"] += 1
+    else:
+        board["visual_budget_override"]["rationale"] += " Đã sửa."
+    write_yaml_atomic(storyboard_path, board)
+
+    revision = project_dir / "revisions/001"
+    current = hash_reviewed_artifacts(medical_reviewed_paths(revision))
+    assert current != record.artifact_hashes
+
+
+def test_legacy_v2_and_v1_medical_gates_remain_compatible(tmp_path: Path) -> None:
+    legacy_v2 = create_v2_project_fixture(
+        tmp_path / "v2", state=WorkflowState.AWAITING_MEDICAL_REVIEW
+    )
+    approve_gate(legacy_v2, GateKind.MEDICAL, reviewer=REVIEWER, now=NOW)
+
+    legacy_v1 = create_project_fixture(tmp_path / "v1", "awaiting_medical_review")
+    from healthvideo.workflows.review import approve_medical
+
+    approve_medical(legacy_v1, reviewer=REVIEWER)
+
+    assert read_yaml(legacy_v2 / "project.yaml")["state"] == "medically_approved"
+    assert read_yaml(legacy_v1 / "project.yaml")["state"] == "script_approved"
 
 
 def test_reject_medical_enters_side_state_and_can_repeat_before_approval(tmp_path: Path) -> None:

@@ -28,6 +28,7 @@ from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.script import Script
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
 from healthvideo.domain.storyboard import Storyboard
+from healthvideo.domain.visual_budget import validate_visual_budget
 from healthvideo.storage.files import (
     canonical_json_hash,
     read_yaml,
@@ -159,6 +160,7 @@ def approve_gate(
         storyboard = Storyboard.model_validate(
             read_yaml(revision_root / "storyboard/storyboard.yaml")
         )
+        validate_visual_budget(storyboard)
         script = Script.model_validate(read_yaml(revision_root / "script/script.yaml"))
         validate_hook_outro(script, storyboard, require_brand=True)
         referenced_storyboard_assets(revision_root, storyboard, manifest)

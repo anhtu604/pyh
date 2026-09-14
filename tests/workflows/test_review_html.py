@@ -1,9 +1,42 @@
+from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
 
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.workflows.review_html import render_medical_packet, render_video_packet
 from tests.helpers import advance_v2_project_to_video_review, create_v2_project_fixture
+
+
+def _enable_packet_budget(project_dir: Path, *, override: bool = False) -> None:
+    storyboard_path = project_dir / "revisions/001/storyboard/storyboard.yaml"
+    board = read_yaml(storyboard_path)
+    board["visual_budget_profile"] = "m6_5_v1"
+    highlight = deepcopy(board["scenes"][0])
+    board["scenes"] = [
+        {
+            "id": "S01",
+            "start_frame": 0,
+            "duration_frames": 900,
+            "narration": "Visual whiteboard synthetic.",
+            "claim_id": "C01",
+            "source_marker": "[1]",
+            "visual": "whiteboard",
+        },
+        {
+            **highlight,
+            "id": "S02",
+            "start_frame": 900,
+            "duration_frames": 300,
+        },
+    ]
+    if override:
+        board["visual_budget_override"] = {
+            "rationale": "Cần <b>chart</b> cho fixture & review.",
+            "whiteboard_svg": {"min_percent": 70, "max_percent": 80},
+            "chart_crop": {"min_percent": 20, "max_percent": 30},
+            "ai_clip": {"min_percent": 0, "max_percent": 0},
+        }
+    write_yaml_atomic(storyboard_path, board)
 
 
 def test_medical_packet_shows_public_and_technical_claim_text_escaped(
@@ -85,3 +118,39 @@ def test_medical_packet_shows_cropped_highlight_provenance_without_source_url(
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
     assert "<script>" not in html
     assert "example.invalid" not in html
+
+
+def test_medical_packet_shows_deterministic_m6_5_visual_budget(
+    tmp_path: Path,
+) -> None:
+    project_dir = create_v2_project_fixture(tmp_path)
+    _enable_packet_budget(project_dir)
+
+    html = render_medical_packet(project_dir / "revisions/001")
+
+    assert "Ngân sách visual M6.5" in html
+    assert "m6_5_v1" in html
+    assert "1200" in html
+    assert "whiteboard_svg" in html and "900" in html and "7500 bp" in html
+    assert "chart_crop" in html and "300" in html and "2500 bp" in html
+    assert "65–75%" in html and "15–25%" in html and "0–10%" in html
+    assert "Override: không" in html and "Kết quả: đạt" in html
+
+
+def test_medical_packet_escapes_override_rationale(tmp_path: Path) -> None:
+    project_dir = create_v2_project_fixture(tmp_path)
+    _enable_packet_budget(project_dir, override=True)
+
+    html = render_medical_packet(project_dir / "revisions/001")
+
+    assert "Override: có" in html
+    assert "Cần &lt;b&gt;chart&lt;/b&gt; cho fixture &amp; review." in html
+    assert "<b>chart</b>" not in html
+
+
+def test_legacy_medical_packet_has_no_m6_5_section(tmp_path: Path) -> None:
+    project_dir = create_v2_project_fixture(tmp_path)
+
+    html = render_medical_packet(project_dir / "revisions/001")
+
+    assert "Ngân sách visual M6.5" not in html
