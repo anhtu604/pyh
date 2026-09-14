@@ -27,10 +27,8 @@ const defaultProps: RenderInput = {
 };
 
 export const durationFromScenes = (scenes: Scene[]): number =>
-  Math.max(
-    MIN_DURATION_IN_FRAMES,
-    ...scenes.map((scene) => scene.start_frame + scene.duration_frames),
-  );
+  scenes.length ? Math.max(...scenes.map((scene) => scene.start_frame + scene.duration_frames))
+    : MIN_DURATION_IN_FRAMES;
 
 export const RemotionRoot: React.FC = () => (
   <Composition

@@ -37,6 +37,15 @@ describe('EvidenceHighlightSchema', () => {
 });
 
 describe('SceneSchema', () => {
+  it('parses the declared brand outro and rejects role pose misuse', () => {
+    const outro = {id: 'OUTRO', script_line_id: 'OUTRO', start_frame: 600,
+      duration_frames: 90, narration: 'Cảm ơn', visual: 'brand_outro',
+      visual_assets: [{path: 'assets/phy.svg', role: 'brand'}]};
+    expect(SceneSchema.safeParse(outro).success).toBe(true);
+    expect(SceneSchema.safeParse({...outro, visual_assets: [
+      {path: 'assets/phy.svg', role: 'brand', pose: 'welcome'},
+    ]}).success).toBe(false);
+  });
   it('accepts declared mascot refs and defaults legacy scenes', () => {
     const legacy = SceneSchema.parse({
       id: 'S01', start_frame: 0, duration_frames: 90,

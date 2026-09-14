@@ -7,15 +7,15 @@ const safeRelativePath = z.string().regex(/^(?!\.?\/?$)(?![A-Za-z]:)(?!\/)(?!.*\
 export const VisualAssetRefSchema = z
   .object({
     path: safeRelativePath,
-    role: z.enum(['whiteboard', 'mascot']),
+    role: z.enum(['whiteboard', 'mascot', 'brand']),
     pose: z.enum(['welcome', 'explain', 'caution']).nullable().optional(),
   })
   .superRefine((asset, context) => {
     if (asset.role === 'mascot' && !asset.pose) {
       context.addIssue({code: 'custom', path: ['pose'], message: 'mascot requires pose'});
     }
-    if (asset.role === 'whiteboard' && asset.pose) {
-      context.addIssue({code: 'custom', path: ['pose'], message: 'whiteboard cannot have pose'});
+    if (asset.role !== 'mascot' && asset.pose) {
+      context.addIssue({code: 'custom', path: ['pose'], message: `${asset.role} cannot have pose`});
     }
   });
 
@@ -79,9 +79,10 @@ export const SceneSchema = z
     start_frame: z.number().int().min(0),
     duration_frames: z.number().int().positive(),
     narration: z.string(),
+    script_line_id: z.string().nullable().optional(),
     claim_id: z.string().nullable().optional(),
     source_marker: z.string().regex(/\S/).nullable().optional(),
-    visual: z.enum(['whiteboard', 'chart', 'evidence_highlight', 'ai_clip']),
+    visual: z.enum(['whiteboard', 'chart', 'evidence_highlight', 'ai_clip', 'brand_outro']),
     evidence_highlight: EvidenceHighlightSchema.nullable().optional(),
     visual_assets: z.array(VisualAssetRefSchema).default([]),
   })
@@ -93,6 +94,15 @@ export const SceneSchema = z
         path: ['visual_assets'],
         message: 'scene visual asset paths must be unique',
       });
+    }
+    if (scene.visual === 'brand_outro') {
+      if (scene.visual_assets.filter((asset) => asset.role === 'brand').length !== 1 ||
+          scene.visual_assets.some((asset) => asset.role === 'whiteboard')) {
+        context.addIssue({code: 'custom', path: ['visual_assets'], message: 'outro requires one brand asset'});
+      }
+      if (scene.claim_id || scene.source_marker || scene.evidence_highlight) {
+        context.addIssue({code: 'custom', path: ['visual'], message: 'outro cannot contain evidence'});
+      }
     }
     if (scene.visual !== 'evidence_highlight') {
       return;

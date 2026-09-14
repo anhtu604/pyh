@@ -2,6 +2,8 @@ import React from 'react';
 import {describe, expect, it, vi} from 'vitest';
 import {HealthVideo} from './HealthVideo';
 import {VisualAsset} from './components/VisualAsset';
+import {OutroScene} from './scenes/OutroScene';
+import {parseRenderInput} from './types';
 
 vi.mock('remotion', () => ({
   AbsoluteFill: 'div',
@@ -29,6 +31,23 @@ const input = (visual: 'whiteboard' | 'evidence_highlight') => ({
 });
 
 describe('HealthVideo visual asset layer', () => {
+  it('opens with authored content and dispatches one declared logo in the final outro', () => {
+    const initial = input('whiteboard');
+    const props = parseRenderInput({...initial, scenes: [...initial.scenes, {
+      schema_version: '1.0', id: 'OUTRO', start_frame: 90, duration_frames: 60,
+      narration: 'Cảm ơn', visual: 'brand_outro',
+      source_marker: undefined, evidence_highlight: undefined,
+      visual_assets: [{path: 'assets/phy.svg', role: 'brand'}],
+    }]});
+    const root = HealthVideo(props) as React.ReactElement<{children: React.ReactNode}>;
+    const sequences = React.Children.toArray(root.props.children).slice(1) as React.ReactElement<{
+      children: React.ReactNode; from: number;
+    }>[];
+    expect(sequences[0].props.from).toBe(0);
+    const children = React.Children.toArray(sequences[1].props.children);
+    expect(children.some((child) => React.isValidElement(child) && child.type === OutroScene)).toBe(true);
+    expect(children.filter((child) => React.isValidElement(child) && child.type === VisualAsset)).toHaveLength(1);
+  });
   it.each(['whiteboard', 'evidence_highlight'] as const)(
     'renders one declared asset for a %s scene',
     (visual) => {

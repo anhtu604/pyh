@@ -1,6 +1,7 @@
 import React from 'react';
 import {AbsoluteFill, Audio, Sequence, staticFile} from 'remotion';
 import {EvidenceHighlightScene} from './scenes/EvidenceHighlightScene';
+import {OutroScene} from './scenes/OutroScene';
 import {WhiteboardScene} from './scenes/WhiteboardScene';
 import {VisualAsset} from './components/VisualAsset';
 import {parseRenderInput} from './types';
@@ -19,13 +20,15 @@ export const HealthVideo: React.FC<RenderInput> = (rawInput) => {
       <Audio src={staticFile(audio_file)} />
       {scenes.map((scene) => (
         <Sequence key={scene.id} from={scene.start_frame} durationInFrames={scene.duration_frames}>
-          {scene.visual === 'evidence_highlight' ? (
+          {scene.visual === 'brand_outro' ? (
+            <OutroScene scene={scene} />
+          ) : scene.visual === 'evidence_highlight' ? (
             <EvidenceHighlightScene scene={scene} />
           ) : (
             <WhiteboardScene scene={scene} />
           )}
           {scene.visual_assets.map((asset) => (
-            <VisualAsset asset={asset} key={asset.path} />
+            <VisualAsset asset={asset} outro={scene.visual === 'brand_outro'} key={asset.path} />
           ))}
         </Sequence>
       ))}
