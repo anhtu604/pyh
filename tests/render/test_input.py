@@ -7,7 +7,28 @@ from healthvideo.domain.storyboard import (
     Storyboard,
     VisualAssetRef,
 )
-from healthvideo.render.input import build_render_input
+from healthvideo.render.input import audio_timing_qa, build_render_input
+
+
+@pytest.mark.parametrize("frames", [600, 4200])
+def test_v2_duration_tracks_content_while_v1_keeps_legacy_range(frames: int) -> None:
+    board = Storyboard(title="variable", scenes=(Scene(
+        id="S01", start_frame=0, duration_frames=frames,
+        narration="content", visual="whiteboard",
+    ),))
+    assert build_render_input(board, "audio/narration.wav", duration_policy="v2").scenes[0].duration_frames == frames
+    with pytest.raises(ValueError, match="total duration"):
+        build_render_input(board, "audio/narration.wav")
+
+
+def test_audio_timing_guard_uses_integer_frame_boundary() -> None:
+    assert audio_timing_qa(1000, 30) == {
+        "audio_duration_ms": 1000,
+        "composition_duration_ms": 1000,
+        "trailing_visual_ms": 0,
+    }
+    with pytest.raises(ValueError, match="exceeds"):
+        audio_timing_qa(1034, 30)
 
 
 def valid_highlight_scene(**overrides: object) -> Scene:

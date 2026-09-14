@@ -22,7 +22,12 @@ class RenderInput(BaseModel):
     fps: Literal[30] = FRAMES_PER_SECOND
 
 
-def build_render_input(storyboard: Storyboard, audio_file: str) -> RenderInput:
+def build_render_input(
+    storyboard: Storyboard,
+    audio_file: str,
+    *,
+    duration_policy: Literal["v1", "v2"] = "v1",
+) -> RenderInput:
     _validate_relative_posix_path(audio_file, "audio")
 
     expected_start = 0
@@ -39,7 +44,7 @@ def build_render_input(storyboard: Storyboard, audio_file: str) -> RenderInput:
 
     if not storyboard.scenes:
         raise ValueError("Scene <none>: storyboard must contain at least one scene")
-    if not MIN_DURATION_FRAMES <= expected_start <= MAX_DURATION_FRAMES:
+    if duration_policy == "v1" and not MIN_DURATION_FRAMES <= expected_start <= MAX_DURATION_FRAMES:
         raise ValueError(
             f"Scene {storyboard.scenes[-1].id}: total duration must be between "
             f"{MIN_DURATION_FRAMES} and {MAX_DURATION_FRAMES} frames"
@@ -50,6 +55,20 @@ def build_render_input(storyboard: Storyboard, audio_file: str) -> RenderInput:
         audio_file=audio_file,
         scenes=storyboard.scenes,
     )
+
+
+def audio_timing_qa(audio_duration_ms: int, final_frame: int) -> dict[str, int]:
+    """Refuse narration beyond the last reviewed frame; report measured tail."""
+    if audio_duration_ms < 0 or final_frame <= 0:
+        raise ValueError("audio duration and final frame must be positive")
+    if 30 * audio_duration_ms > 1000 * (final_frame + 1):
+        raise ValueError("narration WAV exceeds reviewed storyboard timeline")
+    composition_ms = (1000 * final_frame + 29) // 30
+    return {
+        "audio_duration_ms": audio_duration_ms,
+        "composition_duration_ms": composition_ms,
+        "trailing_visual_ms": max(0, composition_ms - audio_duration_ms),
+    }
 
 
 def _validate_relative_posix_path(path: str, location: str) -> None:

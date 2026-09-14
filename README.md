@@ -174,6 +174,7 @@ applicability, per-claim doctor notes — hoãn sang M3).
 | M6.4 contract | Profile `hook_outro_v1`, câu kết cố định, scene–line binding và yêu cầu logo ở cổng duyệt; dữ liệu legacy giữ mặc định riêng. | Implemented; authoring, asset, timing và render còn tiếp tục | 24 domain/contract tests; schema export; Ruff; `git diff --check` | `feat: define M6.4 script storyboard contract` |
 | M6.4 authoring/gate | Lệnh `outro author` ghi script và storyboard có intent phục hồi; cổng duyệt y khoa từ chối intent dở hoặc thiếu logo, kiểm tra hook–claim–marker–source; packet hiển thị hook/outro. | Implemented; logo, timing và render còn tiếp tục | 63 workflow/CLI tests; Ruff; `git diff --check` | `feat: author reviewed PHY outro before medical gate` |
 | M6.4 logo | Logo PHY decorative được khai báo `FLOURISH`/`brand`, có hash và rights ledger; cổng duyệt kiểm tra role/kind/file và đưa bytes logo vào hash duyệt. | Implemented; timing và render còn tiếp tục | 83 domain/workflow tests; schema export; Ruff; `git diff --check` | `feat: register declared PHY logo for outro` |
+| M6.4 timing | V2 dùng thời lượng storyboard theo nội dung; WAV thực đo phải vừa timeline trước render, QA lưu thời lượng audio, composition và đoạn hình cuối không tiếng; V1 giữ 45–90 giây. | Implemented; Remotion và integration còn tiếp tục | 69 render/produce/e2e tests; Ruff; `git diff --check` | `feat: match v2 video duration to reviewed audio timeline` |
 
 ## Kiến trúc
 

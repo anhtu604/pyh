@@ -7,7 +7,7 @@ import pytest
 
 import healthvideo.tts.pronunciation as pronunciation_module
 import healthvideo.workflows.produce as produce_workflow
-from healthvideo.domain.brand import MascotPose
+from healthvideo.domain.brand import LogoVariant, MascotPose
 from healthvideo.domain.gate_review import GateKind
 from healthvideo.domain.project_v2 import WorkflowState
 from healthvideo.domain.script import Script
@@ -16,12 +16,43 @@ from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.tts.base import TTSRequest, TTSResult
 from healthvideo.tts.silent import SilentTTS
 from healthvideo.workflows.gate_review import approve_gate, video_reviewed_paths
+from healthvideo.workflows.hook_outro import author_hook_outro
 from healthvideo.workflows.package import package_project
 from healthvideo.workflows.produce import _input_hash, produce_project
-from healthvideo.workflows.visual_assets import create_mascot_reaction_asset
+from healthvideo.workflows.visual_assets import (
+    create_brand_logo_asset,
+    create_mascot_reaction_asset,
+)
 from tests.helpers import create_project_fixture, create_v2_project_fixture
 
 V2_REVIEWED_AT = datetime(2026, 9, 12, 8, 0, tzinfo=UTC)
+
+
+def test_m64_production_records_measured_audio_and_rejects_stale_qa(tmp_path: Path) -> None:
+    project = create_v2_project_fixture(tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW)
+    revision = project / "revisions/001"
+    board_path = revision / "storyboard/storyboard.yaml"
+    board = read_yaml(board_path)
+    board["scenes"][0]["duration_frames"] = 1350
+    write_yaml_atomic(board_path, board)
+    author_hook_outro(project, duration_frames=90)
+    create_brand_logo_asset(project, scene_id="OUTRO", asset_name="phy-logo", variant=LogoVariant.MONOGRAM)
+    approve_gate(project, GateKind.MEDICAL, reviewer="doctor", now=V2_REVIEWED_AT)
+
+    def runner(argv: list[str]) -> int:
+        _write_synthetic_output(argv)
+        return 0
+
+    produce_project(project, SilentTTS(), runner)
+    qa_path = revision / "reviews/video-qa.json"
+    qa = json.loads(qa_path.read_text(encoding="utf-8"))
+    assert qa["audio_duration_ms"] > 0
+    assert qa["composition_duration_ms"] == 48000
+    assert qa["trailing_visual_ms"] >= 0
+    qa.pop("audio_duration_ms")
+    qa_path.write_text(json.dumps(qa), encoding="utf-8")
+    with pytest.raises(ValueError, match="medically_approved"):
+        produce_project(project, SilentTTS(), runner)
 
 
 def test_v2_produce_stages_declared_mascot_asset(tmp_path: Path) -> None:
