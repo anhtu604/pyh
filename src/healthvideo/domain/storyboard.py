@@ -4,6 +4,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from healthvideo.domain.brand import MascotPose
+from healthvideo.domain.visual_budget import VisualBudgetOverride, VisualBudgetProfile
 
 
 class VisualAssetRef(BaseModel):
@@ -153,3 +154,14 @@ class Storyboard(BaseModel):
     schema_version: str = "1.0"
     title: str
     scenes: tuple[Scene, ...] = Field(default_factory=tuple)
+    visual_budget_profile: VisualBudgetProfile = "legacy"
+    visual_budget_override: VisualBudgetOverride | None = None
+
+    @model_validator(mode="after")
+    def validate_visual_budget_activation(self) -> "Storyboard":
+        if (
+            self.visual_budget_override is not None
+            and self.visual_budget_profile != "m6_5_v1"
+        ):
+            raise ValueError("visual budget override requires m6_5_v1 profile")
+        return self

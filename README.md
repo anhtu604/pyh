@@ -180,6 +180,7 @@ applicability, per-claim doctor notes — hoãn sang M3).
 | M6.4 retry QA | Cache M6.4 nhận QA thời lượng đã chuyển sang `reviews`, kiểm tra lại số đo WAV và frame cuối, phục hồi được khi trạng thái dự án chưa cập nhật; retry không gọi lại TTS/render. | Complete; C2C implementation review iteration 2 DONE | 663 Python tests; Ruff; schema export không đổi; 24 video tests; typecheck; `git diff --check` | `fix: reuse promoted M6.4 timing QA on retry` |
 | M6.5 design | Ngân sách visual tính theo frame storyboard đã duyệt; ba nhóm loại trừ nhau, override nằm trong medical hash; chart dùng SVG khai báo, AI production chờ M6.6. | Designed; đã chốt chart binding/retry và basis-point formula theo C2C review | Spec/plan review; Ruff; `git diff --check` | `docs: clarify M6.5 chart binding contract` |
 | M6.5 plan | Năm lát test-first cho contract, medical packet, chart render, production QA và E2E; lát sáu acceptance/C2C. | Planned; chưa triển khai | Plan/spec consistency; Ruff; `git diff --check` | `docs: plan M6.5 visual budget implementation` |
+| M6.5 Task 1 | Contract domain/schema opt-in `m6_5_v1`, phân nhóm scene theo frame, biên số nguyên, override có rationale và feasibility; legacy mặc định không bị cưỡng chế. | Implemented; chờ C2C review trước Task 2 | 43 focused + 29 render regression tests; schema export/diff; Ruff; `git diff --check` | `feat: define deterministic M6.5 visual budgets` |
 
 ## Kiến trúc
 

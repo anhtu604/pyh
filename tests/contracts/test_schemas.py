@@ -161,3 +161,34 @@ def test_exported_storyboard_contract_announces_cross_field_invariants(
         "x_plus_width": "x + width <= 1",
         "y_plus_height": "y + height <= 1",
     }
+
+
+def test_storyboard_schema_adds_optional_visual_budget_contract(tmp_path: Path) -> None:
+    output_dir = tmp_path / "schemas"
+    subprocess.run(
+        [sys.executable, "tools/export_schemas.py", "--output-dir", str(output_dir)],
+        check=True,
+        cwd=REPOSITORY_ROOT,
+    )
+    schema = json.loads(
+        (output_dir / "storyboard.schema.json").read_text(encoding="utf-8")
+    )
+
+    assert schema["properties"]["visual_budget_profile"]["default"] == "legacy"
+    assert schema["properties"]["visual_budget_profile"]["enum"] == [
+        "legacy",
+        "m6_5_v1",
+    ]
+    assert schema["properties"]["visual_budget_override"]["default"] is None
+    assert schema["$defs"]["PercentRange"]["properties"]["min_percent"][
+        "minimum"
+    ] == 0
+    assert schema["$defs"]["PercentRange"]["properties"]["max_percent"][
+        "maximum"
+    ] == 100
+    assert schema["$defs"]["PercentRange"]["x-invariants"] == {
+        "ordered": "min_percent <= max_percent"
+    }
+    assert schema["$defs"]["VisualBudgetOverride"]["x-invariants"] == {
+        "feasible": "sum(min_percent) <= 100 <= sum(max_percent)"
+    }

@@ -173,6 +173,32 @@
       "title": "MascotPose",
       "type": "string"
     },
+    "PercentRange": {
+      "additionalProperties": false,
+      "properties": {
+        "max_percent": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Max Percent",
+          "type": "integer"
+        },
+        "min_percent": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Min Percent",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "min_percent",
+        "max_percent"
+      ],
+      "title": "PercentRange",
+      "type": "object",
+      "x-invariants": {
+        "ordered": "min_percent <= max_percent"
+      }
+    },
     "Scene": {
       "allOf": [
         {
@@ -339,6 +365,36 @@
       ],
       "title": "VisualAssetRef",
       "type": "object"
+    },
+    "VisualBudgetOverride": {
+      "additionalProperties": false,
+      "properties": {
+        "ai_clip": {
+          "$ref": "#/$defs/PercentRange"
+        },
+        "chart_crop": {
+          "$ref": "#/$defs/PercentRange"
+        },
+        "rationale": {
+          "pattern": "\\S",
+          "title": "Rationale",
+          "type": "string"
+        },
+        "whiteboard_svg": {
+          "$ref": "#/$defs/PercentRange"
+        }
+      },
+      "required": [
+        "rationale",
+        "whiteboard_svg",
+        "chart_crop",
+        "ai_clip"
+      ],
+      "title": "VisualBudgetOverride",
+      "type": "object",
+      "x-invariants": {
+        "feasible": "sum(min_percent) <= 100 <= sum(max_percent)"
+      }
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -357,6 +413,26 @@
     },
     "title": {
       "title": "Title",
+      "type": "string"
+    },
+    "visual_budget_override": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/VisualBudgetOverride"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "visual_budget_profile": {
+      "default": "legacy",
+      "enum": [
+        "legacy",
+        "m6_5_v1"
+      ],
+      "title": "Visual Budget Profile",
       "type": "string"
     }
   },
