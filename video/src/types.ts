@@ -7,7 +7,7 @@ const safeRelativePath = z.string().regex(/^(?!\.?\/?$)(?![A-Za-z]:)(?!\/)(?!.*\
 export const VisualAssetRefSchema = z
   .object({
     path: safeRelativePath,
-    role: z.enum(['whiteboard', 'mascot', 'brand']),
+    role: z.enum(['whiteboard', 'mascot', 'brand', 'chart']),
     pose: z.enum(['welcome', 'explain', 'caution']).nullable().optional(),
   })
   .superRefine((asset, context) => {
@@ -128,9 +128,27 @@ export const RenderInputSchema = z.object({
   title: z.string(),
   audio_file: z.string(),
   scenes: z.array(SceneSchema).default([]),
+  visual_budget_profile: z.enum(['legacy', 'm6_5_v1']).default('legacy'),
   width: z.literal(1080).default(1080),
   height: z.literal(1920).default(1920),
   fps: z.literal(30).default(30),
+}).superRefine((input, context) => {
+  if (input.visual_budget_profile !== 'm6_5_v1') {
+    return;
+  }
+  input.scenes.forEach((scene, index) => {
+    if (scene.visual !== 'chart') {
+      return;
+    }
+    const charts = scene.visual_assets.filter((asset) => asset.role === 'chart');
+    if (charts.length !== 1) {
+      context.addIssue({
+        code: 'custom',
+        path: ['scenes', index, 'visual_assets'],
+        message: 'M6.5 chart scene requires exactly one chart asset',
+      });
+    }
+  });
 });
 
 export type EvidenceHighlight = z.input<typeof EvidenceHighlightSchema>;

@@ -11,6 +11,7 @@ from healthvideo.domain.asset_manifest import (
     AssetKind,
     AssetManifest,
     AssetRecord,
+    _posix_relative_path,
     load_asset_manifest,
     validate_asset_manifest,
 )
@@ -25,6 +26,7 @@ from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.script import Script
 from healthvideo.domain.storyboard import EvidenceHighlight, Storyboard, VisualAssetRef
 from healthvideo.storage.files import (
+    canonical_json_hash,
     read_yaml,
     recover_directory_promotion,
     replace_directory_atomic,
@@ -42,6 +44,7 @@ from healthvideo.visuals.whiteboard import (
 )
 
 BRAND_PROFILE_PATH = Path(__file__).resolve().parents[3] / "profiles/brand.vi.yaml"
+CHART_BINDING_INTENT = "workflow/pending-chart-binding.yaml"
 
 
 def create_evidence_chart(
@@ -144,6 +147,226 @@ def create_evidence_chart(
         if staged.exists():
             shutil.rmtree(staged)
     return asset_dir / f"{asset_name}.svg"
+
+
+def bind_chart_asset(
+    project_dir: Path, *, scene_id: str, asset_path: str
+) -> None:
+    """Bind an existing declared M6.1 chart to one storyboard chart scene."""
+    recover_chart_asset_binding(project_dir)
+    project = ProjectManifestV2.model_validate(read_yaml(project_dir / "project.yaml"))
+    if project.state not in {
+        WorkflowState.DRAFT_READY,
+        WorkflowState.AWAITING_MEDICAL_REVIEW,
+    }:
+        raise ValueError("chart binding requires a pre-medical-review draft")
+    revision = project_dir / "revisions" / project.active_revision
+    if (revision / "reviews/medical-approval.yaml").exists():
+        raise ValueError("chart binding refuses a medically approved revision")
+    _posix_relative_path(asset_path)
+    storyboard_path = revision / "storyboard/storyboard.yaml"
+    old_storyboard = Storyboard.model_validate(read_yaml(storyboard_path))
+    scene = next((item for item in old_storyboard.scenes if item.id == scene_id), None)
+    if scene is None or scene.visual != "chart":
+        raise ValueError("chart binding target must be an existing chart scene")
+
+    asset_dir = revision / "assets"
+    recover_directory_promotion(asset_dir)
+    old_manifest = load_asset_manifest(asset_dir / "asset-manifest.yaml")
+    validate_asset_manifest(revision, old_manifest)
+    matches = [item for item in old_manifest.assets if item.path == asset_path]
+    if len(matches) != 1 or matches[0].kind is not AssetKind.DATA_CHART:
+        raise ValueError("chart binding requires exactly one declared DATA_CHART")
+    record = matches[0]
+    if not record.semantic:
+        raise ValueError("chart binding requires semantic DATA_CHART")
+    rights_path = asset_dir / "license-ledger.yaml"
+    if not rights_path.is_file():
+        raise ValueError("chart binding requires matching source and usage rights")
+    rights = LicenseLedger.model_validate(read_yaml(rights_path))
+    validate_license_ledger(old_manifest, rights, project.active_revision)
+
+    asset_refs = [
+        (item.id, ref)
+        for item in old_storyboard.scenes
+        for ref in item.visual_assets
+        if ref.path == asset_path
+    ]
+    scene_chart_refs = [ref for ref in scene.visual_assets if ref.role == "chart"]
+    expected_ref = VisualAssetRef(path=asset_path, role="chart")
+    if record.storyboard_role == "chart":
+        if asset_refs == [(scene_id, expected_ref)] and scene_chart_refs == [
+            expected_ref
+        ]:
+            return
+        raise ValueError("chart asset is owned or referenced by a different scene")
+    if record.storyboard_role is not None or asset_refs or scene_chart_refs:
+        raise ValueError("chart asset has conflicting ownership or reference")
+
+    desired_record = record.model_copy(update={"storyboard_role": "chart"})
+    desired_manifest = AssetManifest(
+        assets=tuple(
+            desired_record if item.path == asset_path else item
+            for item in old_manifest.assets
+        )
+    )
+    desired_storyboard = _desired_chart_storyboard(
+        old_storyboard, scene_id=scene_id, asset_path=asset_path
+    )
+    intent = {
+        "schema_version": "1.0",
+        "scene_id": scene_id,
+        "asset_path": asset_path,
+        "rights_hash": canonical_json_hash(rights.model_dump(mode="json")),
+        "old_manifest": old_manifest.model_dump(mode="json"),
+        "desired_manifest": desired_manifest.model_dump(mode="json"),
+        "old_storyboard": old_storyboard.model_dump(mode="json"),
+        "desired_storyboard": desired_storyboard.model_dump(mode="json"),
+        "old_manifest_hash": canonical_json_hash(old_manifest.model_dump(mode="json")),
+        "desired_manifest_hash": canonical_json_hash(
+            desired_manifest.model_dump(mode="json")
+        ),
+        "old_storyboard_hash": canonical_json_hash(
+            old_storyboard.model_dump(mode="json")
+        ),
+        "desired_storyboard_hash": canonical_json_hash(
+            desired_storyboard.model_dump(mode="json")
+        ),
+    }
+    intent_path = revision / CHART_BINDING_INTENT
+    write_yaml_atomic(intent_path, intent)
+    recover_chart_asset_binding(project_dir)
+
+
+def recover_chart_asset_binding(project_dir: Path) -> None:
+    """Converge one recognized chart-binding intent or refuse conflicting edits."""
+    project_data = read_yaml(project_dir / "project.yaml")
+    if project_data.get("schema_version") != "2.0":
+        return
+    project = ProjectManifestV2.model_validate(project_data)
+    revision = project_dir / "revisions" / project.active_revision
+    intent_path = revision / CHART_BINDING_INTENT
+    if not intent_path.is_file():
+        return
+    if project.state not in {
+        WorkflowState.DRAFT_READY,
+        WorkflowState.AWAITING_MEDICAL_REVIEW,
+    } or (revision / "reviews/medical-approval.yaml").exists():
+        raise ValueError("pending chart binding cannot recover after medical review")
+
+    intent = read_yaml(intent_path)
+    old_manifest = AssetManifest.model_validate(intent.get("old_manifest"))
+    desired_manifest = AssetManifest.model_validate(intent.get("desired_manifest"))
+    old_storyboard = Storyboard.model_validate(intent.get("old_storyboard"))
+    desired_storyboard = Storyboard.model_validate(intent.get("desired_storyboard"))
+    scene_id = str(intent.get("scene_id", ""))
+    asset_path = str(intent.get("asset_path", ""))
+    expected_storyboard = _desired_chart_storyboard(
+        old_storyboard, scene_id=scene_id, asset_path=asset_path
+    )
+    old_record = next(
+        (item for item in old_manifest.assets if item.path == asset_path), None
+    )
+    desired_record = next(
+        (item for item in desired_manifest.assets if item.path == asset_path), None
+    )
+    if (
+        intent.get("schema_version") != "1.0"
+        or old_record is None
+        or old_record.kind is not AssetKind.DATA_CHART
+        or not old_record.semantic
+        or old_record.storyboard_role is not None
+        or desired_record != old_record.model_copy(update={"storyboard_role": "chart"})
+        or desired_storyboard != expected_storyboard
+        or intent.get("old_manifest_hash")
+        != canonical_json_hash(old_manifest.model_dump(mode="json"))
+        or intent.get("desired_manifest_hash")
+        != canonical_json_hash(desired_manifest.model_dump(mode="json"))
+        or intent.get("old_storyboard_hash")
+        != canonical_json_hash(old_storyboard.model_dump(mode="json"))
+        or intent.get("desired_storyboard_hash")
+        != canonical_json_hash(desired_storyboard.model_dump(mode="json"))
+    ):
+        raise ValueError("pending chart binding intent is invalid or conflicting")
+
+    asset_dir = revision / "assets"
+    recover_directory_promotion(asset_dir)
+    current_manifest = load_asset_manifest(asset_dir / "asset-manifest.yaml")
+    current_storyboard = Storyboard.model_validate(
+        read_yaml(revision / "storyboard/storyboard.yaml")
+    )
+    rights_path = asset_dir / "license-ledger.yaml"
+    if not rights_path.is_file():
+        raise ValueError("pending chart binding rights conflict")
+    rights = LicenseLedger.model_validate(read_yaml(rights_path))
+    if intent.get("rights_hash") != canonical_json_hash(rights.model_dump(mode="json")):
+        raise ValueError("pending chart binding rights conflict")
+    validate_license_ledger(current_manifest, rights, project.active_revision)
+    validate_asset_manifest(revision, current_manifest)
+
+    current_manifest_hash = canonical_json_hash(current_manifest.model_dump(mode="json"))
+    current_storyboard_hash = canonical_json_hash(
+        current_storyboard.model_dump(mode="json")
+    )
+    old_manifest_hash = intent["old_manifest_hash"]
+    desired_manifest_hash = intent["desired_manifest_hash"]
+    old_storyboard_hash = intent["old_storyboard_hash"]
+    desired_storyboard_hash = intent["desired_storyboard_hash"]
+    if (
+        current_manifest_hash == old_manifest_hash
+        and current_storyboard_hash == desired_storyboard_hash
+    ):
+        raise ValueError("pending chart binding conflict: storyboard promoted first")
+    if current_manifest_hash == old_manifest_hash and current_storyboard_hash == old_storyboard_hash:
+        _promote_chart_manifest(revision, desired_manifest)
+        current_manifest_hash = desired_manifest_hash
+    if (
+        current_manifest_hash == desired_manifest_hash
+        and current_storyboard_hash == old_storyboard_hash
+    ):
+        _write_chart_storyboard(
+            revision / "storyboard/storyboard.yaml", desired_storyboard
+        )
+        current_storyboard_hash = desired_storyboard_hash
+    if not (
+        current_manifest_hash == desired_manifest_hash
+        and current_storyboard_hash == desired_storyboard_hash
+    ):
+        raise ValueError("pending chart binding conflict with unrelated edits")
+    intent_path.unlink()
+
+
+def _desired_chart_storyboard(
+    storyboard: Storyboard, *, scene_id: str, asset_path: str
+) -> Storyboard:
+    data = storyboard.model_dump(mode="json")
+    scene = next((item for item in data["scenes"] if item["id"] == scene_id), None)
+    if scene is None or scene["visual"] != "chart":
+        raise ValueError("pending chart binding target is not a chart scene")
+    refs = scene.setdefault("visual_assets", [])
+    if any(ref["path"] == asset_path or ref["role"] == "chart" for ref in refs):
+        raise ValueError("pending chart binding target has conflicting visual assets")
+    refs.append(VisualAssetRef(path=asset_path, role="chart").model_dump(mode="json"))
+    return Storyboard.model_validate(data)
+
+
+def _promote_chart_manifest(revision: Path, manifest: AssetManifest) -> None:
+    asset_dir = revision / "assets"
+    staged = Path(mkdtemp(prefix=".assets-chart-bind-", dir=revision))
+    try:
+        shutil.copytree(asset_dir, staged, dirs_exist_ok=True)
+        write_yaml_atomic(
+            staged / "asset-manifest.yaml", manifest.model_dump(mode="json")
+        )
+        validate_asset_manifest(revision, manifest)
+        replace_directory_atomic(staged, asset_dir)
+    finally:
+        if staged.exists():
+            shutil.rmtree(staged)
+
+
+def _write_chart_storyboard(path: Path, storyboard: Storyboard) -> None:
+    write_yaml_atomic(path, storyboard.model_dump(mode="json"))
 
 
 def create_evidence_highlight_asset(

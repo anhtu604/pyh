@@ -192,3 +192,32 @@ def test_storyboard_schema_adds_optional_visual_budget_contract(tmp_path: Path) 
     assert schema["$defs"]["VisualBudgetOverride"]["x-invariants"] == {
         "feasible": "sum(min_percent) <= 100 <= sum(max_percent)"
     }
+
+
+def test_exported_chart_role_and_render_profile_are_additive(tmp_path: Path) -> None:
+    output_dir = tmp_path / "schemas"
+    subprocess.run(
+        [sys.executable, "tools/export_schemas.py", "--output-dir", str(output_dir)],
+        check=True,
+        cwd=REPOSITORY_ROOT,
+    )
+    storyboard = json.loads(
+        (output_dir / "storyboard.schema.json").read_text(encoding="utf-8")
+    )
+    asset_manifest = json.loads(
+        (output_dir / "asset-manifest.schema.json").read_text(encoding="utf-8")
+    )
+    render_input = json.loads(
+        (output_dir / "render-input.schema.json").read_text(encoding="utf-8")
+    )
+
+    assert "chart" in storyboard["$defs"]["VisualAssetRef"]["properties"]["role"][
+        "enum"
+    ]
+    assert "chart" in asset_manifest["$defs"]["AssetRecord"]["properties"][
+        "storyboard_role"
+    ]["anyOf"][0]["enum"]
+    assert render_input["properties"]["visual_budget_profile"]["default"] == "legacy"
+    assert render_input["x-invariants"]["m6_5_chart_ref"] == (
+        "m6_5_v1 chart scenes contain exactly one role=chart asset"
+    )

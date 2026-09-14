@@ -38,6 +38,7 @@ from healthvideo.storage.files import (
 from healthvideo.storage.immutable import write_yaml_once
 from healthvideo.tts import pronunciation as pronunciation_module
 from healthvideo.workflows.citations import resolve_citations
+from healthvideo.workflows.visual_assets import recover_chart_asset_binding
 
 MEDICAL_APPROVAL_ARTIFACT = "reviews/medical-approval.yaml"
 VIDEO_APPROVAL_ARTIFACT = "reviews/video-approval.yaml"
@@ -148,6 +149,7 @@ def approve_gate(
         raise ValueError(f"{kind.value} gate requires project state {expected.value}")
 
     if kind is GateKind.MEDICAL:
+        recover_chart_asset_binding(project_dir)
         if (revision_root / "workflow/pending-hook-outro.yaml").exists():
             raise ValueError("medical gate refuses pending hook/outro authoring")
         manifest = load_asset_manifest(revision_root / "assets" / "asset-manifest.yaml")

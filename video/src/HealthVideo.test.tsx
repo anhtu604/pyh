@@ -2,6 +2,7 @@ import React from 'react';
 import {describe, expect, it, vi} from 'vitest';
 import {HealthVideo} from './HealthVideo';
 import {VisualAsset} from './components/VisualAsset';
+import {ChartScene} from './scenes/ChartScene';
 import {OutroScene} from './scenes/OutroScene';
 import {parseRenderInput} from './types';
 
@@ -27,6 +28,7 @@ const input = (visual: 'whiteboard' | 'evidence_highlight') => ({
     } : undefined,
     visual_assets: [{path: 'assets/guide.svg', role: 'mascot' as const, pose: 'welcome' as const}],
   }],
+  visual_budget_profile: 'legacy' as const,
   width: 1080 as const, height: 1920 as const, fps: 30 as const,
 });
 
@@ -61,4 +63,24 @@ describe('HealthVideo visual asset layer', () => {
       expect(assets).toHaveLength(1);
     },
   );
+  it('dispatches an enabled declared chart once outside the overlay layer', () => {
+    const props = parseRenderInput({
+      ...input('whiteboard'),
+      visual_budget_profile: 'm6_5_v1',
+      scenes: [{
+        ...input('whiteboard').scenes[0],
+        visual: 'chart',
+        visual_assets: [{path: 'assets/chart.svg', role: 'chart'}],
+      }],
+    });
+    const root = HealthVideo(props) as React.ReactElement<{children: React.ReactNode}>;
+    const sequence = React.Children.toArray(root.props.children)[1] as React.ReactElement<{
+      children: React.ReactNode;
+    }>;
+    const children = React.Children.toArray(sequence.props.children);
+    expect(children.filter((child) => React.isValidElement(child) && child.type === ChartScene))
+      .toHaveLength(1);
+    expect(children.filter((child) => React.isValidElement(child) && child.type === VisualAsset))
+      .toHaveLength(0);
+  });
 });

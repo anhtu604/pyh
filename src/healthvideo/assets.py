@@ -59,9 +59,11 @@ def referenced_storyboard_assets(
             AssetKind.MEDICAL_DIAGRAM,
             AssetKind.MEDICAL_TEXT,
         },
+        "chart": {AssetKind.DATA_CHART},
     }
     resolved_assets: dict[str, Path] = {}
     referenced_roles: dict[str, str] = {}
+    referenced_counts: dict[str, int] = {}
     for scene in storyboard.scenes:
         for reference in scene.visual_assets:
             relative = _relative_posix_path(reference.path, scene.id)
@@ -81,6 +83,14 @@ def referenced_storyboard_assets(
                 or record.semantic
             ):
                 raise ValueError(f"Scene {scene.id}: brand logo ownership or classification mismatch")
+            if reference.role == "chart" and (
+                scene.visual != "chart"
+                or not record.semantic
+                or record.storyboard_role != "chart"
+            ):
+                raise ValueError(
+                    f"Scene {scene.id}: chart ownership or classification mismatch"
+                )
             if scene.visual == "brand_outro" and reference.role == "mascot" and (
                 record.kind is not AssetKind.MASCOT_REACTION
                 or record.semantic
@@ -101,6 +111,15 @@ def referenced_storyboard_assets(
                 )
             resolved_assets[relative.as_posix()] = candidate
             referenced_roles[relative.as_posix()] = reference.role
+            referenced_counts[relative.as_posix()] = (
+                referenced_counts.get(relative.as_posix(), 0) + 1
+            )
+        if storyboard.visual_budget_profile == "m6_5_v1" and scene.visual == "chart":
+            chart_refs = [ref for ref in scene.visual_assets if ref.role == "chart"]
+            if len(chart_refs) != 1:
+                raise ValueError(
+                    f"Scene {scene.id}: M6.5 chart scene requires exactly one chart asset"
+                )
     for record in manifest.assets:
         if record.storyboard_role is None:
             continue
@@ -111,6 +130,10 @@ def referenced_storyboard_assets(
             raise ValueError(
                 f"visual asset storyboard role mismatch for {record.path}: "
                 f"expected {record.storyboard_role!r}, found {actual_role!r}"
+            )
+        if record.storyboard_role == "chart" and referenced_counts[record.path] != 1:
+            raise ValueError(
+                f"chart asset must be referenced by exactly one scene: {record.path}"
             )
     return resolved_assets
 

@@ -11,7 +11,7 @@ class VisualAssetRef(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     path: str
-    role: Literal["whiteboard", "mascot", "brand"]
+    role: Literal["whiteboard", "mascot", "brand", "chart"]
     pose: MascotPose | None = None
 
     @model_validator(mode="after")
@@ -30,7 +30,7 @@ class VisualAssetRef(BaseModel):
             raise ValueError("visual asset path must be safe relative POSIX")
         if self.role == "mascot" and self.pose is None:
             raise ValueError("mascot visual asset requires pose")
-        if self.role in {"whiteboard", "brand"} and self.pose is not None:
+        if self.role in {"whiteboard", "brand", "chart"} and self.pose is not None:
             raise ValueError(f"{self.role} visual asset cannot have pose")
         return self
 

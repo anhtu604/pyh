@@ -182,6 +182,7 @@ applicability, per-claim doctor notes — hoãn sang M3).
 | M6.5 plan | Năm lát test-first cho contract, medical packet, chart render, production QA và E2E; lát sáu acceptance/C2C. | Planned; chưa triển khai | Plan/spec consistency; Ruff; `git diff --check` | `docs: plan M6.5 visual budget implementation` |
 | M6.5 Task 1 | Contract domain/schema opt-in `m6_5_v1`, phân nhóm scene theo frame, biên số nguyên, override có rationale và feasibility; legacy mặc định không bị cưỡng chế. | Implemented; chờ C2C review trước Task 2 | 43 focused + 29 render regression tests; schema export/diff; Ruff; `git diff --check` | `feat: define deterministic M6.5 visual budgets` |
 | M6.5 Task 2 | Medical gate cưỡng chế cùng visual-budget validator trước khi ghi approval; packet hiển thị frame/basis point/bound/override đã escape, vẫn chỉ có một cổng medical. | Implemented; chờ C2C review trước Task 3 | Gate/packet/domain/produce regression tests; Ruff; `git diff --check` | `feat: bind M6.5 budget to medical review` |
+| M6.5 Task 3 | Bind chart M6.1 có intent/recovery manifest-first, ownership/hash/rights hai chiều; render đúng SVG khai báo qua Remotion và giữ legacy fallback. | Implemented; chờ C2C review trước production QA | 136 Python tests; 29 video tests; schema export/diff; Ruff; typecheck; `git diff --check` | `feat: render declared M6.1 chart assets` |
 
 ## Kiến trúc
 

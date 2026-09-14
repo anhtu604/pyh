@@ -1,9 +1,10 @@
 from pathlib import PurePosixPath
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from healthvideo.domain.storyboard import Scene, Storyboard
+from healthvideo.domain.visual_budget import VisualBudgetProfile
 
 FRAMES_PER_SECOND = 30
 MIN_DURATION_FRAMES = 45 * FRAMES_PER_SECOND
@@ -11,15 +12,38 @@ MAX_DURATION_FRAMES = 90 * FRAMES_PER_SECOND
 
 
 class RenderInput(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(
+        frozen=True,
+        json_schema_extra={
+            "x-invariants": {
+                "m6_5_chart_ref": (
+                    "m6_5_v1 chart scenes contain exactly one role=chart asset"
+                )
+            }
+        },
+    )
 
     schema_version: str = "1.0"
     title: str
     audio_file: str
     scenes: tuple[Scene, ...] = Field(default_factory=tuple)
+    visual_budget_profile: VisualBudgetProfile = "legacy"
     width: Literal[1080] = 1080
     height: Literal[1920] = 1920
     fps: Literal[30] = FRAMES_PER_SECOND
+
+    @model_validator(mode="after")
+    def validate_m6_5_chart_refs(self) -> "RenderInput":
+        if self.visual_budget_profile != "m6_5_v1":
+            return self
+        for scene in self.scenes:
+            if scene.visual == "chart" and sum(
+                asset.role == "chart" for asset in scene.visual_assets
+            ) != 1:
+                raise ValueError(
+                    f"Scene {scene.id}: M6.5 chart scene requires exactly one chart asset"
+                )
+        return self
 
 
 def build_render_input(
@@ -54,6 +78,7 @@ def build_render_input(
         title=storyboard.title,
         audio_file=audio_file,
         scenes=storyboard.scenes,
+        visual_budget_profile=storyboard.visual_budget_profile,
     )
 
 

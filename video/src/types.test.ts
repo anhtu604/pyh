@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {EvidenceHighlightSchema, SceneSchema} from './types';
+import {EvidenceHighlightSchema, RenderInputSchema, SceneSchema} from './types';
 
 const validHighlight = {
   image: 'assets/evidence-card.svg',
@@ -91,5 +91,47 @@ describe('SceneSchema', () => {
         visual: 'evidence_highlight',
       }).success,
     ).toBe(false);
+  });
+
+  it('accepts a chart role without pose', () => {
+    expect(SceneSchema.safeParse({
+      id: 'S03', start_frame: 0, duration_frames: 90,
+      narration: 'Chart declared', visual: 'chart',
+      visual_assets: [{path: 'assets/chart.svg', role: 'chart'}],
+    }).success).toBe(true);
+    expect(SceneSchema.safeParse({
+      id: 'S03', start_frame: 0, duration_frames: 90,
+      narration: 'Chart declared', visual: 'chart',
+      visual_assets: [{path: 'assets/chart.svg', role: 'chart', pose: 'explain'}],
+    }).success).toBe(false);
+  });
+});
+
+describe('RenderInputSchema chart contract', () => {
+  const chartInput = {
+    title: 'PHY', audio_file: 'audio/narration.wav', visual_budget_profile: 'm6_5_v1',
+    scenes: [{id: 'S01', start_frame: 0, duration_frames: 90,
+      narration: 'Chart', visual: 'chart',
+      visual_assets: [{path: 'assets/chart.svg', role: 'chart'}]}],
+  };
+
+  it('requires exactly one declared chart ref for enabled chart scenes', () => {
+    expect(RenderInputSchema.safeParse(chartInput).success).toBe(true);
+    expect(RenderInputSchema.safeParse({...chartInput, scenes: [{
+      ...chartInput.scenes[0], visual_assets: [],
+    }]}).success).toBe(false);
+    expect(RenderInputSchema.safeParse({...chartInput, scenes: [{
+      ...chartInput.scenes[0], visual_assets: [
+        {path: 'assets/chart-a.svg', role: 'chart'},
+        {path: 'assets/chart-b.svg', role: 'chart'},
+      ],
+    }]}).success).toBe(false);
+  });
+
+  it('keeps an unmarked legacy chart input compatible', () => {
+    const legacy = {...chartInput, visual_budget_profile: undefined, scenes: [{
+      ...chartInput.scenes[0], visual_assets: [],
+    }]};
+    expect(RenderInputSchema.safeParse(legacy).success).toBe(true);
   });
 });

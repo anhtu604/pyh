@@ -51,6 +51,7 @@ from healthvideo.workflows.gate_review import (
     medical_reviewed_paths,
 )
 from healthvideo.workflows.review import ensure_approval_current
+from healthvideo.workflows.visual_assets import recover_chart_asset_binding
 
 Runner = Callable[[list[str]], int]
 AUTHOR_PROFILE_PATH = (
@@ -186,6 +187,7 @@ def _produce_v2(
             "Production requires v2 project state medically_approved"
         )
 
+    recover_chart_asset_binding(layout.project_dir)
     _ensure_v2_medical_approval_current(layout.artifact_root)
     script = Script.model_validate(
         read_yaml(layout.artifact_root / "script" / "script.yaml")

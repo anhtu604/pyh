@@ -1,6 +1,7 @@
 import React from 'react';
 import {AbsoluteFill, Audio, Sequence, staticFile} from 'remotion';
 import {EvidenceHighlightScene} from './scenes/EvidenceHighlightScene';
+import {ChartScene} from './scenes/ChartScene';
 import {OutroScene} from './scenes/OutroScene';
 import {WhiteboardScene} from './scenes/WhiteboardScene';
 import {VisualAsset} from './components/VisualAsset';
@@ -24,10 +25,12 @@ export const HealthVideo: React.FC<RenderInput> = (rawInput) => {
             <OutroScene scene={scene} />
           ) : scene.visual === 'evidence_highlight' ? (
             <EvidenceHighlightScene scene={scene} />
+          ) : scene.visual === 'chart' && scene.visual_assets.some((asset) => asset.role === 'chart') ? (
+            <ChartScene scene={scene} />
           ) : (
             <WhiteboardScene scene={scene} />
           )}
-          {scene.visual_assets.map((asset) => (
+          {scene.visual_assets.filter((asset) => asset.role !== 'chart').map((asset) => (
             <VisualAsset asset={asset} outro={scene.visual === 'brand_outro'} key={asset.path} />
           ))}
         </Sequence>

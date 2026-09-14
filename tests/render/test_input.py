@@ -234,6 +234,44 @@ def test_visual_assets_round_trip_through_render_input() -> None:
     result = build_render_input(Storyboard(title="PHY", scenes=(scene,)), "audio/a.wav")
     assert result.scenes[0].visual_assets == scene.visual_assets
 
+
+def test_render_input_carries_m6_5_profile_and_requires_one_chart_ref() -> None:
+    scene = Scene(
+        id="S01",
+        start_frame=0,
+        duration_frames=1350,
+        narration="Declared chart.",
+        visual="chart",
+        visual_assets=(VisualAssetRef(path="assets/chart.svg", role="chart"),),
+    )
+    board = Storyboard(
+        title="PHY", visual_budget_profile="m6_5_v1", scenes=(scene,)
+    )
+    result = build_render_input(board, "audio/a.wav")
+    assert result.visual_budget_profile == "m6_5_v1"
+
+    missing = board.model_copy(
+        update={"scenes": (scene.model_copy(update={"visual_assets": ()}),)}
+    )
+    with pytest.raises(ValidationError, match="exactly one chart"):
+        build_render_input(missing, "audio/a.wav")
+
+
+def test_render_input_keeps_unmarked_legacy_chart_compatible() -> None:
+    board = Storyboard(
+        title="Legacy",
+        scenes=(
+            Scene(
+                id="S01",
+                start_frame=0,
+                duration_frames=1350,
+                narration="Legacy chart fallback.",
+                visual="chart",
+            ),
+        ),
+    )
+    assert build_render_input(board, "audio/a.wav").visual_budget_profile == "legacy"
+
 @pytest.mark.parametrize(
     "audio_file", ["audio\\narration.wav", "/audio/narration.wav", ".", "./"]
 )

@@ -80,7 +80,8 @@
               "enum": [
                 "whiteboard",
                 "mascot",
-                "brand"
+                "brand",
+                "chart"
               ],
               "type": "string"
             },

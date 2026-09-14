@@ -353,7 +353,8 @@
           "enum": [
             "whiteboard",
             "mascot",
-            "brand"
+            "brand",
+            "chart"
           ],
           "title": "Role",
           "type": "string"

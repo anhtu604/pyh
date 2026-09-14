@@ -21,6 +21,7 @@ const defaultProps: RenderInput = {
       visual_assets: [],
     },
   ],
+  visual_budget_profile: 'legacy',
   width: 1080,
   height: 1920,
   fps: 30,

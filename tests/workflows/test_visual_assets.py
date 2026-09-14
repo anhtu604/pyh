@@ -24,11 +24,13 @@ from healthvideo.workflows.gate_review import (
     medical_reviewed_paths,
 )
 from healthvideo.workflows.visual_assets import (
+    bind_chart_asset,
     create_evidence_chart,
     create_evidence_highlight_asset,
     create_mascot_annotation_asset,
     create_mascot_reaction_asset,
     create_whiteboard_asset,
+    recover_chart_asset_binding,
 )
 
 
@@ -299,6 +301,202 @@ def test_register_chart_and_rights_without_state_change(project: Path) -> None:
     chart.write_text("tampered", encoding="utf-8")
     with pytest.raises(AssetIntegrityError):
         validate_asset_manifest(revision, manifest)
+
+
+def test_bind_existing_chart_to_chart_scene_and_identical_retry(project: Path) -> None:
+    chart = make_chart(project)
+    revision = project / "revisions/001"
+
+    bind_chart_asset(project, scene_id="S04", asset_path="assets/chart-count.svg")
+    first_storyboard = (revision / "storyboard/storyboard.yaml").read_bytes()
+    first_manifest = (revision / "assets/asset-manifest.yaml").read_bytes()
+    bind_chart_asset(project, scene_id="S04", asset_path="assets/chart-count.svg")
+
+    board = Storyboard.model_validate(
+        read_yaml(revision / "storyboard/storyboard.yaml")
+    )
+    scene = next(item for item in board.scenes if item.id == "S04")
+    assert scene.visual_assets == (
+        visual_assets.VisualAssetRef(path="assets/chart-count.svg", role="chart"),
+    )
+    record = next(
+        item
+        for item in load_asset_manifest(revision / "assets/asset-manifest.yaml").assets
+        if item.path == "assets/chart-count.svg"
+    )
+    assert record.storyboard_role == "chart"
+    assert chart.is_file()
+    assert (revision / "storyboard/storyboard.yaml").read_bytes() == first_storyboard
+    assert (revision / "assets/asset-manifest.yaml").read_bytes() == first_manifest
+
+
+def test_chart_binding_recovers_manifest_first_interruption(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    make_chart(project)
+    revision = project / "revisions/001"
+    original = visual_assets._write_chart_storyboard
+
+    def interrupt(*args, **kwargs):
+        raise OSError("synthetic chart binding interruption")
+
+    monkeypatch.setattr(visual_assets, "_write_chart_storyboard", interrupt)
+    with pytest.raises(OSError, match="interruption"):
+        bind_chart_asset(
+            project, scene_id="S04", asset_path="assets/chart-count.svg"
+        )
+    record = next(
+        item
+        for item in load_asset_manifest(revision / "assets/asset-manifest.yaml").assets
+        if item.path == "assets/chart-count.svg"
+    )
+    assert record.storyboard_role == "chart"
+    assert not any(
+        ref.role == "chart"
+        for scene in Storyboard.model_validate(
+            read_yaml(revision / "storyboard/storyboard.yaml")
+        ).scenes
+        for ref in scene.visual_assets
+    )
+    assert (revision / "workflow/pending-chart-binding.yaml").is_file()
+
+    monkeypatch.setattr(visual_assets, "_write_chart_storyboard", original)
+    recover_chart_asset_binding(project)
+
+    board = Storyboard.model_validate(
+        read_yaml(revision / "storyboard/storyboard.yaml")
+    )
+    assert next(item for item in board.scenes if item.id == "S04").visual_assets[0].role == (
+        "chart"
+    )
+    assert not (revision / "workflow/pending-chart-binding.yaml").exists()
+
+
+def test_chart_binding_pending_intent_refuses_unrelated_edit(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    make_chart(project)
+    revision = project / "revisions/001"
+
+    def interrupt(*args, **kwargs):
+        raise OSError("synthetic chart binding interruption")
+
+    monkeypatch.setattr(visual_assets, "_write_chart_storyboard", interrupt)
+    with pytest.raises(OSError):
+        bind_chart_asset(
+            project, scene_id="S04", asset_path="assets/chart-count.svg"
+        )
+    board_path = revision / "storyboard/storyboard.yaml"
+    data = read_yaml(board_path)
+    data["title"] = "operator edit"
+    write_yaml_atomic(board_path, data)
+
+    with pytest.raises(ValueError, match="conflict"):
+        recover_chart_asset_binding(project)
+    assert (revision / "workflow/pending-chart-binding.yaml").is_file()
+
+
+def test_medical_gate_recovers_pending_chart_binding_before_validation(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    make_chart(project)
+    original = visual_assets._write_chart_storyboard
+
+    def interrupt(*args, **kwargs):
+        raise OSError("synthetic chart binding interruption")
+
+    monkeypatch.setattr(visual_assets, "_write_chart_storyboard", interrupt)
+    with pytest.raises(OSError):
+        bind_chart_asset(
+            project, scene_id="S04", asset_path="assets/chart-count.svg"
+        )
+    monkeypatch.setattr(visual_assets, "_write_chart_storyboard", original)
+    state = read_yaml(project / "project.yaml")
+    state["state"] = "awaiting_medical_review"
+    write_yaml_atomic(project / "project.yaml", state)
+
+    approve_gate(
+        project, GateKind.MEDICAL, reviewer="test doctor", now=datetime.now(UTC)
+    )
+
+    revision = project / "revisions/001"
+    assert not (revision / "workflow/pending-chart-binding.yaml").exists()
+    assert (revision / "reviews/medical-approval.yaml").is_file()
+
+
+def test_chart_binding_refuses_changed_target_path_state_kind_and_rights(
+    project: Path,
+) -> None:
+    make_chart(project)
+    revision = project / "revisions/001"
+    with pytest.raises(ValueError, match="chart scene"):
+        bind_chart_asset(project, scene_id="S01", asset_path="assets/chart-count.svg")
+    with pytest.raises(ValueError, match="relative POSIX"):
+        bind_chart_asset(project, scene_id="S04", asset_path="../chart-count.svg")
+
+    manifest_path = revision / "assets/asset-manifest.yaml"
+    original_manifest = read_yaml(manifest_path)
+    wrong_kind = read_yaml(manifest_path)
+    chart_record = next(
+        item for item in wrong_kind["assets"] if item["path"] == "assets/chart-count.svg"
+    )
+    chart_record["kind"] = "medical_text"
+    write_yaml_atomic(manifest_path, wrong_kind)
+    with pytest.raises(ValueError, match="DATA_CHART"):
+        bind_chart_asset(project, scene_id="S04", asset_path="assets/chart-count.svg")
+    write_yaml_atomic(manifest_path, original_manifest)
+
+    rights_path = revision / "assets/license-ledger.yaml"
+    rights = read_yaml(rights_path)
+    rights["entries"][0]["rights_basis"] = ""
+    write_yaml_atomic(rights_path, rights)
+    with pytest.raises(ValueError, match="rights|source"):
+        bind_chart_asset(project, scene_id="S04", asset_path="assets/chart-count.svg")
+
+
+def test_chart_binding_refuses_post_approval_and_different_scene_retry(
+    project: Path,
+) -> None:
+    make_chart(project)
+    bind_chart_asset(project, scene_id="S04", asset_path="assets/chart-count.svg")
+    revision = project / "revisions/001"
+    board_path = revision / "storyboard/storyboard.yaml"
+    board = read_yaml(board_path)
+    board["scenes"][2]["visual"] = "chart"
+    write_yaml_atomic(board_path, board)
+    with pytest.raises(ValueError, match="owned|referenced|different"):
+        bind_chart_asset(project, scene_id="S03", asset_path="assets/chart-count.svg")
+
+    state = read_yaml(project / "project.yaml")
+    state["state"] = "medically_approved"
+    write_yaml_atomic(project / "project.yaml", state)
+    with pytest.raises(ValueError, match="pre-medical"):
+        bind_chart_asset(project, scene_id="S04", asset_path="assets/chart-count.svg")
+
+
+def test_chart_binding_allows_distinct_owned_charts_in_distinct_scenes(
+    project: Path,
+) -> None:
+    make_chart(project)
+    make_chart(project, asset_name="chart-two")
+    board_path = project / "revisions/001/storyboard/storyboard.yaml"
+    board = read_yaml(board_path)
+    board["scenes"][2]["visual"] = "chart"
+    write_yaml_atomic(board_path, board)
+
+    bind_chart_asset(project, scene_id="S04", asset_path="assets/chart-count.svg")
+    bind_chart_asset(project, scene_id="S03", asset_path="assets/chart-two.svg")
+
+    parsed = Storyboard.model_validate(read_yaml(board_path))
+    assert {
+        (scene.id, ref.path)
+        for scene in parsed.scenes
+        for ref in scene.visual_assets
+        if ref.role == "chart"
+    } == {
+        ("S03", "assets/chart-two.svg"),
+        ("S04", "assets/chart-count.svg"),
+    }
 
 
 def test_refuses_overwrite_or_missing_source_and_rights(project: Path) -> None:

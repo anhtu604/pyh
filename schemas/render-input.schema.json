@@ -327,7 +327,8 @@
           "enum": [
             "whiteboard",
             "mascot",
-            "brand"
+            "brand",
+            "chart"
           ],
           "title": "Role",
           "type": "string"
@@ -375,6 +376,15 @@
       "title": "Title",
       "type": "string"
     },
+    "visual_budget_profile": {
+      "default": "legacy",
+      "enum": [
+        "legacy",
+        "m6_5_v1"
+      ],
+      "title": "Visual Budget Profile",
+      "type": "string"
+    },
     "width": {
       "const": 1080,
       "default": 1080,
@@ -387,5 +397,8 @@
     "audio_file"
   ],
   "title": "RenderInput",
-  "type": "object"
+  "type": "object",
+  "x-invariants": {
+    "m6_5_chart_ref": "m6_5_v1 chart scenes contain exactly one role=chart asset"
+  }
 }
