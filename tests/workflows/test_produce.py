@@ -15,7 +15,12 @@ from healthvideo.domain.storyboard import Storyboard
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.tts.base import TTSRequest, TTSResult
 from healthvideo.tts.silent import SilentTTS
-from healthvideo.workflows.gate_review import approve_gate, video_reviewed_paths
+from healthvideo.workflows.gate_review import (
+    approve_gate,
+    hash_reviewed_artifacts,
+    medical_reviewed_paths,
+    video_reviewed_paths,
+)
 from healthvideo.workflows.hook_outro import author_hook_outro
 from healthvideo.workflows.package import package_project
 from healthvideo.workflows.produce import _input_hash, produce_project
@@ -121,6 +126,245 @@ def test_m64_production_retry_reuses_promoted_timing_qa(tmp_path: Path) -> None:
     qa_path.write_text(json.dumps(qa), encoding="utf-8")
     with pytest.raises(ValueError, match="medically_approved"):
         produce_project(project, SilentTTS(), runner)
+
+
+def _m65_project(
+    tmp_path: Path, *, ai: bool = False
+) -> Path:
+    project = create_v2_project_fixture(
+        tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW
+    )
+    revision = project / "revisions/001"
+    board_path = revision / "storyboard/storyboard.yaml"
+    board = read_yaml(board_path)
+    highlight = dict(board["scenes"][0])
+    highlight["id"] = "S02"
+    if ai:
+        whiteboard_frames, highlight_frames, ai_frames = 650, 250, 100
+    else:
+        whiteboard_frames, highlight_frames, ai_frames = 750, 250, 0
+    board["visual_budget_profile"] = "m6_5_v1"
+    board["scenes"] = [
+        {
+            "id": "S01",
+            "start_frame": 0,
+            "duration_frames": whiteboard_frames,
+            "narration": "Whiteboard synthetic.",
+            "claim_id": "C01",
+            "source_marker": "[1]",
+            "visual": "whiteboard",
+        },
+        {
+            **highlight,
+            "start_frame": whiteboard_frames,
+            "duration_frames": highlight_frames,
+        },
+    ]
+    if ai_frames:
+        board["scenes"].append(
+            {
+                "id": "S03",
+                "start_frame": whiteboard_frames + highlight_frames,
+                "duration_frames": ai_frames,
+                "narration": "AI clip placeholder.",
+                "visual": "ai_clip",
+            }
+        )
+    write_yaml_atomic(board_path, board)
+    approve_gate(project, GateKind.MEDICAL, reviewer="doctor", now=V2_REVIEWED_AT)
+    return project
+
+
+class CountingSilent(SilentTTS):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def synthesize(self, request: TTSRequest, output_path: Path) -> TTSResult:
+        self.calls += 1
+        return super().synthesize(request, output_path)
+
+
+class NoSynthesis(SilentTTS):
+    def synthesize(self, request: TTSRequest, output_path: Path) -> TTSResult:
+        pytest.fail("TTS invoked while validating M6.5 cache")
+
+
+def test_m65_production_revalidates_budget_before_tts_or_render(tmp_path: Path) -> None:
+    project = _m65_project(tmp_path)
+    revision = project / "revisions/001"
+    board_path = revision / "storyboard/storyboard.yaml"
+    board = read_yaml(board_path)
+    board["scenes"][0]["duration_frames"] = 600
+    board["scenes"][1]["start_frame"] = 600
+    board["scenes"][1]["duration_frames"] = 400
+    write_yaml_atomic(board_path, board)
+    approval_path = revision / "reviews/medical-approval.yaml"
+    approval = read_yaml(approval_path)
+    approval["artifact_hashes"] = hash_reviewed_artifacts(
+        medical_reviewed_paths(revision)
+    )
+    write_yaml_atomic(approval_path, approval)
+    tts = CountingSilent()
+    render_calls: list[list[str]] = []
+
+    with pytest.raises(ValueError, match="visual budget failed"):
+        produce_project(project, tts, lambda argv: render_calls.append(argv) or 0)
+
+    assert tts.calls == 0 and render_calls == []
+    assert read_yaml(project / "project.yaml")["state"] == "medically_approved"
+
+
+def test_m65_ai_clip_fails_before_tts_or_render_with_m66_message(
+    tmp_path: Path,
+) -> None:
+    project = _m65_project(tmp_path, ai=True)
+    tts = CountingSilent()
+    render_calls: list[list[str]] = []
+
+    with pytest.raises(ValueError, match="M6.6|provider"):
+        produce_project(project, tts, lambda argv: render_calls.append(argv) or 0)
+
+    assert tts.calls == 0 and render_calls == []
+    assert read_yaml(project / "project.yaml")["state"] == "medically_approved"
+
+
+def test_m65_production_records_visual_qa_and_reuses_valid_promoted_cache(
+    tmp_path: Path,
+) -> None:
+    project = _m65_project(tmp_path)
+    revision = project / "revisions/001"
+    tts = CountingSilent()
+    render_calls: list[list[str]] = []
+
+    def runner(argv: list[str]) -> int:
+        render_calls.append(argv)
+        _write_synthetic_output(argv)
+        return 0
+
+    first = produce_project(project, tts, runner)
+    qa = json.loads((revision / "reviews/video-qa.json").read_text(encoding="utf-8"))
+    assert qa["visual_budget"] == {
+        "profile": "m6_5_v1",
+        "override_active": False,
+        "total_frames": 1000,
+        "category_frames": {
+            "whiteboard_svg": 750,
+            "chart_crop": 250,
+            "ai_clip": 0,
+        },
+        "category_basis_points": {
+            "whiteboard_svg": 7500,
+            "chart_crop": 2500,
+            "ai_clip": 0,
+        },
+        "effective_bounds": {
+            "whiteboard_svg": {"min_percent": 65, "max_percent": 75},
+            "chart_crop": {"min_percent": 15, "max_percent": 25},
+            "ai_clip": {"min_percent": 0, "max_percent": 10},
+        },
+        "passed": True,
+    }
+    assert produce_project(
+        project, NoSynthesis(), lambda _: pytest.fail("renderer invoked on retry")
+    ) == first
+    project_data = read_yaml(project / "project.yaml")
+    project_data["state"] = "medically_approved"
+    write_yaml_atomic(project / "project.yaml", project_data)
+    assert produce_project(
+        project, NoSynthesis(), lambda _: pytest.fail("renderer invoked on recovery")
+    ) == first
+    assert tts.calls == 1 and len(render_calls) == 1
+
+
+@pytest.mark.parametrize(
+    "tamper",
+    [
+        "missing",
+        "total_frames",
+        "category_frames",
+        "category_basis_points",
+        "effective_bounds",
+        "override_active",
+        "profile",
+        "passed",
+        "extra_field",
+        "total_frames_as_float",
+        "override_active_as_int",
+    ],
+)
+def test_m65_cache_rejects_each_tampered_visual_qa_field(
+    tmp_path: Path, tamper: str
+) -> None:
+    project = _m65_project(tmp_path)
+    revision = project / "revisions/001"
+
+    def runner(argv: list[str]) -> int:
+        _write_synthetic_output(argv)
+        return 0
+
+    produce_project(project, SilentTTS(), runner)
+    qa_path = revision / "reviews/video-qa.json"
+    qa = json.loads(qa_path.read_text(encoding="utf-8"))
+    replacements = {
+        "total_frames": ("total_frames", 1001),
+        "override_active": ("override_active", True),
+        "profile": ("profile", "legacy"),
+        "passed": ("passed", False),
+        "extra_field": ("rounded_percent", 75),
+        "total_frames_as_float": ("total_frames", 1000.0),
+        "override_active_as_int": ("override_active", 0),
+    }
+    if tamper == "missing":
+        del qa["visual_budget"]
+    elif tamper in replacements:
+        field, value = replacements[tamper]
+        qa["visual_budget"][field] = value
+    elif tamper == "effective_bounds":
+        qa["visual_budget"][tamper]["whiteboard_svg"]["min_percent"] = 64
+    else:
+        qa["visual_budget"][tamper]["whiteboard_svg"] += 1
+    qa_path.write_text(json.dumps(qa), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="medically_approved"):
+        produce_project(
+            project,
+            NoSynthesis(),
+            lambda _: pytest.fail("renderer invoked for tampered cache"),
+        )
+
+
+@pytest.mark.parametrize("tampered", [False, True])
+def test_m65_recovery_verifies_staged_visual_qa_before_promotion(
+    tmp_path: Path, tampered: bool
+) -> None:
+    project = _m65_project(tmp_path)
+    revision = project / "revisions/001"
+    tts = CountingSilent()
+    render_calls: list[list[str]] = []
+
+    def runner(argv: list[str]) -> int:
+        render_calls.append(argv)
+        _write_synthetic_output(argv)
+        return 0
+
+    produce_project(project, tts, runner)
+    promoted = revision / "reviews/video-qa.json"
+    expected = json.loads(promoted.read_text(encoding="utf-8"))["visual_budget"]
+    staged = revision / "renders/video-qa.json"
+    qa = json.loads(promoted.read_text(encoding="utf-8"))
+    if tampered:
+        qa["visual_budget"]["category_frames"]["chart_crop"] = 0
+    staged.write_text(json.dumps(qa), encoding="utf-8")
+    promoted.unlink()
+    project_data = read_yaml(project / "project.yaml")
+    project_data["state"] = "medically_approved"
+    write_yaml_atomic(project / "project.yaml", project_data)
+
+    produce_project(project, tts, runner)
+
+    assert json.loads(promoted.read_text(encoding="utf-8"))["visual_budget"] == expected
+    assert (tts.calls, len(render_calls)) == ((2, 2) if tampered else (1, 1))
+    assert read_yaml(project / "project.yaml")["state"] == "awaiting_video_review"
 
 
 def test_v2_produce_stages_declared_mascot_asset(tmp_path: Path) -> None:

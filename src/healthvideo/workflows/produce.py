@@ -20,6 +20,7 @@ from healthvideo.domain.review import ReviewKind
 from healthvideo.domain.script import Script
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
 from healthvideo.domain.storyboard import Storyboard
+from healthvideo.domain.visual_budget import validate_visual_budget
 from healthvideo.render.input import audio_timing_qa, build_render_input
 from healthvideo.render.remotion import build_render_argv
 from healthvideo.render.run import (
@@ -195,6 +196,18 @@ def _produce_v2(
     storyboard = Storyboard.model_validate(
         read_yaml(layout.artifact_root / "storyboard" / "storyboard.yaml")
     )
+    visual_budget_report = validate_visual_budget(storyboard)
+    visual_budget_qa = (
+        visual_budget_report.model_dump(mode="json")
+        if storyboard.visual_budget_profile == "m6_5_v1"
+        else None
+    )
+    if visual_budget_qa is not None and any(
+        scene.visual == "ai_clip" for scene in storyboard.scenes
+    ):
+        raise ValueError(
+            "M6.5 ai_clip production is unsupported until M6.6 provider support"
+        )
     validate_hook_outro(script, storyboard, require_brand=script.format_profile == "hook_outro_v1")
     author_profile = read_yaml(AUTHOR_PROFILE_PATH)
     pronunciation = load_pronunciation_lexicon(
@@ -236,14 +249,19 @@ def _produce_v2(
         provider_identity=provider_identity_data,
         require_timing=False,
     )
-    if cache_valid and require_timing:
+    if cache_valid and (require_timing or visual_budget_qa is not None):
         cache_valid = _v2_video_qa_is_valid(
             layout.artifact_root,
             input_hash,
-            require_timing=True,
+            require_timing=require_timing,
             final_frame=final_frame,
-        ) or _timing_qa_is_valid(
-            renders_dir / "video-qa.json", renders_dir, final_frame
+            expected_visual_budget=visual_budget_qa,
+        ) or _production_qa_is_valid(
+            renders_dir / "video-qa.json",
+            renders_dir,
+            final_frame,
+            require_timing=require_timing,
+            expected_visual_budget=visual_budget_qa,
         )
 
     if project.state is WorkflowState.AWAITING_VIDEO_REVIEW:
@@ -254,6 +272,7 @@ def _produce_v2(
                 input_hash,
                 require_timing=require_timing,
                 final_frame=final_frame,
+                expected_visual_budget=visual_budget_qa,
             )
         ):
             raise ValueError(
@@ -268,6 +287,7 @@ def _produce_v2(
             input_hash,
             require_timing=require_timing,
             final_frame=final_frame,
+            expected_visual_budget=visual_budget_qa,
         )
         write_yaml_atomic(
             layout.project_dir / "project.yaml",
@@ -330,6 +350,11 @@ def _produce_v2(
                 "input_hash": input_hash,
                 "checks": {"output_exists": True},
                 **timing_qa,
+                **(
+                    {"visual_budget": visual_budget_qa}
+                    if visual_budget_qa is not None
+                    else {}
+                ),
             },
         )
         _validate_v2_staged_run(
@@ -338,6 +363,7 @@ def _produce_v2(
             provider_identity=provider_identity_data,
             require_timing=require_timing,
             final_frame=final_frame,
+            expected_visual_budget=visual_budget_qa,
         )
         _promote_run(staging_dir, renders_dir)
         _promote_v2_video_qa_if_needed(
@@ -345,6 +371,7 @@ def _produce_v2(
             input_hash,
             require_timing=require_timing,
             final_frame=final_frame,
+            expected_visual_budget=visual_budget_qa,
         )
         write_yaml_atomic(
             layout.project_dir / "project.yaml",
@@ -385,6 +412,7 @@ def _v2_run_is_valid(
     provider_identity: Mapping[str, str],
     require_timing: bool = False,
     final_frame: int | None = None,
+    expected_visual_budget: Mapping[str, Any] | None = None,
 ) -> bool:
     required_paths = (
         run_dir / "audio" / "narration.wav",
@@ -396,6 +424,10 @@ def _v2_run_is_valid(
         return False
     if require_timing and not _timing_qa_is_valid(
         run_dir / "video-qa.json", run_dir, final_frame
+    ):
+        return False
+    if expected_visual_budget is not None and not _visual_budget_qa_is_valid(
+        run_dir / "video-qa.json", expected_visual_budget
     ):
         return False
     try:
@@ -435,6 +467,7 @@ def _validate_v2_staged_run(
     provider_identity: Mapping[str, str],
     require_timing: bool = False,
     final_frame: int | None = None,
+    expected_visual_budget: Mapping[str, Any] | None = None,
 ) -> None:
     if not _v2_run_is_valid(
         staging_dir, input_hash, provider_name, asset_hashes,
@@ -442,6 +475,7 @@ def _validate_v2_staged_run(
         provider_identity=provider_identity,
         require_timing=require_timing,
         final_frame=final_frame,
+        expected_visual_budget=expected_visual_budget,
     ):
         raise ValueError("Staged v2 production run is incomplete")
 
@@ -461,10 +495,12 @@ def _promote_v2_video_qa_if_needed(
     *,
     require_timing: bool = False,
     final_frame: int | None = None,
+    expected_visual_budget: Mapping[str, Any] | None = None,
 ) -> None:
     if _v2_video_qa_is_valid(
         revision_root, input_hash, require_timing=require_timing,
         final_frame=final_frame,
+        expected_visual_budget=expected_visual_budget,
     ):
         return
     source = revision_root / "renders" / "video-qa.json"
@@ -480,6 +516,10 @@ def _promote_v2_video_qa_if_needed(
         source, revision_root / "renders", final_frame
     ):
         raise ValueError("Production video QA timing is invalid")
+    if expected_visual_budget is not None and not _visual_budget_qa_is_valid(
+        source, expected_visual_budget
+    ):
+        raise ValueError("Production visual-budget QA is invalid")
     target = revision_root / V2_VIDEO_QA_ARTIFACT
     target.parent.mkdir(parents=True, exist_ok=True)
     os.replace(source, target)
@@ -491,6 +531,7 @@ def _v2_video_qa_is_valid(
     *,
     require_timing: bool = False,
     final_frame: int | None = None,
+    expected_visual_budget: Mapping[str, Any] | None = None,
 ) -> bool:
     path = revision_root / V2_VIDEO_QA_ARTIFACT
     if not path.is_file():
@@ -499,11 +540,46 @@ def _v2_video_qa_is_valid(
         data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
         return False
-    return data.get("input_hash") == input_hash and (
-        not require_timing or _timing_qa_is_valid(
-            path, revision_root / "renders", final_frame
+    return (
+        data.get("input_hash") == input_hash
+        and (
+            not require_timing
+            or _timing_qa_is_valid(path, revision_root / "renders", final_frame)
+        )
+        and (
+            expected_visual_budget is None
+            or _visual_budget_qa_is_valid(path, expected_visual_budget)
         )
     )
+
+
+def _production_qa_is_valid(
+    path: Path,
+    run_dir: Path,
+    final_frame: int | None,
+    *,
+    require_timing: bool,
+    expected_visual_budget: Mapping[str, Any] | None,
+) -> bool:
+    return (
+        not require_timing or _timing_qa_is_valid(path, run_dir, final_frame)
+    ) and (
+        expected_visual_budget is None
+        or _visual_budget_qa_is_valid(path, expected_visual_budget)
+    )
+
+
+def _visual_budget_qa_is_valid(
+    path: Path, expected_visual_budget: Mapping[str, Any]
+) -> bool:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    # Canonical JSON keeps 0/False and 1000/1000.0 distinct, unlike dict equality.
+    return isinstance(data, dict) and canonical_json_hash(
+        data.get("visual_budget")
+    ) == canonical_json_hash(dict(expected_visual_budget))
 
 
 def _timing_qa_is_valid(path: Path, run_dir: Path, final_frame: int | None) -> bool:
