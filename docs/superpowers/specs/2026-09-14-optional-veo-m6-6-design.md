@@ -117,7 +117,8 @@ khác.
 - MIME/container `video/mp4`/`mp4`;
 - width/height 1080×1920;
 - source fps 24;
-- duration 4.000/6.000/8.000 ms và source frame count tương ứng 96/144/192.
+- `duration_ms` thuộc đúng `{4000, 6000, 8000}` và source frame count tương ứng
+  96/144/192.
 
 AI clip có thể `semantic=true` hoặc `semantic=false`. Clip decorative bắt buộc có
 `classification_reason` không rỗng và không được mang claim/source marker. Clip
@@ -240,4 +241,3 @@ hỗ trợ bước đăng thủ công, không gọi TikTok, không tự bật nh
   publishing giữ nguyên.
 - Full Python, Ruff, schema export/diff, video tests/typecheck và
   `git diff --check` phải qua trước khi đánh dấu M6.6 complete.
-

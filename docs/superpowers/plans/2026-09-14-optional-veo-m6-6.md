@@ -30,8 +30,10 @@ declared clip. Packaging emits deterministic manual disclosure guidance.
 - Never generate inside production, never infer rights, never add a third gate,
   never auto-publish, and never persist credentials or Google project IDs.
 - Preserve M6.4 timing QA, M6.5 budget/cache, zero-AI, legacy v2 and v1 45–90 s.
-- Use `pathlib.Path`; do not commit generated audio/video, render/cache/model,
-  credentials, raw provider responses, source-page images or copyrighted full text.
+- Use `pathlib.Path`; do not commit generated audio/video, including test MP4
+  fixtures, render/cache/model, credentials, raw provider responses, source-page
+  images or copyrighted full text. Tests create disposable bytes under `tmp_path`
+  and inject deterministic media-probe metadata.
 - Update README in every task commit. Send execution records to C2C and apply
   independent review until `DONE`.
 
@@ -83,8 +85,6 @@ declared clip. Packaging emits deterministic manual disclosure guidance.
 - Modify `src/healthvideo/cli.py`
 - Test `tests/video_ai/test_veo.py`, `tests/workflows/test_ai_clips.py`,
   `tests/test_cli.py`
-- Add a minimal synthetic MP4 fixture under `tests/fixtures/` only if it is small,
-  generated for tests, and explicitly marked synthetic
 - Modify `README.md`
 
 **Interfaces**
@@ -100,7 +100,9 @@ declared clip. Packaging emits deterministic manual disclosure guidance.
 
 - [ ] RED provider tests: canonical request hash; exact request fields; submit and
   polling; timeout/failure/malformed/multiple/empty/base64/MIME responses; token
-  absent from errors and persisted data; fake path requires no network.
+  absent from errors and persisted data; fake path requires no network. Create
+  disposable synthetic bytes under `tmp_path` and inject probe metadata; do not
+  track an MP4 fixture.
 - [ ] RED workflow tests: valid semantic and decorative registration; pre-medical
   state only; no approval; safe deterministic path; generation failure leaves no
   mutation; probe failure leaves no declared asset; promotion interruption and
@@ -204,7 +206,8 @@ declared clip. Packaging emits deterministic manual disclosure guidance.
 - Modify these design/plan documents only if implementation revealed an approved
   contract correction
 
-- [ ] Inspect every M6.6 commit for generated MP4/WAV, render/cache/model, token,
+- [ ] Inspect every M6.6 commit for any tracked MP4/WAV (including fixtures),
+  render/cache/model, token,
   credential, cloud project ID, raw response, source-page image or full text. Remove
   prohibited tracked artifacts without deleting user-owned untracked work.
 - [ ] Run `python -m pytest -q`.
@@ -218,4 +221,3 @@ declared clip. Packaging emits deterministic manual disclosure guidance.
 - [ ] Record execution with `C:\Users\anhtu\codex-with-chatgpt\bin\c2c.js`, send
   `EXECUTED` to ChatGPT, apply concrete review fixes and resend until `STATE: DONE`.
 - [ ] Declare M6.6 complete only after C2C `DONE`; do not publish.
-
