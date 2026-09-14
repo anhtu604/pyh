@@ -1,7 +1,12 @@
+import json
 from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
+from healthvideo.domain.storyboard import Storyboard
+from healthvideo.domain.visual_budget import calculate_visual_budget
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.workflows.review_html import render_medical_packet, render_video_packet
 from tests.helpers import advance_v2_project_to_video_review, create_v2_project_fixture
@@ -154,3 +159,45 @@ def test_legacy_medical_packet_has_no_m6_5_section(tmp_path: Path) -> None:
     html = render_medical_packet(project_dir / "revisions/001")
 
     assert "Ngân sách visual M6.5" not in html
+
+
+@pytest.mark.parametrize(
+    ("qa_budget", "status"),
+    [
+        ("recomputed", "QA production: khớp report tái tính"),
+        ("tampered", "QA production: không khớp report tái tính"),
+        ("missing", "QA production: thiếu visual_budget"),
+    ],
+)
+def test_video_packet_shows_recomputed_m6_5_budget_against_recorded_qa(
+    tmp_path: Path, qa_budget: str, status: str
+) -> None:
+    project_dir = create_v2_project_fixture(tmp_path)
+    _enable_packet_budget(project_dir)
+    revision = project_dir / "revisions/001"
+    board = Storyboard.model_validate(read_yaml(revision / "storyboard/storyboard.yaml"))
+    recorded = calculate_visual_budget(board).model_dump(mode="json")
+    if qa_budget == "tampered":
+        recorded["override_active"] = 0
+    qa = {"input_hash": "0" * 64}
+    if qa_budget != "missing":
+        qa["visual_budget"] = recorded
+    (revision / "reviews").mkdir(parents=True, exist_ok=True)
+    (revision / "reviews/video-qa.json").write_text(json.dumps(qa), encoding="utf-8")
+
+    html = render_video_packet(revision)
+
+    assert "Ngân sách visual M6.5" in html
+    assert "7500 bp" in html and "2500 bp" in html and "Kết quả: đạt" in html
+    assert status in html
+
+
+def test_legacy_video_packet_has_no_m6_5_section(tmp_path: Path) -> None:
+    project_dir = create_v2_project_fixture(tmp_path)
+    advance_v2_project_to_video_review(
+        project_dir, now=datetime(2026, 9, 11, 9, 0, tzinfo=UTC)
+    )
+
+    html = render_video_packet(project_dir / "revisions/001")
+
+    assert "Ngân sách visual M6.5" not in html and "QA production" not in html

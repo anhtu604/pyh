@@ -4,9 +4,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
-from healthvideo.domain.asset_manifest import AssetManifest, validate_asset_manifest
+from healthvideo.domain.asset_manifest import (
+    AssetKind,
+    AssetManifest,
+    load_asset_manifest,
+    validate_asset_manifest,
+)
 from healthvideo.domain.brand import LogoVariant
 from healthvideo.domain.gate_review import GateKind
+from healthvideo.domain.hook_outro import OUTRO_TEXT
 from healthvideo.domain.invalidation import (
     ArtifactChange,
     InvalidationLevel,
@@ -20,14 +26,19 @@ from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.storage.project_layout import resolve_project_layout
 from healthvideo.storage.revisions import create_revision
 from healthvideo.storage.stages import append_stage_manifest
+from healthvideo.tts.base import TTSRequest, TTSResult
 from healthvideo.tts.silent import SilentTTS
 from healthvideo.workflows.gate_review import approve_gate
 from healthvideo.workflows.hook_outro import author_hook_outro
 from healthvideo.workflows.migrate import migrate_project, plan_migration
 from healthvideo.workflows.package import package_project
 from healthvideo.workflows.produce import produce_project
-from healthvideo.workflows.review_html import render_medical_packet
-from healthvideo.workflows.visual_assets import create_brand_logo_asset
+from healthvideo.workflows.review_html import render_medical_packet, render_video_packet
+from healthvideo.workflows.visual_assets import (
+    bind_chart_asset,
+    create_brand_logo_asset,
+    create_evidence_chart,
+)
 from tests.helpers import _advance_v2_state, create_v2_project_fixture
 
 GOLDEN_PROJECTS = [
@@ -67,6 +78,85 @@ def test_m64_hook_outro_through_both_manual_gates_and_package(tmp_path: Path) ->
     script = read_yaml(revision / "script/script.yaml")
     assert script["lines"][0]["text"] in caption
     assert script["lines"][-1]["text"] not in caption
+
+
+def test_m65_zero_ai_budget_through_chart_outro_gates_and_package(tmp_path: Path) -> None:
+    before = _snapshot_tree(GOLDEN_PROJECTS[1])
+    project = tmp_path / "golden-project-v2"
+    shutil.copytree(GOLDEN_PROJECTS[1], project)
+    _advance_v2_state(project, WorkflowState.AWAITING_MEDICAL_REVIEW)
+    revision = project / "revisions/001"
+    ledger_path = revision / "evidence/ledger.yaml"
+    ledger = read_yaml(ledger_path)
+    ledger["claims"][0]["chart_data"] = [
+        {"id": "bp-count", "source_id": "R01", "label": "Mẫu thử tổng hợp",
+         "value": 12, "denominator": 40, "unit": "người"}
+    ]
+    write_yaml_atomic(ledger_path, ledger)
+    board_path = revision / "storyboard/storyboard.yaml"
+    board = read_yaml(board_path)
+    board["visual_budget_profile"] = "m6_5_v1"
+    start = 0
+    for scene in board["scenes"]:
+        chart_crop = scene["visual"] in {"chart", "evidence_highlight"}
+        scene["start_frame"], scene["duration_frames"] = start, 225 if chart_crop else 315
+        start += scene["duration_frames"]
+    write_yaml_atomic(board_path, board)
+    author_hook_outro(project, duration_frames=90)
+    create_brand_logo_asset(project, scene_id="OUTRO", asset_name="phy-logo", variant=LogoVariant.MONOGRAM)
+    chart = create_evidence_chart(
+        project, claim_id="C01", datum_id="bp-count", asset_name="chart-count",
+        license="synthetic_test_only", rights_basis="fixture nội bộ", creator="repository_fixture",
+    )
+    bind_chart_asset(project, scene_id="S04", asset_path="assets/chart-count.svg")
+    assert "Ngân sách visual M6.5" in render_medical_packet(revision)
+    records = {record.path: record for record in load_asset_manifest(revision / "assets/asset-manifest.yaml").assets}
+    chart_record = records["assets/chart-count.svg"]
+    assert (chart_record.kind, chart_record.semantic, chart_record.storyboard_role) == (
+        AssetKind.DATA_CHART, True, "chart"
+    )
+    rights = read_yaml(revision / "assets/license-ledger.yaml")["entries"]
+    assert any(entry["path"] == chart_record.path for entry in rights)
+    assert any(record.storyboard_role == "brand" and record.sha256 for record in records.values())
+    approve_gate(project, GateKind.MEDICAL, reviewer="doctor", now=GOLDEN_ENTERED_AT)
+
+    tts_calls: list[str] = []
+    staged_charts: list[bytes] = []
+
+    class CountingSilent(SilentTTS):
+        def synthesize(self, request: TTSRequest, output_path: Path) -> TTSResult:
+            tts_calls.append(request.text)
+            return super().synthesize(request, output_path)
+
+    def runner(argv: list[str]) -> int:
+        props = Path(argv[argv.index("--props") + 1])
+        staged_charts.append((props.parent / "assets/chart-count.svg").read_bytes())
+        return _write_golden_video(argv)
+
+    produce_project(project, CountingSilent(), runner)
+    assert staged_charts == [chart.read_bytes()] and len(tts_calls) == 1
+    render_input = json.loads((revision / "renders/render-input.json").read_text(encoding="utf-8"))
+    scenes = render_input["scenes"]
+    assert (scenes[0]["id"], scenes[0]["start_frame"], scenes[0]["visual"]) == ("S01", 0, "whiteboard")
+    assert not any("intro" in f"{scene['id']} {scene['visual']}".lower() for scene in scenes)
+    assert scenes[-1]["visual"] == "brand_outro" and scenes[-1]["narration"] == OUTRO_TEXT
+    assert next(scene for scene in scenes if scene["id"] == "S04")["visual_assets"] == [
+        {"path": "assets/chart-count.svg", "role": "chart", "pose": None}
+    ]
+    qa = json.loads((revision / "reviews/video-qa.json").read_text(encoding="utf-8"))
+    assert qa["composition_duration_ms"] == 60000 and qa["audio_duration_ms"] > 0
+    assert qa["visual_budget"]["category_frames"] == {"whiteboard_svg": 1350, "chart_crop": 450, "ai_clip": 0}
+    assert qa["visual_budget"]["passed"] is True
+    assert "QA production: khớp report tái tính" in render_video_packet(revision)
+    assert read_yaml(project / "project.yaml")["state"] == "awaiting_video_review"
+
+    approve_gate(project, GateKind.VIDEO, reviewer="doctor", now=GOLDEN_ENTERED_AT)
+    package = package_project(project)
+    caption = (package / "caption.txt").read_text(encoding="utf-8")
+    script = read_yaml(revision / "script/script.yaml")
+    assert script["lines"][0]["text"] in caption and OUTRO_TEXT not in caption
+    assert read_yaml(project / "project.yaml")["state"] == "packaged"
+    assert _snapshot_tree(GOLDEN_PROJECTS[1]) == before
 
 
 def test_v1_and_v2_golden_are_available_from_first_m1_task() -> None:

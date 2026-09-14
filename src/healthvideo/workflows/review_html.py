@@ -18,7 +18,7 @@ from healthvideo.domain.evidence import EvidenceClaim, SourceRecord
 from healthvideo.domain.script import Script
 from healthvideo.domain.storyboard import Storyboard
 from healthvideo.domain.visual_budget import VisualCategory, calculate_visual_budget
-from healthvideo.storage.files import read_yaml
+from healthvideo.storage.files import canonical_json_hash, read_yaml
 
 _NOT_YET_MODELED = (
     "chưa có trong hệ thống: population, certainty, applicability, "
@@ -206,12 +206,27 @@ def render_video_packet(revision_root: Path) -> str:
     manifest = read_yaml(manifest_path) if manifest_path.is_file() else {}
     qa_path = revision_root / "reviews" / "video-qa.json"
     qa = read_yaml(qa_path) if qa_path.is_file() else {}
+    storyboard = Storyboard.model_validate(
+        read_yaml(revision_root / "storyboard" / "storyboard.yaml")
+    )
+    budget_section = _render_visual_budget_section(storyboard)
+    if budget_section:
+        recorded = qa.get("visual_budget")
+        expected = calculate_visual_budget(storyboard).model_dump(mode="json")
+        if recorded is None:
+            status = "thiếu visual_budget"
+        elif canonical_json_hash(recorded) == canonical_json_hash(expected):
+            status = "khớp report tái tính"
+        else:
+            status = "không khớp report tái tính"
+        budget_section += f"<p>QA production: {status}</p>"
 
     return (
         '<!doctype html><html lang="vi"><head><meta charset="utf-8">'
         "<title>Gói duyệt video</title></head><body>"
         '<video controls src="../renders/video.mp4"></video>'
-        f"<pre>{escape(str(manifest))}</pre>"
+        + budget_section
+        + f"<pre>{escape(str(manifest))}</pre>"
         f"<pre>{escape(str(qa))}</pre>"
         "</body></html>"
     )
