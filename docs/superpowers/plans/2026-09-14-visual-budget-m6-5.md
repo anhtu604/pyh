@@ -41,7 +41,7 @@ renders predeclared chart bytes. M6.6 owns AI providers.
 - Create `src/healthvideo/domain/visual_budget.py`
 - Modify `src/healthvideo/domain/storyboard.py`
 - Create `tests/domain/test_visual_budget.py`
-- Modify `tests/domain/test_storyboard.py`, `tests/contracts/test_schemas.py`
+- Create `tests/domain/test_storyboard.py`; modify `tests/contracts/test_schemas.py`
 - Export changed schemas; modify `README.md`
 
 **Interfaces**
@@ -53,6 +53,9 @@ renders predeclared chart bytes. M6.6 owns AI providers.
   category_basis_points, effective_bounds, passed)`
 - `classify_scene_visual(visual)`, `calculate_visual_budget(storyboard)`,
   `validate_visual_budget(storyboard)`
+- Canonical display calculation is
+  `category_basis_points[c] = (10_000 * category_frames[c]) // total_frames`;
+  pass/fail uses cross-multiplication only.
 
 - [ ] Write RED tests for legacy bypass; exact default boundaries; one-frame
   failures; every visual mapping; partition equality; no overlay double-count;
@@ -101,14 +104,21 @@ renders predeclared chart bytes. M6.6 owns AI providers.
   `video/src/types.test.ts`, `video/src/HealthVideo.test.tsx`
 - Modify schemas and `README.md`
 
+- [ ] RED: `bind_chart_asset(project_dir, scene_id, asset_path)` preserves the
+  existing `create_evidence_chart()` API and only binds a pre-existing chart in
+  a pre-medical-review revision. It is an identical-retry no-op, recovers an
+  interrupted manifest-first promotion, and refuses a different scene/owner,
+  changed provenance, unsafe path, or invalid project state.
 - [ ] RED: chart scene requires exactly one `role=chart`; resolver accepts only
   `DATA_CHART`, semantic, chart-owned record with valid bytes/right ledger. Missing,
   duplicate, wrong kind/owner/hash/unbound ref fail. Video tests require one SVG
   render and safe marker/caption layout.
 - [ ] Run Python and video focused tests; confirm RED.
-- [ ] Add `chart` role to both models/resolver and registration ownership. Dispatch
-  chart to a component that uses the declared `staticFile` only; never calculate
-  chart data in TypeScript.
+- [ ] Add `chart` role to both models/resolver. Implement explicit chart binding
+  with a durable revision intent: stage/promote manifest ownership first, atomically
+  write the storyboard ref second, then clear intent. Recovery completes only the
+  missing step; conflicting retries fail closed. Dispatch chart to a component
+  that uses the declared `staticFile` only; never calculate chart data in TypeScript.
 - [ ] Run focused Python, schema export/diff, video tests/typecheck and Ruff.
 - [ ] Update README and commit `feat: render declared M6.1 chart assets`.
 

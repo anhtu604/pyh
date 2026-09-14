@@ -85,8 +85,9 @@ làm policy đạt.
 
 Hàm domain thuần trả report bất biến gồm profile, `override_active`, `total_frames`,
 frame theo nhóm, basis points chỉ để hiển thị, effective bounds và `passed`.
-Basis points dùng phép chia nguyên xác định; quyết định pass luôn dùng phép nhân
-chéo ở trên.
+Basis points dùng phép chia nguyên lấy phần nguyên theo công thức duy nhất
+`basis_points[c] = (10_000 * F[c]) // T`; quyết định pass luôn dùng phép nhân
+chéo ở trên, không dùng basis points.
 
 ## 5. Chart đã khai báo
 
@@ -102,6 +103,24 @@ marker/caption trong vùng an toàn.
 
 `VisualAssetRef.role` và `AssetRecord.storyboard_role` được mở rộng cộng thêm
 `chart`; các role M6.3–M6.4 không đổi.
+
+Chart M6.1 hiện được `create_evidence_chart()` tạo và khai báo mà chưa thuộc scene.
+M6.5 giữ API này tương thích và thêm thao tác tường minh
+`bind_chart_asset(project_dir: Path, *, scene_id: str, asset_path: str) -> None`.
+Thao tác chỉ chạy trước medical approval; nó yêu cầu scene tồn tại với
+`visual=chart`, asset path an toàn trỏ tới đúng một record `DATA_CHART` semantic,
+bytes khớp hash và có rights entry hiện hành. Nó thêm đúng một
+`VisualAssetRef(role=chart)` và đặt `storyboard_role=chart`; không tạo lại chart,
+đổi provenance hoặc suy đoán quyền.
+
+Binding dùng intent bền vững trong revision, staging asset directory và atomic
+write storyboard. Promotion cập nhật manifest ownership trước, rồi storyboard
+reference, sau đó xóa intent. Retry cùng `scene_id`/`asset_path` hoàn tất bước còn
+thiếu và trả thành công; binding đã hoàn tất giống hệt là no-op. Retry khác scene,
+asset đã có owner khác, ref khác role, nhiều ref chart trong scene, hash hoặc
+rights thay đổi đều fail closed. Medical gate và production luôn gọi recovery
+trước validation, nên trạng thái giữa hai lần promotion không được duyệt hoặc
+render và không cần người dùng sửa YAML thủ công.
 
 ## 6. AI clip chưa hỗ trợ production
 
@@ -145,7 +164,8 @@ công; không thay caption, source hoặc publish flow.
 - Chart ref/manifest/bytes/rights sai bị từ chối trước gate và production.
 - AI clip bị từ chối trước thao tác tốn kém.
 - Không tự retime, chuyển nhóm, thêm chart/crop hoặc nới bound.
-- Đăng ký chart tiếp tục intent/staging/promotion của visual asset workflow.
+- Tạo chart giữ API M6.1; binding chart dùng intent/staging/promotion và retry
+  hoàn tất an toàn như mô tả ở mục 5.
 - Ghi storyboard dùng atomic write; production dùng staging và promotion hiện có.
 
 ## 9. Tiêu chí chấp nhận
