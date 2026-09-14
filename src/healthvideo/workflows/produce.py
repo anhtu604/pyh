@@ -223,21 +223,35 @@ def _produce_v2(
     render_input = build_render_input(
         storyboard, audio_file="audio/narration.wav", duration_policy="v2"
     )
+    final_scene = storyboard.scenes[-1]
+    final_frame = final_scene.start_frame + final_scene.duration_frames
+    require_timing = script.format_profile == "hook_outro_v1"
     renders_dir = layout.artifact_root / "renders"
     output = renders_dir / OUTPUT_NAME
     cache_valid = _v2_run_is_valid(
         renders_dir, input_hash, provider_name, asset_hashes,
         pronunciation_sha256=pronunciation_sha256,
         provider_identity=provider_identity_data,
-        require_timing=script.format_profile == "hook_outro_v1",
+        require_timing=False,
     )
+    if cache_valid and require_timing:
+        cache_valid = _v2_video_qa_is_valid(
+            layout.artifact_root,
+            input_hash,
+            require_timing=True,
+            final_frame=final_frame,
+        ) or _timing_qa_is_valid(
+            renders_dir / "video-qa.json", renders_dir, final_frame
+        )
 
     if project.state is WorkflowState.AWAITING_VIDEO_REVIEW:
         if not (
             _is_active_v2_cache(project, input_hash, cache_valid)
             and _v2_video_qa_is_valid(
-                layout.artifact_root, input_hash,
-                require_timing=script.format_profile == "hook_outro_v1",
+                layout.artifact_root,
+                input_hash,
+                require_timing=require_timing,
+                final_frame=final_frame,
             )
         ):
             raise ValueError(
@@ -248,8 +262,10 @@ def _produce_v2(
         return output
     if cache_valid:
         _promote_v2_video_qa_if_needed(
-            layout.artifact_root, input_hash,
-            require_timing=script.format_profile == "hook_outro_v1",
+            layout.artifact_root,
+            input_hash,
+            require_timing=require_timing,
+            final_frame=final_frame,
         )
         write_yaml_atomic(
             layout.project_dir / "project.yaml",
@@ -278,7 +294,6 @@ def _produce_v2(
         audio_report = inspect_wav(
             staged_audio, require_signal=getattr(tts, "require_signal", False)
         )
-        final_frame = storyboard.scenes[-1].start_frame + storyboard.scenes[-1].duration_frames
         timing_qa = audio_timing_qa(audio_report.duration_ms, final_frame)
         render_input_data = render_input.model_dump(mode="json")
         staged_render_input = staging_dir / RENDER_INPUT_NAME
@@ -319,12 +334,15 @@ def _produce_v2(
             staging_dir, input_hash, provider_name, asset_hashes,
             pronunciation_sha256=pronunciation_sha256,
             provider_identity=provider_identity_data,
-            require_timing=script.format_profile == "hook_outro_v1",
+            require_timing=require_timing,
+            final_frame=final_frame,
         )
         _promote_run(staging_dir, renders_dir)
         _promote_v2_video_qa_if_needed(
-            layout.artifact_root, input_hash,
-            require_timing=script.format_profile == "hook_outro_v1",
+            layout.artifact_root,
+            input_hash,
+            require_timing=require_timing,
+            final_frame=final_frame,
         )
         write_yaml_atomic(
             layout.project_dir / "project.yaml",
@@ -364,6 +382,7 @@ def _v2_run_is_valid(
     pronunciation_sha256: str,
     provider_identity: Mapping[str, str],
     require_timing: bool = False,
+    final_frame: int | None = None,
 ) -> bool:
     required_paths = (
         run_dir / "audio" / "narration.wav",
@@ -373,7 +392,9 @@ def _v2_run_is_valid(
     )
     if not all(path.is_file() for path in required_paths):
         return False
-    if require_timing and not _timing_qa_is_valid(run_dir / "video-qa.json"):
+    if require_timing and not _timing_qa_is_valid(
+        run_dir / "video-qa.json", run_dir, final_frame
+    ):
         return False
     try:
         manifest = json.loads(
@@ -411,12 +432,14 @@ def _validate_v2_staged_run(
     pronunciation_sha256: str,
     provider_identity: Mapping[str, str],
     require_timing: bool = False,
+    final_frame: int | None = None,
 ) -> None:
     if not _v2_run_is_valid(
         staging_dir, input_hash, provider_name, asset_hashes,
         pronunciation_sha256=pronunciation_sha256,
         provider_identity=provider_identity,
         require_timing=require_timing,
+        final_frame=final_frame,
     ):
         raise ValueError("Staged v2 production run is incomplete")
 
@@ -431,9 +454,16 @@ def _is_active_v2_cache(
 
 
 def _promote_v2_video_qa_if_needed(
-    revision_root: Path, input_hash: str, *, require_timing: bool = False
+    revision_root: Path,
+    input_hash: str,
+    *,
+    require_timing: bool = False,
+    final_frame: int | None = None,
 ) -> None:
-    if _v2_video_qa_is_valid(revision_root, input_hash, require_timing=require_timing):
+    if _v2_video_qa_is_valid(
+        revision_root, input_hash, require_timing=require_timing,
+        final_frame=final_frame,
+    ):
         return
     source = revision_root / "renders" / "video-qa.json"
     if not source.is_file():
@@ -444,7 +474,9 @@ def _promote_v2_video_qa_if_needed(
         raise ValueError("Production video QA is invalid") from error
     if data.get("input_hash") != input_hash:
         raise ValueError("Production video QA does not match the active render")
-    if require_timing and not _timing_qa_is_valid(source):
+    if require_timing and not _timing_qa_is_valid(
+        source, revision_root / "renders", final_frame
+    ):
         raise ValueError("Production video QA timing is invalid")
     target = revision_root / V2_VIDEO_QA_ARTIFACT
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -452,7 +484,11 @@ def _promote_v2_video_qa_if_needed(
 
 
 def _v2_video_qa_is_valid(
-    revision_root: Path, input_hash: str, *, require_timing: bool = False
+    revision_root: Path,
+    input_hash: str,
+    *,
+    require_timing: bool = False,
+    final_frame: int | None = None,
 ) -> bool:
     path = revision_root / V2_VIDEO_QA_ARTIFACT
     if not path.is_file():
@@ -462,21 +498,28 @@ def _v2_video_qa_is_valid(
     except json.JSONDecodeError:
         return False
     return data.get("input_hash") == input_hash and (
-        not require_timing or _timing_qa_is_valid(path)
+        not require_timing or _timing_qa_is_valid(
+            path, revision_root / "renders", final_frame
+        )
     )
 
 
-def _timing_qa_is_valid(path: Path) -> bool:
+def _timing_qa_is_valid(path: Path, run_dir: Path, final_frame: int | None) -> bool:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         audio_ms = data["audio_duration_ms"]
         composition_ms = data["composition_duration_ms"]
         trailing_ms = data["trailing_visual_ms"]
+        measured_ms = inspect_wav(run_dir / "audio" / "narration.wav").duration_ms
+        expected = audio_timing_qa(measured_ms, final_frame)
     except (OSError, ValueError, KeyError, TypeError):
         return False
     return (
-        all(type(value) is int and value >= 0 for value in (audio_ms, composition_ms, trailing_ms))
-        and trailing_ms == max(0, composition_ms - audio_ms)
+        all(
+            type(value) is int and value >= 0
+            for value in (audio_ms, composition_ms, trailing_ms)
+        )
+        and {key: data[key] for key in expected} == expected
     )
 
 

@@ -177,6 +177,7 @@ applicability, per-claim doctor notes — hoãn sang M3).
 | M6.4 timing | V2 dùng thời lượng storyboard theo nội dung; WAV thực đo phải vừa timeline trước render, QA lưu thời lượng audio, composition và đoạn hình cuối không tiếng; V1 giữ 45–90 giây. | Implemented; Remotion và integration còn tiếp tục | 69 render/produce/e2e tests; Ruff; `git diff --check` | `feat: match v2 video duration to reviewed audio timeline` |
 | M6.4 Remotion | Composition lấy đúng frame cuối storyboard; frame đầu là hook, scene cuối dùng logo/mascot đã khai báo và caption trong vùng an toàn. | Implemented; integration còn tiếp tục | 24 video tests; TypeScript typecheck; `git diff --check` | `feat: render hook-first PHY outro at exact duration` |
 | M6.4 integration | E2E xác nhận hook ở frame 0, outro cuối với logo khai báo, QA WAV, hai cổng duyệt thủ công và caption từ hook; packet nêu nguồn gốc logo. | Implemented; chờ C2C review độc lập trước khi đánh dấu complete | 662 Python tests; Ruff; schema export không đổi; 24 video tests; typecheck; `git diff --check` | `feat: complete reviewed M6.4 hook and outro workflow` |
+| M6.4 retry QA | Cache M6.4 nhận QA thời lượng đã chuyển sang `reviews`, kiểm tra lại số đo WAV và frame cuối, phục hồi được khi trạng thái dự án chưa cập nhật; retry không gọi lại TTS/render. | Implemented; chờ C2C review vòng 2 | 663 Python tests; Ruff; schema export không đổi; 24 video tests; typecheck; `git diff --check` | `fix: reuse promoted M6.4 timing QA on retry` |
 
 ## Kiến trúc
 
