@@ -354,7 +354,8 @@
             "whiteboard",
             "mascot",
             "brand",
-            "chart"
+            "chart",
+            "ai_clip"
           ],
           "title": "Role",
           "type": "string"
@@ -441,5 +442,8 @@
     "title"
   ],
   "title": "Storyboard",
-  "type": "object"
+  "type": "object",
+  "x-invariants": {
+    "m6_6_ai_clip": "m6_5_v1 ai_clip scenes use 120/180/240 frames"
+  }
 }

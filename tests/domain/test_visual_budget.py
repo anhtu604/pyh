@@ -65,8 +65,8 @@ def test_unknown_primary_visual_fails_closed() -> None:
 @pytest.mark.parametrize(
     "durations",
     [
-        (("whiteboard", 65), ("chart", 25), ("ai_clip", 10)),
-        (("brand_outro", 75), ("chart", 15), ("ai_clip", 10)),
+        (("whiteboard", 780), ("chart", 300), ("ai_clip", 120)),
+        (("brand_outro", 900), ("chart", 180), ("ai_clip", 120)),
         (("whiteboard", 75), ("chart", 25)),
     ],
 )
@@ -76,15 +76,17 @@ def test_default_inclusive_boundaries_pass(
     report = validate_visual_budget(storyboard(durations))
 
     assert report.passed is True
-    assert sum(report.category_frames.values()) == report.total_frames == 100
+    assert sum(report.category_frames.values()) == report.total_frames == sum(
+        duration for _, duration in durations
+    )
 
 
 @pytest.mark.parametrize(
     "durations",
     [
-        (("whiteboard", 64), ("chart", 26), ("ai_clip", 10)),
-        (("whiteboard", 76), ("chart", 14), ("ai_clip", 10)),
-        (("whiteboard", 70), ("chart", 19), ("ai_clip", 11)),
+        (("whiteboard", 779), ("chart", 301), ("ai_clip", 120)),
+        (("whiteboard", 901), ("chart", 179), ("ai_clip", 120)),
+        (("whiteboard", 1679), ("chart", 480), ("ai_clip", 240)),
     ],
 )
 def test_one_frame_boundary_violation_fails_without_rounding(
@@ -95,9 +97,7 @@ def test_one_frame_boundary_violation_fails_without_rounding(
 
 
 def test_cross_multiplication_rejects_sub_basis_boundary_violation() -> None:
-    board = storyboard(
-        (("whiteboard", 6500), ("chart", 2501), ("ai_clip", 1000))
-    )
+    board = storyboard((("whiteboard", 7500), ("chart", 2501)))
 
     report = calculate_visual_budget(board)
 

@@ -1,5 +1,117 @@
 {
   "$defs": {
+    "AIClipProvenance": {
+      "additionalProperties": false,
+      "description": "Provider request identity and measured media properties for one clip.",
+      "properties": {
+        "container": {
+          "const": "mp4",
+          "title": "Container",
+          "type": "string"
+        },
+        "duration_ms": {
+          "enum": [
+            4000,
+            6000,
+            8000
+          ],
+          "title": "Duration Ms",
+          "type": "integer"
+        },
+        "generated_at": {
+          "format": "date-time",
+          "title": "Generated At",
+          "type": "string"
+        },
+        "height": {
+          "const": 1920,
+          "title": "Height",
+          "type": "integer"
+        },
+        "mime_type": {
+          "const": "video/mp4",
+          "title": "Mime Type",
+          "type": "string"
+        },
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "output_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Output Sha256",
+          "type": "string"
+        },
+        "prompt": {
+          "title": "Prompt",
+          "type": "string"
+        },
+        "provider": {
+          "const": "google_vertex_ai",
+          "title": "Provider",
+          "type": "string"
+        },
+        "request_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Request Sha256",
+          "type": "string"
+        },
+        "requested_seed": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Requested Seed"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "source_fps": {
+          "const": 24,
+          "title": "Source Fps",
+          "type": "integer"
+        },
+        "source_frame_count": {
+          "enum": [
+            96,
+            144,
+            192
+          ],
+          "title": "Source Frame Count",
+          "type": "integer"
+        },
+        "width": {
+          "const": 1080,
+          "title": "Width",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "provider",
+        "model",
+        "prompt",
+        "generated_at",
+        "request_sha256",
+        "output_sha256",
+        "mime_type",
+        "container",
+        "width",
+        "height",
+        "source_fps",
+        "duration_ms",
+        "source_frame_count"
+      ],
+      "title": "AIClipProvenance",
+      "type": "object"
+    },
     "AssetKind": {
       "enum": [
         "evidence_highlight",
@@ -11,7 +123,8 @@
         "flourish",
         "transition",
         "mascot_reaction",
-        "mascot_medical_annotation"
+        "mascot_medical_annotation",
+        "ai_clip"
       ],
       "title": "AssetKind",
       "type": "string"
@@ -20,6 +133,17 @@
       "additionalProperties": false,
       "description": "One tracked asset, its classification, and its provenance.\n\n``path`` must already be a safe POSIX-relative path with no ``..``\nsegment and no absolute root; whether it actually resolves inside a\ngiven revision is checked later by :func:`validate_asset_manifest`,\nwhich has the revision root to check it against.",
       "properties": {
+        "ai_provenance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AIClipProvenance"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "classification_reason": {
           "anyOf": [
             {
@@ -81,7 +205,8 @@
                 "whiteboard",
                 "mascot",
                 "brand",
-                "chart"
+                "chart",
+                "ai_clip"
               ],
               "type": "string"
             },
@@ -104,7 +229,10 @@
         "revision"
       ],
       "title": "AssetRecord",
-      "type": "object"
+      "type": "object",
+      "x-invariants": {
+        "ai_clip": "kind=ai_clip requires matching ai_provenance, rights_required=true, and a decorative rationale when semantic=false; other kinds forbid ai_provenance"
+      }
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",

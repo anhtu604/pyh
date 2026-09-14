@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
+from healthvideo.domain.ai_clip import AIClipProvenance
 from healthvideo.domain.asset_manifest import (
     DECORATIVE_KINDS,
     SEMANTIC_REQUIRED_KINDS,
@@ -25,6 +26,24 @@ GOLDEN_ASSET_MANIFEST = Path(
 )
 GOLDEN_REVISION_ROOT = GOLDEN_ASSET_MANIFEST.parents[1]
 SYNTHETIC_SHA256 = "a" * 64
+
+
+def ai_provenance(output_sha256: str = SYNTHETIC_SHA256) -> AIClipProvenance:
+    return AIClipProvenance(
+        provider="google_vertex_ai",
+        model="veo-3.1-fast-generate-001",
+        prompt="Minh họa một lựa chọn dự phòng.",
+        generated_at="2026-09-14T12:00:00+00:00",
+        request_sha256="b" * 64,
+        output_sha256=output_sha256,
+        mime_type="video/mp4",
+        container="mp4",
+        width=1080,
+        height=1920,
+        source_fps=24,
+        duration_ms=4000,
+        source_frame_count=96,
+    )
 
 
 def asset_payload(**overrides: Any) -> dict[str, Any]:
@@ -230,6 +249,51 @@ def test_validate_asset_manifest_skips_byte_check_for_decorative_assets(
     )
 
     validate_asset_manifest(revision, manifest)
+
+
+def test_ai_clip_requires_typed_provenance_rights_and_matching_output_hash() -> None:
+    valid = asset_payload(
+        path="assets/ai-clips/S01.mp4",
+        kind="ai_clip",
+        semantic=True,
+        classification_reason=None,
+        rights_required=True,
+        storyboard_role="ai_clip",
+        ai_provenance=ai_provenance(),
+    )
+    assert AssetRecord.model_validate(valid).kind is AssetKind.AI_CLIP
+
+    for changes in (
+        {"ai_provenance": None},
+        {"rights_required": False},
+        {"ai_provenance": ai_provenance("c" * 64)},
+    ):
+        with pytest.raises(ValidationError):
+            AssetRecord.model_validate(valid | changes)
+
+
+def test_non_ai_asset_forbids_ai_provenance() -> None:
+    with pytest.raises(ValidationError, match="ai_provenance"):
+        AssetRecord.model_validate(asset_payload(ai_provenance=ai_provenance()))
+
+
+def test_decorative_ai_clip_requires_nonblank_classification_reason() -> None:
+    payload = asset_payload(
+        path="assets/ai-clips/S01.mp4",
+        kind="ai_clip",
+        semantic=False,
+        rights_required=True,
+        storyboard_role="ai_clip",
+        ai_provenance=ai_provenance(),
+    )
+    for reason in (None, "  "):
+        with pytest.raises(ValidationError, match="classification_reason"):
+            AssetRecord.model_validate(payload | {"classification_reason": reason})
+
+    record = AssetRecord.model_validate(
+        payload | {"classification_reason": "Chuyển cảnh không mang nghĩa y khoa."}
+    )
+    assert record.semantic is False
 
 
 # ---------------------------------------------------------------------------

@@ -11,7 +11,7 @@ class VisualAssetRef(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     path: str
-    role: Literal["whiteboard", "mascot", "brand", "chart"]
+    role: Literal["whiteboard", "mascot", "brand", "chart", "ai_clip"]
     pose: MascotPose | None = None
 
     @model_validator(mode="after")
@@ -30,7 +30,7 @@ class VisualAssetRef(BaseModel):
             raise ValueError("visual asset path must be safe relative POSIX")
         if self.role == "mascot" and self.pose is None:
             raise ValueError("mascot visual asset requires pose")
-        if self.role in {"whiteboard", "brand", "chart"} and self.pose is not None:
+        if self.role in {"whiteboard", "brand", "chart", "ai_clip"} and self.pose is not None:
             raise ValueError(f"{self.role} visual asset cannot have pose")
         return self
 
@@ -149,7 +149,16 @@ class Scene(BaseModel):
 
 
 class Storyboard(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(
+        frozen=True,
+        json_schema_extra={
+            "x-invariants": {
+                "m6_6_ai_clip": (
+                    "m6_5_v1 ai_clip scenes use 120/180/240 frames"
+                )
+            }
+        },
+    )
 
     schema_version: str = "1.0"
     title: str
@@ -164,4 +173,15 @@ class Storyboard(BaseModel):
             and self.visual_budget_profile != "m6_5_v1"
         ):
             raise ValueError("visual budget override requires m6_5_v1 profile")
+        if self.visual_budget_profile == "m6_5_v1":
+            for scene in self.scenes:
+                if scene.visual == "ai_clip" and scene.duration_frames not in {
+                    120,
+                    180,
+                    240,
+                }:
+                    raise ValueError(
+                        f"Scene {scene.id}: M6.5 ai_clip duration must be "
+                        "120, 180, or 240 frames"
+                    )
         return self

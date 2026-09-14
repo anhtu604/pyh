@@ -221,3 +221,37 @@ def test_exported_chart_role_and_render_profile_are_additive(tmp_path: Path) -> 
     assert render_input["x-invariants"]["m6_5_chart_ref"] == (
         "m6_5_v1 chart scenes contain exactly one role=chart asset"
     )
+
+
+def test_exported_ai_clip_contract_is_additive_and_explicit(tmp_path: Path) -> None:
+    output_dir = tmp_path / "schemas"
+    subprocess.run(
+        [sys.executable, "tools/export_schemas.py", "--output-dir", str(output_dir)],
+        check=True,
+        cwd=REPOSITORY_ROOT,
+    )
+    storyboard = json.loads(
+        (output_dir / "storyboard.schema.json").read_text(encoding="utf-8")
+    )
+    asset_manifest = json.loads(
+        (output_dir / "asset-manifest.schema.json").read_text(encoding="utf-8")
+    )
+
+    assert "ai_clip" in storyboard["$defs"]["VisualAssetRef"]["properties"][
+        "role"
+    ]["enum"]
+    record = asset_manifest["$defs"]["AssetRecord"]["properties"]
+    assert "ai_clip" in asset_manifest["$defs"]["AssetKind"]["enum"]
+    assert "ai_clip" in record["storyboard_role"]["anyOf"][0]["enum"]
+    provenance = asset_manifest["$defs"]["AIClipProvenance"]["properties"]
+    assert provenance["duration_ms"]["enum"] == [4000, 6000, 8000]
+    assert provenance["source_frame_count"]["enum"] == [96, 144, 192]
+    assert provenance["width"]["const"] == 1080
+    assert provenance["height"]["const"] == 1920
+    assert provenance["source_fps"]["const"] == 24
+    assert asset_manifest["$defs"]["AssetRecord"]["x-invariants"][
+        "ai_clip"
+    ].startswith("kind=ai_clip")
+    assert storyboard["x-invariants"]["m6_6_ai_clip"] == (
+        "m6_5_v1 ai_clip scenes use 120/180/240 frames"
+    )

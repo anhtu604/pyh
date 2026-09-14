@@ -328,7 +328,8 @@
             "whiteboard",
             "mascot",
             "brand",
-            "chart"
+            "chart",
+            "ai_clip"
           ],
           "title": "Role",
           "type": "string"
