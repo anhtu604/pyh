@@ -6,6 +6,11 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 _SHA256_HEX_PATTERN = r"^[0-9a-f]{64}$"
+_VALID_MEDIA_CONTRACTS = {
+    ("video/mp4", "mp4", 1080, 1920, 24, 4000, 96),
+    ("video/mp4", "mp4", 1080, 1920, 24, 6000, 144),
+    ("video/mp4", "mp4", 1080, 1920, 24, 8000, 192),
+}
 
 
 class AIClipProvenance(BaseModel):
@@ -45,8 +50,21 @@ class AIClipProvenance(BaseModel):
 
     @model_validator(mode="after")
     def _validate_duration_frames(self) -> "AIClipProvenance":
-        expected = {4000: 96, 6000: 144, 8000: 192}
-        if self.source_frame_count != expected[self.duration_ms]:
-            raise ValueError("AI clip duration and source frame count do not match")
+        validate_ai_clip_media_contract(self)
         return self
 
+
+def validate_ai_clip_media_contract(provenance: AIClipProvenance) -> None:
+    """Reject declared or measured metadata outside the reviewed clip contract."""
+
+    media_contract = (
+        provenance.mime_type,
+        provenance.container,
+        provenance.width,
+        provenance.height,
+        provenance.source_fps,
+        provenance.duration_ms,
+        provenance.source_frame_count,
+    )
+    if media_contract not in _VALID_MEDIA_CONTRACTS:
+        raise ValueError("AI clip media contract does not match a reviewed profile")

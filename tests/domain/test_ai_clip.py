@@ -3,7 +3,10 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
-from healthvideo.domain.ai_clip import AIClipProvenance
+from healthvideo.domain.ai_clip import (
+    AIClipProvenance,
+    validate_ai_clip_media_contract,
+)
 
 
 def provenance_payload(**overrides: object) -> dict[str, object]:
@@ -89,3 +92,28 @@ def test_ai_clip_provenance_allows_missing_requested_seed_and_is_frozen() -> Non
     assert provenance.requested_seed is None
     with pytest.raises(ValidationError):
         provenance.duration_ms = 6000  # type: ignore[misc]
+
+
+@pytest.mark.parametrize(
+    ("duration_ms", "source_frame_count"),
+    [(4000, 96), (6000, 144), (8000, 192)],
+)
+def test_validate_ai_clip_media_contract_accepts_exact_pairs(
+    duration_ms: int, source_frame_count: int
+) -> None:
+    provenance = AIClipProvenance.model_validate(
+        provenance_payload(
+            duration_ms=duration_ms, source_frame_count=source_frame_count
+        )
+    )
+
+    validate_ai_clip_media_contract(provenance)
+
+
+def test_validate_ai_clip_media_contract_rejects_bypassed_invalid_pair() -> None:
+    provenance = AIClipProvenance.model_construct(
+        **provenance_payload(duration_ms=4000, source_frame_count=144)
+    )
+
+    with pytest.raises(ValueError, match="media contract"):
+        validate_ai_clip_media_contract(provenance)
