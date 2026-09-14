@@ -13,6 +13,7 @@ from __future__ import annotations
 from html import escape
 from pathlib import Path
 
+from healthvideo.domain.asset_manifest import AssetManifest
 from healthvideo.domain.evidence import EvidenceClaim, SourceRecord
 from healthvideo.domain.script import Script
 from healthvideo.domain.storyboard import Storyboard
@@ -109,9 +110,26 @@ def render_medical_packet(revision_root: Path) -> str:
     hook_outro_section = ""
     if script.format_profile == "hook_outro_v1":
         final = storyboard.scenes[-1]
-        brand_paths = ", ".join(
-            escape(ref.path) for ref in final.visual_assets if ref.role == "brand"
+        asset_manifest = AssetManifest.model_validate(
+            read_yaml(revision_root / "assets" / "asset-manifest.yaml")
         )
+        brand_records = {
+            asset.path: asset for asset in asset_manifest.assets
+            if asset.storyboard_role == "brand"
+        }
+        brand_details = []
+        for ref in final.visual_assets:
+            if ref.role != "brand":
+                continue
+            record = brand_records.get(ref.path)
+            if record is None:
+                brand_details.append(escape(ref.path) + " (chưa khai báo)")
+            else:
+                brand_details.append(
+                    f"{escape(record.path)}; SHA-256: {escape(record.sha256)}; "
+                    f"license: {escape(record.license)}; creator: {escape(record.creator)}"
+                )
+        brand_paths = ", ".join(brand_details)
         hook_outro_section = (
             '<section><h2>Hook và outro đã khai báo</h2>'
             f"<p>Profile: {escape(script.format_profile)}</p>"

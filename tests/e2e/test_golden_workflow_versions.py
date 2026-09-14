@@ -1,9 +1,11 @@
+import json
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
 from healthvideo.domain.asset_manifest import AssetManifest, validate_asset_manifest
+from healthvideo.domain.brand import LogoVariant
 from healthvideo.domain.gate_review import GateKind
 from healthvideo.domain.invalidation import (
     ArtifactChange,
@@ -14,16 +16,19 @@ from healthvideo.domain.project import ProjectState, transition
 from healthvideo.domain.project_v2 import WorkflowState
 from healthvideo.domain.stage import StageManifest, StageStatus
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
-from healthvideo.storage.files import read_yaml
+from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.storage.project_layout import resolve_project_layout
 from healthvideo.storage.revisions import create_revision
 from healthvideo.storage.stages import append_stage_manifest
 from healthvideo.tts.silent import SilentTTS
 from healthvideo.workflows.gate_review import approve_gate
+from healthvideo.workflows.hook_outro import author_hook_outro
 from healthvideo.workflows.migrate import migrate_project, plan_migration
 from healthvideo.workflows.package import package_project
 from healthvideo.workflows.produce import produce_project
-from tests.helpers import _advance_v2_state
+from healthvideo.workflows.review_html import render_medical_packet
+from healthvideo.workflows.visual_assets import create_brand_logo_asset
+from tests.helpers import _advance_v2_state, create_v2_project_fixture
 
 GOLDEN_PROJECTS = [
     Path("tests/fixtures/golden-project"),
@@ -31,6 +36,37 @@ GOLDEN_PROJECTS = [
 ]
 
 GOLDEN_ENTERED_AT = datetime(2026, 9, 10, 7, 30, tzinfo=UTC)
+
+
+def test_m64_hook_outro_through_both_manual_gates_and_package(tmp_path: Path) -> None:
+    project = create_v2_project_fixture(tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW)
+    revision = project / "revisions/001"
+    board_path = revision / "storyboard/storyboard.yaml"
+    board = read_yaml(board_path)
+    board["scenes"][0]["duration_frames"] = 1350
+    write_yaml_atomic(board_path, board)
+    author_hook_outro(project, duration_frames=90)
+    create_brand_logo_asset(project, scene_id="OUTRO", asset_name="phy-logo", variant=LogoVariant.MONOGRAM)
+    packet = render_medical_packet(revision)
+    assert "Hook:" in packet and "Outro:" in packet and "phy-logo.svg" in packet
+    logo = next(asset for asset in read_yaml(revision / "assets/asset-manifest.yaml")["assets"]
+                if asset.get("storyboard_role") == "brand")
+    assert logo["sha256"] in packet and logo["license"] in packet
+    approve_gate(project, GateKind.MEDICAL, reviewer="doctor", now=GOLDEN_ENTERED_AT)
+    video = produce_project(project, SilentTTS(), _write_golden_video)
+    assert video.is_file()
+    assert read_yaml(project / "project.yaml")["state"] == "awaiting_video_review"
+    render_input = json.loads((revision / "renders/render-input.json").read_text(encoding="utf-8"))
+    assert render_input["scenes"][0]["start_frame"] == 0
+    assert render_input["scenes"][-1]["visual"] == "brand_outro"
+    qa = json.loads((revision / "reviews/video-qa.json").read_text(encoding="utf-8"))
+    assert qa["composition_duration_ms"] == 48000 and qa["audio_duration_ms"] > 0
+    approve_gate(project, GateKind.VIDEO, reviewer="doctor", now=GOLDEN_ENTERED_AT)
+    package = package_project(project)
+    caption = (package / "caption.txt").read_text(encoding="utf-8")
+    script = read_yaml(revision / "script/script.yaml")
+    assert script["lines"][0]["text"] in caption
+    assert script["lines"][-1]["text"] not in caption
 
 
 def test_v1_and_v2_golden_are_available_from_first_m1_task() -> None:
