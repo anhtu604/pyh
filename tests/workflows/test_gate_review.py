@@ -246,6 +246,105 @@ def test_semantic_ai_clip_requires_real_script_citation(tmp_path: Path) -> None:
         approve_gate(project_dir, GateKind.MEDICAL, reviewer=REVIEWER, now=NOW)
 
 
+def _edit_yaml(path: Path, edit) -> None:
+    data = read_yaml(path)
+    edit(data)
+    write_yaml_atomic(path, data)
+
+
+def _ai_record(data: dict) -> dict:
+    return next(item for item in data["assets"] if item["kind"] == "ai_clip")
+
+
+def _ai_scene(data: dict) -> dict:
+    return next(item for item in data["scenes"] if item["visual"] == "ai_clip")
+
+
+def _drop_ledger(revision: Path) -> None:
+    (revision / "assets/license-ledger.yaml").unlink()
+
+
+def _cite_missing_source(revision: Path) -> None:
+    _edit_yaml(
+        revision / "evidence/ledger.yaml",
+        lambda data: data["claims"][0].update(sources=["R99"]),
+    )
+
+
+def _mismatch_ledger_license(revision: Path) -> None:
+    _edit_yaml(
+        revision / "assets/license-ledger.yaml",
+        lambda data: data["entries"][-1].update(license="different license"),
+    )
+
+
+def _decorative_carries_claim(revision: Path) -> None:
+    _edit_yaml(
+        revision / "storyboard/storyboard.yaml",
+        lambda data: _ai_scene(data).update(claim_id="C01", source_marker="[1]"),
+    )
+
+
+@pytest.mark.parametrize(
+    ("decorative", "mutate", "error", "match"),
+    [
+        (False, _drop_ledger, FileNotFoundError, "license ledger"),
+        (False, _mismatch_ledger_license, ValueError, "license ledger does not match"),
+        (False, _cite_missing_source, ValueError, "undefined source R99"),
+        (True, _decorative_carries_claim, ValueError, "decorative ai_clip cannot carry"),
+    ],
+)
+def test_medical_gate_refuses_invalid_ai_clip_rights_or_binding(
+    tmp_path: Path, decorative: bool, mutate, error: type[Exception], match: str
+) -> None:
+    project_dir = _create_ai_project(tmp_path)
+    _author_ai_clip(project_dir, decorative=decorative)
+    revision = project_dir / "revisions/001"
+    mutate(revision)
+
+    with pytest.raises(error, match=match):
+        approve_gate(project_dir, GateKind.MEDICAL, reviewer=REVIEWER, now=NOW)
+    assert not (revision / MEDICAL_APPROVAL_ARTIFACT).exists()
+    assert read_yaml(project_dir / "project.yaml")["state"] == "awaiting_medical_review"
+
+
+@pytest.mark.parametrize(
+    ("artifact", "edit"),
+    [
+        (
+            "assets/asset-manifest.yaml",
+            lambda data: _ai_record(data)["ai_provenance"].update(prompt="edited prompt"),
+        ),
+        (
+            "assets/asset-manifest.yaml",
+            lambda data: _ai_record(data).update(
+                semantic=False, classification_reason="reclassified after review"
+            ),
+        ),
+        (
+            "assets/license-ledger.yaml",
+            lambda data: data["entries"][-1].update(rights_basis="edited basis"),
+        ),
+        (
+            "storyboard/storyboard.yaml",
+            lambda data: _ai_scene(data).update(claim_id="C02"),
+        ),
+    ],
+    ids=["prompt", "classification", "rights", "binding"],
+)
+def test_ai_clip_metadata_edit_after_approval_makes_review_stale(
+    tmp_path: Path, artifact: str, edit
+) -> None:
+    project_dir = _create_ai_project(tmp_path)
+    _author_ai_clip(project_dir)
+    revision = project_dir / "revisions/001"
+    record = approve_gate(project_dir, GateKind.MEDICAL, reviewer=REVIEWER, now=NOW)
+
+    _edit_yaml(revision / artifact, edit)
+
+    assert hash_reviewed_artifacts(medical_reviewed_paths(revision)) != record.artifact_hashes
+
+
 def test_approve_medical_rejects_missing_semantic_asset_bytes(tmp_path: Path) -> None:
     project_dir = create_v2_project_fixture(tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW)
     (project_dir / "revisions" / "001" / "assets" / "evidence-r01.svg").write_bytes(b"changed")

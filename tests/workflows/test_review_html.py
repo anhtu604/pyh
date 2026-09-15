@@ -80,6 +80,20 @@ def test_medical_packet_shows_safe_ai_clip_provenance_and_rights(tmp_path: Path)
     assert "cloud project" not in html.lower() and "token" not in html.lower()
 
 
+def test_medical_packet_escapes_ai_clip_rights_entry(tmp_path: Path) -> None:
+    project_dir = _create_ai_project(tmp_path)
+    _author_ai_clip(project_dir)
+    ledger_path = project_dir / "revisions/001/assets/license-ledger.yaml"
+    ledger = read_yaml(ledger_path)
+    ledger["entries"][-1]["rights_basis"] = "<img src=x onerror=alert(1)>"
+    write_yaml_atomic(ledger_path, ledger)
+
+    html = render_medical_packet(project_dir / "revisions/001")
+
+    assert "&lt;img src=x onerror=alert(1)&gt;" in html
+    assert "<img" not in html
+
+
 def test_video_packet_references_the_mp4_by_relative_path_not_embedded(
     tmp_path: Path,
 ) -> None:
