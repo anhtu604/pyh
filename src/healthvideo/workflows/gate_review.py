@@ -37,6 +37,7 @@ from healthvideo.storage.files import (
 )
 from healthvideo.storage.immutable import write_yaml_once
 from healthvideo.tts import pronunciation as pronunciation_module
+from healthvideo.workflows.ai_clips import recover_ai_clip_generation
 from healthvideo.workflows.citations import resolve_citations
 from healthvideo.workflows.visual_assets import recover_chart_asset_binding
 
@@ -77,7 +78,11 @@ def medical_reviewed_paths(revision_root: Path) -> dict[str, Path]:
         if rights_path.is_file():
             paths["assets/license-ledger.yaml"] = rights_path
         for asset in manifest.assets:
-            if asset.semantic or asset.storyboard_role == "brand":
+            if (
+                asset.semantic
+                or asset.storyboard_role == "brand"
+                or asset.kind is AssetKind.AI_CLIP
+            ):
                 paths[f"asset:{asset.path}"] = revision_root / asset.path
     return paths
 
@@ -150,6 +155,7 @@ def approve_gate(
 
     if kind is GateKind.MEDICAL:
         recover_chart_asset_binding(project_dir)
+        recover_ai_clip_generation(project_dir)
         if (revision_root / "workflow/pending-hook-outro.yaml").exists():
             raise ValueError("medical gate refuses pending hook/outro authoring")
         manifest = load_asset_manifest(revision_root / "assets" / "asset-manifest.yaml")
@@ -166,6 +172,12 @@ def approve_gate(
         script = Script.model_validate(read_yaml(revision_root / "script/script.yaml"))
         validate_hook_outro(script, storyboard, require_brand=True)
         referenced_storyboard_assets(revision_root, storyboard, manifest)
+        if any(asset.kind is AssetKind.AI_CLIP for asset in manifest.assets):
+            resolve_citations(
+                script,
+                read_yaml(revision_root / "evidence/ledger.yaml"),
+                storyboard.scenes,
+            )
         if script.format_profile == "hook_outro_v1":
             resolve_citations(
                 script,

@@ -1,3 +1,4 @@
+import shutil
 from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
@@ -5,10 +6,13 @@ from pathlib import Path
 import pytest
 
 import healthvideo.tts.pronunciation as pronunciation_module
+import healthvideo.workflows.ai_clips as ai_clips_module
 from healthvideo.domain.gate_review import GateKind
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
+from healthvideo.video_ai.base import VeoRequest, VeoResult, VideoProbeResult
+from healthvideo.workflows.ai_clips import AIClipRights, generate_ai_clip
 from healthvideo.workflows.gate_review import (
     MEDICAL_APPROVAL_ARTIFACT,
     approve_gate,
@@ -25,6 +29,69 @@ from tests.helpers import (
 
 REVIEWER = "BS Nguyễn Văn An"
 NOW = datetime(2026, 9, 11, 9, 0, tzinfo=UTC)
+
+
+class _FakeVeo:
+    def generate(self, request: VeoRequest) -> VeoResult:
+        return VeoResult(video_bytes=b"synthetic-ai-clip", mime_type="video/mp4")
+
+
+def _ai_probe(_path: Path) -> VideoProbeResult:
+    return VideoProbeResult(
+        mime_type="video/mp4", container="mp4", width=1080, height=1920,
+        source_fps=24, duration_ms=4000, source_frame_count=96,
+        video_stream_count=1,
+    )
+
+
+def _author_ai_clip(project_dir: Path, *, decorative: bool = False) -> Path:
+    board_path = project_dir / "revisions/001/storyboard/storyboard.yaml"
+    board = read_yaml(board_path)
+    board["visual_budget_profile"] = "m6_5_v1"
+    whiteboard = board["scenes"][0]
+    highlight = board["scenes"][2]
+    clip = board["scenes"][3]
+    whiteboard["start_frame"], whiteboard["duration_frames"] = 0, 780
+    highlight["start_frame"], highlight["duration_frames"] = 780, 300
+    clip["start_frame"], clip["duration_frames"] = 1080, 120
+    clip["visual"] = "ai_clip"
+    clip.pop("evidence_highlight", None)
+    board["scenes"] = [whiteboard, highlight, clip]
+    if decorative:
+        clip["claim_id"] = None
+        clip["source_marker"] = None
+    write_yaml_atomic(board_path, board)
+    output = generate_ai_clip(
+        project_dir,
+        scene_id="S04",
+        prompt="PRIVATE PROMPT <script>",
+        duration_seconds=4,
+        requested_seed=17,
+        rights=AIClipRights(
+            source="Google Vertex AI generation",
+            creator="Protect Your Health operator",
+            license="operator-recorded provider terms",
+            rights_basis="operator confirmed authorized generation and use",
+        ),
+        transport=_FakeVeo(),
+        now=NOW,
+        probe=_ai_probe,
+    )
+    write_yaml_atomic(
+        project_dir / "project.yaml",
+        read_yaml(project_dir / "project.yaml") | {"state": "awaiting_medical_review"},
+    )
+    return output
+
+
+def _create_ai_project(tmp_path: Path) -> Path:
+    root = tmp_path / "ai-project"
+    shutil.copytree(Path("tests/fixtures/golden-project-v2"), root)
+    write_yaml_atomic(
+        root / "project.yaml",
+        read_yaml(root / "project.yaml") | {"state": "draft_ready"},
+    )
+    return root
 
 
 def _advance_to_awaiting_medical_review(project_dir: Path) -> None:
@@ -115,6 +182,68 @@ def test_medical_reviewed_paths_includes_ledger_script_storyboard_manifest_and_s
         "profiles/pronunciation.vi.yaml",
         "asset:assets/evidence-r01.svg",
     }
+
+
+@pytest.mark.parametrize("decorative", [False, True])
+def test_ai_clip_bytes_and_rights_are_medically_reviewed(
+    tmp_path: Path, decorative: bool
+) -> None:
+    project_dir = _create_ai_project(tmp_path)
+    output = _author_ai_clip(project_dir, decorative=decorative)
+    revision = project_dir / "revisions/001"
+
+    paths = medical_reviewed_paths(revision)
+    assert paths["asset:assets/ai-clips/S04.mp4"] == output
+    assert "assets/license-ledger.yaml" in paths
+    record = approve_gate(project_dir, GateKind.MEDICAL, reviewer=REVIEWER, now=NOW)
+    assert "asset:assets/ai-clips/S04.mp4" in record.artifact_hashes
+
+    output.write_bytes(b"changed-after-approval")
+    assert hash_reviewed_artifacts(medical_reviewed_paths(revision)) != record.artifact_hashes
+
+
+def test_medical_gate_recovers_valid_pending_ai_transaction(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project_dir = _create_ai_project(tmp_path)
+    real_write = ai_clips_module._write_manifest
+    calls = 0
+
+    def fail_once(path: Path, payload: dict[str, object]) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise OSError("synthetic crash after AI intent")
+        real_write(path, payload)
+
+    monkeypatch.setattr(ai_clips_module, "_write_manifest", fail_once)
+    with pytest.raises(OSError, match="synthetic crash"):
+        _author_ai_clip(project_dir)
+    revision = project_dir / "revisions/001"
+    assert (revision / ai_clips_module.AI_CLIP_INTENT).is_file()
+    write_yaml_atomic(
+        project_dir / "project.yaml",
+        read_yaml(project_dir / "project.yaml") | {"state": "awaiting_medical_review"},
+    )
+
+    approve_gate(project_dir, GateKind.MEDICAL, reviewer=REVIEWER, now=NOW)
+
+    assert not (revision / ai_clips_module.AI_CLIP_INTENT).exists()
+    assert read_yaml(project_dir / "project.yaml")["state"] == "medically_approved"
+
+
+def test_semantic_ai_clip_requires_real_script_citation(tmp_path: Path) -> None:
+    project_dir = _create_ai_project(tmp_path)
+    _author_ai_clip(project_dir)
+    script_path = project_dir / "revisions/001/script/script.yaml"
+    script = read_yaml(script_path)
+    for line in script["lines"]:
+        if line.get("claim_id") == "C01":
+            line["source_marker"] = None
+    write_yaml_atomic(script_path, script)
+
+    with pytest.raises(ValueError, match="script claim/source mapping"):
+        approve_gate(project_dir, GateKind.MEDICAL, reviewer=REVIEWER, now=NOW)
 
 
 def test_approve_medical_rejects_missing_semantic_asset_bytes(tmp_path: Path) -> None:

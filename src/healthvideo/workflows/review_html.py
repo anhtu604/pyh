@@ -13,8 +13,9 @@ from __future__ import annotations
 from html import escape
 from pathlib import Path
 
-from healthvideo.domain.asset_manifest import AssetManifest
+from healthvideo.domain.asset_manifest import AssetKind, AssetManifest
 from healthvideo.domain.evidence import EvidenceClaim, SourceRecord
+from healthvideo.domain.license_ledger import LicenseLedger
 from healthvideo.domain.script import Script
 from healthvideo.domain.storyboard import Storyboard
 from healthvideo.domain.visual_budget import VisualCategory, calculate_visual_budget
@@ -60,6 +61,47 @@ def _render_visual_budget_section(storyboard: Storyboard) -> str:
         + "".join(rows)
         + "</tbody></table>"
         f"<p>Kết quả: {'đạt' if report.passed else 'không đạt'}</p></section>"
+    )
+
+
+def _render_ai_clip_section(revision_root: Path, manifest: AssetManifest) -> str:
+    clips = [asset for asset in manifest.assets if asset.kind is AssetKind.AI_CLIP]
+    if not clips:
+        return ""
+    rights_path = revision_root / "assets" / "license-ledger.yaml"
+    rights = (
+        {entry.path: entry for entry in LicenseLedger.model_validate(
+            read_yaml(rights_path)
+        ).entries}
+        if rights_path.is_file()
+        else {}
+    )
+    rows = []
+    for asset in clips:
+        provenance = asset.ai_provenance
+        entry = rights.get(asset.path)
+        if provenance is None:
+            continue
+        classification = "semantic" if asset.semantic else "decorative"
+        rationale = asset.classification_reason or "—"
+        rights_text = (
+            f"{entry.source}; {entry.creator}; {entry.license}; {entry.rights_basis}"
+            if entry is not None
+            else "chưa khai báo"
+        )
+        rows.append(
+            "<tr>"
+            f"<td>{escape(asset.path)}</td><td>{classification}</td>"
+            f"<td>{escape(rationale)}</td><td>{escape(provenance.provider)}</td>"
+            f"<td>{escape(provenance.model)}</td><td>{provenance.duration_ms} ms</td>"
+            f"<td>{escape(provenance.request_sha256[:12])}</td>"
+            f"<td>{escape(rights_text)}</td></tr>"
+        )
+    return (
+        '<section><h2>AI clip M6.6</h2><table border="1"><thead><tr>'
+        "<th>Asset</th><th>Phân loại</th><th>Lý do</th><th>Provider</th>"
+        "<th>Model</th><th>Thời lượng</th><th>Request hash</th><th>Quyền</th>"
+        "</tr></thead><tbody>" + "".join(rows) + "</tbody></table></section>"
     )
 
 
@@ -146,12 +188,13 @@ def render_medical_packet(revision_root: Path) -> str:
 
     note_paragraph = f"<p>{escape(_NOT_YET_MODELED)}</p>" if has_unmodeled else ""
     visual_budget_section = _render_visual_budget_section(storyboard)
+    asset_manifest = AssetManifest.model_validate(
+        read_yaml(revision_root / "assets" / "asset-manifest.yaml")
+    )
+    ai_clip_section = _render_ai_clip_section(revision_root, asset_manifest)
     hook_outro_section = ""
     if script.format_profile == "hook_outro_v1":
         final = storyboard.scenes[-1]
-        asset_manifest = AssetManifest.model_validate(
-            read_yaml(revision_root / "assets" / "asset-manifest.yaml")
-        )
         brand_records = {
             asset.path: asset for asset in asset_manifest.assets
             if asset.storyboard_role == "brand"
@@ -196,6 +239,7 @@ def render_medical_packet(revision_root: Path) -> str:
         )
         + note_paragraph
         + visual_budget_section
+        + ai_clip_section
         + hook_outro_section
         + "</body></html>"
     )

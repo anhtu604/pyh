@@ -10,6 +10,7 @@ from healthvideo.domain.visual_budget import calculate_visual_budget
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.workflows.review_html import render_medical_packet, render_video_packet
 from tests.helpers import advance_v2_project_to_video_review, create_v2_project_fixture
+from tests.workflows.test_gate_review import _author_ai_clip, _create_ai_project
 
 
 def _enable_packet_budget(project_dir: Path, *, override: bool = False) -> None:
@@ -64,6 +65,19 @@ def test_medical_packet_notes_fields_the_model_does_not_carry_yet(
     project_dir = create_v2_project_fixture(tmp_path)
     html = render_medical_packet(project_dir / "revisions" / "001")
     assert "chưa có trong hệ thống" in html
+
+
+def test_medical_packet_shows_safe_ai_clip_provenance_and_rights(tmp_path: Path) -> None:
+    project_dir = _create_ai_project(tmp_path)
+    _author_ai_clip(project_dir)
+
+    html = render_medical_packet(project_dir / "revisions/001")
+
+    assert "AI clip M6.6" in html
+    assert "google_vertex_ai" in html and "veo-3.1-fast-generate-001" in html
+    assert "4000 ms" in html and "operator-recorded provider terms" in html
+    assert "PRIVATE PROMPT" not in html and "&lt;script&gt;" not in html
+    assert "cloud project" not in html.lower() and "token" not in html.lower()
 
 
 def test_video_packet_references_the_mp4_by_relative_path_not_embedded(
