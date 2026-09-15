@@ -97,8 +97,10 @@ claim–source–marker hợp lệ. Remotion chỉ render asset đã khai báo q
 Scene cũ không có trường này vẫn giữ fallback hiện tại. M6.4 đã hoàn tất.
 M6.5 complete (acceptance và C2C review DONE): storyboard `m6_5_v1`
 cưỡng chế ngân sách visual theo frame ở medical gate và production, QA ghi report
-tái tính được, chart dùng SVG `DATA_CHART` đã bind. AI clip vẫn chờ M6.6; hai
-cổng duyệt và đăng thủ công giữ nguyên.
+tái tính được, chart dùng SVG `DATA_CHART` đã bind. M6.6 đang triển khai (chưa
+nhận C2C DONE): production chỉ stage đúng bytes AI clip đã được medical approval
+bao phủ, không gọi provider, và Remotion render clip muted; hai cổng duyệt và
+đăng thủ công giữ nguyên.
 
 ## Milestone
 
@@ -195,6 +197,7 @@ applicability, per-claim doctor notes — hoãn sang M3).
 | M6.6 Task 1 | Contract `AI_CLIP` và provenance typed; role/ownership một scene; duration M6.5 đúng 120/180/240 frame; semantic/decorative policy; rights bắt buộc; referenced decorative clip vẫn kiểm byte/hash; legacy giữ nguyên. | Complete; C2C review iteration 2 DONE | 102 focused tests; 94 nearest regressions; deterministic schema export; Ruff; `git diff --check` | `feat: define reviewed AI clip assets`; `fix: expose AI clip media validator` |
 | M6.6 Task 2 | Veo transport inject token/HTTP, request hash canonical và lỗi đã khử bí mật; ffprobe argv kiểm đúng MP4 dọc 24 fps 4/6/8 s; authoring pre-medical ghi bytes/manifest/quyền/storyboard theo intent R0–R4, retry cùng identity không gọi provider; CLI bắt buộc opt-in trước live boundary. | Complete; C2C review iteration 2 DONE | 66 provider/workflow/CLI tests; 122 Task 1 regressions; Ruff; `git diff --check` | `feat: author optional Veo clips safely`; `fix: use Veo fetch operation contract` |
 | M6.6 Task 3 | Medical gate phục hồi intent AI hợp lệ, kiểm ownership/citation/quyền và đưa mọi AI clip kể cả decorative vào review hash; packet hiển thị classification, provider/model/duration/hash prefix/quyền (đã escape) mà không lộ prompt hoặc runtime secret. Review độc lập bổ sung test từ chối ledger thiếu/lệch, citation tới nguồn không tồn tại, decorative mang claim, và stale khi sửa prompt/classification/quyền/binding. | Implemented; independent review fixes applied; awaiting C2C review | 60 gate/packet/authoring tests (mutation check: bỏ citation AI làm 2 test fail); Ruff; `git diff --check` | `feat: bind AI clips to medical review`; `test: cover AI clip medical gate refusals` |
+| M6.6 Task 4 | Production chạy recovery AI rồi kiểm approval hash (bytes/provenance/quyền), resolver role/ownership và duration scene khớp provenance trước TTS/render; bỏ lỗi "unsupported until M6.6"; stage đúng bytes đã duyệt, hash vào render manifest/cache; không gọi provider. Render input/Zod: `ai_clip` chỉ nằm trong scene `ai_clip`, tối đa một, đúng một ở `m6_5_v1`, 120/180/240 frame. `AiClipScene` dùng `OffthreadVideo` muted qua `staticFile` một lần, không loop/trim/playback rate; overlay ảnh bỏ qua `ai_clip`. Zero-AI và legacy giữ nguyên. | Implemented; awaiting C2C review | `python -m pytest -q` (822 passed); `ruff check src tests tools`; schema export chỉ thêm x-invariant, lần hai sạch; `pnpm --dir video test` (33 passed)/typecheck; `git diff --check` | `feat: render approved AI clips` |
 
 ## Kiến trúc
 

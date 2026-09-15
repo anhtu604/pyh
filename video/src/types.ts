@@ -7,7 +7,7 @@ const safeRelativePath = z.string().regex(/^(?!\.?\/?$)(?![A-Za-z]:)(?!\/)(?!.*\
 export const VisualAssetRefSchema = z
   .object({
     path: safeRelativePath,
-    role: z.enum(['whiteboard', 'mascot', 'brand', 'chart']),
+    role: z.enum(['whiteboard', 'mascot', 'brand', 'chart', 'ai_clip']),
     pose: z.enum(['welcome', 'explain', 'caution']).nullable().optional(),
   })
   .superRefine((asset, context) => {
@@ -95,6 +95,14 @@ export const SceneSchema = z
         message: 'scene visual asset paths must be unique',
       });
     }
+    const clips = scene.visual_assets.filter((asset) => asset.role === 'ai_clip').length;
+    if ((clips > 0 && scene.visual !== 'ai_clip') || clips > 1) {
+      context.addIssue({
+        code: 'custom',
+        path: ['visual_assets'],
+        message: 'ai_clip asset appears at most once and only in an ai_clip scene',
+      });
+    }
     if (scene.visual === 'brand_outro') {
       if (scene.visual_assets.filter((asset) => asset.role === 'brand').length !== 1 ||
           scene.visual_assets.some((asset) => asset.role === 'whiteboard')) {
@@ -137,6 +145,17 @@ export const RenderInputSchema = z.object({
     return;
   }
   input.scenes.forEach((scene, index) => {
+    if (scene.visual === 'ai_clip') {
+      if (scene.visual_assets.filter((asset) => asset.role === 'ai_clip').length !== 1 ||
+          ![120, 180, 240].includes(scene.duration_frames)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['scenes', index, 'visual_assets'],
+          message: 'M6.5 ai_clip scene requires one ai_clip asset and 120/180/240 frames',
+        });
+      }
+      return;
+    }
     if (scene.visual !== 'chart') {
       return;
     }

@@ -272,6 +272,37 @@ def test_render_input_keeps_unmarked_legacy_chart_compatible() -> None:
     )
     assert build_render_input(board, "audio/a.wav").visual_budget_profile == "legacy"
 
+
+def test_render_input_carries_exactly_one_ai_clip_ref_in_its_scene() -> None:
+    clip_ref = VisualAssetRef(path="assets/ai-clips/S02.mp4", role="ai_clip")
+    whiteboard = Scene(
+        id="S01", start_frame=0, duration_frames=1230,
+        narration="Whiteboard.", visual="whiteboard",
+    )
+    clip = Scene(
+        id="S02", start_frame=1230, duration_frames=120,
+        narration="AI clip.", visual="ai_clip", visual_assets=(clip_ref,),
+    )
+    board = Storyboard(
+        title="PYH", visual_budget_profile="m6_5_v1", scenes=(whiteboard, clip)
+    )
+
+    result = build_render_input(board, "audio/a.wav", duration_policy="v2")
+    assert result.scenes[1].visual_assets == (clip_ref,)
+
+    extra = VisualAssetRef(path="assets/ai-clips/other.mp4", role="ai_clip")
+    for refs in ((), (clip_ref, extra)):
+        broken = board.model_copy(update={"scenes": (
+            whiteboard, clip.model_copy(update={"visual_assets": refs}),
+        )})
+        with pytest.raises(ValidationError, match="exactly one ai_clip"):
+            build_render_input(broken, "audio/a.wav", duration_policy="v2")
+    misplaced = board.model_copy(update={"scenes": (
+        whiteboard.model_copy(update={"visual_assets": (extra,)}), clip,
+    )})
+    with pytest.raises(ValidationError, match="ai_clip asset only in an ai_clip scene"):
+        build_render_input(misplaced, "audio/a.wav", duration_policy="v2")
+
 @pytest.mark.parametrize(
     "audio_file", ["audio\\narration.wav", "/audio/narration.wav", ".", "./"]
 )

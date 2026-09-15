@@ -113,6 +113,15 @@ def referenced_storyboard_assets(
                         f"Scene {scene.id}: decorative ai_clip cannot carry "
                         "claim_id or source_marker"
                     )
+                provenance = record.ai_provenance
+                if (
+                    provenance is None
+                    or provenance.duration_ms * 30 != scene.duration_frames * 1000
+                ):
+                    raise ValueError(
+                        f"Scene {scene.id}: ai_clip scene duration does not match "
+                        "AI clip provenance"
+                    )
             if scene.visual == "brand_outro" and reference.role == "mascot" and (
                 record.kind is not AssetKind.MASCOT_REACTION
                 or record.semantic

@@ -400,6 +400,7 @@
   "title": "RenderInput",
   "type": "object",
   "x-invariants": {
-    "m6_5_chart_ref": "m6_5_v1 chart scenes contain exactly one role=chart asset"
+    "m6_5_chart_ref": "m6_5_v1 chart scenes contain exactly one role=chart asset",
+    "m6_6_ai_clip_ref": "role=ai_clip assets appear only in ai_clip scenes, at most once per scene and exactly once in m6_5_v1 ai_clip scenes"
   }
 }

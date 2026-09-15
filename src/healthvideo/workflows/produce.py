@@ -46,6 +46,7 @@ from healthvideo.tts.pronunciation import (
     load_pronunciation_lexicon,
     pronunciation_hash,
 )
+from healthvideo.workflows.ai_clips import recover_ai_clip_generation
 from healthvideo.workflows.gate_review import (
     MEDICAL_APPROVAL_ARTIFACT,
     hash_reviewed_artifacts,
@@ -189,6 +190,7 @@ def _produce_v2(
         )
 
     recover_chart_asset_binding(layout.project_dir)
+    recover_ai_clip_generation(layout.project_dir)
     _ensure_v2_medical_approval_current(layout.artifact_root)
     script = Script.model_validate(
         read_yaml(layout.artifact_root / "script" / "script.yaml")
@@ -202,12 +204,6 @@ def _produce_v2(
         if storyboard.visual_budget_profile == "m6_5_v1"
         else None
     )
-    if visual_budget_qa is not None and any(
-        scene.visual == "ai_clip" for scene in storyboard.scenes
-    ):
-        raise ValueError(
-            "M6.5 ai_clip production is unsupported until M6.6 provider support"
-        )
     validate_hook_outro(script, storyboard, require_brand=script.format_profile == "hook_outro_v1")
     author_profile = read_yaml(AUTHOR_PROFILE_PATH)
     pronunciation = load_pronunciation_lexicon(
