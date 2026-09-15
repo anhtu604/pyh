@@ -8,12 +8,13 @@ import pytest
 import healthvideo.workflows.package as package_workflow
 from healthvideo.domain.gate_review import GateKind
 from healthvideo.domain.project_v2 import WorkflowState
-from healthvideo.storage.files import read_yaml, write_yaml_atomic
+from healthvideo.storage.files import read_yaml, sha256_file, write_yaml_atomic
 from healthvideo.tts.silent import SilentTTS
 from healthvideo.workflows.gate_review import approve_gate
 from healthvideo.workflows.package import package_project
 from healthvideo.workflows.produce import produce_project
 from tests.helpers import create_v2_project_fixture
+from tests.workflows.test_gate_review import _author_ai_clip, _create_ai_project
 
 NOW = datetime(2026, 9, 12, 8, 0, tzinfo=UTC)
 
@@ -113,6 +114,55 @@ def test_v2_package_rejects_render_input_changed_during_copy(
     assert read_yaml(project_dir / "project.yaml")["state"] == "video_approved"
     assert not (revision_root / "publish").exists()
     assert list(revision_root.glob(".*.package-*")) == []
+
+
+ZERO_AI_PAYLOAD = {
+    "video.mp4", "caption.txt", "sources.md", "manifest.json", "render-input.json",
+}
+
+
+def test_v2_zero_ai_package_keeps_exact_payload_without_disclosure(tmp_path: Path) -> None:
+    output = package_project(_v2_video_approved_project(tmp_path))
+
+    assert {path.name for path in output.iterdir()} == ZERO_AI_PAYLOAD
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+    assert set(manifest["payload_sha256"]) == ZERO_AI_PAYLOAD - {"manifest.json"}
+
+
+@pytest.mark.parametrize("decorative", [False, True])
+def test_v2_ai_package_adds_hashed_manual_disclosure_without_prompt(
+    tmp_path: Path, decorative: bool
+) -> None:
+    project_dir = _create_ai_project(tmp_path)
+    _author_ai_clip(project_dir, decorative=decorative)
+    approve_gate(project_dir, GateKind.MEDICAL, reviewer="BS Nguyễn Văn An", now=NOW)
+    produce_project(project_dir, SilentTTS(), _fake_renderer)
+    approve_gate(project_dir, GateKind.VIDEO, reviewer="BS Nguyễn Văn An", now=NOW)
+
+    output = package_project(project_dir)
+
+    assert {path.name for path in output.iterdir()} == ZERO_AI_PAYLOAD | {"ai-disclosure.json"}
+    raw = (output / "ai-disclosure.json").read_text(encoding="utf-8")
+    expected = {
+        "schema_version": "1.0",
+        "contains_ai": True,
+        "clips": [{
+            "scene_id": "S04",
+            "path": "assets/ai-clips/S04.mp4",
+            "provider": "google_vertex_ai",
+            "model": "veo-3.1-fast-generate-001",
+            "classification": "decorative" if decorative else "semantic",
+        }],
+        "operator_guidance": package_workflow.AI_DISCLOSURE_GUIDANCE,
+    }
+    assert raw == json.dumps(expected, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    assert "PRIVATE PROMPT" not in raw and "token" not in raw.lower()
+    assert "project" not in raw.lower()
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["payload_sha256"]["ai-disclosure.json"] == sha256_file(
+        output / "ai-disclosure.json"
+    )
+    assert read_yaml(project_dir / "project.yaml")["state"] == "packaged"
 
 
 def _v2_awaiting_video_review_project(tmp_path: Path) -> Path:

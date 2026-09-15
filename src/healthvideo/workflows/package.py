@@ -15,6 +15,7 @@ from typing import Any, TypeVar
 
 from pydantic import BaseModel
 
+from healthvideo.domain.asset_manifest import AssetKind, AssetManifest
 from healthvideo.domain.evidence import EvidenceClaim, SourceRecord
 from healthvideo.domain.gate_review import GateApprovalRecord, GateKind
 from healthvideo.domain.project import ProjectManifest, ProjectState
@@ -56,6 +57,13 @@ CAPTION_NAME = "caption.txt"
 SOURCES_NAME = "sources.md"
 PACKAGE_MANIFEST_NAME = "manifest.json"
 PROJECT_MANIFEST_NAME = "project.yaml"
+AI_DISCLOSURE_NAME = "ai-disclosure.json"
+AI_DISCLOSURE_GUIDANCE = (
+    "Video có đoạn minh họa do AI tạo. Khi đăng thủ công, operator bật nhãn nội "
+    "dung do AI tạo (AI-generated content) nếu nền tảng yêu cầu. Tệp này không gọi "
+    "API đăng bài, không tự bật nhãn và không xác nhận đã đáp ứng mọi yêu cầu của "
+    "nền tảng."
+)
 DISCLAIMER = (
     "Nội dung chỉ mang tính thông tin chung, không thay thế khám, chẩn đoán "
     "hoặc điều trị y khoa. Hãy trao đổi với bác sĩ của bạn trước khi thay đổi "
@@ -164,9 +172,10 @@ def _package_v2(layout: ProjectLayout) -> Path:
     video_approval = _ensure_v2_gate_approval(
         layout.artifact_root, GateKind.VIDEO
     )
-    ledger, script, _storyboard = _approved_v2_medical_snapshots(
+    ledger, script, storyboard = _approved_v2_medical_snapshots(
         layout.artifact_root, medical_approval
     )
+    ai_disclosure = _ai_disclosure(layout.artifact_root, medical_approval, storyboard)
 
     renders_dir = layout.artifact_root / "renders"
     video = renders_dir / OUTPUT_NAME
@@ -206,6 +215,8 @@ def _package_v2(layout: ProjectLayout) -> Path:
         )
         write_text_atomic(staging_dir / CAPTION_NAME, _caption(script, citations))
         write_text_atomic(staging_dir / SOURCES_NAME, _sources(script, citations))
+        if ai_disclosure is not None:
+            write_text_atomic(staging_dir / AI_DISCLOSURE_NAME, ai_disclosure)
         write_text_atomic(
             staging_dir / PACKAGE_MANIFEST_NAME,
             _manifest_json(
@@ -283,6 +294,45 @@ def _approved_v2_medical_snapshots(
         Script.model_validate(script_data),
         Storyboard.model_validate(storyboard_data),
     )
+
+
+def _ai_disclosure(
+    revision_root: Path, approval: GateApprovalRecord, storyboard: Storyboard
+) -> str | None:
+    """Describe approved AI clips for manual upload labelling; None when there are none."""
+    manifest_path = revision_root / "assets" / "asset-manifest.yaml"
+    if not manifest_path.is_file():
+        return None
+    manifest_data = read_yaml(manifest_path)
+    _require_approved_hash(
+        approval, "assets/asset-manifest.yaml", canonical_json_hash(manifest_data)
+    )
+    records = {
+        record.path: record
+        for record in AssetManifest.model_validate(manifest_data).assets
+        if record.kind is AssetKind.AI_CLIP and record.ai_provenance is not None
+    }
+    clips = [
+        {
+            "scene_id": scene.id,
+            "path": ref.path,
+            "provider": records[ref.path].ai_provenance.provider,
+            "model": records[ref.path].ai_provenance.model,
+            "classification": "semantic" if records[ref.path].semantic else "decorative",
+        }
+        for scene in storyboard.scenes
+        for ref in scene.visual_assets
+        if ref.role == "ai_clip" and ref.path in records
+    ]
+    if not clips:
+        return None
+    disclosure = {
+        "schema_version": "1.0",
+        "contains_ai": True,
+        "clips": clips,
+        "operator_guidance": AI_DISCLOSURE_GUIDANCE,
+    }
+    return json.dumps(disclosure, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
 
 
 def _validate_staged_v2_video_artifacts(
@@ -533,6 +583,11 @@ def _manifest_json(
             OUTPUT_NAME: sha256_file(staging_dir / OUTPUT_NAME),
             SOURCES_NAME: sha256_file(staging_dir / SOURCES_NAME),
             RENDER_INPUT_NAME: sha256_file(staging_dir / RENDER_INPUT_NAME),
+            **(
+                {AI_DISCLOSURE_NAME: sha256_file(staging_dir / AI_DISCLOSURE_NAME)}
+                if (staging_dir / AI_DISCLOSURE_NAME).is_file()
+                else {}
+            ),
         },
         "source_markers": {
             marker: [record.id for record in records]

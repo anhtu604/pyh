@@ -4,6 +4,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
+import pytest
+
+import healthvideo.workflows.ai_clips as ai_clips_module
 from healthvideo.domain.asset_manifest import (
     AssetKind,
     AssetManifest,
@@ -28,6 +31,9 @@ from healthvideo.storage.revisions import create_revision
 from healthvideo.storage.stages import append_stage_manifest
 from healthvideo.tts.base import TTSRequest, TTSResult
 from healthvideo.tts.silent import SilentTTS
+from healthvideo.video_ai.base import VeoRequest, VeoResult, VideoProbeResult
+from healthvideo.video_ai.veo import GoogleVeoTransport
+from healthvideo.workflows.ai_clips import AIClipRights, generate_ai_clip
 from healthvideo.workflows.gate_review import approve_gate
 from healthvideo.workflows.hook_outro import author_hook_outro
 from healthvideo.workflows.migrate import migrate_project, plan_migration
@@ -155,7 +161,124 @@ def test_m65_zero_ai_budget_through_chart_outro_gates_and_package(tmp_path: Path
     caption = (package / "caption.txt").read_text(encoding="utf-8")
     script = read_yaml(revision / "script/script.yaml")
     assert script["lines"][0]["text"] in caption and OUTRO_TEXT not in caption
+    assert not (package / "ai-disclosure.json").exists()
     assert read_yaml(project / "project.yaml")["state"] == "packaged"
+    assert _snapshot_tree(GOLDEN_PROJECTS[1]) == before
+
+
+def test_m66_ai_clip_through_both_manual_gates_and_disclosed_package(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    before = _snapshot_tree(GOLDEN_PROJECTS[1])
+    project = tmp_path / "golden-project-v2"
+    shutil.copytree(GOLDEN_PROJECTS[1], project)
+    _advance_v2_state(project, WorkflowState.AWAITING_MEDICAL_REVIEW)
+    revision = project / "revisions/001"
+    ledger_path = revision / "evidence/ledger.yaml"
+    ledger = read_yaml(ledger_path)
+    ledger["claims"][0]["chart_data"] = [
+        {"id": "bp-count", "source_id": "R01", "label": "Mẫu thử tổng hợp",
+         "value": 12, "denominator": 40, "unit": "người"}
+    ]
+    write_yaml_atomic(ledger_path, ledger)
+    board_path = revision / "storyboard/storyboard.yaml"
+    board = read_yaml(board_path)
+    board["visual_budget_profile"] = "m6_5_v1"
+    board["scenes"][1]["visual"] = "ai_clip"
+    durations = {"ai_clip": 180, "chart": 225, "evidence_highlight": 225, "whiteboard": 390}
+    start = 0
+    for scene in board["scenes"]:
+        scene["start_frame"], scene["duration_frames"] = start, durations[scene["visual"]]
+        start += scene["duration_frames"]
+    write_yaml_atomic(board_path, board)
+    author_hook_outro(project, duration_frames=90)
+    create_brand_logo_asset(project, scene_id="OUTRO", asset_name="pyh-logo", variant=LogoVariant.MONOGRAM)
+    create_evidence_chart(
+        project, claim_id="C01", datum_id="bp-count", asset_name="chart-count",
+        license="synthetic_test_only", rights_basis="fixture nội bộ", creator="repository_fixture",
+    )
+    bind_chart_asset(project, scene_id="S04", asset_path="assets/chart-count.svg")
+
+    provider_requests: list[VeoRequest] = []
+
+    class FakeVeo:
+        def generate(self, request: VeoRequest) -> VeoResult:
+            provider_requests.append(request)
+            return VeoResult(video_bytes=b"synthetic-e2e-ai-clip", mime_type="video/mp4")
+
+    prompt = "Minh họa tổng hợp: một người nêm ít muối khi nấu ăn"
+    clip = generate_ai_clip(
+        project, scene_id="S02", prompt=prompt, duration_seconds=6, requested_seed=None,
+        rights=AIClipRights(
+            source="Google Vertex AI generation", creator="PYH operator",
+            license="synthetic_test_only", rights_basis="fixture nội bộ",
+        ),
+        transport=FakeVeo(), now=GOLDEN_ENTERED_AT,
+        probe=lambda _path: VideoProbeResult(
+            mime_type="video/mp4", container="mp4", width=1080, height=1920,
+            source_fps=24, duration_ms=6000, source_frame_count=144, video_stream_count=1,
+        ),
+    )
+    assert clip.is_relative_to(tmp_path) and len(provider_requests) == 1
+    packet = render_medical_packet(revision)
+    assert "veo-3.1-fast-generate-001" in packet and prompt not in packet
+    approve_gate(project, GateKind.MEDICAL, reviewer="doctor", now=GOLDEN_ENTERED_AT)
+
+    def no_provider(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("AI provider reached after medical approval")
+
+    monkeypatch.setattr(ai_clips_module, "generate_ai_clip", no_provider)
+    monkeypatch.setattr(ai_clips_module, "probe_ai_clip_media", no_provider)
+    monkeypatch.setattr(GoogleVeoTransport, "generate", no_provider)
+    tts_calls: list[str] = []
+    staged_clips: list[bytes] = []
+
+    class CountingSilent(SilentTTS):
+        def synthesize(self, request: TTSRequest, output_path: Path) -> TTSResult:
+            tts_calls.append(request.text)
+            return super().synthesize(request, output_path)
+
+    def runner(argv: list[str]) -> int:
+        props = Path(argv[argv.index("--props") + 1])
+        staged_clips.append((props.parent / "assets/ai-clips/S02.mp4").read_bytes())
+        return _write_golden_video(argv)
+
+    produce_project(project, CountingSilent(), runner)
+    assert staged_clips == [clip.read_bytes()] and len(tts_calls) == 1
+    render_input = json.loads((revision / "renders/render-input.json").read_text(encoding="utf-8"))
+    scenes = render_input["scenes"]
+    assert (render_input["fps"], render_input["audio_file"]) == (30, "audio/narration.wav")
+    assert (scenes[0]["id"], scenes[0]["start_frame"], scenes[0]["visual"]) == ("S01", 0, "whiteboard")
+    assert not any("intro" in f"{scene['id']} {scene['visual']}".lower() for scene in scenes)
+    assert scenes[-1]["visual"] == "brand_outro" and scenes[-1]["narration"] == OUTRO_TEXT
+    ai_scene = next(scene for scene in scenes if scene["id"] == "S02")
+    assert (ai_scene["visual"], ai_scene["duration_frames"], ai_scene["visual_assets"]) == (
+        "ai_clip", 180, [{"path": "assets/ai-clips/S02.mp4", "role": "ai_clip", "pose": None}]
+    )
+    qa = json.loads((revision / "reviews/video-qa.json").read_text(encoding="utf-8"))
+    assert qa["composition_duration_ms"] == 63000 and qa["audio_duration_ms"] > 0
+    assert qa["visual_budget"]["category_frames"] == {
+        "whiteboard_svg": 1260, "chart_crop": 450, "ai_clip": 180,
+    }
+    assert qa["visual_budget"]["passed"] is True
+
+    approve_gate(project, GateKind.VIDEO, reviewer="doctor", now=GOLDEN_ENTERED_AT)
+    package = package_project(project)
+    disclosure = json.loads((package / "ai-disclosure.json").read_text(encoding="utf-8"))
+    assert disclosure["contains_ai"] is True
+    assert disclosure["clips"] == [{
+        "scene_id": "S02", "path": "assets/ai-clips/S02.mp4", "provider": "google_vertex_ai",
+        "model": "veo-3.1-fast-generate-001", "classification": "semantic",
+    }]
+    assert prompt not in (package / "ai-disclosure.json").read_text(encoding="utf-8")
+    assert "ai-disclosure.json" in json.loads(
+        (package / "manifest.json").read_text(encoding="utf-8")
+    )["payload_sha256"]
+    assert sorted(path.name for path in (revision / "reviews").glob("*-approval.yaml")) == [
+        "medical-approval.yaml", "video-approval.yaml",
+    ]
+    assert read_yaml(project / "project.yaml")["state"] == "packaged"
+    assert len(provider_requests) == 1
     assert _snapshot_tree(GOLDEN_PROJECTS[1]) == before
 
 
