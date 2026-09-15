@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "acquired_at": {
+      "format": "date-time",
+      "title": "Acquired At",
+      "type": "string"
+    },
+    "active_revision": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9]{3}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Active Revision"
+    },
+    "heartbeat_at": {
+      "format": "date-time",
+      "title": "Heartbeat At",
+      "type": "string"
+    },
+    "host_id": {
+      "pattern": "\\S",
+      "title": "Host Id",
+      "type": "string"
+    },
+    "lease_id": {
+      "pattern": "\\S",
+      "title": "Lease Id",
+      "type": "string"
+    },
+    "operation": {
+      "pattern": "\\S",
+      "title": "Operation",
+      "type": "string"
+    },
+    "pid": {
+      "minimum": 1,
+      "title": "Pid",
+      "type": "integer"
+    },
+    "process_start_fingerprint": {
+      "pattern": "\\S",
+      "title": "Process Start Fingerprint",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "ttl_seconds": {
+      "maximum": 3600,
+      "minimum": 5,
+      "title": "Ttl Seconds",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "lease_id",
+    "host_id",
+    "pid",
+    "process_start_fingerprint",
+    "operation",
+    "acquired_at",
+    "heartbeat_at",
+    "ttl_seconds"
+  ],
+  "title": "ProjectLease",
+  "type": "object"
+}

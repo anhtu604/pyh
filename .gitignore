@@ -19,6 +19,7 @@ projects/**/publish/
 projects/**/source-documents/
 projects/**/reviews/*.html
 projects/**/evidence/source-cache/
+projects/**/.healthvideo/
 
 # Skill symlinks: absolute paths, machine-specific; the real content lives in .agents/skills
 .claude/

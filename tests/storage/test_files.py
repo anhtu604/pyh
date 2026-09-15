@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -11,6 +12,41 @@ from healthvideo.storage.files import (
     sha256_file,
     write_yaml_atomic,
 )
+
+
+def test_atomic_writers_use_unique_owned_temporary_files(tmp_path, monkeypatch) -> None:
+    path = tmp_path / "shared.txt"
+    seen: list[Path] = []
+    real_replace = files.os.replace
+
+    def record_replace(old: Path, new: Path) -> None:
+        seen.append(Path(old))
+        real_replace(old, new)
+
+    monkeypatch.setattr(files.os, "replace", record_replace)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        list(pool.map(lambda text: files.write_text_atomic(path, text), ["a", "b"]))
+
+    assert len({item.name for item in seen}) == 2
+    assert all(item.parent == tmp_path for item in seen)
+    assert path.read_text(encoding="utf-8") in {"a", "b"}
+    assert not [item for item in tmp_path.iterdir() if item != path]
+
+
+def test_atomic_write_failure_removes_only_its_owned_temporary(tmp_path, monkeypatch) -> None:
+    path = tmp_path / "shared.txt"
+    unrelated = tmp_path / ".shared.txt.unrelated.tmp"
+    unrelated.write_text("keep", encoding="utf-8")
+
+    def fail_replace(old: Path, new: Path) -> None:
+        raise OSError("replace failed")
+
+    monkeypatch.setattr(files.os, "replace", fail_replace)
+    with pytest.raises(OSError, match="replace failed"):
+        files.write_text_atomic(path, "new")
+
+    assert unrelated.read_text(encoding="utf-8") == "keep"
+    assert sorted(item.name for item in tmp_path.iterdir()) == [unrelated.name]
 
 
 def test_yaml_round_trip_and_hash(tmp_path) -> None:
