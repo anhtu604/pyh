@@ -1,0 +1,93 @@
+{
+  "$defs": {
+    "BackupEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "size": {
+          "minimum": 0,
+          "title": "Size",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "size",
+        "sha256"
+      ],
+      "title": "BackupEntry",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Closed manifest of one immutable snapshot; it lists every file except itself.",
+  "properties": {
+    "active_revision": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9]{3}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Active Revision"
+    },
+    "backup_id": {
+      "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,126}[A-Za-z0-9])?$",
+      "title": "Backup Id",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "entries": {
+      "items": {
+        "$ref": "#/$defs/BackupEntry"
+      },
+      "title": "Entries",
+      "type": "array"
+    },
+    "project_schema_version": {
+      "enum": [
+        "1.0",
+        "2.0"
+      ],
+      "title": "Project Schema Version",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "slug": {
+      "pattern": "\\S",
+      "title": "Slug",
+      "type": "string"
+    }
+  },
+  "required": [
+    "backup_id",
+    "project_schema_version",
+    "slug",
+    "active_revision",
+    "created_at",
+    "entries"
+  ],
+  "title": "BackupManifest",
+  "type": "object"
+}

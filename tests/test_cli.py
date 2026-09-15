@@ -64,6 +64,25 @@ def test_operator_help_preserves_existing_cli_commands() -> None:
         assert name in result.stdout
 
 
+def test_backup_cli_creates_and_restores_a_snapshot(tmp_path) -> None:
+    project = create_v2_project_fixture(tmp_path / "source")
+
+    created = runner.invoke(
+        app,
+        ["backup", "create", str(project), str(tmp_path / "backups"), "--id", "cli"],
+    )
+    restored = runner.invoke(
+        app,
+        ["backup", "restore", str(tmp_path / "backups" / "cli"), str(tmp_path / "restored")],
+    )
+
+    assert created.exit_code == 0, created.stdout
+    assert restored.exit_code == 0, restored.stdout
+    assert (tmp_path / "restored" / "project.yaml").read_bytes() == (
+        project / "project.yaml"
+    ).read_bytes()
+
+
 def test_mutating_cli_refuses_busy_project_but_status_remains_read_only(tmp_path) -> None:
     from healthvideo.domain.topic import TopicCard
 

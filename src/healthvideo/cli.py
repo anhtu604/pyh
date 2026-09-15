@@ -28,6 +28,7 @@ from healthvideo.process import resolve_pnpm_argv
 from healthvideo.render.remotion import build_render_argv
 from healthvideo.storage.files import read_yaml, write_text_atomic
 from healthvideo.storage.lease import (
+    LeaseBusyError,
     LeaseRecoveryError,
     read_write_lease,
     recover_stale_lease,
@@ -50,6 +51,7 @@ from healthvideo.workflows.agent_review import (
     request_second_model_review,
 )
 from healthvideo.workflows.ai_clips import AIClipRights, generate_ai_clip
+from healthvideo.workflows.backup import create_backup, restore_backup
 from healthvideo.workflows.create_project import create_project
 from healthvideo.workflows.doctor import (
     check_environment,
@@ -123,6 +125,7 @@ agent_app = typer.Typer(no_args_is_help=True)
 outro_app = typer.Typer(no_args_is_help=True)
 ai_clip_app = typer.Typer(no_args_is_help=True)
 lease_app = typer.Typer(no_args_is_help=True)
+backup_app = typer.Typer(no_args_is_help=True)
 app.add_typer(project_app, name="project")
 app.add_typer(review_app, name="review")
 app.add_typer(revision_app, name="revision")
@@ -133,6 +136,49 @@ app.add_typer(agent_app, name="agent")
 app.add_typer(outro_app, name="outro")
 app.add_typer(ai_clip_app, name="ai-clip")
 app.add_typer(lease_app, name="lease")
+app.add_typer(backup_app, name="backup")
+
+
+def _echo_error(error: BaseException) -> None:
+    typer.echo("\n".join([str(error), *getattr(error, "__notes__", [])]))
+
+
+@backup_app.command("create")
+def backup_create(
+    project_dir: Annotated[Path, typer.Argument(help="Thư mục dự án")],
+    backup_root: Annotated[Path, typer.Argument(help="Thư mục chứa các snapshot")],
+    backup_id: Annotated[
+        str, typer.Option("--id", help="Tên snapshot mới; không bao giờ ghi đè")
+    ],
+) -> None:
+    """Snapshot authoritative project bytes under the write lease; never overwrite."""
+    try:
+        snapshot = create_backup(
+            project_dir, backup_root, backup_id=backup_id, now=current_time()
+        )
+    except LeaseBusyError as error:
+        typer.echo("Project busy: another writer owns the project; no backup created.")
+        raise typer.Exit(code=1) from error
+    except (OSError, TypeError, ValueError) as error:
+        _echo_error(error)
+        raise typer.Exit(code=1) from error
+    typer.echo(f"Backup created: {snapshot}")
+
+
+@backup_app.command("restore")
+def backup_restore(
+    snapshot_dir: Annotated[Path, typer.Argument(help="Thư mục snapshot")],
+    destination_dir: Annotated[
+        Path, typer.Argument(help="Thư mục dự án mới; phải chưa tồn tại")
+    ],
+) -> None:
+    """Verify a snapshot and restore it into a new project directory."""
+    try:
+        restored = restore_backup(snapshot_dir, destination_dir)
+    except (OSError, TypeError, ValueError) as error:
+        _echo_error(error)
+        raise typer.Exit(code=1) from error
+    typer.echo(f"Project restored: {restored}")
 
 
 @lease_app.command("inspect")

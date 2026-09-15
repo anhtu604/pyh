@@ -29,7 +29,8 @@ READ_ONLY = {
     "src/healthvideo/commands/operator.py": {"status"},
 }
 LEASE_CONTROL = {
-    "src/healthvideo/cli.py": {"lease_recover"},
+    # backup_create holds the write lease inside create_backup, not via the decorator.
+    "src/healthvideo/cli.py": {"lease_recover", "backup_create"},
     "src/healthvideo/commands/operator.py": set(),
 }
 

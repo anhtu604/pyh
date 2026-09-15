@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from healthvideo.domain.agent_review import AgentReviewResponse
 from healthvideo.domain.asset_manifest import AssetManifest
 from healthvideo.domain.author import AuthorBrief
+from healthvideo.domain.backup import BackupManifest
 from healthvideo.domain.brand import BrandProfile
 from healthvideo.domain.evidence import EvidenceClaim
 from healthvideo.domain.lease import ProjectLease
@@ -37,6 +38,7 @@ SCHEMAS: dict[str, type[BaseModel]] = {
     "license-ledger.schema.json": LicenseLedger,
     "agent-review-response.schema.json": AgentReviewResponse,
     "project-lease.schema.json": ProjectLease,
+    "backup-manifest.schema.json": BackupManifest,
 }
 
 
