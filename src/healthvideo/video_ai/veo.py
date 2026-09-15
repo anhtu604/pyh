@@ -96,7 +96,10 @@ class GoogleVeoTransport:
 
         for poll_index in range(self._max_polls):
             status, polled = self._http(
-                "GET", f"{base_url}/{operation}", headers, None
+                "POST",
+                f"{base_url}/{model_path}:fetchPredictOperation",
+                headers,
+                {"operationName": operation},
             )
             if status < 200 or status >= 300:
                 raise ValueError("Veo poll request failed")

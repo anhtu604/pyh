@@ -84,7 +84,11 @@ def test_submit_and_poll_exact_request(duration: int) -> None:
 
     assert result.video_bytes == b"video"
     assert token_calls == [1]
-    assert calls[0][0] == "POST" and calls[1][0] == "GET"
+    assert calls[0][0] == "POST" and calls[1][0] == "POST"
+    assert calls[1][1].endswith(
+        "/publishers/google/models/veo-3.1-fast-generate-001:fetchPredictOperation"
+    )
+    assert calls[1][3] == {"operationName": "operations/abc"}
     assert calls[0][2]["Authorization"] == "Bearer secret-token"
     assert calls[0][3] == {
         "instances": [{"prompt": "Minh họa ít muối"}],
