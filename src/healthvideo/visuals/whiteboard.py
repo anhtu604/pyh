@@ -51,7 +51,7 @@ def render_whiteboard(
     shapes = _shapes(template, labels, colors.navy, colors.teal, colors.yellow)
     return (
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1000" '
-        f'role="img" aria-label="PHY whiteboard {template.value}">\n'
+        f'role="img" aria-label="PYH whiteboard {template.value}">\n'
         f'<g id="whiteboard-{template.value}" fill="none" stroke="{colors.navy}" '
         'stroke-width="18" stroke-linecap="round" stroke-linejoin="round">\n'
         f'{shapes}</g>\n</svg>\n'

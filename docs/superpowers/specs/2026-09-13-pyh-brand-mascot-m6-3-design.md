@@ -1,4 +1,4 @@
-# Thiết kế nhận diện PHY và mascot M6.3
+# Thiết kế nhận diện PYH và mascot M6.3
 
 **Ngày:** 13-09-2026  
 **Trạng thái:** Chờ duyệt đặc tả  
@@ -6,21 +6,21 @@
 
 ## 1. Mục tiêu
 
-M6.3 tạo một ngôn ngữ hình ảnh riêng cho Protect Your Health (PHY). Trụ cột
+M6.3 tạo một ngôn ngữ hình ảnh riêng cho Protect Your Health (PYH). Trụ cột
 thương hiệu là **y khoa đáng tin**. Tính cách thương hiệu là một bác sĩ gần gũi,
 giải thích kiến thức khó bằng ngôn ngữ dễ hiểu nhưng vẫn chỉn chu và có căn cứ.
 
-Lát này phải tạo được logo chữ PHY, bộ màu, SVG whiteboard và mascot đồng nhất,
-xác định và dùng được trong Remotion. Uy tín của PHY đến từ nguồn và quy trình
+Lát này phải tạo được logo chữ PYH, bộ màu, SVG whiteboard và mascot đồng nhất,
+xác định và dùng được trong Remotion. Uy tín của PYH đến từ nguồn và quy trình
 kiểm chứng, không đến từ việc mascot giả lập hoạt động khám bệnh.
 
 ## 2. Phạm vi và ranh giới
 
 ### Trong phạm vi
 
-- Mở rộng `profiles/brand.vi.yaml` với token nhận diện PHY được kiểm tra bằng
+- Mở rộng `profiles/brand.vi.yaml` với token nhận diện PYH được kiểm tra bằng
   model cố định.
-- Sinh logo chữ PHY và mascot từ SVG xác định, không phụ thuộc model tạo ảnh.
+- Sinh logo chữ PYH và mascot từ SVG xác định, không phụ thuộc model tạo ảnh.
 - Cung cấp ba tư thế mascot: `welcome`, `explain`, `caution`.
 - Sinh SVG whiteboard từ một tập template cố định và dữ liệu do operator nhập.
 - Khai báo asset mascot/whiteboard trong manifest của revision trước khi
@@ -45,13 +45,13 @@ production, không được chép vào Git và không quyết định byte SVG c
 
 ### 3.1. Logo “Dấu kiểm chứng”
 
-Logo là wordmark hình học viết đúng `PHY`:
+Logo là wordmark hình học viết đúng `PYH`:
 
 - `P` gợi một bong bóng giải thích bằng khoảng âm đơn giản;
-- `H` chứa dấu cộng kín đáo trong cấu trúc nét;
 - nhánh trên của `Y` kết thúc thành dấu kiểm màu vàng.
+- `H` chứa dấu cộng kín đáo trong cấu trúc nét.
 
-Logo phải đọc rõ là `PHY` ở kích thước nhỏ. Dấu cộng không được trở thành biểu
+Logo phải đọc rõ là `PYH` ở kích thước nhỏ. Dấu cộng không được trở thành biểu
 tượng bệnh viện độc lập. Logo không dùng tim–điện tâm đồ, khiên, caduceus hoặc
 DNA. Generator cung cấp bản ngang, monogram vuông và bản một màu từ cùng token.
 
@@ -223,3 +223,8 @@ dở, phục hồi trạng thái nhất quán và hội tụ về cùng byte/has
 M6.3 định nghĩa logo, palette và DNA mascot để M6.4 có đầu vào ổn định. M6.4 mới
 quyết định cách logo xuất hiện trong intro/outro, thời lượng 2–3 giây, chuyển động
 signature và câu thoại được bác sĩ cung cấp. M6.3 không tự tạo slogan hoặc thoại.
+## Sửa tương thích tên viết tắt
+
+Tên chuẩn là Protect Your Health (PYH). `render_phy_logo` được giữ làm alias đọc
+tương thích và trả cùng byte với `render_pyh_logo`; dữ liệu đã lưu với `phy-*`
+vẫn được đọc nguyên trạng, còn asset mới dùng `pyh-*`.

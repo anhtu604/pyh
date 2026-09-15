@@ -1,4 +1,4 @@
-"""Deterministic, non-clinical PHY mascot SVG rig."""
+"""Deterministic, non-clinical PYH mascot SVG rig."""
 
 from html import escape
 
@@ -26,7 +26,7 @@ def render_mascot(brand: BrandProfile, pose: MascotPose) -> bytes:
     arms = _ARMS[pose]
     return (
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 900" role="img" '
-        f'aria-label="PHY guide {pose.value}">\n'
+        f'aria-label="PYH guide {pose.value}">\n'
         f'<g id="mascot-pose-{pose.value}" stroke="{colors.navy}" stroke-width="34" '
         'stroke-linecap="round" stroke-linejoin="round" fill="none">\n'
         f'{arms}'

@@ -30,6 +30,7 @@ def test_whiteboard_is_safe_and_deterministic(brand, template, labels) -> None:
     payload = WhiteboardPayload(labels=labels)
     svg = render_whiteboard(brand, template, payload)
     assert svg == render_whiteboard(brand, template, payload)
+    assert f'aria-label="PYH whiteboard {template.value}"'.encode() in svg
     assert svg.endswith(b"\n")
     content = svg.replace(b'xmlns="http://www.w3.org/2000/svg"', b"")
     for forbidden in (b"<script", b"<filter", b"href=", b"http:", b"https:", b"foreignObject", b"<image"):

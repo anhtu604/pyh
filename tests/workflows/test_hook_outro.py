@@ -64,7 +64,7 @@ def test_medical_gate_rejects_unfinished_authoring_and_missing_logo(project: Pat
     with pytest.raises(ValueError, match="pending"):
         approve_gate(project, GateKind.MEDICAL, reviewer="doctor", now=datetime.now(UTC))
     intent.unlink()
-    with pytest.raises(ValueError, match="logo"):
+    with pytest.raises(ValueError, match="declared PYH logo"):
         approve_gate(project, GateKind.MEDICAL, reviewer="doctor", now=datetime.now(UTC))
 
 
@@ -151,12 +151,15 @@ def test_retry_preserves_operator_edit_after_interruption(
 def test_declared_logo_unblocks_medical_review(project: Path) -> None:
     author_hook_outro(project, duration_frames=90)
     path = create_brand_logo_asset(
-        project, scene_id="OUTRO", asset_name="phy-logo", variant=LogoVariant.MONOGRAM
+        project, scene_id="OUTRO", asset_name="pyh-logo", variant=LogoVariant.MONOGRAM
     )
     assert path.is_file()
+    manifest = read_yaml(project / "revisions/001/assets/asset-manifest.yaml")
+    logo = next(item for item in manifest["assets"] if item["path"] == "assets/pyh-logo.svg")
+    assert logo["source"] == "built_in:pyh-logo"
     assert create_brand_logo_asset(
-        project, scene_id="OUTRO", asset_name="phy-logo", variant=LogoVariant.MONOGRAM
+        project, scene_id="OUTRO", asset_name="pyh-logo", variant=LogoVariant.MONOGRAM
     ) == path
     approve_gate(project, GateKind.MEDICAL, reviewer="doctor", now=datetime.now(UTC))
     assert (project / "revisions/001/reviews/medical-approval.yaml").is_file()
-    assert "asset:assets/phy-logo.svg" in medical_reviewed_paths(project / "revisions/001")
+    assert "asset:assets/pyh-logo.svg" in medical_reviewed_paths(project / "revisions/001")

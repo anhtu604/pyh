@@ -18,6 +18,7 @@ def brand():
 def test_mascot_pose_is_safe_and_deterministic(brand, pose: MascotPose) -> None:
     svg = render_mascot(brand, pose)
     assert svg == render_mascot(brand, pose)
+    assert f'aria-label="PYH guide {pose.value}"'.encode() in svg
     assert svg.endswith(b"\n")
     for marker in (b"mascot-p-badge", b"mascot-h-seam", b"mascot-y-check", b"mascot-short-hair"):
         assert marker in svg

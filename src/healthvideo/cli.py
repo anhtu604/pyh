@@ -189,7 +189,7 @@ def outro_author(
     project_dir: Annotated[Path, typer.Argument(help="Thư mục dự án v2")],
     duration_frames: Annotated[int, typer.Option("--duration-frames", help="Số frame của câu kết")],
 ) -> None:
-    """Thêm câu kết PHY cố định trước cổng duyệt y khoa."""
+    """Thêm câu kết PYH cố định trước cổng duyệt y khoa."""
     try:
         author_hook_outro(project_dir, duration_frames=duration_frames)
     except (OSError, TypeError, ValueError) as error:

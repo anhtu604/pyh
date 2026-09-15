@@ -1,4 +1,4 @@
-"""Validated visual identity tokens for deterministic PHY assets."""
+"""Validated visual identity tokens for deterministic PYH assets."""
 
 from enum import StrEnum
 from pathlib import Path
@@ -74,5 +74,5 @@ class BrandProfile(BaseModel):
 
 
 def load_brand_profile(path: Path) -> BrandProfile:
-    """Load the checked, immutable PHY brand profile."""
+    """Load the checked, immutable PYH brand profile."""
     return BrandProfile.model_validate(read_yaml(path))

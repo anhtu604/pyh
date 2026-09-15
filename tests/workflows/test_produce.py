@@ -41,7 +41,7 @@ def test_m64_production_records_measured_audio_and_rejects_stale_qa(tmp_path: Pa
     board["scenes"][0]["duration_frames"] = 1350
     write_yaml_atomic(board_path, board)
     author_hook_outro(project, duration_frames=90)
-    create_brand_logo_asset(project, scene_id="OUTRO", asset_name="phy-logo", variant=LogoVariant.MONOGRAM)
+    create_brand_logo_asset(project, scene_id="OUTRO", asset_name="pyh-logo", variant=LogoVariant.MONOGRAM)
     approve_gate(project, GateKind.MEDICAL, reviewer="doctor", now=V2_REVIEWED_AT)
 
     def runner(argv: list[str]) -> int:
@@ -73,7 +73,7 @@ def test_m64_production_retry_reuses_promoted_timing_qa(tmp_path: Path) -> None:
     create_brand_logo_asset(
         project,
         scene_id="OUTRO",
-        asset_name="phy-logo",
+        asset_name="pyh-logo",
         variant=LogoVariant.MONOGRAM,
     )
     approve_gate(project, GateKind.MEDICAL, reviewer="doctor", now=V2_REVIEWED_AT)
@@ -140,7 +140,7 @@ def _m65_project(
     highlight = dict(board["scenes"][0])
     highlight["id"] = "S02"
     if ai:
-        whiteboard_frames, highlight_frames, ai_frames = 650, 250, 100
+        whiteboard_frames, highlight_frames, ai_frames = 830, 250, 120
     else:
         whiteboard_frames, highlight_frames, ai_frames = 750, 250, 0
     board["visual_budget_profile"] = "m6_5_v1"
@@ -171,7 +171,8 @@ def _m65_project(
             }
         )
     write_yaml_atomic(board_path, board)
-    approve_gate(project, GateKind.MEDICAL, reviewer="doctor", now=V2_REVIEWED_AT)
+    if not ai:
+        approve_gate(project, GateKind.MEDICAL, reviewer="doctor", now=V2_REVIEWED_AT)
     return project
 
 
@@ -214,18 +215,15 @@ def test_m65_production_revalidates_budget_before_tts_or_render(tmp_path: Path) 
     assert read_yaml(project / "project.yaml")["state"] == "medically_approved"
 
 
-def test_m65_ai_clip_fails_before_tts_or_render_with_m66_message(
+def test_m65_ai_clip_without_declared_asset_fails_at_medical_gate(
     tmp_path: Path,
 ) -> None:
     project = _m65_project(tmp_path, ai=True)
-    tts = CountingSilent()
-    render_calls: list[list[str]] = []
 
-    with pytest.raises(ValueError, match="M6.6|provider"):
-        produce_project(project, tts, lambda argv: render_calls.append(argv) or 0)
+    with pytest.raises(ValueError, match="exactly one ai_clip asset"):
+        approve_gate(project, GateKind.MEDICAL, reviewer="doctor", now=V2_REVIEWED_AT)
 
-    assert tts.calls == 0 and render_calls == []
-    assert read_yaml(project / "project.yaml")["state"] == "medically_approved"
+    assert read_yaml(project / "project.yaml")["state"] == "awaiting_medical_review"
 
 
 def test_m65_production_records_visual_qa_and_reuses_valid_promoted_cache(
@@ -379,7 +377,7 @@ def test_v2_produce_stages_declared_mascot_asset(tmp_path: Path) -> None:
     source_asset = create_mascot_reaction_asset(
         project_dir,
         scene_id="S01",
-        asset_name="phy-welcome",
+        asset_name="pyh-welcome",
         pose=MascotPose.WELCOME,
     )
     approve_gate(
@@ -394,19 +392,19 @@ def test_v2_produce_stages_declared_mascot_asset(tmp_path: Path) -> None:
     def runner(argv: list[str]) -> int:
         props = Path(argv[argv.index("--props") + 1])
         render_inputs.append(json.loads(props.read_text(encoding="utf-8")))
-        assert (props.parent / "assets" / "phy-welcome.svg").read_bytes() == source_asset.read_bytes()
+        assert (props.parent / "assets" / "pyh-welcome.svg").read_bytes() == source_asset.read_bytes()
         _write_synthetic_output(argv)
         return 0
 
     produce_project(project_dir, SilentTTS(), runner)
 
     assert render_inputs[0]["scenes"][0]["visual_assets"] == [
-        {"path": "assets/phy-welcome.svg", "role": "mascot", "pose": "welcome"}
+        {"path": "assets/pyh-welcome.svg", "role": "mascot", "pose": "welcome"}
     ]
     manifest = json.loads(
         (revision / "renders" / "render-manifest.json").read_text(encoding="utf-8")
     )
-    assert "assets/phy-welcome.svg" in manifest["asset_sha256"]
+    assert "assets/pyh-welcome.svg" in manifest["asset_sha256"]
 
 
 def test_v2_provider_identity_changes_cache_with_same_provider_name(tmp_path: Path) -> None:

@@ -57,9 +57,9 @@ def test_m64_hook_outro_through_both_manual_gates_and_package(tmp_path: Path) ->
     board["scenes"][0]["duration_frames"] = 1350
     write_yaml_atomic(board_path, board)
     author_hook_outro(project, duration_frames=90)
-    create_brand_logo_asset(project, scene_id="OUTRO", asset_name="phy-logo", variant=LogoVariant.MONOGRAM)
+    create_brand_logo_asset(project, scene_id="OUTRO", asset_name="pyh-logo", variant=LogoVariant.MONOGRAM)
     packet = render_medical_packet(revision)
-    assert "Hook:" in packet and "Outro:" in packet and "phy-logo.svg" in packet
+    assert "Hook:" in packet and "Outro:" in packet and "pyh-logo.svg" in packet
     logo = next(asset for asset in read_yaml(revision / "assets/asset-manifest.yaml")["assets"]
                 if asset.get("storyboard_role") == "brand")
     assert logo["sha256"] in packet and logo["license"] in packet
@@ -103,7 +103,7 @@ def test_m65_zero_ai_budget_through_chart_outro_gates_and_package(tmp_path: Path
         start += scene["duration_frames"]
     write_yaml_atomic(board_path, board)
     author_hook_outro(project, duration_frames=90)
-    create_brand_logo_asset(project, scene_id="OUTRO", asset_name="phy-logo", variant=LogoVariant.MONOGRAM)
+    create_brand_logo_asset(project, scene_id="OUTRO", asset_name="pyh-logo", variant=LogoVariant.MONOGRAM)
     chart = create_evidence_chart(
         project, claim_id="C01", datum_id="bp-count", asset_name="chart-count",
         license="synthetic_test_only", rights_basis="fixture nội bộ", creator="repository_fixture",

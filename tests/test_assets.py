@@ -34,7 +34,7 @@ def record(path: str, data: bytes, revision: Path, kind: AssetKind) -> AssetReco
 
 def board(ref: VisualAssetRef) -> Storyboard:
     return Storyboard(
-        title="PHY",
+        title="PYH",
         scenes=(
             Scene(
                 id="S01",
@@ -145,7 +145,7 @@ def test_storyboard_asset_resolver_rejects_orphan_scene_asset(tmp_path: Path) ->
         "assets/orphan.svg", b"<svg/>", tmp_path, AssetKind.MASCOT_REACTION
     ).model_copy(update={"storyboard_role": "mascot"})
     empty = Storyboard(
-        title="PHY",
+        title="PYH",
         scenes=(
             Scene(
                 id="S01",
@@ -167,7 +167,7 @@ def test_storyboard_asset_resolver_keeps_legacy_unowned_records_compatible(
         "assets/legacy.svg", b"<svg/>", tmp_path, AssetKind.MASCOT_REACTION
     )
     assert referenced_storyboard_assets(
-        tmp_path, Storyboard(title="PHY"), AssetManifest(assets=(legacy,))
+        tmp_path, Storyboard(title="PYH"), AssetManifest(assets=(legacy,))
     ) == {}
 
 
@@ -180,7 +180,7 @@ def test_chart_role_requires_semantic_owned_data_chart_and_chart_scene(
     )
     ref = VisualAssetRef(path=chart.path, role="chart")
     chart_board = Storyboard(
-        title="PHY",
+        title="PYH",
         visual_budget_profile="m6_5_v1",
         visual_budget_override={
             "rationale": "Resolver-only chart fixture.",
@@ -236,7 +236,7 @@ def test_chart_role_requires_semantic_owned_data_chart_and_chart_scene(
 
 def test_enabled_chart_scene_requires_exactly_one_chart_ref(tmp_path: Path) -> None:
     base = Storyboard(
-        title="PHY",
+        title="PYH",
         visual_budget_profile="m6_5_v1",
         scenes=(
             Scene(

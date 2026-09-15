@@ -25,12 +25,12 @@ def valid_brand_data() -> dict[str, object]:
             "off_white": "#F7F4EC",
             "charcoal": "#263238",
         },
-        "assets": {"creator": "Protect Your Health", "license": "PHY internal"},
+        "assets": {"creator": "Protect Your Health", "license": "PYH internal"},
         "mascot": {"poses": ["welcome", "explain", "caution"]},
     }
 
 
-def test_checked_in_brand_profile_has_approved_phy_tokens() -> None:
+def test_checked_in_brand_profile_has_approved_pyh_tokens() -> None:
     brand = load_brand_profile(ROOT / "profiles/brand.vi.yaml")
     assert brand.canvas == BrandCanvas(width=1080, height=1920, fps=30)
     assert brand.colors.model_dump() == valid_brand_data()["colors"]

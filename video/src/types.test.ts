@@ -109,7 +109,7 @@ describe('SceneSchema', () => {
 
 describe('RenderInputSchema chart contract', () => {
   const chartInput = {
-    title: 'PHY', audio_file: 'audio/narration.wav', visual_budget_profile: 'm6_5_v1',
+    title: 'PYH', audio_file: 'audio/narration.wav', visual_budget_profile: 'm6_5_v1',
     scenes: [{id: 'S01', start_frame: 0, duration_frames: 90,
       narration: 'Chart', visual: 'chart',
       visual_assets: [{path: 'assets/chart.svg', role: 'chart'}]}],

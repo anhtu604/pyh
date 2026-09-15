@@ -95,7 +95,7 @@ outro vẫn đọc và chạy được. v1 không phải đổi schema hay hành
 
 ## 4. Brand asset và renderer
 
-Logo PHY SVG tạo xác định từ M6.3 được đăng ký như một `AssetRecord` có
+Logo PYH SVG tạo xác định từ M6.3 được đăng ký như một `AssetRecord` có
 `kind=FLOURISH`, `semantic=false` và `storyboard_role=brand`; không giả làm
 `whiteboard`. Mở rộng `VisualAssetRef.role` bằng `brand`. Resolver chỉ chấp nhận
 `role=brand` với `AssetKind.FLOURISH`; logo đã khai báo `storyboard_role=brand`

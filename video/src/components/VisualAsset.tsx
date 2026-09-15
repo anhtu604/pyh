@@ -27,7 +27,7 @@ export const VisualAsset: React.FC<{asset: VisualAssetRef; outro?: boolean}> = (
   const opacity = interpolate(frame, [0, 10], [0, 1], {extrapolateRight: 'clamp'});
   return (
     <Img
-      aria-label={`PHY ${asset.role} ${asset.pose ?? ''}`.trim()}
+      aria-label={`PYH ${asset.role} ${asset.pose ?? ''}`.trim()}
       src={staticFile(asset.path)}
       style={{...box, objectFit: 'contain', opacity, position: 'absolute'}}
     />

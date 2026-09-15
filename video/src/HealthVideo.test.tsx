@@ -9,13 +9,16 @@ import {parseRenderInput} from './types';
 vi.mock('remotion', () => ({
   AbsoluteFill: 'div',
   Audio: 'audio',
+  Img: 'img',
   Sequence: 'section',
+  interpolate: () => 1,
   staticFile: (path: string) => path,
+  useCurrentFrame: () => 0,
 }));
 
 const input = (visual: 'whiteboard' | 'evidence_highlight') => ({
   schema_version: '1.0',
-  title: 'PHY',
+  title: 'PYH',
   audio_file: 'audio/silence.wav',
   scenes: [{
     schema_version: '1.0',
@@ -33,6 +36,11 @@ const input = (visual: 'whiteboard' | 'evidence_highlight') => ({
 });
 
 describe('HealthVideo visual asset layer', () => {
+  it('labels current visual assets with the PYH identity', () => {
+    const rendered = VisualAsset({asset: {path: 'assets/pyh.svg', role: 'brand'}}) as
+      React.ReactElement<{['aria-label']: string}>;
+    expect(rendered.props['aria-label']).toBe('PYH brand');
+  });
   it('opens with authored content and dispatches one declared logo in the final outro', () => {
     const initial = input('whiteboard');
     const props = parseRenderInput({...initial, scenes: [...initial.scenes, {

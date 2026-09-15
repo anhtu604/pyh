@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Do not delegate unless the user explicitly requests parallel agents.
 
-**Goal:** Produce v2 videos that open on the authored hook and close on the reviewed PHY outro, with content-sized duration and no change to v1 or either manual gate.
+**Goal:** Produce v2 videos that open on the authored hook and close on the reviewed PYH outro, with content-sized duration and no change to v1 or either manual gate.
 
 **Architecture:** `Script.format_profile` activates strict M6.4 validation without changing legacy files. Script and storyboard own speech and timing; a declared `FLOURISH` logo and optional decorative mascot supply the final scene. Python validates audio against the final frame before Remotion; Remotion renders `brand_outro` and derives duration from storyboard.
 
@@ -94,7 +94,7 @@ def validate_hook_outro(
     if any(ref.role not in {"brand", "mascot"} for ref in final.visual_assets):
         raise ValueError("M6.4 outro has invalid visual role")
     if require_brand and sum(ref.role == "brand" for ref in final.visual_assets) != 1:
-        raise ValueError("M6.4 outro requires exactly one declared PHY logo")
+        raise ValueError("M6.4 outro requires exactly one declared PYH logo")
 ```
 - [ ] **Step 4: Verify GREEN and schemas.** Run `python -m pytest tests/domain/test_hook_outro.py tests/domain/test_script.py tests/contracts/test_schemas.py -q`, `python tools/export_schemas.py`, then inspect `git diff -- schemas` and `python -m ruff check src tests tools`; expect only additive schema fields/enums.
 - [ ] **Step 5: Update README row and commit.** Run `git diff --check`; stage only Task 1 files and README. Commit `feat: define M6.4 script storyboard contract`.
@@ -136,9 +136,9 @@ def append_outro(script: Script, storyboard: Storyboard, duration_frames: int) -
 
 The transaction implementation must use four explicit states (`old/old`, `desired/old`, `old/desired`, `desired/desired`) and compare hashes before every write. It may remove only the exact `workflow/pending-hook-outro.yaml` after both desired hashes match. This file is not an approval artifact; a medical approval attempt while it exists always fails. Extract package `_citations` resolution into `workflows/citations.py`, preserving legacy package behavior. In strict M6.4 mode match each scene to `script_line_id` and require line/scene claim and marker equality. A present claim must exist and all its listed sources must exist. A present marker requires a claim and consistent marker-to-source reuse. Specifically the first line/scene (hook) with a claim must also have a marker; later content may retain `claim_id` without `source_marker`. This keeps the hook claim/source/marker-bound without breaking legacy-style later content.
 - [ ] **Step 4: Verify GREEN.** Run `python -m pytest tests/workflows/test_hook_outro.py tests/workflows/test_gate_review.py tests/workflows/test_review_html.py tests/workflows/test_package.py tests/test_cli.py -q` and Ruff. Add test that changing final text or timing after medical approval makes approval stale and production refuses. Task 2 medical gate remains closed for M6.4 until Task 3 attaches the required logo.
-- [ ] **Step 5: Update README row and commit.** Run `git diff --check`; commit only Task 2 files with `feat: author reviewed PHY outro before medical gate`.
+- [ ] **Step 5: Update README row and commit.** Run `git diff --check`; commit only Task 2 files with `feat: author reviewed PYH outro before medical gate`.
 
-### Task 3: Declared PHY logo and reverse manifest checks
+### Task 3: Declared PYH logo and reverse manifest checks
 
 **Files:**
 - Modify: `src/healthvideo/domain/asset_manifest.py`, `src/healthvideo/domain/storyboard.py`, `src/healthvideo/assets.py`, `src/healthvideo/workflows/visual_assets.py`
@@ -146,7 +146,7 @@ The transaction implementation must use four explicit states (`old/old`, `desire
 - Modify: `README.md`
 
 **Interfaces:**
-- Consumes: `render_phy_logo(brand, variant) -> bytes`, M6.3 `_register_generated_svg`, `referenced_storyboard_assets`.
+- Consumes: `render_pyh_logo(brand, variant) -> bytes`, M6.3 `_register_generated_svg`, `referenced_storyboard_assets`.
 - Produces: `create_brand_logo_asset(project_dir: Path, *, scene_id: str, asset_name: str, variant: LogoVariant) -> Path`, with `FLOURISH`, `semantic=False`, `storyboard_role="brand"`.
 
 - [ ] **Step 1: Write RED asset tests.** A brand-role ref resolves only a declared decorative `FLOURISH` logo; missing file/hash/rights, role–kind mismatch, orphan owned logo, and wrong scene role refuse. Medical approval refuses zero or two brand refs; exactly one declared logo passes, with optional valid `MASCOT_REACTION`; semantic mascot annotation on outro refuses. Brand ref to whiteboard-owned `FLOURISH` refuses. Existing decorative whiteboard `FLOURISH` remains valid. Verify two same-input registrations converge and a conflicting existing path fails without overwrite.
@@ -160,15 +160,15 @@ def create_brand_logo_asset(
     brand = load_brand_profile(BRAND_PROFILE_PATH)
     return _register_generated_svg(
         project_dir, scene_id=scene_id, asset_name=asset_name,
-        svg_bytes=render_phy_logo(brand, variant), kind=AssetKind.FLOURISH,
-        semantic=False, pose=None, source="built_in:phy-logo",
+        svg_bytes=render_pyh_logo(brand, variant), kind=AssetKind.FLOURISH,
+        semantic=False, pose=None, source="built_in:pyh-logo",
         creator=brand.assets.creator, license=brand.assets.license,
         rights_basis=brand.assets.license, role="brand",
-        classification_reason="Fixed decorative PHY logo geometry.",
+        classification_reason="Fixed decorative PYH logo geometry.",
     )
 ```
 - [ ] **Step 4: Verify GREEN.** Run `python -m pytest tests/workflows/test_visual_assets.py tests/workflows/test_gate_review.py tests/domain/test_asset_manifest.py -q`, `python tools/export_schemas.py`, inspect schema diff, and Ruff.
-- [ ] **Step 5: Update README row and commit.** Run `git diff --check`; commit `feat: register declared PHY logo for outro`.
+- [ ] **Step 5: Update README row and commit.** Run `git diff --check`; commit `feat: register declared PYH logo for outro`.
 
 ### Task 4: Version-aware duration and measured WAV guard
 
@@ -225,7 +225,7 @@ export const durationFromScenes = (scenes: Scene[]): number =>
   : <WhiteboardScene scene={scene} />}
 ```
 - [ ] **Step 4: Verify GREEN.** Run `pnpm --dir video test` and `pnpm --dir video typecheck`; inspect one test still at frame 0 and one final frame without committing generated renders. Check v1/v2 render props parse.
-- [ ] **Step 5: Update README row and commit.** Run `git diff --check`; commit `feat: render hook-first PHY outro at exact duration`.
+- [ ] **Step 5: Update README row and commit.** Run `git diff --check`; commit `feat: render hook-first PYH outro at exact duration`.
 
 ### Task 6: End-to-end gates, packet, package, and acceptance
 

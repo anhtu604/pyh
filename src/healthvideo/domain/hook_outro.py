@@ -40,4 +40,4 @@ def validate_hook_outro(
     if any(ref.role not in {"brand", "mascot"} for ref in final.visual_assets):
         raise ValueError("M6.4 outro has invalid visual role")
     if require_brand and sum(ref.role == "brand" for ref in final.visual_assets) != 1:
-        raise ValueError("M6.4 outro requires exactly one declared PHY logo")
+        raise ValueError("M6.4 outro requires exactly one declared PYH logo")

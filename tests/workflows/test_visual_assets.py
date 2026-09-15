@@ -76,12 +76,12 @@ def test_register_mascot_reaction_and_semantic_annotation(project: Path) -> None
     revision = project / "revisions/001"
     before = (project / "project.yaml").read_bytes()
     reaction = create_mascot_reaction_asset(
-        project, scene_id="S01", asset_name="phy-welcome", pose=MascotPose.WELCOME
+        project, scene_id="S01", asset_name="pyh-welcome", pose=MascotPose.WELCOME
     )
     annotation = create_mascot_annotation_asset(
         project,
         scene_id="S01",
-        asset_name="phy-note",
+        asset_name="pyh-note",
         pose=MascotPose.EXPLAIN,
         annotation="Ăn mặn có thể làm huyết áp tăng.",
         claim_id="C01",
@@ -90,22 +90,23 @@ def test_register_mascot_reaction_and_semantic_annotation(project: Path) -> None
     )
     manifest = load_asset_manifest(revision / "assets/asset-manifest.yaml")
     records = {item.path: item for item in manifest.assets}
-    assert records["assets/phy-welcome.svg"].kind is AssetKind.MASCOT_REACTION
-    assert records["assets/phy-welcome.svg"].semantic is False
-    assert records["assets/phy-welcome.svg"].storyboard_role == "mascot"
-    assert records["assets/phy-welcome.svg"].classification_reason == (
+    assert records["assets/pyh-welcome.svg"].kind is AssetKind.MASCOT_REACTION
+    assert records["assets/pyh-welcome.svg"].semantic is False
+    assert records["assets/pyh-welcome.svg"].storyboard_role == "mascot"
+    assert records["assets/pyh-welcome.svg"].source == "built_in:pyh-mascot"
+    assert records["assets/pyh-welcome.svg"].classification_reason == (
         "Fixed mascot reaction with no content fields."
     )
-    assert records["assets/phy-note.svg"].kind is AssetKind.MASCOT_MEDICAL_ANNOTATION
-    assert records["assets/phy-note.svg"].semantic is True
-    assert records["assets/phy-note.svg"].classification_reason == (
+    assert records["assets/pyh-note.svg"].kind is AssetKind.MASCOT_MEDICAL_ANNOTATION
+    assert records["assets/pyh-note.svg"].semantic is True
+    assert records["assets/pyh-note.svg"].classification_reason == (
         "Mascot carries source-bound medical annotation."
     )
     assert reaction.is_file() and annotation.is_file()
     storyboard = Storyboard.model_validate(read_yaml(revision / "storyboard/storyboard.yaml"))
     assert [ref.path for ref in storyboard.scenes[0].visual_assets] == [
-        "assets/phy-welcome.svg",
-        "assets/phy-note.svg",
+        "assets/pyh-welcome.svg",
+        "assets/pyh-note.svg",
     ]
     assert (project / "project.yaml").read_bytes() == before
 
@@ -130,7 +131,7 @@ def test_register_decorative_and_semantic_whiteboards(project: Path) -> None:
     decorative = create_whiteboard_asset(
         project,
         scene_id="S01",
-        asset_name="phy-connector",
+        asset_name="pyh-connector",
         template=WhiteboardTemplate.CONNECTOR,
         payload=WhiteboardPayload(),
         semantic=False,
@@ -138,7 +139,7 @@ def test_register_decorative_and_semantic_whiteboards(project: Path) -> None:
     semantic = create_whiteboard_asset(
         project,
         scene_id="S01",
-        asset_name="phy-callout",
+        asset_name="pyh-callout",
         template=WhiteboardTemplate.CALLOUT,
         payload=WhiteboardPayload(labels=("Giảm muối",)),
         semantic=True,
@@ -148,14 +149,15 @@ def test_register_decorative_and_semantic_whiteboards(project: Path) -> None:
     )
     manifest = load_asset_manifest(revision / "assets/asset-manifest.yaml")
     records = {item.path: item for item in manifest.assets}
-    assert records["assets/phy-connector.svg"].kind is AssetKind.FLOURISH
-    assert records["assets/phy-connector.svg"].semantic is False
-    assert records["assets/phy-connector.svg"].classification_reason == (
+    assert records["assets/pyh-connector.svg"].kind is AssetKind.FLOURISH
+    assert records["assets/pyh-connector.svg"].semantic is False
+    assert records["assets/pyh-connector.svg"].source == "built_in:pyh-whiteboard"
+    assert records["assets/pyh-connector.svg"].classification_reason == (
         "Fixed decorative whiteboard geometry."
     )
-    assert records["assets/phy-callout.svg"].kind is AssetKind.MEDICAL_TEXT
-    assert records["assets/phy-callout.svg"].semantic is True
-    assert records["assets/phy-callout.svg"].classification_reason == (
+    assert records["assets/pyh-callout.svg"].kind is AssetKind.MEDICAL_TEXT
+    assert records["assets/pyh-callout.svg"].semantic is True
+    assert records["assets/pyh-callout.svg"].classification_reason == (
         "Source-bound semantic whiteboard content."
     )
     assert decorative.is_file() and semantic.is_file()
@@ -197,7 +199,7 @@ def test_mascot_retry_after_asset_promotion_failure_is_gate_safe(
         create_mascot_reaction_asset(
             project,
             scene_id="S01",
-            asset_name="phy-welcome",
+            asset_name="pyh-welcome",
             pose=MascotPose.WELCOME,
         )
     state = read_yaml(project / "project.yaml")
@@ -211,7 +213,7 @@ def test_mascot_retry_after_asset_promotion_failure_is_gate_safe(
     output = create_mascot_reaction_asset(
         project,
         scene_id="S01",
-        asset_name="phy-welcome",
+        asset_name="pyh-welcome",
         pose=MascotPose.WELCOME,
     )
     assert output.is_file()
@@ -219,7 +221,7 @@ def test_mascot_retry_after_asset_promotion_failure_is_gate_safe(
         read_yaml(revision / "storyboard/storyboard.yaml")
     )
     assert sum(
-        ref.path == "assets/phy-welcome.svg"
+        ref.path == "assets/pyh-welcome.svg"
         for ref in storyboard.scenes[0].visual_assets
     ) == 1
 

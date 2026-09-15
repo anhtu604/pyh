@@ -33,7 +33,7 @@ from healthvideo.storage.files import (
     sha256_file,
     write_yaml_atomic,
 )
-from healthvideo.visuals.brand import render_phy_logo
+from healthvideo.visuals.brand import render_pyh_logo
 from healthvideo.visuals.charts import render_count_chart
 from healthvideo.visuals.highlights import crop_highlight
 from healthvideo.visuals.mascot import render_mascot, render_mascot_annotation
@@ -595,7 +595,7 @@ def create_mascot_reaction_asset(
     asset_name: str,
     pose: MascotPose,
 ) -> Path:
-    """Create a declared decorative PHY guide pose without content inputs."""
+    """Create a declared decorative PYH guide pose without content inputs."""
     brand = load_brand_profile(BRAND_PROFILE_PATH)
     return _register_generated_svg(
         project_dir,
@@ -605,7 +605,7 @@ def create_mascot_reaction_asset(
         kind=AssetKind.MASCOT_REACTION,
         semantic=False,
         pose=pose,
-        source="built_in:phy-mascot",
+        source="built_in:pyh-mascot",
         creator=brand.assets.creator,
         license=brand.assets.license,
         rights_basis=brand.assets.license,
@@ -617,7 +617,7 @@ def create_mascot_reaction_asset(
 def create_brand_logo_asset(
     project_dir: Path, *, scene_id: str, asset_name: str, variant: LogoVariant
 ) -> Path:
-    """Register a fixed decorative PHY logo on the approved outro scene path."""
+    """Register a fixed decorative PYH logo on the approved outro scene path."""
     project = ProjectManifestV2.model_validate(read_yaml(project_dir / "project.yaml"))
     revision = project_dir / "revisions" / project.active_revision
     if (revision / "workflow/pending-hook-outro.yaml").exists():
@@ -630,11 +630,11 @@ def create_brand_logo_asset(
     brand = load_brand_profile(BRAND_PROFILE_PATH)
     return _register_generated_svg(
         project_dir, scene_id=scene_id, asset_name=asset_name,
-        svg_bytes=render_phy_logo(brand, variant), kind=AssetKind.FLOURISH,
-        semantic=False, pose=None, source="built_in:phy-logo",
+        svg_bytes=render_pyh_logo(brand, variant), kind=AssetKind.FLOURISH,
+        semantic=False, pose=None, source="built_in:pyh-logo",
         creator=brand.assets.creator, license=brand.assets.license,
         rights_basis=brand.assets.license, role="brand",
-        classification_reason="Fixed decorative PHY logo geometry.",
+        classification_reason="Fixed decorative PYH logo geometry.",
     )
 
 
@@ -709,7 +709,7 @@ def create_whiteboard_asset(
         kind=AssetKind.MEDICAL_TEXT if semantic else AssetKind.FLOURISH,
         semantic=semantic,
         pose=None,
-        source=source_id or "built_in:phy-whiteboard",
+        source=source_id or "built_in:pyh-whiteboard",
         creator=brand.assets.creator,
         license=brand.assets.license,
         rights_basis=brand.assets.license,

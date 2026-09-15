@@ -231,7 +231,7 @@ def test_visual_assets_round_trip_through_render_input() -> None:
             ),
         ),
     )
-    result = build_render_input(Storyboard(title="PHY", scenes=(scene,)), "audio/a.wav")
+    result = build_render_input(Storyboard(title="PYH", scenes=(scene,)), "audio/a.wav")
     assert result.scenes[0].visual_assets == scene.visual_assets
 
 
@@ -245,7 +245,7 @@ def test_render_input_carries_m6_5_profile_and_requires_one_chart_ref() -> None:
         visual_assets=(VisualAssetRef(path="assets/chart.svg", role="chart"),),
     )
     board = Storyboard(
-        title="PHY", visual_budget_profile="m6_5_v1", scenes=(scene,)
+        title="PYH", visual_budget_profile="m6_5_v1", scenes=(scene,)
     )
     result = build_render_input(board, "audio/a.wav")
     assert result.visual_budget_profile == "m6_5_v1"

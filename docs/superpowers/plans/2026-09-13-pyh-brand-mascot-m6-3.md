@@ -1,8 +1,8 @@
-# PHY Brand and Mascot M6.3 Implementation Plan
+# PYH Brand and Mascot M6.3 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a deterministic PHY identity, fixed whiteboard SVG templates, and a three-pose non-clinical mascot that Remotion renders only through declared revision assets.
+**Goal:** Add a deterministic PYH identity, fixed whiteboard SVG templates, and a three-pose non-clinical mascot that Remotion renders only through declared revision assets.
 
 **Architecture:** A frozen brand profile supplies all visual tokens to pure Python SVG generators. Additive storyboard references point to manifest-declared assets; v2 gate and production preflight validate those references before Remotion receives them. Existing v1 and asset-free v2 scenes retain their current paths.
 
@@ -25,7 +25,7 @@
 
 ---
 
-### Task 1: Brand profile contract and PHY logo
+### Task 1: Brand profile contract and PYH logo
 
 **Files:**
 - Create: `src/healthvideo/domain/brand.py`
@@ -38,7 +38,7 @@
 - Create: `schemas/brand.schema.json` through the exporter
 
 **Interfaces:**
-- Produces: `BrandProfile`, `BrandColors`, `MascotPose`, `LogoVariant`, `load_brand_profile(path: Path) -> BrandProfile`, and `render_phy_logo(brand: BrandProfile, variant: LogoVariant) -> bytes`.
+- Produces: `BrandProfile`, `BrandColors`, `MascotPose`, `LogoVariant`, `load_brand_profile(path: Path) -> BrandProfile`, and `render_pyh_logo(brand: BrandProfile, variant: LogoVariant) -> bytes`.
 - Consumes: `read_yaml(Path)` and Pydantic v2 conventions already used by domain models.
 
 - [ ] **Step 1: Write failing brand-profile tests**
@@ -87,8 +87,8 @@ intro/outro fields.
 ```python
 @pytest.mark.parametrize("variant", list(LogoVariant))
 def test_phy_logo_is_safe_and_deterministic(brand: BrandProfile, variant: LogoVariant) -> None:
-    first = render_phy_logo(brand, variant)
-    assert first == render_phy_logo(brand, variant)
+    first = render_pyh_logo(brand, variant)
+    assert first == render_pyh_logo(brand, variant)
     assert first.endswith(b"\n")
     assert b"<script" not in first
     assert b"<filter" not in first
@@ -98,19 +98,19 @@ def test_phy_logo_is_safe_and_deterministic(brand: BrandProfile, variant: LogoVa
 
 
 def test_logo_variants_have_distinct_geometry(brand: BrandProfile) -> None:
-    assert len({render_phy_logo(brand, item) for item in LogoVariant}) == 3
+    assert len({render_pyh_logo(brand, item) for item in LogoVariant}) == 3
 ```
 
 - [ ] **Step 5: Run logo tests and confirm RED**
 
 Run: `python -m pytest tests/visuals/test_brand.py -q`
 
-Expected: FAIL because `render_phy_logo` is missing.
+Expected: FAIL because `render_pyh_logo` is missing.
 
 - [ ] **Step 6: Implement font-free P/H/Y-check geometry**
 
 Construct the wordmark from paths and primitive shapes. Give safe internal IDs
-such as `phy-p-bubble`, `phy-h-plus`, and `phy-y-check`; never emit forbidden
+such as `pyh-p-bubble`, `pyh-h-plus`, and `pyh-y-check`; never emit forbidden
 motif IDs. Serialize fixed strings in stable order and use only colors read from
 `BrandProfile`.
 
@@ -126,7 +126,7 @@ Expected: PASS.
 
 ```powershell
 git add profiles/brand.vi.yaml schemas/brand.schema.json src/healthvideo/domain/brand.py src/healthvideo/visuals/brand.py tests/domain/test_brand.py tests/visuals/test_brand.py tests/contracts/test_schemas.py tools/export_schemas.py
-git commit -m "feat: define the PHY visual identity"
+git commit -m "feat: define the PYH visual identity"
 ```
 
 ---
@@ -222,7 +222,7 @@ Expected: PASS.
 
 ```powershell
 git add src/healthvideo/visuals tests/visuals
-git commit -m "feat: generate fixed PHY visual assets"
+git commit -m "feat: generate fixed PYH visual assets"
 ```
 
 ---
@@ -351,11 +351,11 @@ def test_create_mascot_reaction_registers_decorative_declared_asset(project_v2: 
     result = create_mascot_reaction_asset(
         project_v2,
         scene_id="S01",
-        asset_name="phy-guide-welcome",
+        asset_name="pyh-guide-welcome",
         pose=MascotPose.WELCOME,
     )
     manifest = load_asset_manifest(active_revision(project_v2) / "assets/asset-manifest.yaml")
-    record = next(item for item in manifest.assets if item.path.endswith("phy-guide-welcome.svg"))
+    record = next(item for item in manifest.assets if item.path.endswith("pyh-guide-welcome.svg"))
     assert result.is_file()
     assert record.kind is AssetKind.MASCOT_REACTION
     assert record.semantic is False
@@ -423,7 +423,7 @@ Expected: PASS.
 
 ```powershell
 git add src/healthvideo/workflows/visual_assets.py src/healthvideo/workflows/gate_review.py tests/workflows/test_visual_assets.py tests/workflows/test_gate_review.py
-git commit -m "feat: register review-safe PHY visuals"
+git commit -m "feat: register review-safe PYH visuals"
 ```
 
 ---
@@ -526,7 +526,7 @@ Expected: PASS.
 
 ```powershell
 git add src/healthvideo/workflows/produce.py tests/workflows/test_produce.py video/src
-git commit -m "feat: render declared PHY visual assets"
+git commit -m "feat: render declared PYH visual assets"
 ```
 
 ---
@@ -544,7 +544,7 @@ git commit -m "feat: render declared PHY visual assets"
 
 - [ ] **Step 1: Update README and progress ledger**
 
-Record the PHY logo/palette, non-clinical navy–teal mascot, three poses,
+Record the PYH logo/palette, non-clinical navy–teal mascot, three poses,
 decorative reaction versus semantic annotation, declared-only Remotion path, and
 the M6.4–M6.6 exclusions. Use measured test counts only after final commands run.
 
@@ -603,7 +603,7 @@ and resubmit. Do not commit implementation completion until ChatGPT returns
 
 ```powershell
 git add README.md .superpowers/sdd/2026-09-12-pyh-operator-experience/progress.md profiles schemas src tests tools video
-git commit -m "feat: add the PHY visual identity and mascot"
+git commit -m "feat: add the PYH visual identity and mascot"
 ```
 
 - [ ] **Step 10: Confirm the worktree is clean**
