@@ -25,8 +25,8 @@ def record(path: str, data: bytes, revision: Path, kind: AssetKind) -> AssetReco
             AssetKind.DATA_CHART,
         },
         sha256=sha256(data).hexdigest(),
-        source="built_in:phy",
-        license="PHY internal",
+        source="built_in:pyh",
+        license="PYH internal",
         creator="Protect Your Health",
         revision="001",
     )
@@ -164,11 +164,13 @@ def test_storyboard_asset_resolver_keeps_legacy_unowned_records_compatible(
     tmp_path: Path,
 ) -> None:
     legacy = record(
-        "assets/legacy.svg", b"<svg/>", tmp_path, AssetKind.MASCOT_REACTION
-    )
+        "assets/phy-logo.svg", b"<svg/>", tmp_path, AssetKind.MASCOT_REACTION
+    ).model_copy(update={"source": "built_in:phy-logo", "license": "PHY internal"})
+    before = legacy.model_dump(mode="json")
     assert referenced_storyboard_assets(
         tmp_path, Storyboard(title="PYH"), AssetManifest(assets=(legacy,))
     ) == {}
+    assert legacy.model_dump(mode="json") == before
 
 
 def test_chart_role_requires_semantic_owned_data_chart_and_chart_scene(
