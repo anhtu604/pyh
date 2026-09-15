@@ -255,6 +255,15 @@ def test_m66_ai_clip_through_both_manual_gates_and_disclosed_package(
     assert (ai_scene["visual"], ai_scene["duration_frames"], ai_scene["visual_assets"]) == (
         "ai_clip", 180, [{"path": "assets/ai-clips/S02.mp4", "role": "ai_clip", "pose": None}]
     )
+    ai_renderer = (
+        Path(__file__).parents[2] / "video/src/scenes/AiClipScene.tsx"
+    ).read_text(encoding="utf-8")
+    assert ai_renderer.count("<OffthreadVideo") == 1
+    assert "muted" in ai_renderer
+    for forbidden_playback_prop in (
+        "loop=", "playbackRate=", "trimBefore=", "trimAfter=", "volume=",
+    ):
+        assert forbidden_playback_prop not in ai_renderer
     qa = json.loads((revision / "reviews/video-qa.json").read_text(encoding="utf-8"))
     assert qa["composition_duration_ms"] == 63000 and qa["audio_duration_ms"] > 0
     assert qa["visual_budget"]["category_frames"] == {

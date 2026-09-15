@@ -13,7 +13,7 @@ from healthvideo.tts.silent import SilentTTS
 from healthvideo.workflows.gate_review import approve_gate
 from healthvideo.workflows.package import package_project
 from healthvideo.workflows.produce import produce_project
-from tests.helpers import create_v2_project_fixture
+from tests.helpers import create_project_fixture, create_v2_project_fixture
 from tests.workflows.test_gate_review import _author_ai_clip, _create_ai_project
 
 NOW = datetime(2026, 9, 12, 8, 0, tzinfo=UTC)
@@ -119,6 +119,17 @@ def test_v2_package_rejects_render_input_changed_during_copy(
 ZERO_AI_PAYLOAD = {
     "video.mp4", "caption.txt", "sources.md", "manifest.json", "render-input.json",
 }
+
+
+def test_v1_package_keeps_exact_legacy_payload_without_disclosure(tmp_path: Path) -> None:
+    output = package_project(
+        create_project_fixture(tmp_path, state="approved_to_publish")
+    )
+
+    assert {path.name for path in output.iterdir()} == ZERO_AI_PAYLOAD
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+    assert set(manifest["payload_sha256"]) == ZERO_AI_PAYLOAD - {"manifest.json"}
+    assert not (output / "ai-disclosure.json").exists()
 
 
 def test_v2_zero_ai_package_keeps_exact_payload_without_disclosure(tmp_path: Path) -> None:
