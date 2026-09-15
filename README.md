@@ -97,8 +97,8 @@ claim–source–marker hợp lệ. Remotion chỉ render asset đã khai báo q
 Scene cũ không có trường này vẫn giữ fallback hiện tại. M6.4 đã hoàn tất.
 M6.5 complete (acceptance và C2C review DONE): storyboard `m6_5_v1`
 cưỡng chế ngân sách visual theo frame ở medical gate và production, QA ghi report
-tái tính được, chart dùng SVG `DATA_CHART` đã bind. M6.6 đã triển khai đủ sáu lát
-và qua acceptance cục bộ nhưng **chưa complete** vì chưa nhận C2C DONE: Veo chỉ
+tái tính được, chart dùng SVG `DATA_CHART` đã bind. M6.6 complete sau acceptance
+toàn bộ và C2C review DONE cho cả sáu lát: Veo chỉ
 chạy khi operator opt-in trước medical gate; production chỉ stage đúng bytes AI
 clip đã được medical approval bao phủ, không gọi provider; Remotion render clip
 muted; gói đăng thủ công có `ai-disclosure.json` khi có AI. Hai cổng duyệt và
@@ -201,7 +201,7 @@ applicability, per-claim doctor notes — hoãn sang M3).
 | M6.6 Task 3 | Medical gate phục hồi intent AI hợp lệ, kiểm ownership/citation/quyền và đưa mọi AI clip kể cả decorative vào review hash; packet hiển thị classification, provider/model/duration/hash prefix/quyền (đã escape) mà không lộ prompt hoặc runtime secret. Review độc lập bổ sung test từ chối ledger thiếu/lệch, citation tới nguồn không tồn tại, decorative mang claim, và stale khi sửa prompt/classification/quyền/binding. | Complete; C2C review iteration 2 DONE | 60 gate/packet/authoring tests (mutation check: bỏ citation AI làm 2 test fail); Ruff; `git diff --check` | `feat: bind AI clips to medical review`; `test: cover AI clip medical gate refusals` |
 | M6.6 Task 4 | Production chạy recovery AI rồi kiểm approval hash (bytes/provenance/quyền), resolver role/ownership và duration scene khớp provenance trước TTS/render; bỏ lỗi "unsupported until M6.6"; stage đúng bytes đã duyệt, hash vào render manifest/cache; không gọi provider. Render input/Zod: `ai_clip` chỉ nằm trong scene `ai_clip`, tối đa một, đúng một ở `m6_5_v1`, 120/180/240 frame. `AiClipScene` dùng `OffthreadVideo` muted qua `staticFile` một lần, không loop/trim/playback rate; overlay ảnh bỏ qua `ai_clip`. Zero-AI và legacy giữ nguyên. | Complete; C2C review iteration 1 DONE | 86 focused Python tests; 33 video tests; typecheck | `feat: render approved AI clips` |
 | M6.6 Task 5 | Package v2 sinh `ai-disclosure.json` (schema 1.0, `contains_ai`, scene/path/provider/model/classification, hướng dẫn bật nhãn AI khi đăng thủ công) từ storyboard và asset manifest đã được medical approval hash, không chứa prompt/project/token, và đưa hash vào `manifest.json`; zero-AI giữ đúng payload cũ, không có file. E2E AI: fake transport + bytes dưới `tmp_path` → medical gate → production không gọi provider, stage đúng clip, hook frame 0, không intro, outro/logo pin, 63 s @30 fps, budget 1260/450/180 → video gate → package; đúng hai approval, state dừng ở `packaged`, không đăng. Review iteration 1 bổ sung exact payload cho v1 và assertion E2E rằng renderer AI dùng một `OffthreadVideo` muted, không loop/trim/rate/volume. | Complete; C2C review iteration 2 DONE | 37 focused package/review/E2E tests; Ruff; `git diff --check` | `feat: package AI disclosure guidance`; `test: strengthen M6.6 package compatibility` |
-| M6.6 Task 6 | Acceptance M6.6: rà toàn bộ commit M6.6 không có media/model/cache/credential hay Google project ID thật; media được track chỉ là icon skill Remotion có trước M6.6. Không test nào gọi provider thật; CLI/Veo test inject token/HTTP giả. `produce`/`package`/`render` không import `video_ai` hay gọi generation. `GateKind` chỉ có `medical`/`video`; package dừng ở `packaged`, `published_manual` vẫn là bước thủ công. MP4 AI dưới `projects/**/assets/ai-clips/` và `workflow/staged-ai-clips/` đã có test `git check-ignore`. | Implemented; refreshed local acceptance passed; awaiting C2C review — M6.6 chưa complete | `python -m pytest -q` (831 passed); `python -m ruff check src tests tools`; `python tools/export_schemas.py` hai lần không diff; `corepack pnpm --dir video test` (33 passed); `corepack pnpm --dir video typecheck`; `git diff --check` | `docs: record M6.6 acceptance` |
+| M6.6 Task 6 | Acceptance M6.6: rà toàn bộ commit M6.6 không có media/model/cache/credential hay Google project ID thật; media được track chỉ là icon skill Remotion có trước M6.6. Không test nào gọi provider thật; CLI/Veo test inject token/HTTP giả. `produce`/`package`/`render` không import `video_ai` hay gọi generation. `GateKind` chỉ có `medical`/`video`; package dừng ở `packaged`, `published_manual` vẫn là bước thủ công. MP4 AI dưới `projects/**/assets/ai-clips/` và `workflow/staged-ai-clips/` đã có test `git check-ignore`. | Complete; C2C review iteration 1 DONE — M6.6 complete | `python -m pytest -q` (831 passed); `python -m ruff check src tests tools`; `python tools/export_schemas.py` hai lần không diff; `corepack pnpm --dir video test` (33 passed); `corepack pnpm --dir video typecheck`; `git diff --check` | `docs: record M6.6 acceptance`; `docs: refresh M6.6 acceptance review status` |
 
 ## Kiến trúc
 
@@ -335,7 +335,7 @@ Ngày chạy acceptance M6.6 cục bộ: **15-09-2026** trên `codex/m1-workflow
 `python -m pytest -q` (831 passed); `python -m ruff check src tests tools`;
 `python tools/export_schemas.py` hai lần không đổi schema; `corepack pnpm --dir video
 test` (33 passed) và `typecheck`; `git diff --check`. Không gọi Veo/provider thật;
-M6.6 chờ C2C review DONE.
+M6.6 complete; Task 3/5 C2C DONE ở iteration 2, Task 4/6 DONE ở iteration 1.
 
 Ngày chạy M2 gần nhất: **11-09-2026**. `python -m pytest -q` (407 passed);
 `python -m ruff check src tests tools`; `git diff --check`. Golden v1 giữ nguyên 100%
