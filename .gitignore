@@ -13,6 +13,8 @@ tests/fixtures/**/renders/
 tests/fixtures/**/publish/
 projects/**/audio/
 projects/**/renders/
+projects/**/assets/ai-clips/
+projects/**/workflow/staged-ai-clips/
 projects/**/publish/
 projects/**/source-documents/
 projects/**/reviews/*.html
