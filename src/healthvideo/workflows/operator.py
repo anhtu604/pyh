@@ -8,6 +8,7 @@ from pathlib import Path
 
 from healthvideo.domain.project import ProjectManifest
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
+from healthvideo.storage.lease import read_write_lease
 from healthvideo.storage.project_layout import ProjectLayout, resolve_project_layout
 
 
@@ -282,13 +283,24 @@ def get_next_action(project_dir: Path) -> OperatorAction:
 def render_status(project_dir: Path) -> str:
     """Render a stable, read-only text status for a project."""
     action = get_next_action(project_dir)
+    lease = read_write_lease(project_dir)
     artifact = str(action.artifact) if action.artifact is not None else "none"
-    return "\n".join(
-        (
+    lines = [
             f"Project: {action.project_dir}",
             f"Next action: {action.kind.value}",
             f"Message: {action.message}",
             f"Artifact: {artifact}",
             f"Suggested command: {action.suggested_command}",
+    ]
+    if lease is not None:
+        lines.extend(
+            [
+                "Writer: busy",
+                f"Writer host: {lease.host_id}",
+                f"Writer PID: {lease.pid}",
+                f"Writer operation: {lease.operation}",
+            ]
         )
-    ) + "\n"
+    else:
+        lines.append("Writer: idle")
+    return "\n".join(lines) + "\n"

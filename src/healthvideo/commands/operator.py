@@ -13,8 +13,10 @@ import typer
 from healthvideo.domain.author import AuthorBrief
 from healthvideo.domain.topic import TopicCard
 from healthvideo.storage.files import read_yaml
+from healthvideo.storage.lease import read_write_lease
 from healthvideo.workflows.author import save_author_brief
 from healthvideo.workflows.create_project_v2 import create_project_v2
+from healthvideo.workflows.operations import project_mutation
 from healthvideo.workflows.operator import get_next_action, render_status
 from healthvideo.workflows.topic import select_topic
 
@@ -45,7 +47,15 @@ def status(
     try:
         if json_output:
             action = get_next_action(project_dir)
-            typer.echo(json.dumps(asdict(action), ensure_ascii=False, default=str))
+            payload = asdict(action)
+            lease = read_write_lease(project_dir)
+            payload["busy"] = lease is not None
+            payload["writer"] = (
+                {"host_id": lease.host_id, "pid": lease.pid, "operation": lease.operation}
+                if lease is not None
+                else None
+            )
+            typer.echo(json.dumps(payload, ensure_ascii=False, default=str))
         else:
             typer.echo(render_status(project_dir))
     except (OSError, TypeError, ValueError) as error:
@@ -54,6 +64,7 @@ def status(
 
 
 @app.command("select")
+@project_mutation("operator_select")
 def select(
     project_dir: Annotated[Path, typer.Argument(help="Thư mục project")],
     file: Annotated[Path, typer.Option("--file", help="Topic card YAML")],
@@ -69,6 +80,7 @@ def select(
 
 
 @app.command("brief")
+@project_mutation("operator_brief")
 def brief(
     project_dir: Annotated[Path, typer.Argument(help="Thư mục project")],
     title: Annotated[str, typer.Option("--title")],

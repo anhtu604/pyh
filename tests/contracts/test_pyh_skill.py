@@ -37,3 +37,12 @@ def test_pyh_second_model_review_waits_for_real_response_and_keeps_doctor_gates(
     assert "agent review-complete" in skill
     assert "response.yaml" in skill
     assert "không thay thế hai cổng duyệt" in skill
+
+
+def test_pyh_reports_busy_projects_and_never_steals_a_lease_by_time() -> None:
+    skill = Path(".agents/skills/pyh/SKILL.md").read_text(encoding="utf-8")
+    assert "healthvideo lease inspect" in skill
+    assert "healthvideo lease recover" in skill
+    assert "--allow-foreign-host" in skill
+    assert "TTL" in skill
+    assert "không tự" in skill

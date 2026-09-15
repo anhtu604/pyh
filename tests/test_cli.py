@@ -1,5 +1,6 @@
 import shutil
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -8,8 +9,10 @@ from typer.testing import CliRunner
 from healthvideo import __version__
 from healthvideo.cli import app, main
 from healthvideo.domain.evidence import CandidateSource
+from healthvideo.domain.lease import LeaseOwner
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
+from healthvideo.storage.lease import acquire_write_lease
 from healthvideo.tts.silent import SilentTTS
 from healthvideo.workflows.ai_clips import AIClipRights
 from healthvideo.workflows.doctor import CheckResult
@@ -59,6 +62,97 @@ def test_operator_help_preserves_existing_cli_commands() -> None:
     assert result.exit_code == 0
     for name in ("operator", "project", "review", "topic", "evidence", "produce", "package"):
         assert name in result.stdout
+
+
+def test_mutating_cli_refuses_busy_project_but_status_remains_read_only(tmp_path) -> None:
+    from healthvideo.domain.topic import TopicCard
+
+    project = create_v2_project_fixture(tmp_path)
+    card_file = tmp_path / "card.yaml"
+    write_yaml_atomic(
+        card_file,
+        TopicCard(
+            slug="muoi",
+            title="Muối",
+            question="Muối ảnh hưởng sức khỏe?",
+            synthetic_test_record=True,
+        ).model_dump(mode="json"),
+    )
+    handle = acquire_write_lease(
+        project,
+        operation="holder",
+        active_revision="001",
+        owner=LeaseOwner(
+            host_id="other-host", pid=999, process_start_fingerprint="other-start"
+        ),
+        now=datetime.now(tz=UTC),
+        ttl_seconds=60,
+    )
+    before = (project / "project.yaml").read_bytes()
+
+    blocked = runner.invoke(
+        app, ["topic", "select", str(project), "--file", str(card_file)]
+    )
+    readable = runner.invoke(app, ["operator", "status", str(project), "--json"])
+
+    assert blocked.exit_code == 1
+    assert "busy" in blocked.stdout.lower()
+    assert (project / "project.yaml").read_bytes() == before
+    assert readable.exit_code == 0, readable.stdout
+    assert '"busy": true' in readable.stdout.lower()
+    assert "other-host" in readable.stdout
+    handle.release()
+
+
+def test_lease_inspect_and_explicit_foreign_recovery(tmp_path) -> None:
+    project = create_v2_project_fixture(tmp_path)
+    handle = acquire_write_lease(
+        project,
+        operation="holder",
+        active_revision="001",
+        owner=LeaseOwner(
+            host_id="other-host", pid=999, process_start_fingerprint="other-start"
+        ),
+        now=datetime(2026, 9, 15, 8, 0, tzinfo=UTC),
+        ttl_seconds=60,
+    )
+
+    inspected = runner.invoke(app, ["lease", "inspect", str(project)])
+    refused = runner.invoke(app, ["lease", "recover", str(project)])
+    recovered = runner.invoke(
+        app, ["lease", "recover", str(project), "--allow-foreign-host"]
+    )
+
+    assert inspected.exit_code == 0, inspected.stdout
+    assert "holder" in inspected.stdout
+    assert "other-host" in inspected.stdout
+    assert str(project) not in inspected.stdout
+    assert refused.exit_code == 1
+    assert "foreign-host" in refused.stdout
+    assert recovered.exit_code == 0, recovered.stdout
+    assert handle.lease_id not in recovered.stdout
+    assert not (project / ".healthvideo" / "write-lease.yaml").exists()
+    assert list((project / ".healthvideo" / "stale-leases").glob("*.yaml"))
+
+
+def test_review_packet_open_remains_available_while_project_is_busy(tmp_path) -> None:
+    project = create_v2_project_fixture(tmp_path)
+    handle = acquire_write_lease(
+        project,
+        operation="holder",
+        active_revision="001",
+        owner=LeaseOwner(
+            host_id="other-host", pid=999, process_start_fingerprint="other-start"
+        ),
+        now=datetime.now(tz=UTC),
+        ttl_seconds=60,
+    )
+
+    result = runner.invoke(app, ["review", "open", str(project), "--gate", "medical"])
+
+    assert result.exit_code == 0, result.stdout
+    assert "medical-packet.html" in result.stdout
+    handle.release()
 
 
 def test_agent_review_cli_requests_and_completes_without_model_call(tmp_path) -> None:
