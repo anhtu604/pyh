@@ -11,6 +11,7 @@ from healthvideo.domain.evidence import CandidateSource
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.tts.silent import SilentTTS
+from healthvideo.workflows.ai_clips import AIClipRights
 from healthvideo.workflows.doctor import CheckResult
 from healthvideo.workflows.produce import produce_project
 from healthvideo.workflows.review import approve_medical
@@ -813,3 +814,58 @@ def test_produce_vieneu_requires_voice_and_builds_normalized_command_provider(tm
     assert "private" not in str(identity)
     assert provider.inner.arguments[-2:] == ("--precision", "int8")
     assert "--voice" in provider.inner.arguments and "Adam" in provider.inner.arguments
+
+
+def test_ai_clip_cli_requires_explicit_live_opt_in(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    token_calls: list[int] = []
+    monkeypatch.setattr(
+        "healthvideo.cli._gcloud_access_token", lambda: token_calls.append(1)
+    )
+    result = runner.invoke(
+        app,
+        [
+            "ai-clip", "generate", str(tmp_path), "--scene-id", "S04",
+            "--prompt", "Minh họa", "--duration-seconds", "4",
+            "--google-project", "cloud-project", "--location", "us-central1",
+            "--source", "source", "--creator", "creator", "--license", "terms",
+            "--rights-basis", "confirmed",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "--allow-live-generation" in result.stdout
+    assert token_calls == []
+
+
+def test_ai_clip_cli_builds_authoring_request_after_opt_in(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, object] = {}
+
+    class StubTransport:
+        def __init__(self, **kwargs: object) -> None:
+            captured["transport"] = kwargs
+
+    def stub_generate(project_dir: Path, **kwargs: object) -> Path:
+        captured["project"] = project_dir
+        captured.update(kwargs)
+        return project_dir / "revisions/001/assets/ai-clips/S04.mp4"
+
+    monkeypatch.setattr("healthvideo.cli.GoogleVeoTransport", StubTransport)
+    monkeypatch.setattr("healthvideo.cli.generate_ai_clip", stub_generate)
+    result = runner.invoke(
+        app,
+        [
+            "ai-clip", "generate", str(tmp_path), "--scene-id", "S04",
+            "--prompt", "Minh họa", "--duration-seconds", "4",
+            "--allow-live-generation", "--google-project", "cloud-project",
+            "--location", "us-central1", "--source", "source",
+            "--creator", "creator", "--license", "terms",
+            "--rights-basis", "confirmed", "--requested-seed", "9",
+        ],
+    )
+    assert result.exit_code == 0, result.stdout
+    assert captured["scene_id"] == "S04"
+    assert captured["requested_seed"] == 9
+    assert isinstance(captured["rights"], AIClipRights)

@@ -39,10 +39,12 @@ from healthvideo.tts.benchmark import (
 from healthvideo.tts.command import CommandTTS
 from healthvideo.tts.normalize import NormalizedTTS
 from healthvideo.tts.silent import SilentTTS
+from healthvideo.video_ai.veo import GoogleVeoTransport
 from healthvideo.workflows.agent_review import (
     complete_second_model_review,
     request_second_model_review,
 )
+from healthvideo.workflows.ai_clips import AIClipRights, generate_ai_clip
 from healthvideo.workflows.create_project import create_project
 from healthvideo.workflows.doctor import (
     check_environment,
@@ -108,6 +110,7 @@ topic_app = typer.Typer(no_args_is_help=True)
 evidence_app = typer.Typer(no_args_is_help=True)
 agent_app = typer.Typer(no_args_is_help=True)
 outro_app = typer.Typer(no_args_is_help=True)
+ai_clip_app = typer.Typer(no_args_is_help=True)
 app.add_typer(project_app, name="project")
 app.add_typer(review_app, name="review")
 app.add_typer(revision_app, name="revision")
@@ -116,6 +119,69 @@ app.add_typer(evidence_app, name="evidence")
 app.add_typer(operator_app, name="operator")
 app.add_typer(agent_app, name="agent")
 app.add_typer(outro_app, name="outro")
+app.add_typer(ai_clip_app, name="ai-clip")
+
+
+def _gcloud_access_token() -> str:
+    completed = subprocess.run(
+        ["gcloud", "auth", "print-access-token"],
+        check=True,
+        capture_output=True,
+        text=True,
+        shell=False,
+    )
+    token = completed.stdout.strip()
+    if not token:
+        raise ValueError("Google access token is unavailable")
+    return token
+
+
+@ai_clip_app.command("generate")
+def ai_clip_generate(
+    project_dir: Annotated[Path, typer.Argument(help="Thư mục dự án v2")],
+    scene_id: Annotated[str, typer.Option("--scene-id")],
+    prompt: Annotated[str, typer.Option("--prompt")],
+    duration_seconds: Annotated[int, typer.Option("--duration-seconds")],
+    google_project: Annotated[str, typer.Option("--google-project")],
+    location: Annotated[str, typer.Option("--location")],
+    source: Annotated[str, typer.Option("--source")],
+    creator: Annotated[str, typer.Option("--creator")],
+    license: Annotated[str, typer.Option("--license")],
+    rights_basis: Annotated[str, typer.Option("--rights-basis")],
+    allow_live_generation: Annotated[
+        bool, typer.Option("--allow-live-generation")
+    ] = False,
+    requested_seed: Annotated[int | None, typer.Option("--requested-seed")] = None,
+) -> None:
+    """Tạo một clip Veo đã yêu cầu rõ ràng trước duyệt y khoa."""
+    if not allow_live_generation:
+        typer.echo("Live AI generation requires --allow-live-generation.")
+        raise typer.Exit(code=1)
+    try:
+        transport = GoogleVeoTransport(
+            project_id=google_project,
+            location=location,
+            token_provider=_gcloud_access_token,
+        )
+        output = generate_ai_clip(
+            project_dir,
+            scene_id=scene_id,
+            prompt=prompt,
+            duration_seconds=duration_seconds,
+            requested_seed=requested_seed,
+            rights=AIClipRights(
+                source=source,
+                creator=creator,
+                license=license,
+                rights_basis=rights_basis,
+            ),
+            transport=transport,
+            now=datetime.now().astimezone(),
+        )
+    except (OSError, subprocess.SubprocessError, TypeError, ValueError) as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
+    typer.echo(str(output))
 
 
 @outro_app.command("author")
