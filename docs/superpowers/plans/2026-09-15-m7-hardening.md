@@ -105,8 +105,8 @@
 
 - [ ] Add RED domain/schema tests for canonical POSIX ordering, injected id/time, unique normalized paths, size/hash validation, and stable export for v1/v2 snapshots.
 - [ ] Add RED create tests for authoritative-file inclusion; runtime/temp/cache/secret/source-fulltext exclusions; referenced forbidden artifact refusal; active-writer refusal; immutable destination; rehash-before-promotion; interrupted copy/promotion.
-- [ ] Add RED restore tests for absolute/drive/parent paths, duplicate and case-colliding paths, symlink/junction, missing/extra/tampered entries, existing destination, invalid v1/v2 layout, and approval-binding mismatch.
-- [ ] Add RED round-trip tests proving every manifest byte is identical, active revision/state/approval hashes are unchanged, `packaged` stays `packaged`, and a stale approval remains stale.
+- [ ] Add RED restore tests for absolute/drive/parent paths, duplicate and case-colliding paths, symlink/junction, missing/extra/tampered entries, existing destination, invalid v1/v2 layout, malformed approval records, and missing artifacts referenced by an approval. Do not reject an intact approval only because its reviewed hash is stale against current project bytes.
+- [ ] Add paired RED round-trip tests proving every manifest byte is identical, active revision/state/approval hashes are unchanged, `packaged` stays `packaged`, a current approval remains current, and an intentionally stale but structurally valid approval restores successfully and remains stale.
 - [ ] Run focused tests and confirm RED.
 - [ ] Implement manifest walking with `Path`, no archive extraction, lease-held snapshot, pre/post-copy verification, new-destination staging and atomic promotion.
 - [ ] Export schemas twice; verify only the standalone backup schema changes; run focused tests, Ruff, and `git diff --check`.

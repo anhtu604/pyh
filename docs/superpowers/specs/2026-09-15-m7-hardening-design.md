@@ -84,12 +84,16 @@ tồn tại. Trước khi tạo destination, nó parse manifest đóng và kiể
   tự không portable;
 - cấm symlink, junction/reparse point và mọi entry ngoài manifest;
 - kiểm size/hash của tất cả entry, không thiếu và không thừa;
-- parse project layout v1/v2 và xác minh approval/artifact bindings hiện hành bằng
-  validator sẵn có, không làm mới approval.
+- parse project layout v1/v2; xác minh cấu trúc approval, sự hiện diện của artifact
+  được record tham chiếu và việc bảo tồn bytes, nhưng không yêu cầu approval phải
+  current.
 
-Restore copy vào staging cạnh destination, xác minh lần hai rồi atomic-promote. Nó
-không resign, migrate, produce, package, render, đổi state hay publish. Project ở
-`packaged` vẫn ở `packaged`; approval stale trước backup vẫn stale sau restore.
+Restore copy vào staging cạnh destination, xác minh lần hai rồi atomic-promote. Sau
+promotion, validator current/stale hiện có phải trả cùng kết quả như trước backup.
+Record approval malformed, artifact được record tham chiếu bị thiếu hoặc bytes lệch
+manifest đều bị từ chối; approval stale nhưng còn nguyên vẹn không phải lỗi restore.
+Restore không resign, migrate, produce, package, render, đổi state hay publish.
+Project ở `packaged` vẫn ở `packaged`; approval stale trước backup vẫn stale sau restore.
 Failure giữ nguyên snapshot, không để destination bán phần, và nêu staging nào cần
 operator xử lý nếu cleanup an toàn không thể hoàn tất.
 
