@@ -26,6 +26,7 @@ from healthvideo.domain.topic import TopicCard
 from healthvideo.evidence.clients import EuropePMCClient, PubMedClient
 from healthvideo.process import resolve_pnpm_argv
 from healthvideo.render.remotion import build_render_argv
+from healthvideo.security import audit_project
 from healthvideo.storage.files import read_yaml, write_text_atomic
 from healthvideo.storage.lease import (
     LeaseBusyError,
@@ -384,6 +385,17 @@ def main() -> None:
 def version() -> None:
     """In phiên bản healthvideo."""
     typer.echo(__version__)
+
+
+@app.command("security-audit")
+def security_audit(project_dir: Annotated[Path, typer.Argument(help="Thư mục dự án")]) -> None:
+    """Audit project bytes offline without printing sensitive values."""
+    findings = audit_project(project_dir)
+    for finding in findings:
+        typer.echo(f"{finding.rule_id}: {finding.relative_path}: {finding.reason}. {finding.remediation}")
+    if findings:
+        raise typer.Exit(code=1)
+    typer.echo("Security audit: no findings")
 
 
 @app.command()

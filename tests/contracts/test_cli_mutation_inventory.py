@@ -25,7 +25,7 @@ EXPECTED = {
     "src/healthvideo/commands/operator.py": {"select", "brief"},
 }
 READ_ONLY = {
-    "src/healthvideo/cli.py": {"status", "lease_inspect", "review_open"},
+    "src/healthvideo/cli.py": {"status", "lease_inspect", "review_open", "security_audit"},
     "src/healthvideo/commands/operator.py": {"status"},
 }
 LEASE_CONTROL = {
