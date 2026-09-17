@@ -12,3 +12,6 @@ chi tiết gốc: `2026-09-15-m7-hardening.md`, Task 5–6.
 | B4 — Acceptance và C2C | Chạy full Python/video/typecheck/schema/E2E nhiều lần, audit v1/v2, kiểm commit không có media/model/cache/credential, review C2C đến DONE. | Worktree sạch; README ghi số đo thật và M7 complete chỉ khi toàn bộ cổng đạt. |
 
 B1 chỉ là lát đầu của Task 5, không thay thế B2–B4 hoặc review độc lập.
+
+Trạng thái 17-09-2026: B1–B3 đã triển khai trên `codex/m1-workflow-kernel`;
+B4 acceptance và C2C review cuối còn mở.

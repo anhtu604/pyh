@@ -10,3 +10,7 @@
 5. Dùng `pathlib.Path` cho đường dẫn nội bộ để các lệnh chạy được trong PowerShell.
 6. Chạy các test liên quan và lint trước commit; cập nhật bảng tiến độ trong `README.md`
    trong cùng commit với thay đổi nhiệm vụ.
+7. Với một project dùng chung, đọc `docs/operations/m7-hardening-runbook.md`, chạy
+   `healthvideo doctor --project <project>` và `healthvideo security-audit <project>`
+   trước khi vận hành nhiều writer hoặc backup. Lease TTL không cho phép tự lấy
+   quyền ghi; giữ nguyên hai cổng duyệt y khoa/video và không tự động xuất bản.
