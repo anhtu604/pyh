@@ -16,6 +16,7 @@ from healthvideo.storage.files import read_yaml
 from healthvideo.storage.lease import read_write_lease
 from healthvideo.workflows.author import save_author_brief
 from healthvideo.workflows.create_project_v2 import create_project_v2
+from healthvideo.workflows.draft import submit_draft, submit_medical_review
 from healthvideo.workflows.operations import project_mutation
 from healthvideo.workflows.operator import get_next_action, render_status
 from healthvideo.workflows.topic import select_topic
@@ -102,6 +103,37 @@ def brief(
             confirm=confirm,
             now=datetime.now().astimezone(),
         )
+    except (OSError, TypeError, ValueError) as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
+    typer.echo(changed.state.value)
+
+
+@app.command("draft")
+@project_mutation("operator_draft")
+def draft(
+    project_dir: Annotated[Path, typer.Argument(help="Thư mục project")],
+    script: Annotated[Path, typer.Option("--script", help="Script YAML đã soạn")],
+    storyboard: Annotated[Path, typer.Option("--storyboard", help="Storyboard YAML đã soạn")],
+    assets: Annotated[Path, typer.Option("--assets", help="Asset manifest YAML")],
+) -> None:
+    """Validate and submit authored draft artifacts for a v2 project."""
+    try:
+        changed = submit_draft(project_dir, script, storyboard, assets)
+    except (OSError, TypeError, ValueError) as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
+    typer.echo(changed.state.value)
+
+
+@app.command("submit-medical")
+@project_mutation("operator_submit_medical")
+def submit_medical(
+    project_dir: Annotated[Path, typer.Argument(help="Thư mục project")],
+) -> None:
+    """Submit a validated draft to the doctor's medical review gate."""
+    try:
+        changed = submit_medical_review(project_dir)
     except (OSError, TypeError, ValueError) as error:
         typer.echo(str(error))
         raise typer.Exit(code=1) from error

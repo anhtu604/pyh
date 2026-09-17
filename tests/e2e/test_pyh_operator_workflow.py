@@ -15,13 +15,13 @@ from healthvideo.domain.invalidation import (
     InvalidationLevel,
     evaluate_invalidation,
 )
-from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
-from healthvideo.domain.state_graph import TransitionContext, transition_v2
+from healthvideo.domain.project_v2 import WorkflowState
 from healthvideo.domain.topic import TopicCard
-from healthvideo.storage.files import canonical_json_hash, read_yaml, write_yaml_atomic
+from healthvideo.storage.files import read_yaml
 from healthvideo.tts.silent import SilentTTS
 from healthvideo.workflows.author import save_author_brief
 from healthvideo.workflows.create_project_v2 import create_project_v2
+from healthvideo.workflows.draft import submit_draft, submit_medical_review
 from healthvideo.workflows.evidence import build_evidence_ledger, record_question
 from healthvideo.workflows.gate_review import approve_gate
 from healthvideo.workflows.operator import OperatorActionKind, get_next_action
@@ -67,26 +67,14 @@ def test_pyh_golden_stops_at_both_human_gates(tmp_path: Path) -> None:
         [SourceRecord.model_validate(item) for item in frozen_ledger["records"]],
         now=FROZEN,
     )
-    for directory in ("script", "storyboard", "assets"):
-        shutil.copytree(SOURCE / directory, revision / directory, dirs_exist_ok=True)
-    manifest_path = project / "project.yaml"
-    manifest = ProjectManifestV2.model_validate(read_yaml(manifest_path))
-    context = TransitionContext(
-        active_revision="001",
-        current_input_hash=canonical_json_hash(
-            read_yaml(revision / "script" / "script.yaml")
-        ),
-        validated_artifacts=frozenset(
-            {
-                "script/script.yaml",
-                "storyboard/storyboard.yaml",
-                "assets/asset-manifest.yaml",
-            }
-        ),
+    shutil.copy2(SOURCE / "assets" / "evidence-r01.svg", revision / "assets")
+    submit_draft(
+        project,
+        SOURCE / "script/script.yaml",
+        SOURCE / "storyboard/storyboard.yaml",
+        SOURCE / "assets/asset-manifest.yaml",
     )
-    manifest = transition_v2(manifest, WorkflowState.DRAFT_READY, context)
-    manifest = transition_v2(manifest, WorkflowState.AWAITING_MEDICAL_REVIEW, context)
-    write_yaml_atomic(manifest_path, manifest.model_dump(mode="json"))
+    submit_medical_review(project)
 
     assert "Gói duyệt y khoa" in render_medical_packet(revision)
     assert get_next_action(project).kind is OperatorActionKind.AWAIT_MEDICAL_APPROVAL
