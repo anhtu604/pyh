@@ -19,7 +19,8 @@ from healthvideo.workflows.backup import is_backup_excluded, validate_project_tr
 
 _SENSITIVE_KEYS = re.compile(
     r"(?:access[_-]?token|api[_-]?key|client[_-]?secret|password|private[_-]?key|"
-    r"authorization|raw[_-]?(?:provider[_-]?)?response|cloud[_-]?project[_-]?id)",
+    r"authorization|raw[_-]?(?:provider[_-]?)?response|cloud[_-]?project[_-]?id|"
+    r"(?:^|[_-])(?:token|secret)$)",
     re.IGNORECASE,
 )
 _RISKY_SUFFIXES = {".mp3", ".mp4", ".wav", ".mov", ".pem", ".key", ".p12", ".pfx", ".safetensors", ".onnx", ".gguf"}
@@ -122,10 +123,13 @@ def audit_project(project_dir: Path) -> tuple[AuditFinding, ...]:
             findings.append(AuditFinding("commit-risk", display, "Sensitive or generated artifact is not confirmed Git-ignored", "Move it outside Git or add a precise ignore rule."))
         if is_backup_excluded(relative) and path.name.casefold().startswith(".env"):
             findings.append(AuditFinding("credential-path", display, "Credential file is present in project", "Keep credentials outside the project directory."))
+        if re.search(r"(?:^|[-_])provider[-_]response\.(?:json|ya?ml)$", path.name, re.IGNORECASE):
+            findings.append(AuditFinding("raw-provider-response", display, "Raw provider response is present in project", "Remove raw provider output and retain only reviewed typed artifacts."))
         if path.suffix.casefold() not in {".json", ".yaml", ".yml"} or is_backup_excluded(relative):
             continue
         try:
             if path.stat().st_size > 2_000_000:
+                findings.append(AuditFinding("typed-artifact", display, "Typed artifact exceeds audit inspection limit", "Review the file size and remove or split the artifact."))
                 continue
             content = path.read_text(encoding="utf-8")
             payload = json.loads(content) if path.suffix.casefold() == ".json" else yaml.safe_load(content)

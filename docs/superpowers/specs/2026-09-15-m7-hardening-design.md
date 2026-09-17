@@ -1,7 +1,7 @@
 # M7 — Hardening vận hành và phục hồi
 
 **Ngày:** 15-09-2026  
-**Trạng thái:** Đề xuất; chờ C2C review độc lập trước implementation
+**Trạng thái:** M7 complete; acceptance đạt và C2C review vòng 2 trả `DONE`.
 
 ## 1. Mục tiêu và ranh giới
 

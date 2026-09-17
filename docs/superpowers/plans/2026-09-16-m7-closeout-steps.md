@@ -13,5 +13,5 @@ chi tiết gốc: `2026-09-15-m7-hardening.md`, Task 5–6.
 
 B1 chỉ là lát đầu của Task 5, không thay thế B2–B4 hoặc review độc lập.
 
-Trạng thái 17-09-2026: B1–B3 đã triển khai trên `codex/m1-workflow-kernel`;
-B4 acceptance và C2C review cuối còn mở.
+Trạng thái 17-09-2026: B1–B4 hoàn thành trên `codex/m1-workflow-kernel`;
+acceptance đạt và C2C review vòng 2 trả `DONE`.

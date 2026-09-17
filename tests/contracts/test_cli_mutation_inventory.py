@@ -51,3 +51,12 @@ def test_every_project_cli_command_is_classified_and_mutations_are_guarded() -> 
         for name in expected_mutations:
             decorators = {ast.unparse(item) for item in commands[name].decorator_list}
             assert any(item.startswith("project_mutation(") for item in decorators), name
+        for name in READ_ONLY[relative]:
+            calls = {
+                ast.unparse(node.func)
+                for node in ast.walk(commands[name])
+                if isinstance(node, ast.Call)
+            }
+            assert not calls.intersection(
+                {"write_text_atomic", "write_yaml_atomic", "write_json_atomic"}
+            ), name

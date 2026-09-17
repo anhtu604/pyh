@@ -1,3 +1,4 @@
+import ast
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -6,6 +7,7 @@ from healthvideo.cli import app
 from healthvideo.domain.gate_review import GateKind
 from healthvideo.domain.project import ProjectState
 from healthvideo.security import audit_project
+from healthvideo.workflows.backup import is_backup_excluded
 from tests.helpers import create_project_fixture, create_v2_project_fixture
 
 
@@ -82,3 +84,53 @@ def test_unignored_generated_media_is_reported(tmp_path: Path, monkeypatch) -> N
 
 def test_gate_contract_remains_two_human_gates() -> None:
     assert {kind.value for kind in GateKind} == {"medical", "video"}
+
+
+def test_audit_rejects_generic_token_and_raw_provider_response(tmp_path: Path) -> None:
+    project = create_v2_project_fixture(tmp_path / "source")
+    typed = project / "revisions/001/evidence/provider-response.json"
+    typed.write_text('{"token":"private-secret-value","data":"raw"}', encoding="utf-8")
+    findings = audit_project(project)
+    assert {item.rule_id for item in findings} >= {"credential-field", "raw-provider-response"}
+    assert "private-secret-value" not in repr(findings)
+
+
+def test_backup_exclusion_policy_is_pinned_independently() -> None:
+    for relative in (
+        ".healthvideo/write-lease.yaml", ".env", "cache/provider.json",
+        "source-documents/fulltext.pdf", "revisions/001/assets/model.onnx",
+        "revisions/001/renders/video.mp4.tmp",
+    ):
+        assert is_backup_excluded(relative), relative
+    for relative in (
+        "project.yaml", "revisions/001/reviews/medical-approval.yaml",
+        "revisions/001/workflow/pending-ai-clip-generation.yaml",
+        "revisions/001/workflow/staged-ai-clips/scene.mp4",
+    ):
+        assert not is_backup_excluded(relative), relative
+
+
+def test_oversized_typed_artifact_fails_closed(tmp_path: Path) -> None:
+    project = create_v2_project_fixture(tmp_path / "source")
+    typed = project / "revisions/001/evidence/large.json"
+    typed.write_bytes(b" " * 2_000_001)
+    assert any(item.rule_id == "typed-artifact" and item.relative_path.endswith("large.json") for item in audit_project(project))
+
+
+def test_production_and_package_do_not_import_provider_or_publish_clients() -> None:
+    root = Path(__file__).resolve().parents[1]
+    forbidden = {"httpx", "requests", "urllib", "selenium", "playwright", "tiktok"}
+    for relative in (
+        "src/healthvideo/workflows/produce.py",
+        "src/healthvideo/workflows/package.py",
+        "src/healthvideo/render/run.py",
+    ):
+        tree = ast.parse((root / relative).read_text(encoding="utf-8"))
+        imports = [
+            name.name for node in ast.walk(tree) if isinstance(node, ast.Import)
+            for name in node.names
+        ] + [
+            node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)
+        ]
+        assert all(name.split(".")[0] not in forbidden for name in imports), relative
+        assert all(not name.startswith("healthvideo.video_ai") for name in imports), relative

@@ -366,10 +366,6 @@ _RENDER_PACKET = {
     GateKind.MEDICAL: render_medical_packet,
     GateKind.VIDEO: render_video_packet,
 }
-_PACKET_NAME = {
-    GateKind.MEDICAL: "medical-packet.html",
-    GateKind.VIDEO: "video-packet.html",
-}
 
 
 @app.callback()
@@ -705,7 +701,7 @@ def review_reject(
 
 @review_app.command("open")
 def review_open(project_dir: ProjectDir, gate: Gate) -> None:
-    """Render gói HTML duyệt hiện tại và in đường dẫn; không tự mở trình duyệt."""
+    """In gói HTML duyệt hiện tại ra stdout, không ghi vào dự án."""
     try:
         manifest = ProjectManifestV2.model_validate(
             read_yaml(project_dir / "project.yaml")
@@ -715,9 +711,7 @@ def review_open(project_dir: ProjectDir, gate: Gate) -> None:
     except (FileNotFoundError, TypeError, ValueError) as error:
         typer.echo(str(error))
         raise typer.Exit(code=1) from error
-    packet_path = revision_root / "reviews" / _PACKET_NAME[gate]
-    write_text_atomic(packet_path, html)
-    typer.echo(str(packet_path))
+    typer.echo(html)
 
 
 @review_app.command("resume")

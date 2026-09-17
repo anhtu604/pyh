@@ -167,10 +167,21 @@ def test_review_packet_open_remains_available_while_project_is_busy(tmp_path) ->
         ttl_seconds=60,
     )
 
+    before = {
+        path.relative_to(project): path.read_bytes()
+        for path in project.rglob("*")
+        if path.is_file()
+    }
     result = runner.invoke(app, ["review", "open", str(project), "--gate", "medical"])
+    after = {
+        path.relative_to(project): path.read_bytes()
+        for path in project.rglob("*")
+        if path.is_file()
+    }
 
     assert result.exit_code == 0, result.stdout
-    assert "medical-packet.html" in result.stdout
+    assert "<html" in result.stdout.lower()
+    assert after == before
     handle.release()
 
 
@@ -588,7 +599,7 @@ def test_review_reject_then_resume_round_trip(tmp_path: Path) -> None:
     assert resume_result.exit_code == 0
 
 
-def test_review_open_writes_html_and_prints_path(tmp_path: Path) -> None:
+def test_review_open_prints_html_without_writing_project(tmp_path: Path) -> None:
     project_dir = create_v2_project_fixture(tmp_path)
 
     result = runner.invoke(
@@ -597,8 +608,8 @@ def test_review_open_writes_html_and_prints_path(tmp_path: Path) -> None:
 
     assert result.exit_code == 0
     packet_path = project_dir / "revisions" / "001" / "reviews" / "medical-packet.html"
-    assert packet_path.is_file()
-    assert str(packet_path) in result.stdout
+    assert not packet_path.exists()
+    assert "<html" in result.stdout.lower()
 
 
 def test_review_v1_commands_are_unaffected(tmp_path: Path) -> None:

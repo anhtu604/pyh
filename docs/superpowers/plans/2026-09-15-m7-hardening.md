@@ -1,5 +1,9 @@
 # M7 Hardening Implementation Plan
 
+**Trạng thái 17-09-2026:** Task 1–6 hoàn thành; acceptance và C2C review vòng 2 đạt `DONE`.
+Các checkbox gốc bên dưới là trình tự thực hiện, còn số đo và commit từng lát nằm
+trong bảng tiến độ `README.md`. M7 complete; chỉ đăng video thủ công sau hai cổng duyệt.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make project mutations single-writer on supported shared filesystems, add byte-verifiable backup/restore, process-boundary E2E coverage, and deterministic operational security checks.
