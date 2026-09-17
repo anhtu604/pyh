@@ -56,6 +56,7 @@ from healthvideo.workflows.backup import create_backup, restore_backup
 from healthvideo.workflows.create_project import create_project
 from healthvideo.workflows.doctor import (
     check_environment,
+    check_project_filesystem,
     has_mandatory_failure,
     run_command,
 )
@@ -399,9 +400,15 @@ def security_audit(project_dir: Annotated[Path, typer.Argument(help="Thư mục 
 
 
 @app.command()
-def doctor() -> None:
-    """Kiểm tra các dependency cục bộ cần để tạo video."""
+def doctor(
+    project: Annotated[
+        Path | None, typer.Option("--project", help="Kiểm tra filesystem chứa project")
+    ] = None,
+) -> None:
+    """Kiểm tra dependency và, nếu yêu cầu, khả năng ghi an toàn của filesystem."""
     results = check_environment(run_command)
+    if project is not None:
+        results.extend(check_project_filesystem(project))
     for result in results:
         status = (
             "OK" if result.ok else "WARN" if result.required == "optional" else "FAIL"

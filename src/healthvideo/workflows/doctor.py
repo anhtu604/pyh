@@ -7,6 +7,7 @@ import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from uuid import uuid4
 
 from healthvideo.process import prepare_subprocess_argv, resolve_pnpm_argv
 
@@ -53,6 +54,72 @@ def check_environment(run: RunCommand) -> list[CheckResult]:
         _font_check(),
         _cuda_check(run),
     ]
+    return results
+
+
+def _remove_owned(path: Path, marker: bytes) -> None:
+    """Never remove a probe path whose contents were replaced by another process."""
+    try:
+        if not path.is_symlink() and path.is_file() and path.read_bytes() == marker:
+            path.unlink()
+    except OSError:
+        pass
+
+
+def check_project_filesystem(project_dir: Path) -> list[CheckResult]:
+    """Probe filesystem operations needed by the project write lease.
+
+    Probes use unique files in the project directory itself, so mount points and
+    paths containing spaces are handled without a shell. A successful rename
+    checks the observable same-directory operation; it cannot prove crash-time
+    atomicity for an arbitrary remote filesystem.
+    """
+    results: list[CheckResult] = []
+    if not project_dir.is_dir() or project_dir.is_symlink():
+        return [
+            CheckResult(name, False, "project directory unavailable", "required", "Provide an existing regular project directory.")
+            for name in ("exclusive_create", "atomic_rename")
+        ]
+    marker = uuid4().hex.encode("ascii")
+    prefix = f".healthvideo-doctor-{uuid4().hex}"
+    exclusive = project_dir / f"{prefix}-exclusive.tmp"
+    source = project_dir / f"{prefix}-source.tmp"
+    destination = project_dir / f"{prefix}-destination.tmp"
+    try:
+        try:
+            with exclusive.open("x", encoding="ascii") as handle:
+                handle.write(marker.decode("ascii"))
+                handle.flush()
+                os.fsync(handle.fileno())
+            try:
+                with exclusive.open("x", encoding="ascii"):
+                    pass
+            except FileExistsError:
+                ok = exclusive.read_bytes() == marker
+            else:
+                ok = False
+            results.append(CheckResult("exclusive_create", ok, "probe passed" if ok else "unsupported", "required", "Use a filesystem with reliable exclusive file creation."))
+        except OSError:
+            results.append(CheckResult("exclusive_create", False, "unsupported", "required", "Use a filesystem with reliable exclusive file creation."))
+
+        try:
+            with source.open("x", encoding="ascii") as handle:
+                handle.write(marker.decode("ascii"))
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(source, destination)
+            ok = not source.exists() and destination.read_bytes() == marker
+            results.append(CheckResult("atomic_rename", ok, "probe passed" if ok else "unsupported", "required", "Use a filesystem with same-directory atomic rename."))
+        except OSError:
+            results.append(CheckResult("atomic_rename", False, "unsupported", "required", "Use a filesystem with same-directory atomic rename."))
+    finally:
+        for path in (exclusive, source, destination):
+            _remove_owned(path, marker)
+    if any(path.exists() or path.is_symlink() for path in (exclusive, source, destination)):
+        return [
+            CheckResult(item.name, False, "probe cleanup incomplete", item.required, "Inspect retained probe files and retry on a supported filesystem.")
+            for item in results
+        ]
     return results
 
 
