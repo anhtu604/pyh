@@ -8,6 +8,10 @@ type CaptionsProps = {
 
 const MAX_CAPTION_WORDS = 6;
 
+export const CAPTION_BACKGROUND_COLOR = '#FFFDF7';
+export const CAPTION_TEXT_COLOR = '#202124';
+export const CAPTION_ACTIVE_COLOR = '#9A3412';
+
 type CaptionWord = {
   index: number;
   text: string;
@@ -19,6 +23,34 @@ export const captionTextLength = (
   maxWidth: number,
 ): number | undefined =>
   Array.from(text).length * fontSize > maxWidth ? maxWidth : undefined;
+
+const relativeLuminance = (color: string): number => {
+  const match = /^#([0-9a-f]{6})$/i.exec(color);
+  if (!match) {
+    throw new Error(`Caption color must be a six-digit hex value: ${color}`);
+  }
+  const channels = [0, 2, 4].map((offset) =>
+    Number.parseInt(match[1].slice(offset, offset + 2), 16) / 255,
+  );
+  const linear = channels.map((channel) =>
+    channel <= 0.04045
+      ? channel / 12.92
+      : ((channel + 0.055) / 1.055) ** 2.4,
+  );
+  return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+};
+
+export const captionContrastRatio = (
+  foreground: string,
+  background: string,
+): number => {
+  const foregroundLuminance = relativeLuminance(foreground);
+  const backgroundLuminance = relativeLuminance(background);
+  return (
+    (Math.max(foregroundLuminance, backgroundLuminance) + 0.05) /
+    (Math.min(foregroundLuminance, backgroundLuminance) + 0.05)
+  );
+};
 
 export const captionRows = (
   words: readonly string[],
@@ -65,7 +97,7 @@ export const Captions: React.FC<CaptionsProps> = ({text, durationInFrames}) => {
         return (
           <text
             key={row[0]?.index}
-            fill="#202124"
+            fill={CAPTION_TEXT_COLOR}
             fontFamily="Arial, sans-serif"
             fontSize="48"
             fontWeight="700"
@@ -75,7 +107,7 @@ export const Captions: React.FC<CaptionsProps> = ({text, durationInFrames}) => {
             {...(textLength === undefined ? {} : {lengthAdjust: 'spacingAndGlyphs', textLength})}
           >
             {row.map((word, index) => (
-              <tspan fill={word.index === activeWord ? '#D97706' : undefined} key={word.index}>
+              <tspan fill={word.index === activeWord ? CAPTION_ACTIVE_COLOR : undefined} key={word.index}>
                 {word.text}{index < row.length - 1 ? ' ' : null}
               </tspan>
             ))}

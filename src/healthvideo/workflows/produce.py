@@ -22,7 +22,7 @@ from healthvideo.domain.state_graph import TransitionContext, transition_v2
 from healthvideo.domain.storyboard import Storyboard
 from healthvideo.domain.visual_budget import validate_visual_budget
 from healthvideo.render.input import audio_timing_qa, build_render_input
-from healthvideo.render.remotion import build_render_argv
+from healthvideo.render.remotion import build_render_argv, renderer_identity
 from healthvideo.render.run import (
     MANIFEST_NAME,
     OUTPUT_NAME,
@@ -101,14 +101,26 @@ def _produce_v1(
     author_profile = read_yaml(AUTHOR_PROFILE_PATH)
     provider_name = _provider_name(tts)
     asset_hashes = evidence_asset_hashes(project_dir, storyboard)
+    renderer_identity_data = renderer_identity()
     input_hash = _input_hash(
-        script, storyboard, author_profile, provider_name, asset_hashes
+        script,
+        storyboard,
+        author_profile,
+        provider_name,
+        asset_hashes,
+        renderer_identity_data,
     )
     renders_dir = renders_directory(project_dir)
     run_dir = renders_dir / input_hash
     output = run_dir / OUTPUT_NAME
     render_input = build_render_input(storyboard, audio_file="audio/narration.wav")
-    cache_valid = _run_is_valid(run_dir, input_hash, provider_name, asset_hashes)
+    cache_valid = _run_is_valid(
+        run_dir,
+        input_hash,
+        provider_name,
+        asset_hashes,
+        renderer_identity_data,
+    )
 
     if project.state is ProjectState.AWAITING_VIDEO_REVIEW:
         if not _is_active_cache(project, input_hash, cache_valid):
@@ -155,9 +167,16 @@ def _produce_v1(
                 "output": OUTPUT_NAME,
                 "provider": provider_name,
                 "asset_sha256": dict(asset_hashes),
+                "renderer_identity": renderer_identity_data,
             },
         )
-        _validate_staged_run(staging_dir, input_hash, provider_name, asset_hashes)
+        _validate_staged_run(
+            staging_dir,
+            input_hash,
+            provider_name,
+            asset_hashes,
+            renderer_identity_data,
+        )
         _promote_run(staging_dir, run_dir)
         write_yaml_atomic(
             manifest_path,
@@ -213,6 +232,7 @@ def _produce_v2(
     narration = " ".join(line.text for line in script.lines)
     provider_name = _provider_name(tts)
     provider_identity_data = provider_identity(tts)
+    renderer_identity_data = renderer_identity()
     asset_hashes = evidence_asset_hashes(layout.artifact_root, storyboard)
     visual_paths = referenced_storyboard_assets(
         layout.artifact_root,
@@ -225,10 +245,16 @@ def _produce_v2(
     input_hash = canonical_json_hash(
         {
             "production": _input_hash(
-                script, storyboard, author_profile, provider_name, asset_hashes
+                script,
+                storyboard,
+                author_profile,
+                provider_name,
+                asset_hashes,
+                renderer_identity_data,
             ),
             "pronunciation_sha256": pronunciation_sha256,
             "provider_identity": provider_identity_data,
+            "renderer_identity": renderer_identity_data,
         }
     )
     render_input = build_render_input(
@@ -243,6 +269,7 @@ def _produce_v2(
         renders_dir, input_hash, provider_name, asset_hashes,
         pronunciation_sha256=pronunciation_sha256,
         provider_identity=provider_identity_data,
+        renderer_identity=renderer_identity_data,
         require_timing=False,
     )
     if cache_valid and (require_timing or visual_budget_qa is not None):
@@ -336,6 +363,7 @@ def _produce_v2(
                 "pronunciation_version": pronunciation.version,
                 "pronunciation_sha256": pronunciation_sha256,
                 "provider_identity": provider_identity_data,
+                "renderer_identity": renderer_identity_data,
             },
         )
         _write_json_atomic(
@@ -357,6 +385,7 @@ def _produce_v2(
             staging_dir, input_hash, provider_name, asset_hashes,
             pronunciation_sha256=pronunciation_sha256,
             provider_identity=provider_identity_data,
+            renderer_identity=renderer_identity_data,
             require_timing=require_timing,
             final_frame=final_frame,
             expected_visual_budget=visual_budget_qa,
@@ -406,6 +435,7 @@ def _v2_run_is_valid(
     *,
     pronunciation_sha256: str,
     provider_identity: Mapping[str, str],
+    renderer_identity: Mapping[str, str],
     require_timing: bool = False,
     final_frame: int | None = None,
     expected_visual_budget: Mapping[str, Any] | None = None,
@@ -442,6 +472,7 @@ def _v2_run_is_valid(
         and manifest.get("asset_sha256") == dict(asset_hashes)
         and manifest.get("pronunciation_sha256") == pronunciation_sha256
         and manifest.get("provider_identity") == dict(provider_identity)
+        and manifest.get("renderer_identity") == dict(renderer_identity)
         and manifest.get("render_input_sha256")
         == canonical_json_hash(render_input)
     ):
@@ -461,6 +492,7 @@ def _validate_v2_staged_run(
     *,
     pronunciation_sha256: str,
     provider_identity: Mapping[str, str],
+    renderer_identity: Mapping[str, str],
     require_timing: bool = False,
     final_frame: int | None = None,
     expected_visual_budget: Mapping[str, Any] | None = None,
@@ -469,6 +501,7 @@ def _validate_v2_staged_run(
         staging_dir, input_hash, provider_name, asset_hashes,
         pronunciation_sha256=pronunciation_sha256,
         provider_identity=provider_identity,
+        renderer_identity=renderer_identity,
         require_timing=require_timing,
         final_frame=final_frame,
         expected_visual_budget=expected_visual_budget,
@@ -637,6 +670,7 @@ def _input_hash(
     author_profile: Mapping[str, Any],
     provider_name: str,
     asset_hashes: Mapping[str, str],
+    renderer: Mapping[str, str],
 ) -> str:
     payload = {
         "author_profile": dict(author_profile),
@@ -644,6 +678,7 @@ def _input_hash(
         "script": script.model_dump(mode="json"),
         "storyboard": storyboard.model_dump(mode="json"),
         "evidence_assets": dict(asset_hashes),
+        "renderer_identity": dict(renderer),
     }
     return canonical_json_hash(payload)
 
@@ -653,6 +688,7 @@ def _run_is_valid(
     input_hash: str,
     provider_name: str,
     asset_hashes: Mapping[str, str],
+    renderer: Mapping[str, str],
 ) -> bool:
     required_paths = (
         run_dir / "audio" / "narration.wav",
@@ -671,6 +707,7 @@ def _run_is_valid(
         and manifest.get("output") == OUTPUT_NAME
         and manifest.get("provider") == provider_name
         and manifest.get("asset_sha256") == dict(asset_hashes)
+        and manifest.get("renderer_identity") == dict(renderer)
     ):
         return False
     return all(
@@ -747,8 +784,11 @@ def _validate_staged_run(
     input_hash: str,
     provider_name: str,
     asset_hashes: Mapping[str, str],
+    renderer: Mapping[str, str],
 ) -> None:
-    if not _run_is_valid(staging_dir, input_hash, provider_name, asset_hashes):
+    if not _run_is_valid(
+        staging_dir, input_hash, provider_name, asset_hashes, renderer
+    ):
         raise ValueError("Staged production run is incomplete")
 
 
