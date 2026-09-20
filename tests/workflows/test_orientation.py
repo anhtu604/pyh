@@ -356,3 +356,26 @@ def test_no_authoritative_record_before_completion(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="no completed orientation"):
         read_authoritative_orientation(project)
+
+
+def test_changed_scope_discards_the_previous_working_candidates(
+    tmp_path: Path,
+) -> None:
+    """Sources found for an earlier question must not back a re-scoped orientation."""
+    project = _researching_project(tmp_path)
+    run_orientation_search(
+        project, [StubClient("pubmed", [_candidate()])], now=FROZEN_NOW
+    )
+
+    begin_orientation(
+        project,
+        OrientationScope(
+            topic_question="Người bệnh thận nên ăn muối thế nào?",
+            intended_audience="Người trưởng thành",
+        ),
+    )
+
+    candidate_file = project / "revisions/001/orientation/candidates.jsonl"
+    assert candidate_file.read_text(encoding="utf-8") == ""
+    with pytest.raises(ValueError, match="included candidate is missing"):
+        complete_orientation(project, _completed(project), now=FROZEN_NOW)

@@ -28,6 +28,7 @@ from healthvideo.domain.state_graph import TransitionContext, transition_v2
 from healthvideo.storage.files import (
     canonical_json_hash,
     read_yaml,
+    write_text_atomic,
     write_yaml_atomic,
 )
 from healthvideo.storage.immutable import write_yaml_once
@@ -121,7 +122,10 @@ def begin_orientation(
     scope_path = _orientation_dir(project_dir, manifest) / "scope.yaml"
     payload = {**scope.model_dump(mode="json"), "topic_input_hash": input_hash}
     if not scope_path.is_file() or read_yaml(scope_path) != payload:
+        # A re-scoped run starts from empty working output: candidates found for the
+        # previous question must never back a record bound to the new input hash.
         write_yaml_atomic(scope_path, payload)
+        _reset_working_output(scope_path.parent)
 
     if manifest.state is WorkflowState.ORIENTATION_RESEARCH_IN_PROGRESS:
         return manifest
@@ -136,6 +140,14 @@ def begin_orientation(
     )
     _write_manifest(project_dir, advanced)
     return advanced
+
+
+def _reset_working_output(orientation_dir: Path) -> None:
+    """Clear the retryable working files; completed records are never touched."""
+    for name in ("candidates.jsonl", "search-log.yaml"):
+        path = orientation_dir / name
+        if path.is_file():
+            write_text_atomic(path, "")
 
 
 def _provider_name(client: Any, index: int) -> str:
