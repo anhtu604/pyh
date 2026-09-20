@@ -136,3 +136,53 @@ def test_source_backed_context_requires_a_limitation_and_included_source() -> No
                 )
             ]
         )
+
+
+def test_orientation_collections_cannot_be_mutated_after_validation() -> None:
+    record = valid_record()
+    scope = OrientationScope(
+        topic_question="Câu hỏi",
+        intended_audience="Công chúng",
+        exclusions=["Không tư vấn cá nhân hóa"],
+    )
+
+    assert isinstance(record.included_source_ids, tuple)
+    assert isinstance(record.options, tuple)
+    assert isinstance(record.options[0].context_source_ids, tuple)
+    assert isinstance(scope.exclusions, tuple)
+    with pytest.raises(ValidationError, match="Instance is frozen"):
+        record.options += (valid_option("pubmed-9"),)  # type: ignore[misc]
+
+
+@pytest.mark.parametrize("source_id", ["!!!", "pubmed 9", "../pubmed-9"])
+def test_orientation_rejects_malformed_source_ids(source_id: str) -> None:
+    with pytest.raises(ValidationError, match="pattern"):
+        SourceBackedContext(
+            text="Bối cảnh",
+            limitation="Giới hạn",
+            source_ids=[source_id],
+        )
+
+
+def test_completed_provider_outcome_requires_positive_count() -> None:
+    with pytest.raises(ValidationError, match="positive result_count"):
+        ProviderOutcome(
+            provider="pubmed",
+            query_id="run-001",
+            status="completed",
+            result_count=0,
+        )
+
+
+def test_provider_error_summary_is_single_line_and_bounded() -> None:
+    outcome = ProviderOutcome(
+        provider="pubmed",
+        query_id="run-001",
+        status="failed",
+        failure_class="OSError",
+        error_summary=" connection" + chr(10) + "failed" + chr(0) + " " + "x" * 600,
+    )
+
+    assert "\n" not in outcome.error_summary
+    assert "\x00" not in outcome.error_summary
+    assert len(outcome.error_summary) == 500

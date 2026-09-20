@@ -1,15 +1,26 @@
 """Validated, non-decisional artifacts for pre-brief editorial orientation."""
 
 from collections.abc import Sequence
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from healthvideo.domain.evidence import CandidateSource
 
 _SHA256_HEX_PATTERN = r"^[0-9a-f]{64}$"
 _RUN_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"
 _REVISION_ID_PATTERN = r"^[0-9]{3}$"
+_SOURCE_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$"
+
+SourceId = Annotated[str, Field(pattern=_SOURCE_ID_PATTERN)]
+
+
+def _sanitize_error_summary(value: object) -> object:
+    """Keep provider errors single-line, printable, and safe to persist in YAML."""
+    if not isinstance(value, str):
+        return value
+    printable = "".join(character if character.isprintable() else " " for character in value)
+    return " ".join(printable.split())[:500]
 
 
 class OrientationScope(BaseModel):
@@ -20,8 +31,8 @@ class OrientationScope(BaseModel):
     schema_version: Literal["1.0"] = "1.0"
     topic_question: str = Field(min_length=1, max_length=1_000)
     intended_audience: str = Field(min_length=1, max_length=500)
-    scope: list[str] = Field(default_factory=list)
-    exclusions: list[str] = Field(default_factory=list)
+    scope: tuple[str, ...] = ()
+    exclusions: tuple[str, ...] = ()
 
     @model_validator(mode="after")
     def _require_nonblank_boundaries(self) -> "OrientationScope":
@@ -42,7 +53,12 @@ class ProviderOutcome(BaseModel):
     status: Literal["completed", "zero_results", "failed"]
     result_count: int | None = Field(default=None, ge=0)
     failure_class: str | None = Field(default=None, max_length=100)
-    error_summary: str | None = Field(default=None, max_length=1_000)
+    error_summary: str | None = Field(default=None, max_length=500)
+
+    @field_validator("error_summary", mode="before")
+    @classmethod
+    def _sanitize_error_summary(cls, value: object) -> object:
+        return _sanitize_error_summary(value)
 
     @model_validator(mode="after")
     def _validate_status_details(self) -> "ProviderOutcome":
@@ -59,8 +75,10 @@ class ProviderOutcome(BaseModel):
             raise ValueError("non-failed provider outcome cannot include failure details")
         elif self.status == "zero_results" and self.result_count != 0:
             raise ValueError("zero_results provider outcome requires result_count=0")
-        elif self.status == "completed" and self.result_count is None:
-            raise ValueError("completed provider outcome requires result_count")
+        elif self.status == "completed" and (
+            self.result_count is None or self.result_count <= 0
+        ):
+            raise ValueError("completed provider outcome requires positive result_count")
         return self
 
 
@@ -71,7 +89,7 @@ class SourceBackedContext(BaseModel):
 
     text: str = Field(min_length=1, max_length=2_000)
     limitation: str = Field(min_length=1, max_length=2_000)
-    source_ids: list[str] = Field(min_length=1)
+    source_ids: tuple[SourceId, ...] = Field(min_length=1)
 
     @model_validator(mode="after")
     def _require_nonblank_content(self) -> "SourceBackedContext":
@@ -90,8 +108,8 @@ class EditorialOption(BaseModel):
     id: str = Field(min_length=1, max_length=64)
     title: str = Field(min_length=1, max_length=300)
     framing: str = Field(min_length=1, max_length=2_000)
-    context_source_ids: list[str] = Field(default_factory=list)
-    questions_for_doctor: list[str] = Field(min_length=1, max_length=10)
+    context_source_ids: tuple[SourceId, ...] = ()
+    questions_for_doctor: tuple[str, ...] = Field(min_length=1, max_length=10)
 
     @model_validator(mode="after")
     def _require_nonblank_editorial_text(self) -> "EditorialOption":
@@ -112,12 +130,12 @@ class CompletedOrientation(BaseModel):
     run_id: str = Field(pattern=_RUN_ID_PATTERN)
     revision: str = Field(default="001", pattern=_REVISION_ID_PATTERN)
     topic_input_hash: str = Field(pattern=_SHA256_HEX_PATTERN)
-    included_source_ids: list[str] = Field(min_length=1)
-    context_points: list[SourceBackedContext] = Field(min_length=1)
-    unresolved_questions: list[str] = Field(default_factory=list)
-    communication_risks: list[str] = Field(default_factory=list)
-    options: list[EditorialOption]
-    provider_outcomes: list[ProviderOutcome] = Field(default_factory=list)
+    included_source_ids: tuple[SourceId, ...] = Field(min_length=1)
+    context_points: tuple[SourceBackedContext, ...] = Field(min_length=1)
+    unresolved_questions: tuple[str, ...] = ()
+    communication_risks: tuple[str, ...] = ()
+    options: tuple[EditorialOption, ...]
+    provider_outcomes: tuple[ProviderOutcome, ...] = ()
 
     @model_validator(mode="after")
     def _validate_internal_references(self) -> "CompletedOrientation":
