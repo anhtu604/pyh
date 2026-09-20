@@ -363,6 +363,8 @@ def create_v2_project_fixture(
 _V2_MAIN_SEQUENCE = [
     WorkflowState.IDEA,
     WorkflowState.TOPIC_SELECTED,
+    WorkflowState.ORIENTATION_RESEARCH_IN_PROGRESS,
+    WorkflowState.AWAITING_EDITORIAL_DIRECTION,
     WorkflowState.AUTHOR_BRIEF_READY,
     WorkflowState.RESEARCH_IN_PROGRESS,
     WorkflowState.EVIDENCE_READY,
@@ -379,6 +381,8 @@ def _advance_v2_state(project_dir: Path, state: WorkflowState) -> None:
         validated_artifacts=frozenset(
             {
                 "topic/card.yaml",
+                "orientation/scope.yaml",
+                "orientation/completed/<run_id>.yaml",
                 "author/brief.yaml",
                 "evidence/ledger.yaml",
                 "script/script.yaml",
