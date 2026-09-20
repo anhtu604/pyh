@@ -11,6 +11,7 @@ from typing import Annotated
 import typer
 
 from healthvideo.domain.author import AuthorBrief
+from healthvideo.domain.orientation import OrientationScope
 from healthvideo.domain.topic import TopicCard
 from healthvideo.storage.files import read_yaml
 from healthvideo.storage.lease import read_write_lease
@@ -19,6 +20,7 @@ from healthvideo.workflows.create_project_v2 import create_project_v2
 from healthvideo.workflows.draft import submit_draft, submit_medical_review
 from healthvideo.workflows.operations import project_mutation
 from healthvideo.workflows.operator import get_next_action, render_status
+from healthvideo.workflows.orientation import begin_orientation
 from healthvideo.workflows.topic import select_topic
 
 app = typer.Typer(no_args_is_help=True)
@@ -74,6 +76,23 @@ def select(
     try:
         card = TopicCard.model_validate(read_yaml(file))
         changed = select_topic(project_dir, card)
+    except (OSError, TypeError, ValueError) as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
+    typer.echo(changed.state.value)
+
+
+@app.command("orientation")
+@project_mutation("operator_orientation")
+def orientation(
+    project_dir: Annotated[Path, typer.Argument(help="Thư mục project")],
+    scope: Annotated[Path, typer.Option("--scope", help="Orientation scope YAML")],
+) -> None:
+    """Start or resume orientation research; it never confirms a brief or a gate."""
+    try:
+        changed = begin_orientation(
+            project_dir, OrientationScope.model_validate(read_yaml(scope))
+        )
     except (OSError, TypeError, ValueError) as error:
         typer.echo(str(error))
         raise typer.Exit(code=1) from error

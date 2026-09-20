@@ -58,7 +58,9 @@ def _v2_project(
     ("state", "kind"),
     [
         (WorkflowState.IDEA, "choose_topic"),
-        (WorkflowState.TOPIC_SELECTED, "confirm_brief"),
+        (WorkflowState.TOPIC_SELECTED, "orientation_research"),
+        (WorkflowState.ORIENTATION_RESEARCH_IN_PROGRESS, "orientation_research"),
+        (WorkflowState.AWAITING_EDITORIAL_DIRECTION, "await_editorial_direction"),
         (WorkflowState.AUTHOR_BRIEF_READY, "research"),
         (WorkflowState.RESEARCH_IN_PROGRESS, "research"),
         (WorkflowState.EVIDENCE_READY, "draft"),
@@ -144,3 +146,13 @@ def test_render_status_is_stable_and_does_not_write_project_state(tmp_path: Path
     assert "await_medical_approval" in first
     assert manifest_path.read_bytes() == before
     assert not (project_dir / "STATUS.md").exists()
+
+
+def test_editorial_direction_asks_for_the_doctors_own_words(tmp_path: Path) -> None:
+    """The boundary must invite the doctor's view, never state one on their behalf."""
+    action = get_next_action(
+        _v2_project(tmp_path, WorkflowState.AWAITING_EDITORIAL_DIRECTION)
+    )
+
+    assert "orientation" in action.message.lower()
+    assert action.artifact == tmp_path / WorkflowState.AWAITING_EDITORIAL_DIRECTION.value / "revisions/001/orientation/editorial-orientation.yaml"

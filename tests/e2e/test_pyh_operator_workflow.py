@@ -15,10 +15,9 @@ from healthvideo.domain.invalidation import (
     InvalidationLevel,
     evaluate_invalidation,
 )
-from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
-from healthvideo.domain.state_graph import TransitionContext, transition_v2
+from healthvideo.domain.project_v2 import WorkflowState
 from healthvideo.domain.topic import TopicCard
-from healthvideo.storage.files import canonical_json_hash, read_yaml, write_yaml_atomic
+from healthvideo.storage.files import read_yaml
 from healthvideo.tts.silent import SilentTTS
 from healthvideo.workflows.author import save_author_brief
 from healthvideo.workflows.create_project_v2 import create_project_v2
@@ -30,6 +29,7 @@ from healthvideo.workflows.package import package_project
 from healthvideo.workflows.produce import produce_project
 from healthvideo.workflows.review_html import render_medical_packet, render_video_packet
 from healthvideo.workflows.topic import select_topic
+from tests.helpers import complete_orientation_fixture
 
 FROZEN = datetime(2026, 9, 10, 7, 30, tzinfo=UTC)
 SOURCE = Path("tests/fixtures/golden-project-v2/revisions/001")
@@ -42,37 +42,6 @@ def _fake_render(argv: list[str]) -> int:
     return 0
 
 
-def _complete_orientation(project: Path) -> None:
-    manifest_path = project / "project.yaml"
-    orientation_dir = project / "revisions/001/orientation"
-    scope = {"synthetic_test_record": True, "topic": "muối"}
-    write_yaml_atomic(orientation_dir / "scope.yaml", scope)
-    selected = ProjectManifestV2.model_validate(read_yaml(manifest_path))
-    researching = transition_v2(
-        selected,
-        WorkflowState.ORIENTATION_RESEARCH_IN_PROGRESS,
-        TransitionContext(
-            "001",
-            canonical_json_hash(scope),
-            frozenset({"orientation/scope.yaml"}),
-        ),
-    )
-    write_yaml_atomic(manifest_path, researching.model_dump(mode="json"))
-
-    completed = {"synthetic_test_record": True, "run_id": "run-001"}
-    write_yaml_atomic(orientation_dir / "completed/run-001.yaml", completed)
-    awaiting = transition_v2(
-        researching,
-        WorkflowState.AWAITING_EDITORIAL_DIRECTION,
-        TransitionContext(
-            "001",
-            canonical_json_hash(completed),
-            frozenset({"orientation/completed/<run_id>.yaml"}),
-        ),
-    )
-    write_yaml_atomic(manifest_path, awaiting.model_dump(mode="json"))
-
-
 def test_pyh_golden_stops_at_both_human_gates(tmp_path: Path) -> None:
     project = create_project_v2(
         tmp_path, "muoi-va-huyet-ap", "Ăn mặn và tăng huyết áp", now=FROZEN
@@ -80,7 +49,7 @@ def test_pyh_golden_stops_at_both_human_gates(tmp_path: Path) -> None:
     revision = project / "revisions" / "001"
     card = TopicCard.model_validate(read_yaml(SOURCE / "topic" / "card.yaml"))
     select_topic(project, card, now=FROZEN)
-    _complete_orientation(project)
+    complete_orientation_fixture(project, now=FROZEN)
     brief = AuthorBrief.model_validate(read_yaml(SOURCE / "author" / "brief.yaml"))
     save_author_brief(project, brief, confirm=True, now=FROZEN)
     record_question(

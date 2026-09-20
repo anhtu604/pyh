@@ -3,7 +3,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from healthvideo.domain.evidence import CandidateSource
 from healthvideo.domain.gate_review import GateKind
+from healthvideo.domain.orientation import (
+    CompletedOrientation,
+    EditorialOption,
+    OrientationScope,
+    SourceBackedContext,
+)
 from healthvideo.domain.project import ORDER, ProjectState
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
@@ -20,6 +27,11 @@ from healthvideo.storage.files import read_yaml, sha256_file, write_yaml_atomic
 from healthvideo.tts.base import TTSRequest
 from healthvideo.tts.silent import SilentTTS
 from healthvideo.workflows.gate_review import approve_gate
+from healthvideo.workflows.orientation import (
+    begin_orientation,
+    complete_orientation,
+    run_orientation_search,
+)
 from healthvideo.workflows.review import approve_medical, approve_video
 
 FIXTURE_PRODUCTION_HASH = "synthetic-production-run"
@@ -446,3 +458,66 @@ def advance_v2_project_to_video_review(project_dir: Path, *, now: datetime) -> N
     manifest = transition_v2(manifest, WorkflowState.PRODUCTION_IN_PROGRESS, context)
     manifest = transition_v2(manifest, WorkflowState.AWAITING_VIDEO_REVIEW, context)
     write_yaml_atomic(project_dir / "project.yaml", manifest.model_dump(mode="json"))
+
+
+class _OrientationStubClient:
+    """A local stand-in literature client: fixed candidates, no network access."""
+
+    name = "pubmed"
+
+    def search(self, query: str, limit: int = 10) -> list[CandidateSource]:
+        del query, limit
+        return [
+            CandidateSource(
+                source_id="pubmed-9",
+                database="pubmed",
+                title="Bản ghi tổng hợp cho test: giảm natri và huyết áp",
+                year=2020,
+            )
+        ]
+
+
+ORIENTATION_SCOPE = OrientationScope(
+    topic_question="Muối ảnh hưởng huyết áp như thế nào?",
+    intended_audience="Người trưởng thành",
+    exclusions=("Không tư vấn cá nhân hóa",),
+)
+
+
+def complete_orientation_fixture(project_dir: Path, *, now: datetime) -> None:
+    """Run a real, synthetic orientation so a fixture reaches the editorial boundary."""
+    begin_orientation(project_dir, ORIENTATION_SCOPE)
+    run_orientation_search(project_dir, [_OrientationStubClient()], now=now)
+    scope = read_yaml(project_dir / "revisions" / "001" / "orientation" / "scope.yaml")
+    complete_orientation(
+        project_dir,
+        CompletedOrientation(
+            run_id="run-001",
+            topic_input_hash=scope["topic_input_hash"],
+            included_source_ids=("pubmed-9",),
+            context_points=(
+                SourceBackedContext(
+                    text="Giảm natri liên quan tới hạ huyết áp.",
+                    limitation="Bằng chứng chủ yếu ở người trưởng thành.",
+                    source_ids=("pubmed-9",),
+                ),
+            ),
+            options=(
+                EditorialOption(
+                    id="opt-1",
+                    title="Thói quen nêm nếm",
+                    framing="Khung trung tính về thói quen hằng ngày.",
+                    context_source_ids=("pubmed-9",),
+                    questions_for_doctor=("Bác sĩ muốn nhấn vào điều gì?",),
+                ),
+                EditorialOption(
+                    id="opt-2",
+                    title="Đọc nhãn thực phẩm",
+                    framing="Khung trung tính về đọc nhãn.",
+                    context_source_ids=("pubmed-9",),
+                    questions_for_doctor=("Khán giả nào cần ưu tiên?",),
+                ),
+            ),
+        ),
+        now=now,
+    )

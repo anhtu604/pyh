@@ -9,6 +9,7 @@ from healthvideo.domain.author import AuthorBrief
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
 from healthvideo.storage.files import canonical_json_hash, read_yaml, write_yaml_atomic
+from healthvideo.workflows.orientation import read_authoritative_orientation
 
 
 def save_author_brief(
@@ -26,6 +27,9 @@ def save_author_brief(
         raise ValueError(
             "author brief can only be confirmed from awaiting_editorial_direction"
         )
+    if confirm:
+        # Bind the brief to the authoritative record, never to a mutable working file.
+        read_authoritative_orientation(project_dir)
 
     brief_path = (
         project_dir

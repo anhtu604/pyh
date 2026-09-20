@@ -10,53 +10,22 @@ from healthvideo.cli import app
 from healthvideo.domain.author import AuthorBrief
 from healthvideo.domain.evidence import EvidenceClaim, EvidenceQuestion, SourceRecord
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
-from healthvideo.domain.state_graph import TransitionContext, transition_v2
 from healthvideo.domain.topic import TopicCard
-from healthvideo.storage.files import canonical_json_hash, read_yaml, write_yaml_atomic
+from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.workflows.author import save_author_brief
 from healthvideo.workflows.create_project_v2 import create_project_v2
 from healthvideo.workflows.evidence import build_evidence_ledger, record_question
 from healthvideo.workflows.topic import select_topic
+from tests.helpers import complete_orientation_fixture
 
 SOURCE = Path("tests/fixtures/golden-project-v2/revisions/001")
 NOW = datetime(2026, 9, 17, tzinfo=UTC)
 
 
-def _complete_orientation(project: Path) -> None:
-    manifest_path = project / "project.yaml"
-    orientation_dir = project / "revisions/001/orientation"
-    scope = {"synthetic_test_record": True, "topic": "muối"}
-    write_yaml_atomic(orientation_dir / "scope.yaml", scope)
-    manifest = ProjectManifestV2.model_validate(read_yaml(manifest_path))
-    researching = transition_v2(
-        manifest,
-        WorkflowState.ORIENTATION_RESEARCH_IN_PROGRESS,
-        TransitionContext(
-            "001",
-            canonical_json_hash(scope),
-            frozenset({"orientation/scope.yaml"}),
-        ),
-    )
-    write_yaml_atomic(manifest_path, researching.model_dump(mode="json"))
-
-    completed = {"synthetic_test_record": True, "run_id": "run-001"}
-    write_yaml_atomic(orientation_dir / "completed/run-001.yaml", completed)
-    awaiting = transition_v2(
-        researching,
-        WorkflowState.AWAITING_EDITORIAL_DIRECTION,
-        TransitionContext(
-            "001",
-            canonical_json_hash(completed),
-            frozenset({"orientation/completed/<run_id>.yaml"}),
-        ),
-    )
-    write_yaml_atomic(manifest_path, awaiting.model_dump(mode="json"))
-
-
 def _evidence_ready(tmp_path: Path) -> Path:
     project = create_project_v2(tmp_path, "draft-test", "Draft test", now=NOW)
     select_topic(project, TopicCard.model_validate(read_yaml(SOURCE / "topic/card.yaml")))
-    _complete_orientation(project)
+    complete_orientation_fixture(project, now=NOW)
     save_author_brief(
         project,
         AuthorBrief.model_validate(read_yaml(SOURCE / "author/brief.yaml")),

@@ -17,6 +17,8 @@ class OperatorActionKind(StrEnum):
 
     MIGRATE_LEGACY = "migrate_legacy"
     CHOOSE_TOPIC = "choose_topic"
+    ORIENTATION_RESEARCH = "orientation_research"
+    AWAIT_EDITORIAL_DIRECTION = "await_editorial_direction"
     CONFIRM_BRIEF = "confirm_brief"
     RESEARCH = "research"
     DRAFT = "draft"
@@ -109,9 +111,28 @@ def get_next_action(project_dir: Path) -> OperatorAction:
             return _action(
                 layout.project_dir,
                 layout.artifact_root,
-                OperatorActionKind.CONFIRM_BRIEF,
-                "Confirm the author brief before research begins.",
-                "author/brief.yaml",
+                OperatorActionKind.ORIENTATION_RESEARCH,
+                "Research and validate orientation sources for this topic.",
+                "orientation/scope.yaml",
+                "/pyh tìm hiểu chủ đề",
+            )
+        case WorkflowState.ORIENTATION_RESEARCH_IN_PROGRESS:
+            return _action(
+                layout.project_dir,
+                layout.artifact_root,
+                OperatorActionKind.ORIENTATION_RESEARCH,
+                "Resume orientation research; record source failures rather than guessing.",
+                "orientation/scope.yaml",
+                "/pyh tìm hiểu chủ đề",
+            )
+        case WorkflowState.AWAITING_EDITORIAL_DIRECTION:
+            return _action(
+                layout.project_dir,
+                layout.artifact_root,
+                OperatorActionKind.AWAIT_EDITORIAL_DIRECTION,
+                "Present the orientation findings, limits and options, then ask the "
+                "doctor for their own editorial view before any brief is confirmed.",
+                "orientation/editorial-orientation.yaml",
                 "/pyh chốt nội dung",
             )
         case WorkflowState.AUTHOR_BRIEF_READY:

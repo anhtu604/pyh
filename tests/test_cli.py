@@ -58,6 +58,44 @@ def test_operator_new_status_select_and_confirm_brief(tmp_path) -> None:
     assert read_yaml(project / "project.yaml")["state"] == "topic_selected"
 
 
+def test_operator_orientation_command_researches_without_confirming(tmp_path) -> None:
+    """The orientation command may research, and must not confirm a brief or a gate."""
+    from healthvideo.domain.topic import TopicCard
+
+    runner.invoke(
+        app,
+        ["operator", "new", str(tmp_path), "--slug", "muoi-va-huyet-ap", "--title", "Ăn mặn"],
+    )
+    project = tmp_path / "muoi-va-huyet-ap"
+    card_file = tmp_path / "card.yaml"
+    write_yaml_atomic(
+        card_file,
+        TopicCard(
+            slug="muoi-va-huyet-ap",
+            title="Ăn mặn",
+            question="Ăn mặn ảnh hưởng huyết áp?",
+            synthetic_test_record=True,
+        ).model_dump(mode="json"),
+    )
+    runner.invoke(app, ["operator", "select", str(project), "--file", str(card_file)])
+    scope_file = tmp_path / "scope.yaml"
+    write_yaml_atomic(
+        scope_file,
+        {
+            "topic_question": "Ăn mặn ảnh hưởng huyết áp?",
+            "intended_audience": "Người trưởng thành",
+        },
+    )
+
+    started = runner.invoke(
+        app, ["operator", "orientation", str(project), "--scope", str(scope_file)]
+    )
+
+    assert started.exit_code == 0, started.stdout
+    assert started.stdout.strip() == "orientation_research_in_progress"
+    assert (project / "revisions/001/orientation/scope.yaml").is_file()
+
+
 def test_operator_help_preserves_existing_cli_commands() -> None:
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
