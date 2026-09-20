@@ -125,6 +125,7 @@ applicability, per-claim doctor notes — hoãn sang M3).
 | Task | Deliverable | Status | Tests | Commit |
 | --- | --- | --- | --- | --- |
 | Evidence-first editorial exploration | Thiết kế pha kiểm định kiến thức trước khi ghi nhận góc nhìn bác sĩ; giữ nguyên author confirmation và hai gate | proposed; awaiting user spec review | spec consistency; `git diff --check` | `docs: design evidence-first editorial exploration` |
+| Evidence-first editorial exploration plan | Kế hoạch TDD cho state, orientation artifact, retry, author boundary, operator/CLI và E2E | approved; awaiting execution choice | plan self-review; `git diff --check` | `docs: plan evidence-first editorial exploration` |
 | 1 | Bootstrap repo và CLI có thể kiểm thử | complete | `pytest tests/test_cli.py`; `ruff check src tests` | `chore: bootstrap healthvideo CLI` |
 | 2 | Domain model, state machine và storage nguyên tử | complete | `python -m pytest tests/domain/test_project.py -v`; `python -m pytest tests/storage/test_files.py -v`; `python -m ruff check src tests` | `feat: add project state and atomic storage` |
 | 3 | Project scaffold và author-owned voice | complete | `python -m pytest tests/workflows/test_create_project.py tests/test_cli.py -v` | `feat: scaffold projects from doctor briefs` |
