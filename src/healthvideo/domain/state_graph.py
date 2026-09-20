@@ -111,8 +111,19 @@ _CONTEXT_ONLY = _rule()
 
 MAIN_RULES: Mapping[tuple[WorkflowState, WorkflowState], TransitionRule] = {
     (WorkflowState.IDEA, WorkflowState.TOPIC_SELECTED): _rule("topic/card.yaml"),
-    (WorkflowState.TOPIC_SELECTED, WorkflowState.AUTHOR_BRIEF_READY): _rule(
-        "author/brief.yaml"
+    (
+        WorkflowState.TOPIC_SELECTED,
+        WorkflowState.ORIENTATION_RESEARCH_IN_PROGRESS,
+    ): _rule("orientation/scope.yaml"),
+    (
+        WorkflowState.ORIENTATION_RESEARCH_IN_PROGRESS,
+        WorkflowState.AWAITING_EDITORIAL_DIRECTION,
+    ): _rule("orientation/completed/<run_id>.yaml"),
+    (
+        WorkflowState.AWAITING_EDITORIAL_DIRECTION,
+        WorkflowState.AUTHOR_BRIEF_READY,
+    ): _rule(
+        "orientation/completed/<run_id>.yaml", "author/brief.yaml"
     ),
     (WorkflowState.AUTHOR_BRIEF_READY, WorkflowState.RESEARCH_IN_PROGRESS): _rule(
         "author/brief.yaml"

@@ -8,6 +8,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 class WorkflowState(StrEnum):
     IDEA = "idea"
     TOPIC_SELECTED = "topic_selected"
+    ORIENTATION_RESEARCH_IN_PROGRESS = "orientation_research_in_progress"
+    AWAITING_EDITORIAL_DIRECTION = "awaiting_editorial_direction"
     AUTHOR_BRIEF_READY = "author_brief_ready"
     RESEARCH_IN_PROGRESS = "research_in_progress"
     EVIDENCE_READY = "evidence_ready"
@@ -31,6 +33,8 @@ MAIN_STATES = frozenset(
     {
         WorkflowState.IDEA,
         WorkflowState.TOPIC_SELECTED,
+        WorkflowState.ORIENTATION_RESEARCH_IN_PROGRESS,
+        WorkflowState.AWAITING_EDITORIAL_DIRECTION,
         WorkflowState.AUTHOR_BRIEF_READY,
         WorkflowState.RESEARCH_IN_PROGRESS,
         WorkflowState.EVIDENCE_READY,
