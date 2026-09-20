@@ -15,7 +15,7 @@ from healthvideo.domain.invalidation import (
     InvalidationLevel,
     evaluate_invalidation,
 )
-from healthvideo.domain.project_v2 import WorkflowState
+from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.topic import TopicCard
 from healthvideo.storage.files import read_yaml
 from healthvideo.tts.silent import SilentTTS
@@ -25,11 +25,12 @@ from healthvideo.workflows.draft import submit_draft, submit_medical_review
 from healthvideo.workflows.evidence import build_evidence_ledger, record_question
 from healthvideo.workflows.gate_review import approve_gate
 from healthvideo.workflows.operator import OperatorActionKind, get_next_action
+from healthvideo.workflows.orientation import begin_orientation
 from healthvideo.workflows.package import package_project
 from healthvideo.workflows.produce import produce_project
 from healthvideo.workflows.review_html import render_medical_packet, render_video_packet
 from healthvideo.workflows.topic import select_topic
-from tests.helpers import complete_orientation_fixture
+from tests.helpers import ORIENTATION_SCOPE, complete_orientation_fixture
 
 FROZEN = datetime(2026, 9, 10, 7, 30, tzinfo=UTC)
 SOURCE = Path("tests/fixtures/golden-project-v2/revisions/001")
@@ -136,3 +137,82 @@ def test_post_approval_invalidation_routes_to_existing_gates() -> None:
             [ArtifactChange(Path(path), frozenset())], manifest
         )
         assert (decision.level, decision.target_state) == (level, state)
+
+
+def test_selected_topic_requires_orientation_then_confirmed_brief(
+    tmp_path: Path,
+) -> None:
+    """A selected topic reaches the brief only through orientation and a doctor's yes."""
+    project = create_project_v2(tmp_path, "muoi-va-huyet-ap", "Ăn mặn", now=FROZEN)
+    card = TopicCard.model_validate(read_yaml(SOURCE / "topic" / "card.yaml"))
+    select_topic(project, card, now=FROZEN)
+    assert get_next_action(project).kind is OperatorActionKind.ORIENTATION_RESEARCH
+
+    begin_orientation(project, ORIENTATION_SCOPE)
+    assert get_next_action(project).kind is OperatorActionKind.ORIENTATION_RESEARCH
+    with pytest.raises(ValueError, match="awaiting_editorial_direction"):
+        save_author_brief(
+            project, AuthorBrief(title="Ăn mặn"), confirm=True, now=FROZEN
+        )
+
+    complete_orientation_fixture(project, now=FROZEN)
+    assert (
+        get_next_action(project).kind is OperatorActionKind.AWAIT_EDITORIAL_DIRECTION
+    )
+    draft = save_author_brief(
+        project, AuthorBrief(title="Ăn mặn"), confirm=False, now=FROZEN
+    )
+    assert draft.state is WorkflowState.AWAITING_EDITORIAL_DIRECTION
+
+    confirmed = save_author_brief(
+        project, AuthorBrief(title="Ăn mặn"), confirm=True, now=FROZEN
+    )
+    assert confirmed.state is WorkflowState.AUTHOR_BRIEF_READY
+
+
+def test_orientation_never_reaches_approval_or_publication(tmp_path: Path) -> None:
+    """Orientation informs the doctor; it can neither approve a gate nor publish."""
+    project = create_project_v2(tmp_path, "muoi-va-huyet-ap", "Ăn mặn", now=FROZEN)
+    select_topic(
+        project,
+        TopicCard.model_validate(read_yaml(SOURCE / "topic" / "card.yaml")),
+        now=FROZEN,
+    )
+    complete_orientation_fixture(project, now=FROZEN)
+    revision = project / "revisions" / "001"
+
+    for gate in (GateKind.MEDICAL, GateKind.VIDEO):
+        with pytest.raises(ValueError):
+            approve_gate(project, gate, reviewer="BS Test", note="fixture", now=FROZEN)
+    with pytest.raises(ValueError):
+        package_project(project)
+
+    assert list((revision / "reviews").glob("*")) == []
+    assert not (revision / "publish" / "manifest.json").exists()
+    assert not (revision / "publish" / "receipt.yaml").exists()
+    manifest = ProjectManifestV2.model_validate(read_yaml(project / "project.yaml"))
+    assert manifest.state is WorkflowState.AWAITING_EDITORIAL_DIRECTION
+
+
+def test_v1_golden_fixture_stays_byte_identical(tmp_path: Path) -> None:
+    """Orientation is a v2-only path; the tracked v1 fixture must not move a byte."""
+    v1_source = Path("tests/fixtures/golden-project")
+    before = {
+        path.relative_to(v1_source): path.read_bytes()
+        for path in v1_source.rglob("*")
+        if path.is_file()
+    }
+
+    project = create_project_v2(tmp_path, "muoi-va-huyet-ap", "Ăn mặn", now=FROZEN)
+    select_topic(
+        project,
+        TopicCard.model_validate(read_yaml(SOURCE / "topic" / "card.yaml")),
+        now=FROZEN,
+    )
+    complete_orientation_fixture(project, now=FROZEN)
+
+    assert {
+        path.relative_to(v1_source): path.read_bytes()
+        for path in v1_source.rglob("*")
+        if path.is_file()
+    } == before
