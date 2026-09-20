@@ -22,7 +22,13 @@ EXPECTED = {
         "evidence_ingest",
         "evidence_build_ledger",
     },
-    "src/healthvideo/commands/operator.py": {"select", "brief"},
+    "src/healthvideo/commands/operator.py": {
+        "select",
+        "orientation",
+        "brief",
+        "draft",
+        "submit_medical",
+    },
 }
 READ_ONLY = {
     "src/healthvideo/cli.py": {"status", "lease_inspect", "review_open", "security_audit"},
