@@ -18,8 +18,14 @@ def save_author_brief(
     del now
     manifest_path = project_dir / "project.yaml"
     manifest = ProjectManifestV2.model_validate(read_yaml(manifest_path))
-    if confirm and manifest.state is not WorkflowState.TOPIC_SELECTED:
-        raise ValueError("author brief can only be confirmed from topic_selected")
+    if confirm and manifest.state is WorkflowState.TOPIC_SELECTED:
+        raise ValueError(
+            "author brief confirmation requires awaiting_editorial_direction"
+        )
+    if confirm and manifest.state is not WorkflowState.AWAITING_EDITORIAL_DIRECTION:
+        raise ValueError(
+            "author brief can only be confirmed from awaiting_editorial_direction"
+        )
 
     brief_path = (
         project_dir

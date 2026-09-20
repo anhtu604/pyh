@@ -53,8 +53,9 @@ def test_operator_new_status_select_and_confirm_brief(tmp_path) -> None:
     assert draft.exit_code == 0, draft.stdout
     assert read_yaml(project / "project.yaml")["state"] == "topic_selected"
     confirmed = runner.invoke(app, ["operator", "brief", str(project), "--title", "Ăn mặn", "--confirm"])
-    assert confirmed.exit_code == 0, confirmed.stdout
-    assert read_yaml(project / "project.yaml")["state"] == "author_brief_ready"
+    assert confirmed.exit_code == 1
+    assert "awaiting_editorial_direction" in confirmed.stdout
+    assert read_yaml(project / "project.yaml")["state"] == "topic_selected"
 
 
 def test_operator_help_preserves_existing_cli_commands() -> None:

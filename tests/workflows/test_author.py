@@ -1,5 +1,7 @@
 from datetime import UTC, datetime
 
+import pytest
+
 from healthvideo.domain.author import AuthorBrief
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.topic import TopicCard
@@ -37,14 +39,14 @@ def test_draft_brief_does_not_advance(tmp_path) -> None:
     assert read_yaml(project / "revisions/001/author/brief.yaml")["title"] == "Muối"
 
 
-def test_confirmed_brief_uses_existing_transition(tmp_path) -> None:
-    """Confirming a brief advances the v2 state graph through its guarded edge."""
+def test_confirming_brief_from_topic_selected_fails_closed(tmp_path) -> None:
+    """Orientation must complete before an author brief can be confirmed."""
     project = _v2_topic_project(tmp_path)
 
-    result = save_author_brief(
-        project, AuthorBrief(title="Muối"), confirm=True, now=FROZEN_NOW
-    )
+    with pytest.raises(ValueError, match="awaiting_editorial_direction"):
+        save_author_brief(
+            project, AuthorBrief(title="Muối"), confirm=True, now=FROZEN_NOW
+        )
 
-    assert result.state is WorkflowState.AUTHOR_BRIEF_READY
     saved = ProjectManifestV2.model_validate(read_yaml(project / "project.yaml"))
-    assert saved.state is WorkflowState.AUTHOR_BRIEF_READY
+    assert saved.state is WorkflowState.TOPIC_SELECTED
