@@ -44,7 +44,9 @@ def save_author_brief(
     context = TransitionContext(
         active_revision=manifest.active_revision,
         current_input_hash=canonical_json_hash(brief_data),
-        validated_artifacts=frozenset({"author/brief.yaml"}),
+        validated_artifacts=frozenset(
+            {"orientation/completed/<run_id>.yaml", "author/brief.yaml"}
+        ),
     )
     updated = transition_v2(manifest, WorkflowState.AUTHOR_BRIEF_READY, context)
     write_yaml_atomic(manifest_path, updated.model_dump(mode="json"))
