@@ -10,6 +10,7 @@ from uuid import uuid4
 import typer
 
 from healthvideo import __version__
+from healthvideo.commands.jev import app as jev_app
 from healthvideo.commands.operator import app as operator_app
 from healthvideo.domain.agent_review import AgentReviewResponse
 from healthvideo.domain.evidence import (
@@ -139,6 +140,7 @@ app.add_typer(outro_app, name="outro")
 app.add_typer(ai_clip_app, name="ai-clip")
 app.add_typer(lease_app, name="lease")
 app.add_typer(backup_app, name="backup")
+app.add_typer(jev_app, name="jev")
 
 
 def _echo_error(error: BaseException) -> None:
