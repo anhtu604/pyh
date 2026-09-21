@@ -15,13 +15,34 @@
 
 - Do not write production code or change schemas in planning; do not alter `ProjectManifest`, `ProjectManifestV2`, `WorkflowState`, or `GateKind`.
 - Advisory only: Jev output never auto-transitions workflow state, never selects or rejects topics automatically, never alters `TopicScores` or evidence ledger, never issues medical verdicts, never generates script/content, never creates handoff XML packets automatically, never signs gates, and never triggers production, packaging, rendering, or publishing.
-- Fail-closed: Missing `TYPESAFE_API_KEY`, transport/network errors, HTTP timeouts, malformed JSON, unrecognized enum/choice, low confidence (< 0.90), or oversized inputs always resolve cleanly to `manual_review_required` advisory records without throwing unhandled exceptions, altering project state, or writing partial files.
+- Fail-closed: Missing `TYPESAFE_API_KEY`, transport/network errors, HTTP timeouts, malformed JSON, unrecognized enum/choice, low confidence (< 0.90), or oversized inputs (> 16384 bytes) always resolve cleanly to `manual_review_required` advisory records without throwing unhandled exceptions, altering project state, or writing partial files.
 - Data safety & secrets: `TYPESAFE_API_KEY` is loaded from the process environment first, falling back only to `%LOCALAPPDATA%\ProtectYourHealth\typesafe.env` outside the repository. No secrets, credentials, or `.env` files may be committed, logged, or copied into project artifacts.
 - Zero raw response / token persistence: Advisory records must never persist raw provider responses, full prompts, or any fields named `token` or matching `_SENSITIVE_KEYS`.
-- Injected adapter & zero CI network: The official `typesafe-sdk` must only be used behind an injected `JevTransport` adapter. Unit, contract, and E2E tests must never make live network calls and must rely solely on fake transports. Live network calls are restricted to explicit operator invocation of `healthvideo jev check`.
+- Injected adapter & zero CI network: The official `typesafe-sdk` must only be used behind an injected `JevTransport` adapter. Unit, contract, and E2E tests must never make live network calls and must rely solely on fake transports. Live network calls are restricted to explicit operator invocation of `healthvideo jev check --live`.
 - Platform & path conventions: Internal paths must use `pathlib.Path` and POSIX-normalized forward slashes in records and manifests for Windows/PowerShell compatibility.
 - Untracked files: Existing untracked files are user-owned; never touch, stage, or modify them.
-- Single commit per task; update README progress table in the final task; commit only plan and README in this planning phase.
+- Produce, package, and render boundaries: Do not add network calls or decision dependencies to `produce`, `package`, or `render`.
+
+---
+
+## File Structure
+
+| Path | Responsibility |
+| --- | --- |
+| `src/healthvideo/jev/__init__.py` | Package root for Jev decision routing. |
+| `src/healthvideo/jev/config.py` | Safe secret resolution (`TYPESAFE_API_KEY`), precedence, masking, input limits (`max_input_bytes = 16384`), and timeout configuration. |
+| `src/healthvideo/domain/jev_decision.py` | Immutable Pydantic models for request inputs (`TopicTriageInput`, `ClaimTriageInput`, `SecondModelRoutingInput`), outcome enums, and versioned advisory records (`JevAdvisoryRecord`) with input hash and sensitive key redaction. |
+| `src/healthvideo/jev/client.py` | Injected `JevTransport` protocol, `FakeJevTransport` test double, `TypeSafeSdkTransport` concrete SDK adapter (using `typesafe_sdk.Choice` and `system_one`), canonical hashing, and `JevClient` with fail-closed decision methods. |
+| `src/healthvideo/workflows/jev_triage.py` | Pure advisory workflows (`triage_topic_advisory`, `triage_claims_advisory`, `recommend_second_model_review`) reading domain data and optionally writing write-once advisory YAML without project mutation. |
+| `src/healthvideo/commands/jev.py` | Explicit CLI subcommands (`healthvideo jev check`, `triage-topic`, `triage-claims`, `recommend-review`). |
+| `src/healthvideo/cli.py` | CLI registration of `jev` command group. |
+| `tests/jev/test_config.py` | Unit tests for configuration, precedence, fallback, and masking. |
+| `tests/domain/test_jev_decision.py` | Domain unit tests for immutability, timezone validation, hash format, and sensitive key rejection. |
+| `tests/jev/test_client.py` | Protocol, adapter, and client unit tests covering success paths and all fail-closed modes. |
+| `tests/workflows/test_jev_triage.py` | Workflow tests verifying read-only execution, write-once artifact generation, and zero state mutation. |
+| `tests/test_jev_cli.py` | CLI invocation and output format tests. |
+| `tests/test_security.py` | Security audit verification confirming Jev artifacts pass `audit_project` and adhere to M7 constraints. |
+| `tests/e2e/test_jev_advisory.py` | End-to-end integration and non-transition regression test. |
 
 ---
 
@@ -495,7 +516,7 @@ git commit -m "feat: define immutable Jev advisory decision models"
   - `JevTransport(Protocol)`:
     - `def decide(self, *, decision_type: str, input_payload: dict[str, Any], model: str) -> dict[str, Any]: ...`
   - `FakeJevTransport(JevTransport)`
-  - `TypeSafeSdkTransport(JevTransport)`
+  - `TypeSafeSdkTransport(JevTransport)` (uses official `typesafe_sdk.Choice` and `system_one`)
   - `JevClient(config: JevConfig, transport: JevTransport | None = None)`
     - `def evaluate_topic(self, input_data: TopicTriageInput, *, now: datetime | None = None) -> JevAdvisoryRecord`
     - `def evaluate_claim(self, input_data: ClaimTriageInput, *, now: datetime | None = None) -> JevAdvisoryRecord`
@@ -639,6 +660,30 @@ def test_client_fail_closed_low_confidence() -> None:
     assert record.normalized_choice == SecondModelRecommendation.MANUAL_REVIEW_REQUIRED.value
     assert record.confidence == 0.72
     assert "ngưỡng tin cậy" in record.reason.lower() or "confidence below threshold" in record.reason.lower()
+
+
+def test_client_fail_closed_oversized_input() -> None:
+    config = JevConfig(api_key="valid-key", max_input_bytes=100)
+    fake_transport = FakeJevTransport()
+    client = JevClient(config=config, transport=fake_transport)
+    now = datetime(2026, 9, 21, 12, 0, 0, tzinfo=UTC)
+
+    inp = ClaimTriageInput(
+        claim_id="CLM-001",
+        text_public="A" * 500,  # exceeds 100 bytes limit
+        text_technical="B" * 500,
+        claim_type="evidence",
+        certainty="unrated",
+        source_count=0,
+        source_types=[],
+    )
+
+    record = client.evaluate_claim(inp, now=now)
+
+    assert record.normalized_choice == ClaimCheckFlag.MANUAL_REVIEW_REQUIRED.value
+    assert record.confidence == 0.0
+    assert "kích thước" in record.reason.lower() or "exceeds" in record.reason.lower()
+    assert len(fake_transport.calls) == 0
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -724,27 +769,92 @@ class TypeSafeSdkTransport:
         if not self.api_key:
             raise ValueError("TypeSafe API key is required")
         try:
-            import typesafe  # type: ignore
+            from typesafe_sdk import Choice, TypeSafeClient
         except ImportError as err:
-            try:
-                import typesafe_sdk as typesafe  # type: ignore
-            except ImportError:
-                raise RuntimeError(
-                    "Official typesafe-sdk package is not installed."
-                ) from err
+            raise RuntimeError(
+                "Official typesafe-sdk package is not installed."
+            ) from err
 
-        client = typesafe.Client(api_key=self.api_key, base_url=self.base_url)
-        # Call SDK decision endpoint behind adapter
-        return client.decisions.create(
-            decision_type=decision_type,
-            input=input_payload,
-            model=model,
-        )
+        with TypeSafeClient(api_key=self.api_key, base_url=self.base_url) as client:
+            if decision_type == "topic_triage":
+                response = client.system_one(
+                    state=input_payload,
+                    questions={
+                        "choice": Choice(
+                            instructions="Classify topic priority into high, standard, low, or manual_review_required.",
+                            criteria={
+                                "high": "High preventive value and evidence readiness",
+                                "standard": "Standard preventive topic suitable for production",
+                                "low": "Low priority or weak preventive focus",
+                                "manual_review_required": "Uncertain or flagged for human review",
+                            },
+                        ),
+                    },
+                    model=model,
+                )
+                choice_ans = response.choices.get("choice")
+                return {
+                    "choice": choice_ans.choice if choice_ans else "manual_review_required",
+                    "confidence": choice_ans.confidence if choice_ans else 0.0,
+                    "flags": [],
+                    "reason": "Topic triage evaluation via TypeSafe System One",
+                }
+            elif decision_type == "claim_triage":
+                response = client.system_one(
+                    state=input_payload,
+                    questions={
+                        "choice": Choice(
+                            instructions="Evaluate claim verification flag.",
+                            criteria={
+                                "citation_check": "Needs additional citation verification",
+                                "absolute_language_check": "Contains absolute or unhedged language",
+                                "population_applicability_check": "Applicability to target population is unclear",
+                                "clear_for_review": "Clean claim ready for medical review",
+                                "manual_review_required": "Uncertain or flagged for human review",
+                            },
+                        ),
+                    },
+                    model=model,
+                )
+                choice_ans = response.choices.get("choice")
+                return {
+                    "choice": choice_ans.choice if choice_ans else "manual_review_required",
+                    "confidence": choice_ans.confidence if choice_ans else 0.0,
+                    "flags": [choice_ans.choice] if choice_ans and choice_ans.choice != "clear_for_review" else [],
+                    "reason": "Claim triage evaluation via TypeSafe System One",
+                }
+            elif decision_type == "second_model_routing":
+                response = client.system_one(
+                    state=input_payload,
+                    questions={
+                        "choice": Choice(
+                            instructions="Recommend whether second model review is warranted.",
+                            criteria={
+                                "not_recommended": "Risk is low, second model review not needed",
+                                "consider_review": "High risk or uncertainty, recommend second model review",
+                                "manual_review_required": "Uncertain or flagged for human review",
+                            },
+                        ),
+                    },
+                    model=model,
+                )
+                choice_ans = response.choices.get("choice")
+                return {
+                    "choice": choice_ans.choice if choice_ans else "manual_review_required",
+                    "confidence": choice_ans.confidence if choice_ans else 0.0,
+                    "flags": [],
+                    "reason": "Second-model routing evaluation via TypeSafe System One",
+                }
+            else:
+                raise ValueError(f"Unknown decision_type: {decision_type}")
 
 
-def _canonical_hash(payload: dict[str, Any]) -> str:
+def _canonical_hash(payload: dict[str, Any], max_bytes: int = 16384) -> str:
     serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+    encoded = serialized.encode("utf-8")
+    if len(encoded) > max_bytes:
+        raise ValueError(f"Input payload exceeds maximum allowed size ({len(encoded)} > {max_bytes} bytes)")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 class JevClient:
@@ -768,8 +878,24 @@ class JevClient:
     ) -> JevAdvisoryRecord:
         timestamp = now or datetime.now(UTC)
         payload = input_data.model_dump(mode="json")
-        input_hash = _canonical_hash(payload)
         decision_id = self._generate_decision_id(timestamp)
+
+        try:
+            input_hash = _canonical_hash(payload, max_bytes=self.config.max_input_bytes)
+        except ValueError as val_err:
+            fallback_hash = hashlib.sha256(str(timestamp.timestamp()).encode("utf-8")).hexdigest()
+            return JevAdvisoryRecord(
+                decision_id=decision_id,
+                decision_kind=JevDecisionKind.TOPIC_TRIAGE,
+                normalized_choice=TopicPriorityBand.MANUAL_REVIEW_REQUIRED.value,
+                confidence=0.0,
+                model_identifier=self.config.model,
+                input_hash=fallback_hash,
+                created_at=timestamp,
+                reason=f"Payload vượt kích thước tối đa: {val_err}"[:490],
+                policy_threshold=self.config.confidence_threshold,
+                flags=[TopicPriorityBand.MANUAL_REVIEW_REQUIRED.value],
+            )
 
         if not self.config.is_configured:
             return JevAdvisoryRecord(
@@ -847,8 +973,24 @@ class JevClient:
     ) -> JevAdvisoryRecord:
         timestamp = now or datetime.now(UTC)
         payload = input_data.model_dump(mode="json")
-        input_hash = _canonical_hash(payload)
         decision_id = self._generate_decision_id(timestamp)
+
+        try:
+            input_hash = _canonical_hash(payload, max_bytes=self.config.max_input_bytes)
+        except ValueError as val_err:
+            fallback_hash = hashlib.sha256(str(timestamp.timestamp()).encode("utf-8")).hexdigest()
+            return JevAdvisoryRecord(
+                decision_id=decision_id,
+                decision_kind=JevDecisionKind.CLAIM_TRIAGE,
+                normalized_choice=ClaimCheckFlag.MANUAL_REVIEW_REQUIRED.value,
+                confidence=0.0,
+                model_identifier=self.config.model,
+                input_hash=fallback_hash,
+                created_at=timestamp,
+                reason=f"Payload vượt kích thước tối đa: {val_err}"[:490],
+                policy_threshold=self.config.confidence_threshold,
+                flags=[ClaimCheckFlag.MANUAL_REVIEW_REQUIRED.value],
+            )
 
         if not self.config.is_configured:
             return JevAdvisoryRecord(
@@ -889,7 +1031,7 @@ class JevClient:
                     flags=flags or [ClaimCheckFlag.MANUAL_REVIEW_REQUIRED.value],
                 )
 
-            valid_choices = {c.value for c in ClaimCheckFlag}
+            valid_choices = {f.value for f in ClaimCheckFlag}
             choice = raw_choice if raw_choice in valid_choices else ClaimCheckFlag.MANUAL_REVIEW_REQUIRED.value
 
             return JevAdvisoryRecord(
@@ -926,8 +1068,24 @@ class JevClient:
     ) -> JevAdvisoryRecord:
         timestamp = now or datetime.now(UTC)
         payload = input_data.model_dump(mode="json")
-        input_hash = _canonical_hash(payload)
         decision_id = self._generate_decision_id(timestamp)
+
+        try:
+            input_hash = _canonical_hash(payload, max_bytes=self.config.max_input_bytes)
+        except ValueError as val_err:
+            fallback_hash = hashlib.sha256(str(timestamp.timestamp()).encode("utf-8")).hexdigest()
+            return JevAdvisoryRecord(
+                decision_id=decision_id,
+                decision_kind=JevDecisionKind.SECOND_MODEL_ROUTING,
+                normalized_choice=SecondModelRecommendation.MANUAL_REVIEW_REQUIRED.value,
+                confidence=0.0,
+                model_identifier=self.config.model,
+                input_hash=fallback_hash,
+                created_at=timestamp,
+                reason=f"Payload vượt kích thước tối đa: {val_err}"[:490],
+                policy_threshold=self.config.confidence_threshold,
+                flags=[SecondModelRecommendation.MANUAL_REVIEW_REQUIRED.value],
+            )
 
         if not self.config.is_configured:
             return JevAdvisoryRecord(
@@ -952,7 +1110,7 @@ class JevClient:
             raw_confidence = float(raw.get("confidence", 0.0))
             raw_choice = str(raw.get("choice", "")).strip().lower()
             flags = [str(f) for f in raw.get("flags", [])]
-            raw_reason = str(raw.get("reason", "Second-model routing recommendation")).strip()
+            raw_reason = str(raw.get("reason", "Second-model routing evaluation")).strip()
 
             if raw_confidence < self.config.confidence_threshold:
                 return JevAdvisoryRecord(
@@ -1001,13 +1159,13 @@ class JevClient:
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `& .venv\Scripts\python.exe -m pytest tests/jev/test_client.py -v`
-Expected: PASS (4 passed)
+Expected: PASS (5 passed)
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add src/healthvideo/jev/client.py tests/jev/test_client.py
-git commit -m "feat: implement injected Jev decision adapter"
+git commit -m "feat: implement injected Jev adapter and client"
 ```
 
 ---
@@ -1327,7 +1485,7 @@ git commit -m "feat: add advisory Jev triage workflows"
 - Consumes: `jev_triage` workflows, `Typer`, `audit_project`
 - Produces:
   - Typer app `jev_app`:
-    - `healthvideo jev check [--json]`
+    - `healthvideo jev check [--json] [--live]`
     - `healthvideo jev triage-topic <card_path> [--json]`
     - `healthvideo jev triage-claims <project_dir> [--save] [--json]`
     - `healthvideo jev recommend-review <project_dir> [--save] [--json]`
@@ -1422,17 +1580,31 @@ app = typer.Typer(help="Jev (TypeSafe) structured advisory decision-routing.")
 @app.command("check")
 def jev_check(
     as_json: Annotated[bool, typer.Option("--json", help="In JSON format")] = False,
+    live: Annotated[bool, typer.Option("--live", help="Kiểm tra kết nối tới TypeSafe API (gọi mạng)")] = False,
 ) -> None:
     """Xác nhận cấu hình và trạng thái opt-in của Jev decision engine."""
     config = resolve_jev_config()
-    payload = {
+    payload: dict[str, object] = {
         "status": "configured" if config.is_configured else "unconfigured",
         "api_key": config.masked_key,
         "model": config.model,
         "confidence_threshold": config.confidence_threshold,
         "timeout_seconds": config.timeout_seconds,
         "max_input_bytes": config.max_input_bytes,
+        "live_check": "skipped" if not live else "unperformed",
     }
+    if live and config.is_configured:
+        try:
+            from typesafe_sdk import TypeSafeClient
+
+            with TypeSafeClient(api_key=config.api_key, base_url=config.base_url) as client:
+                models_resp = client.models.list()
+                model_names = [m.name for m in models_resp.models] if hasattr(models_resp, "models") else []
+                payload["live_check"] = "ok"
+                payload["available_models"] = model_names
+        except Exception as exc:
+            payload["live_check"] = f"failed: {exc}"
+
     if as_json:
         typer.echo(json.dumps(payload, indent=2, ensure_ascii=False))
     else:
@@ -1441,6 +1613,11 @@ def jev_check(
         typer.echo(f"  API Key: {payload['api_key']}")
         typer.echo(f"  Model: {payload['model']}")
         typer.echo(f"  Confidence threshold: {payload['confidence_threshold']}")
+        if live:
+            typer.echo(f"  Live probe: {payload['live_check']}")
+            if "available_models" in payload:
+                models_list = payload["available_models"]
+                typer.echo(f"  Models: {', '.join(models_list) if isinstance(models_list, list) else ''}")
 
 
 @app.command("triage-topic")
@@ -1648,7 +1825,7 @@ git commit -m "test: verify Jev non-transition and regression safety"
 | §4 Secret resolution: `TYPESAFE_API_KEY` env first, `%LOCALAPPDATA%\ProtectYourHealth\typesafe.env` fallback | Task 1 (`resolve_jev_config`) |
 | §4 Masked secret, no secret in Git/log/artifact | Tasks 1, 5, 6 (audit and repr tests) |
 | §4 No raw provider response, prompt, or `token` field in records | Tasks 2, 3, 5 (`_FORBIDDEN_KEY_PATTERN` and audit) |
-| §5 Fail-closed: missing key, transport error, low confidence (<0.90) -> `manual_review_required` | Tasks 1, 3, 4 (thorough RED tests) |
+| §5 Fail-closed: missing key, transport error, low confidence (<0.90), oversized input (>16384 bytes) -> `manual_review_required` | Tasks 1, 3, 4 (thorough RED tests) |
 | §6 Use cases: topic triage, claim triage, second-model recommendation | Tasks 3, 4, 5 |
 | §7 Components: `config.py`, `client.py`, `jev_decision.py`, `jev_triage.py`, CLI `healthvideo jev` | Tasks 1–5 |
 | §8 Compatibility: zero schema migration, no GateKind change, offline CI | Tasks 1–6 |
