@@ -5,6 +5,7 @@ from typer.testing import CliRunner
 from healthvideo.cli import app
 from healthvideo.domain.topic import TopicCard, TopicScores
 from healthvideo.storage.files import write_yaml_atomic
+from healthvideo.workflows.operations import mutation_lease
 from tests.helpers import create_v2_project_fixture
 
 runner = CliRunner()
@@ -47,3 +48,12 @@ def test_jev_cli_recommend_review(tmp_path: Path) -> None:
     assert result.exit_code == 0
     assert "Second-model recommendation:" in result.output
     assert "healthvideo agent review-request" in result.output or "manual" in result.output.lower()
+
+
+def test_jev_save_respects_project_write_lease(tmp_path: Path) -> None:
+    project = create_v2_project_fixture(tmp_path / "project")
+    target = project / "revisions" / "001" / "handoffs" / "jev-review-advisory.yaml"
+    with mutation_lease(project, "other_writer"):
+        result = runner.invoke(app, ["jev", "recommend-review", str(project), "--save"])
+        assert result.exit_code != 0
+        assert not target.exists()

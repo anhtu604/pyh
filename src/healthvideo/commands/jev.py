@@ -14,6 +14,7 @@ from healthvideo.workflows.jev_triage import (
     triage_claims_advisory,
     triage_topic_advisory,
 )
+from healthvideo.workflows.operations import project_mutation
 
 app = typer.Typer(help="Jev (TypeSafe) structured advisory decision-routing.")
 
@@ -64,6 +65,7 @@ def jev_triage_topic(
 
 
 @app.command("triage-claims")
+@project_mutation("jev_triage_claims", skip_when=lambda values: not bool(values.get("save")))
 def jev_triage_claims(
     project_dir: Annotated[Path, typer.Argument(help="Thư mục project v2")],
     save: Annotated[bool, typer.Option("--save", help="Lưu advisory record vào revision")] = False,
@@ -83,6 +85,7 @@ def jev_triage_claims(
 
 
 @app.command("recommend-review")
+@project_mutation("jev_recommend_review", skip_when=lambda values: not bool(values.get("save")))
 def jev_recommend_review(
     project_dir: Annotated[Path, typer.Argument(help="Thư mục project v2")],
     save: Annotated[bool, typer.Option("--save", help="Lưu advisory record vào revision")] = False,

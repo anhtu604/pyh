@@ -10,7 +10,7 @@ from pathlib import Path
 class JevConfig:
     api_key: str | None = None
     base_url: str | None = None
-    model: str = "jev-v1"
+    model: str = "jev-latest"
     confidence_threshold: float = 0.90
     timeout_seconds: float = 10.0
     max_input_bytes: int = 16384
@@ -58,7 +58,7 @@ def resolve_jev_config(
     active_env = os.environ if env is None else env
     api_key = active_env.get("TYPESAFE_API_KEY")
     base_url = active_env.get("TYPESAFE_BASE_URL")
-    model = active_env.get("TYPESAFE_MODEL", "jev-v1")
+    model = active_env.get("TYPESAFE_MODEL", "jev-latest")
 
     if not api_key:
         local_appdata = (
@@ -75,13 +75,13 @@ def resolve_jev_config(
         api_key = file_vars.get("TYPESAFE_API_KEY")
         if not base_url:
             base_url = file_vars.get("TYPESAFE_BASE_URL")
-        if model == "jev-v1" and "TYPESAFE_MODEL" in file_vars:
+        if model == "jev-latest" and "TYPESAFE_MODEL" in file_vars:
             model = file_vars["TYPESAFE_MODEL"]
 
     return JevConfig(
         api_key=api_key.strip() if api_key else None,
         base_url=base_url.strip() if base_url else None,
-        model=model.strip() if model else "jev-v1",
+        model=model.strip() if model else "jev-latest",
         confidence_threshold=0.90,
         timeout_seconds=10.0,
         max_input_bytes=16384,
