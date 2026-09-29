@@ -3,6 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from healthvideo.domain.format_profile import FORMAT_SPECS, FormatProfile
 from healthvideo.domain.storyboard import Scene, Storyboard
 from healthvideo.domain.visual_budget import VisualBudgetProfile
 
@@ -32,12 +33,18 @@ class RenderInput(BaseModel):
     audio_file: str
     scenes: tuple[Scene, ...] = Field(default_factory=tuple)
     visual_budget_profile: VisualBudgetProfile = "legacy"
-    width: Literal[1080] = 1080
-    height: Literal[1920] = 1920
+    format_profile: FormatProfile = "vertical_clip"
+    width: Literal[1080, 1920] = 1080
+    height: Literal[1920, 1080] = 1920
     fps: Literal[30] = FRAMES_PER_SECOND
 
     @model_validator(mode="after")
     def validate_m6_5_chart_refs(self) -> "RenderInput":
+        spec = FORMAT_SPECS[self.format_profile]
+        if (self.width, self.height) != (spec.width, spec.height):
+            raise ValueError(
+                f"{self.format_profile} requires {spec.width}x{spec.height}"
+            )
         for scene in self.scenes:
             clips = sum(asset.role == "ai_clip" for asset in scene.visual_assets)
             if clips and scene.visual != "ai_clip":
@@ -84,10 +91,12 @@ def build_render_input(
 
     if not storyboard.scenes:
         raise ValueError("Scene <none>: storyboard must contain at least one scene")
-    if duration_policy == "v1" and not MIN_DURATION_FRAMES <= expected_start <= MAX_DURATION_FRAMES:
+    spec = FORMAT_SPECS[storyboard.format_profile]
+    bounded = storyboard.format_profile == "youtube_long" or duration_policy == "v1"
+    if bounded and not spec.min_frames <= expected_start <= spec.max_frames:
         raise ValueError(
             f"Scene {storyboard.scenes[-1].id}: total duration must be between "
-            f"{MIN_DURATION_FRAMES} and {MAX_DURATION_FRAMES} frames"
+            f"{spec.min_frames} and {spec.max_frames} frames"
         )
 
     return RenderInput(
@@ -95,6 +104,9 @@ def build_render_input(
         audio_file=audio_file,
         scenes=storyboard.scenes,
         visual_budget_profile=storyboard.visual_budget_profile,
+        format_profile=storyboard.format_profile,
+        width=spec.width,
+        height=spec.height,
     )
 
 
