@@ -90,3 +90,18 @@ def test_failed_chapter_raises_and_leaves_no_part(tmp_path: Path) -> None:
             runner=lambda argv: 1,
         )
     assert not list((tmp_path / "cache").glob("*.mp4"))
+
+
+def test_referenced_asset_without_hash_raises() -> None:
+    import pytest
+
+    from healthvideo.domain.storyboard import Scene, Storyboard
+    from healthvideo.render.input import build_render_input
+
+    scene = Scene(id="S01", start_frame=0, duration_frames=1800, narration="a",
+                  visual="whiteboard", chapter_id="CH01",
+                  visual_assets=({"path": "assets/missing.png", "role": "whiteboard"},))
+    board = Storyboard(title="PYH", scenes=(scene,), format_profile="youtube_long")
+    ri = build_render_input(board, "audio/narration.wav", duration_policy="v2")
+    with pytest.raises(ValueError, match="assets/missing.png"):
+        chapter_cache_key(ri, chapter_spans(ri)[0], {}, RENDERER)

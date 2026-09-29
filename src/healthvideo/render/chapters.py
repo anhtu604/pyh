@@ -46,12 +46,15 @@ def chapter_cache_key(
         paths.update(asset.path for asset in scene.visual_assets)
         if scene.evidence_highlight is not None:
             paths.add(scene.evidence_highlight.image)
+    missing = sorted(paths - asset_hashes.keys())
+    if missing:
+        raise ValueError(f"Chapter {span.chapter_id}: no content hash for asset {missing[0]}")
     return canonical_json_hash(
         {
             "format_profile": render_input.format_profile,
             "fps": render_input.fps,
             "scenes": scenes,
-            "assets": {path: asset_hashes.get(path, "") for path in sorted(paths)},
+            "assets": {path: asset_hashes[path] for path in sorted(paths)},
             "renderer": dict(renderer_identity),
         }
     )
