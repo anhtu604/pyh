@@ -48,7 +48,9 @@ def test_youtube_long_renders_by_chapter(tmp_path: Path) -> None:
     assert "--frames=0-1799" in calls[0] and "--muted" in calls[0]
     assert calls[-1][0] == "ffmpeg"
     assert read_yaml(project_dir / "project.yaml")["state"] == "awaiting_video_review"
-    assert list((project_dir / "revisions" / "001" / "renders-cache").glob("CH01-*.mp4"))
+    # project-level so a new revision reuses unchanged chapters (spec 4.1)
+    assert list((project_dir / "renders-cache").glob("CH01-*.mp4"))
+    assert not (project_dir / "revisions" / "001" / "renders-cache").exists()
 
 
 def test_cli_runner_routes_ffmpeg_concat_past_pnpm(tmp_path: Path, monkeypatch) -> None:

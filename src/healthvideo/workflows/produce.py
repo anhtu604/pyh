@@ -354,7 +354,7 @@ def _produce_v2(
                 public_dir=staging_dir,
                 audio=staged_audio,
                 output=staged_output,
-                cache_dir=layout.artifact_root / CHAPTER_CACHE_DIRECTORY,
+                cache_dir=layout.project_dir / CHAPTER_CACHE_DIRECTORY,
                 asset_hashes=asset_hashes,
                 renderer_identity=renderer_identity_data,
                 runner=runner,
