@@ -39,6 +39,11 @@ const input = (visual: 'whiteboard' | 'evidence_highlight') => ({
   width: 1080 as const, height: 1920 as const, fps: 30 as const,
 });
 
+// HealthVideo wraps the frame in LayoutContext.Provider; unwrap to the AbsoluteFill.
+const renderVideo = (props: ReturnType<typeof parseRenderInput>) =>
+  (HealthVideo(props) as React.ReactElement<{children: React.ReactElement}>).props.children as
+    React.ReactElement<{children: React.ReactNode}>;
+
 describe('HealthVideo visual asset layer', () => {
   it('labels current visual assets with the PYH identity', () => {
     const rendered = VisualAsset({asset: {path: 'assets/pyh.svg', role: 'brand'}}) as
@@ -53,7 +58,7 @@ describe('HealthVideo visual asset layer', () => {
       source_marker: undefined, evidence_highlight: undefined,
       visual_assets: [{path: 'assets/phy.svg', role: 'brand'}],
     }]});
-    const root = HealthVideo(props) as React.ReactElement<{children: React.ReactNode}>;
+    const root = renderVideo(props);
     const sequences = React.Children.toArray(root.props.children).slice(1) as React.ReactElement<{
       children: React.ReactNode; from: number;
     }>[];
@@ -65,7 +70,7 @@ describe('HealthVideo visual asset layer', () => {
   it.each(['whiteboard', 'evidence_highlight'] as const)(
     'renders one declared asset for a %s scene',
     (visual) => {
-      const root = HealthVideo(input(visual)) as React.ReactElement<{children: React.ReactNode}>;
+      const root = renderVideo(input(visual));
       const sequence = React.Children.toArray(root.props.children)[1] as React.ReactElement<{
         children: React.ReactNode;
       }>;
@@ -85,7 +90,7 @@ describe('HealthVideo visual asset layer', () => {
         visual_assets: [{path: 'assets/chart.svg', role: 'chart'}],
       }],
     });
-    const root = HealthVideo(props) as React.ReactElement<{children: React.ReactNode}>;
+    const root = renderVideo(props);
     const sequence = React.Children.toArray(root.props.children)[1] as React.ReactElement<{
       children: React.ReactNode;
     }>;
@@ -106,7 +111,7 @@ describe('HealthVideo visual asset layer', () => {
         visual_assets: [{path: 'assets/ai-clips/S01.mp4', role: 'ai_clip'}],
       }],
     });
-    const root = HealthVideo(props) as React.ReactElement<{children: React.ReactNode}>;
+    const root = renderVideo(props);
     const rootChildren = React.Children.toArray(root.props.children);
     expect(rootChildren.filter((child) => React.isValidElement(child) && child.type === 'audio'))
       .toHaveLength(1);

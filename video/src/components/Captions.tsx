@@ -1,12 +1,13 @@
 import React from 'react';
 import {useCurrentFrame} from 'remotion';
+import {useLayout} from '../layout';
 
 type CaptionsProps = {
   text: string;
   durationInFrames: number;
 };
 
-const MAX_CAPTION_WORDS = 6;
+export const MAX_CAPTION_WORDS = 6;
 
 export const CAPTION_BACKGROUND_COLOR = '#FFFDF7';
 export const CAPTION_TEXT_COLOR = '#202124';
@@ -73,37 +74,37 @@ export const captionRows = (
 
 export const Captions: React.FC<CaptionsProps> = ({text, durationInFrames}) => {
   const frame = useCurrentFrame();
+  const c = useLayout().captions;
   const words = text.trim().split(/\s+/).filter(Boolean);
   const activeWord = words.length === 0
     ? -1
     : Math.min(words.length - 1, Math.floor((frame / Math.max(durationInFrames, 1)) * words.length));
-  const layout = captionRows(words, activeWord, MAX_CAPTION_WORDS);
+  const layout = captionRows(words, activeWord, c.maxWords);
 
   return (
     <svg
       aria-label="Phụ đề đang đọc"
-      viewBox="0 0 936 136"
+      viewBox={`0 0 ${c.width} ${c.height}`}
       style={{
-        bottom: 174,
-        height: 136,
-        left: 72,
+        bottom: c.bottom,
+        height: c.height,
+        left: c.left,
         position: 'absolute',
-        right: 72,
-        width: 936,
+        width: c.width,
       }}
     >
       {layout.rows.map((row, rowIndex) => {
-        const textLength = captionTextLength(row.map((word) => word.text).join(' '), 48, 900);
+        const textLength = captionTextLength(row.map((word) => word.text).join(' '), c.fontSize, c.maxTextWidth);
         return (
           <text
             key={row[0]?.index}
             fill={CAPTION_TEXT_COLOR}
             fontFamily="Arial, sans-serif"
-            fontSize="48"
+            fontSize={String(c.fontSize)}
             fontWeight="700"
             textAnchor="middle"
-            x="468"
-            y={rowIndex === 0 ? 52 : 116}
+            x={String(c.width / 2)}
+            y={c.rowY[rowIndex === 0 ? 0 : 1]}
             {...(textLength === undefined ? {} : {lengthAdjust: 'spacingAndGlyphs', textLength})}
           >
             {row.map((word, index) => (
