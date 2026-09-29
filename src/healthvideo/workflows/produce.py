@@ -21,6 +21,7 @@ from healthvideo.domain.script import Script
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
 from healthvideo.domain.storyboard import Storyboard
 from healthvideo.domain.visual_budget import validate_visual_budget
+from healthvideo.render.chapters import render_long_form
 from healthvideo.render.input import audio_timing_qa, build_render_input
 from healthvideo.render.remotion import build_render_argv, renderer_identity
 from healthvideo.render.run import (
@@ -61,6 +62,7 @@ AUTHOR_PROFILE_PATH = (
 )
 V2_RENDER_MANIFEST_NAME = "render-manifest.json"
 V2_VIDEO_QA_ARTIFACT = "reviews/video-qa.json"
+CHAPTER_CACHE_DIRECTORY = "renders-cache"
 
 
 def produce_project(
@@ -344,14 +346,28 @@ def _produce_v2(
         staged_render_input = staging_dir / RENDER_INPUT_NAME
         _write_json_atomic(staged_render_input, render_input_data)
         staged_output = staging_dir / OUTPUT_NAME
-        argv = build_render_argv(staged_render_input, staged_output, staging_dir)
-        exit_code = runner(argv)
-        if exit_code != 0:
-            raise RuntimeError(f"Remotion render failed with exit code {exit_code}")
-        if not staged_output.is_file():
-            raise FileNotFoundError(
-                f"Remotion render did not create output: {staged_output}"
+        chapter_parts: tuple[str, ...] = ()
+        if render_input.format_profile == "youtube_long":
+            chapter_parts = render_long_form(
+                render_input_path=staged_render_input,
+                render_input=render_input,
+                public_dir=staging_dir,
+                audio=staged_audio,
+                output=staged_output,
+                cache_dir=layout.artifact_root / CHAPTER_CACHE_DIRECTORY,
+                asset_hashes=asset_hashes,
+                renderer_identity=renderer_identity_data,
+                runner=runner,
             )
+        else:
+            argv = build_render_argv(staged_render_input, staged_output, staging_dir)
+            exit_code = runner(argv)
+            if exit_code != 0:
+                raise RuntimeError(f"Remotion render failed with exit code {exit_code}")
+            if not staged_output.is_file():
+                raise FileNotFoundError(
+                    f"Remotion render did not create output: {staged_output}"
+                )
         _write_json_atomic(
             staging_dir / V2_RENDER_MANIFEST_NAME,
             {
@@ -364,6 +380,7 @@ def _produce_v2(
                 "pronunciation_sha256": pronunciation_sha256,
                 "provider_identity": provider_identity_data,
                 "renderer_identity": renderer_identity_data,
+                **({"chapter_parts": list(chapter_parts)} if chapter_parts else {}),
             },
         )
         _write_json_atomic(
