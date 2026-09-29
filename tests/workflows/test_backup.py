@@ -51,6 +51,7 @@ def test_backup_excludes_runtime_secrets_source_fulltext_and_temporary_files(
         ".healthvideo/write-lease-copy.yaml",
         ".env",
         "cache/provider/response.json",
+        "renders-cache/CH01-0123456789abcdef.mp4",
         "source-documents/article.pdf",
         "revisions/001/workflow/pending-render.yaml",
         "revisions/001/assets/model.safetensors",
