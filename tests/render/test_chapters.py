@@ -34,3 +34,59 @@ def test_key_changes_with_text_renderer_and_assets() -> None:
     edited = _input(("CH01", 1800, "b"))
     assert chapter_cache_key(edited, chapter_spans(edited)[0], {}, RENDERER) != original
     assert chapter_cache_key(base, span, {}, {**RENDERER, "source_sha256": "y"}) != original
+
+
+from pathlib import Path
+
+from healthvideo.render.chapters import render_long_form
+
+
+def _fake_runner(calls: list[list[str]]):
+    def run(argv: list[str]) -> int:
+        calls.append(argv)
+        out = Path(argv[argv.index("--output") + 1]) if "--output" in argv else Path(argv[-1])
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"mp4")
+        return 0
+    return run
+
+
+def _render(tmp_path: Path, render_input, calls: list[list[str]]):
+    (tmp_path / "ri.json").write_text("{}", encoding="utf-8")
+    return render_long_form(
+        render_input_path=tmp_path / "ri.json", render_input=render_input,
+        public_dir=tmp_path, audio=tmp_path / "a.wav", output=tmp_path / "out" / "video.mp4",
+        cache_dir=tmp_path / "cache", asset_hashes={}, renderer_identity=RENDERER,
+        runner=_fake_runner(calls),
+    )
+
+
+def test_renders_each_chapter_then_concats(tmp_path: Path) -> None:
+    calls: list[list[str]] = []
+    parts = _render(tmp_path, _input(("CH01", 900, "a"), ("CH02", 900, "b")), calls)
+    assert [p.split("-")[0] for p in parts] == ["CH01", "CH02"]
+    assert "--frames=0-899" in calls[0] and "--frames=900-1799" in calls[1]
+    assert calls[2][0] == "ffmpeg" and (tmp_path / "out" / "video.mp4").is_file()
+    listing = (tmp_path / "out" / "chapters.txt").read_text(encoding="utf-8")
+    assert listing.count("file '") == 2
+
+
+def test_second_run_reuses_unchanged_chapters(tmp_path: Path) -> None:
+    _render(tmp_path, _input(("CH01", 900, "a"), ("CH02", 900, "b")), [])
+    calls: list[list[str]] = []
+    _render(tmp_path, _input(("CH01", 900, "a"), ("CH02", 900, "b-edited")), calls)
+    rendered = [c for c in calls if c[0] != "ffmpeg"]
+    assert len(rendered) == 1 and "--frames=900-1799" in rendered[0]
+
+
+def test_failed_chapter_raises_and_leaves_no_part(tmp_path: Path) -> None:
+    import pytest
+    (tmp_path / "ri.json").write_text("{}", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="Chapter CH01 render failed"):
+        render_long_form(
+            render_input_path=tmp_path / "ri.json", render_input=_input(("CH01", 1800, "a")),
+            public_dir=tmp_path, audio=tmp_path / "a.wav", output=tmp_path / "video.mp4",
+            cache_dir=tmp_path / "cache", asset_hashes={}, renderer_identity=RENDERER,
+            runner=lambda argv: 1,
+        )
+    assert not list((tmp_path / "cache").glob("*.mp4"))
