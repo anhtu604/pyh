@@ -586,6 +586,46 @@ def test_v2_provider_identity_changes_cache_with_same_provider_name(tmp_path: Pa
     assert len(calls) == 2
 
 
+def test_v2_renderer_identity_changes_cache_and_render_manifest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project_dir = _v2_medically_approved_project(tmp_path)
+    revision = project_dir / "revisions" / "001"
+    calls: list[list[str]] = []
+
+    def runner(argv: list[str]) -> int:
+        calls.append(argv)
+        _write_synthetic_output(argv)
+        return 0
+
+    monkeypatch.setattr(
+        produce_workflow,
+        "renderer_identity",
+        lambda: {"name": "remotion", "package_version": "4.0.522", "source_sha256": "a" * 64},
+    )
+    produce_project(project_dir, SilentTTS(), runner)
+    first = json.loads((revision / "renders" / "render-manifest.json").read_text(encoding="utf-8"))
+    project = read_yaml(project_dir / "project.yaml")
+    project["state"] = "medically_approved"
+    write_yaml_atomic(project_dir / "project.yaml", project)
+
+    monkeypatch.setattr(
+        produce_workflow,
+        "renderer_identity",
+        lambda: {"name": "remotion", "package_version": "4.0.523", "source_sha256": "b" * 64},
+    )
+    produce_project(project_dir, SilentTTS(), runner)
+    second = json.loads((revision / "renders" / "render-manifest.json").read_text(encoding="utf-8"))
+
+    assert first["input_hash"] != second["input_hash"]
+    assert second["renderer_identity"] == {
+        "name": "remotion",
+        "package_version": "4.0.523",
+        "source_sha256": "b" * 64,
+    }
+    assert len(calls) == 2
+
+
 def test_v2_rejects_bad_staged_audio_before_render(tmp_path: Path) -> None:
     project_dir = _v2_medically_approved_project(tmp_path)
     before = (project_dir / "project.yaml").read_bytes()
@@ -1079,12 +1119,18 @@ def test_input_hash_changes_for_every_declared_input(tmp_path) -> None:
     script = Script.model_validate(script_data)
     storyboard = Storyboard.model_validate(storyboard_data)
     profile = {"language": "vi", "directness": "clear_and_calm"}
+    renderer = {
+        "name": "remotion",
+        "package_version": "4.0.522",
+        "source_sha256": "c" * 64,
+    }
     baseline = _input_hash(
         script,
         storyboard,
         profile,
         "silent",
         {"assets/evidence-r01.svg": "a" * 64},
+        renderer,
     )
 
     changed_script = script.model_copy(
@@ -1101,6 +1147,7 @@ def test_input_hash_changes_for_every_declared_input(tmp_path) -> None:
             profile,
             "silent",
             {"assets/evidence-r01.svg": "a" * 64},
+            renderer,
         )
         != baseline
     )
@@ -1111,6 +1158,7 @@ def test_input_hash_changes_for_every_declared_input(tmp_path) -> None:
             profile,
             "silent",
             {"assets/evidence-r01.svg": "a" * 64},
+            renderer,
         )
         != baseline
     )
@@ -1121,6 +1169,7 @@ def test_input_hash_changes_for_every_declared_input(tmp_path) -> None:
             {"language": "vi", "directness": "direct"},
             "silent",
             {"assets/evidence-r01.svg": "a" * 64},
+            renderer,
         )
         != baseline
     )
@@ -1131,6 +1180,7 @@ def test_input_hash_changes_for_every_declared_input(tmp_path) -> None:
             profile,
             "other",
             {"assets/evidence-r01.svg": "a" * 64},
+            renderer,
         )
         != baseline
     )
@@ -1141,6 +1191,18 @@ def test_input_hash_changes_for_every_declared_input(tmp_path) -> None:
             profile,
             "silent",
             {"assets/evidence-r01.svg": "b" * 64},
+            renderer,
+        )
+        != baseline
+    )
+    assert (
+        _input_hash(
+            script,
+            storyboard,
+            profile,
+            "silent",
+            {"assets/evidence-r01.svg": "a" * 64},
+            {**renderer, "source_sha256": "d" * 64},
         )
         != baseline
     )

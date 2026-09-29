@@ -37,7 +37,7 @@ from healthvideo.workflows.operations import mutation_lease
 from healthvideo.workflows.review import _reviewed_paths
 
 _EXCLUDED_DIRECTORIES = frozenset(
-    {".healthvideo", "__pycache__", "cache", "source-cache", "source-documents"}
+    {".healthvideo", "__pycache__", "cache", "renders-cache", "source-cache", "source-documents"}
 )
 _EXCLUDED_SUFFIXES = frozenset(
     {".tmp", ".safetensors", ".ckpt", ".pt", ".pth", ".onnx", ".gguf"}

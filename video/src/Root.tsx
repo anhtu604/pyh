@@ -22,6 +22,7 @@ const defaultProps: RenderInput = {
     },
   ],
   visual_budget_profile: 'legacy',
+  format_profile: 'vertical_clip',
   width: 1080,
   height: 1920,
   fps: 30,
@@ -31,17 +32,40 @@ export const durationFromScenes = (scenes: Scene[]): number =>
   scenes.length ? Math.max(...scenes.map((scene) => scene.start_frame + scene.duration_frames))
     : MIN_DURATION_IN_FRAMES;
 
+export const metadataFromProps = (props: unknown) => {
+  const input = parseRenderInput(props);
+  return {durationInFrames: durationFromScenes(input.scenes), width: input.width, height: input.height};
+};
+
+const longFormDefaults: RenderInput = {
+  ...defaultProps,
+  format_profile: 'youtube_long',
+  width: 1920,
+  height: 1080,
+  scenes: [{...defaultProps.scenes[0], duration_frames: 1800, chapter_id: 'CH01'}],
+};
+
 export const RemotionRoot: React.FC = () => (
-  <Composition
-    id="HealthVideo"
-    component={HealthVideo}
-    defaultProps={defaultProps}
-    durationInFrames={MIN_DURATION_IN_FRAMES}
-    fps={30}
-    width={1080}
-    height={1920}
-    calculateMetadata={({props}) => ({
-      durationInFrames: durationFromScenes(parseRenderInput(props).scenes),
-    })}
-  />
+  <>
+    <Composition
+      id="HealthVideo"
+      component={HealthVideo}
+      defaultProps={defaultProps}
+      durationInFrames={MIN_DURATION_IN_FRAMES}
+      fps={30}
+      width={1080}
+      height={1920}
+      calculateMetadata={({props}) => metadataFromProps(props)}
+    />
+    <Composition
+      id="LongForm"
+      component={HealthVideo}
+      defaultProps={longFormDefaults}
+      durationInFrames={1800}
+      fps={30}
+      width={1920}
+      height={1080}
+      calculateMetadata={({props}) => metadataFromProps(props)}
+    />
+  </>
 );

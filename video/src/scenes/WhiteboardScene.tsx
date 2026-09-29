@@ -1,13 +1,16 @@
 import React from 'react';
 import {interpolate, useCurrentFrame} from 'remotion';
 import {Captions} from '../components/Captions';
+import {useLayout} from '../layout';
 import type {Scene} from '../types';
 
 type WhiteboardSceneProps = {
   scene: Scene;
 };
 
-export const SourceMarker = ({sourceMarker}: {sourceMarker: string}): React.JSX.Element => (
+export const SourceMarker = ({sourceMarker}: {sourceMarker: string}): React.JSX.Element => {
+  const m = useLayout().sourceMarker;
+  return (
   <div
     aria-label={`Nguồn ${sourceMarker}`}
     style={{
@@ -16,20 +19,22 @@ export const SourceMarker = ({sourceMarker}: {sourceMarker: string}): React.JSX.
       borderRadius: 18,
       color: '#202124',
       fontFamily: 'Arial, sans-serif',
-      fontSize: 52,
+      fontSize: m.fontSize,
       fontWeight: 800,
       padding: '12px 22px',
       position: 'absolute',
-      right: 72,
-      top: 96,
+      right: m.right,
+      top: m.top,
     }}
   >
     {sourceMarker}
   </div>
-);
+  );
+};
 
 export const WhiteboardScene: React.FC<WhiteboardSceneProps> = ({scene}) => {
   const frame = useCurrentFrame();
+  const layout = useLayout();
   const dashOffset = interpolate(frame, [0, 45], [1, 0], {
     extrapolateRight: 'clamp',
   });
@@ -40,10 +45,10 @@ export const WhiteboardScene: React.FC<WhiteboardSceneProps> = ({scene}) => {
       {visualAssets.length === 0 ? <svg
         aria-label="Nét vẽ whiteboard"
         style={{height: '100%', left: 0, position: 'absolute', top: 0, width: '100%'}}
-        viewBox="0 0 1080 1920"
+        viewBox={`0 0 ${layout.frame.width} ${layout.frame.height}`}
       >
         <path
-          d="M150 570 C 350 400, 650 740, 930 530"
+          d={layout.whiteboardPath}
           fill="none"
           pathLength="1"
           stroke="#202124"
@@ -56,14 +61,14 @@ export const WhiteboardScene: React.FC<WhiteboardSceneProps> = ({scene}) => {
         style={{
           color: '#202124',
           fontFamily: 'Arial, sans-serif',
-          fontSize: 72,
+          fontSize: layout.narration.fontSize,
           fontWeight: 800,
-          left: 96,
+          left: layout.narration.left,
           lineHeight: 1.15,
           position: 'absolute',
-          right: 96,
+          right: layout.narration.right,
           textAlign: 'center',
-          top: 760,
+          top: layout.narration.top,
         }}
       >
         {scene.narration}

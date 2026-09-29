@@ -230,6 +230,19 @@
         }
       ],
       "properties": {
+        "chapter_id": {
+          "anyOf": [
+            {
+              "pattern": "^CH\\d{2}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Chapter Id"
+        },
         "claim_id": {
           "anyOf": [
             {
@@ -401,6 +414,15 @@
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
+    "format_profile": {
+      "default": "vertical_clip",
+      "enum": [
+        "vertical_clip",
+        "youtube_long"
+      ],
+      "title": "Format Profile",
+      "type": "string"
+    },
     "scenes": {
       "items": {
         "$ref": "#/$defs/Scene"

@@ -1,5 +1,12 @@
 import {describe, expect, it} from 'vitest';
-import {captionRows, captionTextLength} from './components/Captions';
+import {
+  CAPTION_ACTIVE_COLOR,
+  CAPTION_BACKGROUND_COLOR,
+  CAPTION_TEXT_COLOR,
+  captionContrastRatio,
+  captionRows,
+  captionTextLength,
+} from './components/Captions';
 
 describe('captionRows', () => {
   const words = ['một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín', 'mười'];
@@ -62,5 +69,12 @@ describe('captionTextLength', () => {
 
   it('counts Unicode code points rather than UTF-16 code units', () => {
     expect(captionTextLength('A😀 B', 100, 400)).toBeUndefined();
+  });
+});
+
+describe('caption contrast', () => {
+  it('keeps standard and active caption text at WCAG AA contrast on the PYH canvas', () => {
+    expect(captionContrastRatio(CAPTION_TEXT_COLOR, CAPTION_BACKGROUND_COLOR)).toBeGreaterThanOrEqual(4.5);
+    expect(captionContrastRatio(CAPTION_ACTIVE_COLOR, CAPTION_BACKGROUND_COLOR)).toBeGreaterThanOrEqual(4.5);
   });
 });

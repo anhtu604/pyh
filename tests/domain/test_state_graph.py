@@ -22,7 +22,18 @@ from healthvideo.domain.state_graph import (
 
 MAIN_EDGES = {
     (WorkflowState.IDEA, WorkflowState.TOPIC_SELECTED),
-    (WorkflowState.TOPIC_SELECTED, WorkflowState.AUTHOR_BRIEF_READY),
+    (
+        WorkflowState.TOPIC_SELECTED,
+        WorkflowState.ORIENTATION_RESEARCH_IN_PROGRESS,
+    ),
+    (
+        WorkflowState.ORIENTATION_RESEARCH_IN_PROGRESS,
+        WorkflowState.AWAITING_EDITORIAL_DIRECTION,
+    ),
+    (
+        WorkflowState.AWAITING_EDITORIAL_DIRECTION,
+        WorkflowState.AUTHOR_BRIEF_READY,
+    ),
     (WorkflowState.AUTHOR_BRIEF_READY, WorkflowState.RESEARCH_IN_PROGRESS),
     (WorkflowState.RESEARCH_IN_PROGRESS, WorkflowState.EVIDENCE_READY),
     (WorkflowState.EVIDENCE_READY, WorkflowState.DRAFT_READY),
@@ -35,6 +46,83 @@ MAIN_EDGES = {
     (WorkflowState.PACKAGED, WorkflowState.PUBLISHED_MANUAL),
     (WorkflowState.PRODUCTION_IN_PROGRESS, WorkflowState.MEDICALLY_APPROVED),
 }
+
+
+def test_topic_cannot_skip_orientation() -> None:
+    project = ProjectManifestV2(slug="muoi", state=WorkflowState.TOPIC_SELECTED)
+
+    with pytest.raises(TransitionError, match="invalid v2 transition"):
+        transition_v2(project, WorkflowState.AUTHOR_BRIEF_READY, valid_context())
+
+
+@pytest.mark.parametrize(
+    ("state", "required_artifacts"),
+    [
+        (
+            WorkflowState.ORIENTATION_RESEARCH_IN_PROGRESS,
+            frozenset({"orientation/scope.yaml"}),
+        ),
+        (
+            WorkflowState.AWAITING_EDITORIAL_DIRECTION,
+            frozenset({"orientation/completed/<run_id>.yaml"}),
+        ),
+    ],
+)
+def test_orientation_states_can_enter_and_resume_from_blocked(
+    state: WorkflowState, required_artifacts: frozenset[str]
+) -> None:
+    project = ProjectManifestV2(slug="muoi", state=state)
+    context = TransitionContext("001", "0" * 64, required_artifacts)
+
+    blocked = transition_v2(
+        project,
+        WorkflowState.BLOCKED,
+        context,
+        reason_code="operator_pause",
+        resume_state=state,
+        entered_at=FROZEN_NOW,
+    )
+    resumed = transition_v2(blocked, state, context)
+
+    assert blocked.side_state is not None
+    assert blocked.side_state.resume_state is state
+    assert resumed.state is state
+
+
+@pytest.mark.parametrize(
+    ("source", "target", "artifacts"),
+    [
+        (
+            WorkflowState.TOPIC_SELECTED,
+            WorkflowState.ORIENTATION_RESEARCH_IN_PROGRESS,
+            frozenset({"orientation/scope.yaml"}),
+        ),
+        (
+            WorkflowState.ORIENTATION_RESEARCH_IN_PROGRESS,
+            WorkflowState.AWAITING_EDITORIAL_DIRECTION,
+            frozenset({"orientation/completed/<run_id>.yaml"}),
+        ),
+        (
+            WorkflowState.AWAITING_EDITORIAL_DIRECTION,
+            WorkflowState.AUTHOR_BRIEF_READY,
+            frozenset({"orientation/completed/<run_id>.yaml", "author/brief.yaml"}),
+        ),
+    ],
+)
+def test_orientation_edges_require_their_contract_artifacts(
+    source: WorkflowState, target: WorkflowState, artifacts: frozenset[str]
+) -> None:
+    project = ProjectManifestV2(slug="muoi", state=source)
+    context = TransitionContext("001", "0" * 64, artifacts)
+
+    assert transition_v2(project, target, context).state is target
+
+    with pytest.raises(TransitionError, match="missing required artifacts"):
+        transition_v2(
+            project,
+            target,
+            TransitionContext("001", "0" * 64, frozenset()),
+        )
 
 
 def test_main_graph_requires_artifacts_and_active_revision() -> None:
@@ -176,6 +264,8 @@ FROZEN_NOW = datetime(2026, 9, 10, 7, 30, tzinfo=UTC)
 ALL_ARTIFACTS = frozenset(
     {
         "topic/card.yaml",
+        "orientation/scope.yaml",
+        "orientation/completed/<run_id>.yaml",
         "author/brief.yaml",
         "evidence/ledger.yaml",
         "script/script.yaml",
@@ -248,6 +338,16 @@ SIDE_ENTRY_CASES = [
         WorkflowState.PRODUCTION_IN_PROGRESS,
     ),
     (WorkflowState.IDEA, WorkflowState.BLOCKED, WorkflowState.IDEA),
+    (
+        WorkflowState.ORIENTATION_RESEARCH_IN_PROGRESS,
+        WorkflowState.BLOCKED,
+        WorkflowState.ORIENTATION_RESEARCH_IN_PROGRESS,
+    ),
+    (
+        WorkflowState.AWAITING_EDITORIAL_DIRECTION,
+        WorkflowState.BLOCKED,
+        WorkflowState.AWAITING_EDITORIAL_DIRECTION,
+    ),
     (WorkflowState.DRAFT_READY, WorkflowState.BLOCKED, WorkflowState.DRAFT_READY),
     (WorkflowState.PACKAGED, WorkflowState.BLOCKED, WorkflowState.PACKAGED),
 ]

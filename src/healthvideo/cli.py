@@ -24,7 +24,7 @@ from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.review import ReviewKind, ReviewRecord
 from healthvideo.domain.topic import TopicCard
 from healthvideo.evidence.clients import EuropePMCClient, PubMedClient
-from healthvideo.process import resolve_pnpm_argv
+from healthvideo.process import prepare_subprocess_argv, resolve_pnpm_argv
 from healthvideo.render.remotion import build_render_argv
 from healthvideo.security import audit_project
 from healthvideo.storage.files import read_yaml, write_text_atomic
@@ -418,6 +418,14 @@ def doctor(
         raise typer.Exit(code=1)
 
 
+def run_render_argv(argv: list[str]) -> int:
+    """Run a render/concat argv without a shell; pnpm goes through its resolver."""
+    resolved = (
+        resolve_pnpm_argv(argv[1:]) if argv[0] == "pnpm" else prepare_subprocess_argv(argv)
+    )
+    return subprocess.run(resolved, check=False, shell=False).returncode
+
+
 @app.command()
 @project_mutation("produce", skip_when=lambda values: bool(values.get("dry_run")))
 def produce(
@@ -455,12 +463,8 @@ def produce(
         typer.echo(f"Unsupported TTS provider: {tts}")
         raise typer.Exit(code=1)
 
-    def run_remotion(argv: list[str]) -> int:
-        resolved = resolve_pnpm_argv(argv[1:])
-        return subprocess.run(resolved, check=False, shell=False).returncode
-
     try:
-        output = produce_project(project_dir, provider, run_remotion, dry_run=dry_run)
+        output = produce_project(project_dir, provider, run_render_argv, dry_run=dry_run)
     except (FileNotFoundError, RuntimeError, ValueError) as error:
         typer.echo(str(error))
         raise typer.Exit(code=1) from error

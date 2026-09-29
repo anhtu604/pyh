@@ -1,12 +1,17 @@
 import React from 'react';
 import {useCurrentFrame} from 'remotion';
+import {useLayout} from '../layout';
 
 type CaptionsProps = {
   text: string;
   durationInFrames: number;
 };
 
-const MAX_CAPTION_WORDS = 6;
+export const MAX_CAPTION_WORDS = 6;
+
+export const CAPTION_BACKGROUND_COLOR = '#FFFDF7';
+export const CAPTION_TEXT_COLOR = '#202124';
+export const CAPTION_ACTIVE_COLOR = '#9A3412';
 
 type CaptionWord = {
   index: number;
@@ -19,6 +24,34 @@ export const captionTextLength = (
   maxWidth: number,
 ): number | undefined =>
   Array.from(text).length * fontSize > maxWidth ? maxWidth : undefined;
+
+const relativeLuminance = (color: string): number => {
+  const match = /^#([0-9a-f]{6})$/i.exec(color);
+  if (!match) {
+    throw new Error(`Caption color must be a six-digit hex value: ${color}`);
+  }
+  const channels = [0, 2, 4].map((offset) =>
+    Number.parseInt(match[1].slice(offset, offset + 2), 16) / 255,
+  );
+  const linear = channels.map((channel) =>
+    channel <= 0.04045
+      ? channel / 12.92
+      : ((channel + 0.055) / 1.055) ** 2.4,
+  );
+  return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+};
+
+export const captionContrastRatio = (
+  foreground: string,
+  background: string,
+): number => {
+  const foregroundLuminance = relativeLuminance(foreground);
+  const backgroundLuminance = relativeLuminance(background);
+  return (
+    (Math.max(foregroundLuminance, backgroundLuminance) + 0.05) /
+    (Math.min(foregroundLuminance, backgroundLuminance) + 0.05)
+  );
+};
 
 export const captionRows = (
   words: readonly string[],
@@ -41,41 +74,41 @@ export const captionRows = (
 
 export const Captions: React.FC<CaptionsProps> = ({text, durationInFrames}) => {
   const frame = useCurrentFrame();
+  const c = useLayout().captions;
   const words = text.trim().split(/\s+/).filter(Boolean);
   const activeWord = words.length === 0
     ? -1
     : Math.min(words.length - 1, Math.floor((frame / Math.max(durationInFrames, 1)) * words.length));
-  const layout = captionRows(words, activeWord, MAX_CAPTION_WORDS);
+  const layout = captionRows(words, activeWord, c.maxWords);
 
   return (
     <svg
       aria-label="Phụ đề đang đọc"
-      viewBox="0 0 936 136"
+      viewBox={`0 0 ${c.width} ${c.height}`}
       style={{
-        bottom: 174,
-        height: 136,
-        left: 72,
+        bottom: c.bottom,
+        height: c.height,
+        left: c.left,
         position: 'absolute',
-        right: 72,
-        width: 936,
+        width: c.width,
       }}
     >
       {layout.rows.map((row, rowIndex) => {
-        const textLength = captionTextLength(row.map((word) => word.text).join(' '), 48, 900);
+        const textLength = captionTextLength(row.map((word) => word.text).join(' '), c.fontSize, c.maxTextWidth);
         return (
           <text
             key={row[0]?.index}
-            fill="#202124"
+            fill={CAPTION_TEXT_COLOR}
             fontFamily="Arial, sans-serif"
-            fontSize="48"
+            fontSize={String(c.fontSize)}
             fontWeight="700"
             textAnchor="middle"
-            x="468"
-            y={rowIndex === 0 ? 52 : 116}
+            x={String(c.width / 2)}
+            y={c.rowY[rowIndex === 0 ? 0 : 1]}
             {...(textLength === undefined ? {} : {lengthAdjust: 'spacingAndGlyphs', textLength})}
           >
             {row.map((word, index) => (
-              <tspan fill={word.index === activeWord ? '#D97706' : undefined} key={word.index}>
+              <tspan fill={word.index === activeWord ? CAPTION_ACTIVE_COLOR : undefined} key={word.index}>
                 {word.text}{index < row.length - 1 ? ' ' : null}
               </tspan>
             ))}

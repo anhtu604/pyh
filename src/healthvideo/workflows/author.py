@@ -9,6 +9,7 @@ from healthvideo.domain.author import AuthorBrief
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
 from healthvideo.storage.files import canonical_json_hash, read_yaml, write_yaml_atomic
+from healthvideo.workflows.orientation import read_authoritative_orientation
 
 
 def save_author_brief(
@@ -18,8 +19,17 @@ def save_author_brief(
     del now
     manifest_path = project_dir / "project.yaml"
     manifest = ProjectManifestV2.model_validate(read_yaml(manifest_path))
-    if confirm and manifest.state is not WorkflowState.TOPIC_SELECTED:
-        raise ValueError("author brief can only be confirmed from topic_selected")
+    if confirm and manifest.state is WorkflowState.TOPIC_SELECTED:
+        raise ValueError(
+            "author brief confirmation requires awaiting_editorial_direction"
+        )
+    if confirm and manifest.state is not WorkflowState.AWAITING_EDITORIAL_DIRECTION:
+        raise ValueError(
+            "author brief can only be confirmed from awaiting_editorial_direction"
+        )
+    if confirm:
+        # Bind the brief to the authoritative record, never to a mutable working file.
+        read_authoritative_orientation(project_dir)
 
     brief_path = (
         project_dir
@@ -38,7 +48,9 @@ def save_author_brief(
     context = TransitionContext(
         active_revision=manifest.active_revision,
         current_input_hash=canonical_json_hash(brief_data),
-        validated_artifacts=frozenset({"author/brief.yaml"}),
+        validated_artifacts=frozenset(
+            {"orientation/completed/<run_id>.yaml", "author/brief.yaml"}
+        ),
     )
     updated = transition_v2(manifest, WorkflowState.AUTHOR_BRIEF_READY, context)
     write_yaml_atomic(manifest_path, updated.model_dump(mode="json"))
