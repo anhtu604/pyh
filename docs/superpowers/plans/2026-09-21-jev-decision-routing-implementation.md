@@ -1,5 +1,7 @@
 # Jev (TypeSafe) Decision Routing Implementation Plan
 
+> Historical plan only. The Jev integration has been removed from the active runtime after a simplification review; do not execute these tasks as the current project plan.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Integrate TypeSafe Jev as an opt-in, structured decision-routing layer providing advisory topic triage, claim triage, and second-model review recommendations with strict fail-closed safety and zero automated state mutations or medical verdicts.

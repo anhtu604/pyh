@@ -68,6 +68,8 @@
       "enum": [
         "idea",
         "topic_selected",
+        "orientation_research_in_progress",
+        "awaiting_editorial_direction",
         "author_brief_ready",
         "research_in_progress",
         "evidence_ready",

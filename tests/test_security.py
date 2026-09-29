@@ -136,17 +136,17 @@ def test_production_and_package_do_not_import_provider_or_publish_clients() -> N
         assert all(not name.startswith("healthvideo.video_ai") for name in imports), relative
 
 
-def test_security_audit_passes_on_jev_advisory_artifacts(tmp_path: Path) -> None:
+def test_security_audit_passes_on_advisory_artifacts(tmp_path: Path) -> None:
     project = create_v2_project_fixture(tmp_path / "project")
-    advisory_file = project / "revisions/001/evidence/jev-claim-advisory.yaml"
+    advisory_file = project / "revisions/001/evidence/provider-advisory.yaml"
     advisory_file.write_text("schema_version: '1.0'\nadvisories: []\n", encoding="utf-8")
     findings = audit_project(project)
     assert findings == ()
 
 
-def test_security_audit_rejects_raw_provider_response_in_jev_advisory(tmp_path: Path) -> None:
+def test_security_audit_rejects_raw_provider_response_in_advisory(tmp_path: Path) -> None:
     project = create_v2_project_fixture(tmp_path / "project")
-    bad_file = project / "revisions/001/evidence/jev-claim-advisory.yaml"
+    bad_file = project / "revisions/001/evidence/provider-advisory.yaml"
     bad_file.write_text("schema_version: '1.0'\nraw_response: 'leak'\n", encoding="utf-8")
     findings = audit_project(project)
     assert any(item.rule_id == "credential-field" for item in findings)

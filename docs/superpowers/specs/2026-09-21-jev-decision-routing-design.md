@@ -1,7 +1,7 @@
 # Thiết kế Jev cho định tuyến quyết định có kiểm soát
 
 **Ngày:** 21-09-2026
-**Trạng thái:** Chờ bác sĩ duyệt đặc tả trước khi lập kế hoạch triển khai
+**Trạng thái:** Lưu lịch sử; tích hợp Jev đã được gỡ khỏi runtime sau rà soát tối giản. Không dùng tài liệu này làm chỉ dẫn triển khai hiện hành.
 
 ## 1. Mục tiêu
 
