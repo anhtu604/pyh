@@ -35,6 +35,7 @@ const input = (visual: 'whiteboard' | 'evidence_highlight') => ({
     visual_assets: [{path: 'assets/guide.svg', role: 'mascot' as const, pose: 'welcome' as const}],
   }],
   visual_budget_profile: 'legacy' as const,
+  format_profile: 'vertical_clip' as const,
   width: 1080 as const, height: 1920 as const, fps: 30 as const,
 });
 
