@@ -91,7 +91,7 @@ def render_long_form(
             staged.replace(part)
         parts.append(part)
     output.parent.mkdir(parents=True, exist_ok=True)
-    concat_list = output.with_name("chapters.txt")
+    concat_list = cache_dir / "chapters.txt"
     concat_list.write_text(
         "".join(f"file '{part.resolve().as_posix()}'" + "\n" for part in parts),
         encoding="utf-8",

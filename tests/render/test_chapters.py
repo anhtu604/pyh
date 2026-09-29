@@ -67,7 +67,8 @@ def test_renders_each_chapter_then_concats(tmp_path: Path) -> None:
     assert [p.split("-")[0] for p in parts] == ["CH01", "CH02"]
     assert "--frames=0-899" in calls[0] and "--frames=900-1799" in calls[1]
     assert calls[2][0] == "ffmpeg" and (tmp_path / "out" / "video.mp4").is_file()
-    listing = (tmp_path / "out" / "chapters.txt").read_text(encoding="utf-8")
+    assert not (tmp_path / "out" / "chapters.txt").exists()
+    listing = (tmp_path / "cache" / "chapters.txt").read_text(encoding="utf-8")
     assert listing.count("file '") == 2
 
 
