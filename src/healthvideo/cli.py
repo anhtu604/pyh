@@ -24,7 +24,7 @@ from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.review import ReviewKind, ReviewRecord
 from healthvideo.domain.topic import TopicCard
 from healthvideo.evidence.clients import EuropePMCClient, PubMedClient
-from healthvideo.process import resolve_pnpm_argv
+from healthvideo.process import prepare_subprocess_argv, resolve_pnpm_argv
 from healthvideo.render.remotion import build_render_argv
 from healthvideo.security import audit_project
 from healthvideo.storage.files import read_yaml, write_text_atomic
@@ -456,7 +456,11 @@ def produce(
         raise typer.Exit(code=1)
 
     def run_remotion(argv: list[str]) -> int:
-        resolved = resolve_pnpm_argv(argv[1:])
+        resolved = (
+            resolve_pnpm_argv(argv[1:])
+            if argv[0] == "pnpm"
+            else prepare_subprocess_argv(argv)
+        )
         return subprocess.run(resolved, check=False, shell=False).returncode
 
     try:

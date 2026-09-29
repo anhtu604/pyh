@@ -49,3 +49,26 @@ def test_youtube_long_renders_by_chapter(tmp_path: Path) -> None:
     assert calls[-1][0] == "ffmpeg"
     assert read_yaml(project_dir / "project.yaml")["state"] == "awaiting_video_review"
     assert list((project_dir / "revisions" / "001" / "renders-cache").glob("CH01-*.mp4"))
+
+
+def test_cli_runner_routes_ffmpeg_concat_past_pnpm(tmp_path: Path, monkeypatch) -> None:
+    from typer.testing import CliRunner
+
+    from healthvideo import cli
+
+    project_dir = _long_form_project(tmp_path)
+    executables: list[str] = []
+
+    def fake_run(argv, **kwargs):
+        executables.append(Path(argv[0]).stem.lower())
+        out = Path(argv[argv.index("--output") + 1]) if "--output" in argv else Path(argv[-1])
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"mp4")
+        return type("Done", (), {"returncode": 0})()
+
+    monkeypatch.setattr(cli.subprocess, "run", fake_run)
+    result = CliRunner().invoke(cli.app, ["produce", str(project_dir), "--tts", "silent"])
+
+    assert result.exit_code == 0, result.output
+    assert executables[-1] == "ffmpeg"
+    assert "ffmpeg" not in executables[:-1]
