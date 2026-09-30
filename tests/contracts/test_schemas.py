@@ -29,6 +29,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
         ("project-lease.schema.json", False),
         ("backup-manifest.schema.json", True),
         ("outline.schema.json", True),
+        ("clip-plan.schema.json", True),
     ],
 )
 def test_exported_schema_has_versioned_contract(

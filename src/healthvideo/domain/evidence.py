@@ -86,6 +86,9 @@ class EvidenceClaim(BaseModel):
     doctor_notes: str = ""
     synthetic_test_record: bool = False
     chart_data: list[ChartDatum] = Field(default_factory=list)
+    # Doctor-owned: claims stating the limits/exceptions of this claim. A vertical
+    # clip that shows this claim must also show every caveat claim (spec §4.2).
+    caveat_claim_ids: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _unique_chart_data(self) -> EvidenceClaim:

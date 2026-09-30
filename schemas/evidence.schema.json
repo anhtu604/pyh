@@ -89,6 +89,13 @@
       "title": "Applicability",
       "type": "string"
     },
+    "caveat_claim_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Caveat Claim Ids",
+      "type": "array"
+    },
     "certainty": {
       "default": "unrated",
       "enum": [
