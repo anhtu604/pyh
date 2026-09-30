@@ -87,6 +87,31 @@ project chỉ báo rule/path tương đối, không in giá trị secret; nó kh
 việc rà staged diff. Gói cuối dừng ở `packaged`. Cổng `medical` và `video` vẫn
 do bác sĩ quyết định; **không tự động xuất bản**.
 
+## 6. Lệnh Remotion treo sau khi đã render xong (Windows)
+
+Remotion đóng trình duyệt headless bằng `taskkill /pid <PID> /T /F`. Thỉnh thoảng
+tiến trình `taskkill` đó bị kẹt ở trạng thái tạm dừng (thread `Suspended`, CPU 0)
+và không bao giờ thoát. Nó giữ ống stdout/stderr của lệnh gọi, nên bên nào đọc
+output đến hết (pipe, shell của agent, CI) sẽ chờ mãi dù render đã xong và file
+đầu ra đầy đủ. Chạy `produce` trực tiếp trong terminal không bị ảnh hưởng. Nguyên
+nhân vì sao `taskkill` bị tạm dừng chưa được xác định.
+
+Phòng tránh: khi chạy render qua agent hoặc script, ghi output ra file thay vì pipe:
+
+```powershell
+& .venv\Scripts\healthvideo.exe produce "<project>" > produce.log 2>&1
+```
+
+Nếu lệnh đã treo: kiểm tra file đầu ra đã có, rồi dừng các `taskkill` mà mọi
+thread đều `Suspended` (chỉ dừng đúng các tiến trình này):
+
+```powershell
+Get-CimInstance Win32_Process -Filter "Name='taskkill.exe'" | ForEach-Object {
+  $threads = (Get-Process -Id $_.ProcessId).Threads
+  if (-not ($threads | Where-Object WaitReason -ne 'Suspended')) { Stop-Process -Id $_.ProcessId -Force }
+}
+```
+
 ## Khi có lỗi
 
 | Tình huống | Dữ liệu được giữ | Bước an toàn tiếp theo |
@@ -98,3 +123,4 @@ do bác sĩ quyết định; **không tự động xuất bản**.
 | Backup lỗi/busy | Project nguồn không bị sửa; snapshot hợp lệ không được ghi đè. Staging lỗi có thể còn để chẩn đoán. | Chạy `lease inspect`, sửa nguyên nhân, tạo backup ID mới. |
 | Restore lỗi | Snapshot nguyên vẹn; destination hợp lệ không bị ghi đè. Staging lỗi có thể còn. | Kiểm `backup-manifest.json` và thông báo lỗi, dùng destination mới sau khi sửa nguyên nhân. |
 | `security-audit` FAIL | Audit chỉ đọc, không sửa project. | Sửa rule được báo, rà Git và chạy audit lại trước commit. |
+| Render xong nhưng lệnh không trả về | Render đã promote; `taskkill` kẹt chỉ giữ ống output. | Làm theo mục 6: xác nhận file đầu ra, dừng `taskkill` bị `Suspended`, lần sau ghi output ra file. |
