@@ -45,6 +45,12 @@ const longFormDefaults: RenderInput = {
   scenes: [{...defaultProps.scenes[0], duration_frames: 1800, chapter_id: 'CH01'}],
 };
 
+export const verticalClipDefaults: RenderInput = {
+  ...defaultProps,
+  audio_file: 'audio/clips/CL01.wav',
+  scenes: [{...defaultProps.scenes[0], duration_frames: 900}],
+};
+
 export const RemotionRoot: React.FC = () => (
   <>
     <Composition
@@ -65,6 +71,16 @@ export const RemotionRoot: React.FC = () => (
       fps={30}
       width={1920}
       height={1080}
+      calculateMetadata={({props}) => metadataFromProps(props)}
+    />
+    <Composition
+      id="VerticalClip"
+      component={HealthVideo}
+      defaultProps={verticalClipDefaults}
+      durationInFrames={900}
+      fps={30}
+      width={1080}
+      height={1920}
       calculateMetadata={({props}) => metadataFromProps(props)}
     />
   </>
