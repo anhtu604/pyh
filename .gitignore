@@ -24,3 +24,4 @@ projects/**/.healthvideo/
 
 # Skill symlinks: absolute paths, machine-specific; the real content lives in .agents/skills
 .claude/
+.agy-reports/
