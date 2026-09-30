@@ -39,6 +39,11 @@ from healthvideo.storage.immutable import write_yaml_once
 from healthvideo.tts import pronunciation as pronunciation_module
 from healthvideo.workflows.ai_clips import recover_ai_clip_generation
 from healthvideo.workflows.citations import resolve_citations
+from healthvideo.workflows.long_form import (
+    CLIP_PLAN_ARTIFACT,
+    OUTLINE_ARTIFACT,
+    load_clip_scenes,
+)
 from healthvideo.workflows.visual_assets import recover_chart_asset_binding
 
 MEDICAL_APPROVAL_ARTIFACT = "reviews/medical-approval.yaml"
@@ -72,6 +77,13 @@ def medical_reviewed_paths(revision_root: Path) -> dict[str, Path]:
         "profiles/pronunciation.vi.yaml": pronunciation_module.PRONUNCIATION_PROFILE_PATH,
     }
     manifest_path = paths["assets/asset-manifest.yaml"]
+    storyboard_path = paths["storyboard/storyboard.yaml"]
+    if (
+        storyboard_path.is_file()
+        and read_yaml(storyboard_path).get("format_profile") == "youtube_long"
+    ):
+        for name in (OUTLINE_ARTIFACT, CLIP_PLAN_ARTIFACT):
+            paths[name] = revision_root / name
     if manifest_path.is_file():
         manifest = load_asset_manifest(manifest_path)
         rights_path = revision_root / "assets" / "license-ledger.yaml"
@@ -171,6 +183,8 @@ def approve_gate(
         validate_visual_budget(storyboard)
         script = Script.model_validate(read_yaml(revision_root / "script/script.yaml"))
         validate_hook_outro(script, storyboard, require_brand=True)
+        if storyboard.format_profile == "youtube_long":
+            load_clip_scenes(revision_root, storyboard)
         referenced_storyboard_assets(revision_root, storyboard, manifest)
         if any(asset.kind is AssetKind.AI_CLIP for asset in manifest.assets):
             resolve_citations(

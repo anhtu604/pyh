@@ -372,6 +372,104 @@ def create_v2_project_fixture(
     return project_dir
 
 
+def create_long_form_project_fixture(root: Path) -> Path:
+    """youtube_long v2 project awaiting medical review: 6 scenes, 5 chapters, 3 clips.
+
+    Claim C01 (scene S01) carries caveat C02 (scene S02): a clip showing S01 must show S02.
+    """
+    project_dir = create_v2_project_fixture(root, state=WorkflowState.AWAITING_MEDICAL_REVIEW)
+    revision_root = project_dir / "revisions" / "001"
+
+    ledger_path = revision_root / "evidence" / "ledger.yaml"
+    ledger = read_yaml(ledger_path)
+    ledger["claims"][0]["caveat_claim_ids"] = ["C02"]
+    ledger["claims"].append(
+        {
+            "id": "C02",
+            "text_public": "Mức giảm khác nhau giữa từng người.",
+            "text_technical": "Đáp ứng huyết áp với giảm natri không đồng nhất.",
+            "type": "evidence",
+            "sources": ["R01"],
+            "synthetic_test_record": True,
+        }
+    )
+    write_yaml_atomic(ledger_path, ledger)
+
+    texts = (
+        "Ăn mặn có thể làm huyết áp tăng.",
+        "Mức giảm khác nhau giữa từng người.",
+        "Muối ẩn trong nhiều món chế biến sẵn.",
+        "Đọc nhãn giúp biết lượng muối.",
+        "Nêm nhạt dần để vị giác quen.",
+        "Tóm tắt các ý chính của video.",
+    )
+    claims = {0: "C01", 1: "C02"}
+    lines = []
+    for index, text in enumerate(texts):
+        line = {"id": f"L{index + 1:02d}", "text": text, "delivery": {"intent": "explain"}}
+        if index in claims:
+            line.update({"claim_id": claims[index], "source_marker": "[1]"})
+        lines.append(line)
+    script_path = revision_root / "script" / "script.yaml"
+    script = read_yaml(script_path)
+    script["lines"] = lines
+    write_yaml_atomic(script_path, script)
+
+    board_path = revision_root / "storyboard" / "storyboard.yaml"
+    board = read_yaml(board_path)
+    first = board["scenes"][0]
+    first.update({"duration_frames": 900, "chapter_id": "CH01"})
+    scenes = [first]
+    chapters = ("CH01", "CH02", "CH03", "CH04", "CH05", "CH05")
+    frames = (900, 900, 900, 900, 900, 600)
+    start = 900
+    for index in range(1, 6):
+        scene = {
+            "id": f"S{index + 1:02d}",
+            "start_frame": start,
+            "duration_frames": frames[index],
+            "narration": texts[index],
+            "visual": "whiteboard",
+            "chapter_id": chapters[index],
+        }
+        if index in claims:
+            scene.update({"claim_id": claims[index], "source_marker": "[1]"})
+        scenes.append(scene)
+        start += frames[index]
+    board.update({"format_profile": "youtube_long", "scenes": scenes})
+    write_yaml_atomic(board_path, board)
+
+    write_yaml_atomic(
+        revision_root / "script" / "outline.yaml",
+        {
+            "schema_version": "1.0",
+            "title": "Ăn mặn và tăng huyết áp",
+            "chapters": [
+                {
+                    "id": f"CH{number:02d}",
+                    "title": f"Chương {number}",
+                    "goal": "Giải thích một ý chính",
+                    "claim_ids": {1: ["C01"], 2: ["C02"]}.get(number, []),
+                    "target_seconds": 240,
+                }
+                for number in range(1, 6)
+            ],
+        },
+    )
+    write_yaml_atomic(
+        revision_root / "script" / "clip-plan.yaml",
+        {
+            "schema_version": "1.0",
+            "clips": [
+                {"id": "CL01", "title": "Muối và huyết áp", "first_scene_id": "S01", "last_scene_id": "S02"},
+                {"id": "CL02", "title": "Muối ẩn", "first_scene_id": "S03", "last_scene_id": "S04"},
+                {"id": "CL03", "title": "Nêm nhạt dần", "first_scene_id": "S05", "last_scene_id": "S06"},
+            ],
+        },
+    )
+    return project_dir
+
+
 _V2_MAIN_SEQUENCE = [
     WorkflowState.IDEA,
     WorkflowState.TOPIC_SELECTED,

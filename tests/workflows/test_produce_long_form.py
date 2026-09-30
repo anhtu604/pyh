@@ -3,25 +3,17 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from healthvideo.domain.gate_review import GateKind
-from healthvideo.domain.project_v2 import WorkflowState
-from healthvideo.storage.files import read_yaml, write_yaml_atomic
+from healthvideo.storage.files import read_yaml
 from healthvideo.tts.silent import SilentTTS
 from healthvideo.workflows.gate_review import approve_gate
 from healthvideo.workflows.produce import produce_project
-from tests.helpers import create_v2_project_fixture
+from tests.helpers import create_long_form_project_fixture
 
 REVIEWED_AT = datetime(2026, 9, 29, 9, 0, tzinfo=UTC)
 
 
 def _long_form_project(tmp_path: Path) -> Path:
-    project_dir = create_v2_project_fixture(tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW)
-    path = project_dir / "revisions" / "001" / "storyboard" / "storyboard.yaml"
-    board = read_yaml(path)
-    board["format_profile"] = "youtube_long"
-    board["scenes"][0]["duration_frames"] = 1800
-    for scene in board["scenes"]:
-        scene["chapter_id"] = "CH01"
-    write_yaml_atomic(path, board)
+    project_dir = create_long_form_project_fixture(tmp_path)
     approve_gate(project_dir, GateKind.MEDICAL, reviewer="BS Nguyễn Văn An", now=REVIEWED_AT)
     return project_dir
 
@@ -45,7 +37,7 @@ def test_youtube_long_renders_by_chapter(tmp_path: Path) -> None:
     assert output == renders / "video.mp4" and output.is_file()
     assert (render_input["width"], render_input["height"]) == (1920, 1080)
     assert manifest["chapter_parts"][0].startswith("CH01-")
-    assert "--frames=0-1799" in calls[0] and "--muted" in calls[0]
+    assert "--frames=0-899" in calls[0] and "--muted" in calls[0]
     assert calls[-1][0] == "ffmpeg"
     assert read_yaml(project_dir / "project.yaml")["state"] == "awaiting_video_review"
     # project-level so a new revision reuses unchanged chapters (spec 4.1)
