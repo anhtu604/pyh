@@ -13,6 +13,7 @@ from healthvideo.domain.brand import BrandProfile
 from healthvideo.domain.evidence import EvidenceClaim
 from healthvideo.domain.lease import ProjectLease
 from healthvideo.domain.license_ledger import LicenseLedger
+from healthvideo.domain.outline import Outline
 from healthvideo.domain.project_v2 import ProjectManifestV2
 from healthvideo.domain.pronunciation import PronunciationLexicon
 from healthvideo.domain.script import Script
@@ -39,6 +40,7 @@ SCHEMAS: dict[str, type[BaseModel]] = {
     "agent-review-response.schema.json": AgentReviewResponse,
     "project-lease.schema.json": ProjectLease,
     "backup-manifest.schema.json": BackupManifest,
+    "outline.schema.json": Outline,
 }
 
 
