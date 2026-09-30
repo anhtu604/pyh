@@ -295,10 +295,16 @@ def render_video_packet(revision_root: Path) -> str:
             status = "không khớp report tái tính"
         budget_section += f"<p>QA production: {status}</p>"
 
+    clip_videos = "".join(
+        f"<h2>Clip {escape(clip_id)}</h2>"
+        f'<video controls src="../renders/{escape(relative)}"></video>'
+        for clip_id, relative in sorted(manifest.get("clips", {}).items())
+    )
     return (
         '<!doctype html><html lang="vi"><head><meta charset="utf-8">'
         "<title>Gói duyệt video</title></head><body>"
         '<video controls src="../renders/video.mp4"></video>'
+        + clip_videos
         + budget_section
         + f"<pre>{escape(str(manifest))}</pre>"
         f"<pre>{escape(str(qa))}</pre>"

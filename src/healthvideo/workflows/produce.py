@@ -53,6 +53,11 @@ from healthvideo.workflows.gate_review import (
     hash_reviewed_artifacts,
     medical_reviewed_paths,
 )
+from healthvideo.workflows.long_form import (
+    CLIP_PLAN_ARTIFACT,
+    load_clip_scenes,
+    render_clips,
+)
 from healthvideo.workflows.review import ensure_approval_current
 from healthvideo.workflows.visual_assets import recover_chart_asset_binding
 
@@ -257,6 +262,11 @@ def _produce_v2(
             "pronunciation_sha256": pronunciation_sha256,
             "provider_identity": provider_identity_data,
             "renderer_identity": renderer_identity_data,
+            **(
+                {"clip_plan": read_yaml(layout.artifact_root / CLIP_PLAN_ARTIFACT)}
+                if storyboard.format_profile == "youtube_long"
+                else {}
+            ),
         }
     )
     render_input = build_render_input(
@@ -347,7 +357,28 @@ def _produce_v2(
         _write_json_atomic(staged_render_input, render_input_data)
         staged_output = staging_dir / OUTPUT_NAME
         chapter_parts: tuple[str, ...] = ()
+        clip_outputs: dict[str, str] = {}
         if render_input.format_profile == "youtube_long":
+
+            def synthesize_clip(text: str, path: Path) -> int:
+                tts.synthesize(
+                    TTSRequest(
+                        text=apply_pronunciation(text, pronunciation),
+                        language=script.language,
+                    ),
+                    path,
+                )
+                return inspect_wav(
+                    path, require_signal=getattr(tts, "require_signal", False)
+                ).duration_ms
+
+            clip_outputs = render_clips(
+                load_clip_scenes(layout.artifact_root, storyboard),
+                storyboard,
+                staging_dir,
+                synthesize=synthesize_clip,
+                runner=runner,
+            )
             chapter_parts = render_long_form(
                 render_input_path=staged_render_input,
                 render_input=render_input,
@@ -381,6 +412,7 @@ def _produce_v2(
                 "provider_identity": provider_identity_data,
                 "renderer_identity": renderer_identity_data,
                 **({"chapter_parts": list(chapter_parts)} if chapter_parts else {}),
+                **({"clips": clip_outputs} if clip_outputs else {}),
             },
         )
         _write_json_atomic(
@@ -492,6 +524,10 @@ def _v2_run_is_valid(
         and manifest.get("renderer_identity") == dict(renderer_identity)
         and manifest.get("render_input_sha256")
         == canonical_json_hash(render_input)
+    ):
+        return False
+    if not all(
+        (run_dir / relative).is_file() for relative in manifest.get("clips", {}).values()
     ):
         return False
     return all(

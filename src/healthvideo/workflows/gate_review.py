@@ -100,13 +100,18 @@ def medical_reviewed_paths(revision_root: Path) -> dict[str, Path]:
 
 
 def video_reviewed_paths(revision_root: Path) -> dict[str, Path]:
-    """Name the artifacts the video gate covers: the render manifest and the MP4."""
-    return {
-        "renders/render-manifest.json": revision_root
-        / "renders"
-        / "render-manifest.json",
-        "renders/video.mp4": revision_root / "renders" / "video.mp4",
+    """Name the artifacts the video gate covers: render manifest, MP4 and every clip."""
+    renders = revision_root / "renders"
+    paths = {
+        "renders/render-manifest.json": renders / "render-manifest.json",
+        "renders/video.mp4": renders / "video.mp4",
     }
+    manifest_path = renders / "render-manifest.json"
+    if manifest_path.is_file():
+        clips = json.loads(manifest_path.read_text(encoding="utf-8")).get("clips", {})
+        for relative in clips.values():
+            paths[f"renders/{relative}"] = renders / relative
+    return paths
 
 
 _REVIEWED_PATHS = {
