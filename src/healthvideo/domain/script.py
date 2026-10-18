@@ -20,12 +20,14 @@ class ScriptLine(BaseModel):
     purpose: Literal["content", "outro"] = "content"
     claim_id: str | None = None
     source_marker: str | None = None
+    arc_beat: int | None = Field(default=None, ge=1, le=7)
+    explainer_layer_id: str | None = None
     delivery: Delivery
 
 
 class Script(BaseModel):
     schema_version: str = "1.0"
     title: str
-    format_profile: Literal["legacy", "hook_outro_v1"] = "legacy"
+    format_profile: Literal["legacy", "hook_outro_v1", "explain_first_v1"] = "legacy"
     language: str = "vi"
     lines: list[ScriptLine] = Field(default_factory=list)

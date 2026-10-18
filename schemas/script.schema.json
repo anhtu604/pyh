@@ -47,6 +47,20 @@
     },
     "ScriptLine": {
       "properties": {
+        "arc_beat": {
+          "anyOf": [
+            {
+              "maximum": 7,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Arc Beat"
+        },
         "claim_id": {
           "anyOf": [
             {
@@ -61,6 +75,18 @@
         },
         "delivery": {
           "$ref": "#/$defs/Delivery"
+        },
+        "explainer_layer_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Explainer Layer Id"
         },
         "id": {
           "title": "Id",
@@ -112,7 +138,8 @@
       "default": "legacy",
       "enum": [
         "legacy",
-        "hook_outro_v1"
+        "hook_outro_v1",
+        "explain_first_v1"
       ],
       "title": "Format Profile",
       "type": "string"

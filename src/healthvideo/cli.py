@@ -25,6 +25,7 @@ from healthvideo.domain.review import ReviewKind, ReviewRecord
 from healthvideo.domain.topic import TopicCard
 from healthvideo.evidence.clients import EuropePMCClient, PubMedClient
 from healthvideo.process import prepare_subprocess_argv, resolve_pnpm_argv
+from healthvideo.qa.script import lint_project_script
 from healthvideo.render.remotion import build_render_argv
 from healthvideo.security import audit_project
 from healthvideo.storage.files import read_yaml, write_text_atomic
@@ -128,6 +129,7 @@ outro_app = typer.Typer(no_args_is_help=True)
 ai_clip_app = typer.Typer(no_args_is_help=True)
 lease_app = typer.Typer(no_args_is_help=True)
 backup_app = typer.Typer(no_args_is_help=True)
+script_app = typer.Typer(no_args_is_help=True)
 app.add_typer(project_app, name="project")
 app.add_typer(review_app, name="review")
 app.add_typer(revision_app, name="revision")
@@ -139,10 +141,25 @@ app.add_typer(outro_app, name="outro")
 app.add_typer(ai_clip_app, name="ai-clip")
 app.add_typer(lease_app, name="lease")
 app.add_typer(backup_app, name="backup")
+app.add_typer(script_app, name="script")
 
 
 def _echo_error(error: BaseException) -> None:
     typer.echo("\n".join([str(error), *getattr(error, "__notes__", [])]))
+
+
+@script_app.command("lint")
+def script_lint(project_dir: Annotated[Path, typer.Argument(help="Thư mục dự án")]) -> None:
+    """Lint the active script; warnings do not cause a failing exit status."""
+    try:
+        issues = lint_project_script(project_dir)
+    except (OSError, TypeError, ValueError) as error:
+        _echo_error(error)
+        raise typer.Exit(code=1) from error
+    for issue in issues:
+        typer.echo(f"{issue.severity}: {issue.code} [{issue.line_id}] {issue.message}")
+    if any(issue.severity == "error" for issue in issues):
+        raise typer.Exit(code=1)
 
 
 @backup_app.command("create")

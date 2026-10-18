@@ -31,7 +31,9 @@ EXPECTED = {
     },
 }
 READ_ONLY = {
-    "src/healthvideo/cli.py": {"status", "lease_inspect", "review_open", "security_audit"},
+    "src/healthvideo/cli.py": {
+        "status", "lease_inspect", "review_open", "security_audit", "script_lint",
+    },
     "src/healthvideo/commands/operator.py": {"status"},
 }
 LEASE_CONTROL = {
