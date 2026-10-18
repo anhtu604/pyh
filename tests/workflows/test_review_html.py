@@ -1,16 +1,79 @@
 import json
 from copy import deepcopy
 from datetime import UTC, datetime
+from hashlib import sha256
 from pathlib import Path
 
 import pytest
 
+from healthvideo.domain.explainer import Explainer
 from healthvideo.domain.storyboard import Storyboard
 from healthvideo.domain.visual_budget import calculate_visual_budget
+from healthvideo.storage.explainer import write_explainer
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.workflows.review_html import render_medical_packet, render_video_packet
 from tests.helpers import advance_v2_project_to_video_review, create_v2_project_fixture
 from tests.workflows.test_gate_review import _author_ai_clip, _create_ai_project
+
+
+def test_legacy_medical_packet_stays_byte_identical() -> None:
+    html = render_medical_packet(Path("tests/fixtures/golden-project-v2/revisions/001"))
+    assert sha256(html.encode()).hexdigest() == (
+        "d26de1d3477d0141a35f4396c320e2daa4a94535f8165cefb6ee5900e904dfdc"
+    )
+
+
+@pytest.mark.parametrize("with_explainer", [False, True])
+def test_mechanism_packet_groups_claims_sources_and_all_referencing_layers(
+    tmp_path: Path, with_explainer: bool,
+) -> None:
+    revision = create_v2_project_fixture(tmp_path) / "revisions/001"
+    ledger_path = revision / "evidence/ledger.yaml"
+    ledger = read_yaml(ledger_path)
+    ledger["records"].append({
+        "id": "R-TEST-01", "title": "Nguồn thử <b>&</b>",
+        "retraction_status": "clean", "synthetic_test_record": True,
+    })
+    ledger["claims"].extend([{
+        "id": claim_id, "type": "mechanism", "text_public": text,
+        "text_technical": "Synthetic model.", "sources": ["R-TEST-01"],
+    } for claim_id, text in [
+        ("M-TEST-01", "Mô hình <script> & thử."), ("M-TEST-02", "Mô hình thứ hai."),
+    ]])
+    write_yaml_atomic(ledger_path, ledger)
+    if with_explainer:
+        write_explainer(revision, Explainer.model_validate({
+            "topic_question": "Mô hình thử?", "organ_system": "synthetic",
+            "layers": [{
+                "id": f"L-TEST-{index}", "layer": layer,
+                "concept": f"Khái niệm <{index}> & thử", "plain_explanation": "Minh họa.",
+                "visual": {"kind": "comparison", "subject": "synthetic",
+                           "motion": f"Chuyển động <{index}> & thử"},
+                "claim_ids": ["M-TEST-01"] if index < 3 else ["M-TEST-02"],
+            } for index, layer in enumerate(
+                ["anatomy", "physiology", "pathophysiology", "pathology"], 1
+            )],
+        }))
+    html = render_medical_packet(revision)
+    before, group = html.split("<h2>Cơ chế — cần kiểm độ đúng giải phẫu</h2>")
+    group = group.split("</section>")[0]
+    assert "M-TEST-01" not in before and "M-TEST-02" not in before
+    assert "Mô hình &lt;script&gt; &amp; thử." in group
+    assert "Mô hình thứ hai." in group
+    assert "R-TEST-01" in group and "Nguồn thử &lt;b&gt;&amp;&lt;/b&gt;" in group
+    assert "<script>" not in html
+    if with_explainer:
+        first, second = group.split("<td>M-TEST-02</td>")
+        for index, layer in enumerate(
+            ["anatomy", "physiology", "pathophysiology", "pathology"], 1
+        ):
+            target, other = (first, second) if index < 3 else (second, first)
+            assert layer in target
+            assert f"Khái niệm &lt;{index}&gt; &amp; thử" in target
+            assert f"Chuyển động &lt;{index}&gt; &amp; thử" in target
+            assert f"Chuyển động &lt;{index}&gt; &amp; thử" not in other
+    else:
+        assert "Chuyển động" not in group
 
 
 def _enable_packet_budget(project_dir: Path, *, override: bool = False) -> None:

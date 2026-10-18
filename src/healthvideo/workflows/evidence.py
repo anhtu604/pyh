@@ -123,10 +123,16 @@ def build_evidence_ledger(
         if s.retraction_status == "retracted":
             raise ValueError(f"Source {s.id} is retracted and cannot be included in evidence ledger")
 
+    verified_source_ids = {s.id for s in sources if s.retraction_status == "clean"}
     for c in claims:
         for src_id in c.sources:
             if src_id not in source_ids:
                 raise ValueError(f"Claim {c.id} references unknown source {src_id}")
+        if c.type == "mechanism" and not verified_source_ids.intersection(c.sources):
+            raise ValueError(
+                f"Claim {c.id}: mechanism requires at least one verified source "
+                "(retraction_status clean); use type professional_opinion for expert opinion"
+            )
 
     ledger_data = {
         "schema_version": "1.0",

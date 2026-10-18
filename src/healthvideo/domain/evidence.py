@@ -7,6 +7,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+# ponytail: Substring matching can flag negations and miss paraphrases; medical review is still required.
+MECHANISM_EFFECT_KEYWORDS = ("giảm nguy cơ", "hiệu quả", "nên dùng", "có ích")
+
 
 class ChartDatum(BaseModel):
     """An explicitly recorded count, never extracted or estimated by the renderer."""
@@ -75,7 +78,7 @@ class EvidenceClaim(BaseModel):
     id: str
     text_public: str
     text_technical: str
-    type: Literal["evidence", "interpretation", "professional_opinion"]
+    type: Literal["evidence", "interpretation", "professional_opinion", "mechanism"]
     sources: list[str] = Field(default_factory=list)
     certainty: Literal["high", "moderate", "low", "very_low", "unrated"] = "unrated"
     population: str = ""
@@ -86,6 +89,18 @@ class EvidenceClaim(BaseModel):
     doctor_notes: str = ""
     synthetic_test_record: bool = False
     chart_data: list[ChartDatum] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_mechanism(self) -> EvidenceClaim:
+        if self.type != "mechanism":
+            return self
+        if not self.sources:
+            raise ValueError(
+                "mechanism requires a source; use type professional_opinion for expert opinion"
+            )
+        if any(keyword in self.text_public.casefold() for keyword in MECHANISM_EFFECT_KEYWORDS):
+            raise ValueError("mechanism cannot claim intervention effects; use type evidence")
+        return self
 
     @model_validator(mode="after")
     def _unique_chart_data(self) -> EvidenceClaim:

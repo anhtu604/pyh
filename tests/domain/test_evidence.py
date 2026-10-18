@@ -15,6 +15,44 @@ from healthvideo.domain.evidence import (
 from healthvideo.storage.files import read_yaml
 
 
+def test_mechanism_needs_sources_but_not_pico_effect_or_certainty() -> None:
+    claim = EvidenceClaim(
+        id="M-TEST-01", type="mechanism", sources=["R-TEST-01"],
+        text_public="Mô hình minh họa gồm hai khối.", text_technical="Synthetic model.",
+    )
+    assert claim.certainty == "unrated"
+    assert claim.population == ""
+
+
+def test_unsourced_mechanism_requires_existing_professional_opinion_label() -> None:
+    data = {
+        "id": "M-TEST-01", "text_public": "Mô hình minh họa.",
+        "text_technical": "Synthetic model.",
+    }
+    with pytest.raises(ValidationError, match="professional_opinion"):
+        EvidenceClaim(type="mechanism", **data)
+    assert EvidenceClaim(type="professional_opinion", **data).sources == []
+
+
+@pytest.mark.parametrize("keyword", ["giảm nguy cơ", "hiệu quả", "nên dùng", "có ích"])
+@pytest.mark.parametrize("uppercase", [False, True])
+def test_mechanism_rejects_effect_keywords_only_in_public_text(
+    keyword: str, uppercase: bool,
+) -> None:
+    text = f"Nội dung thử nghiệm: {keyword.upper() if uppercase else keyword}."
+    data = {
+        "id": "M-TEST-01", "sources": ["R-TEST-01"],
+        "text_public": text, "text_technical": "Synthetic model.",
+    }
+    with pytest.raises(ValidationError, match="evidence"):
+        EvidenceClaim(type="mechanism", **data)
+    for claim_type in ("evidence", "interpretation", "professional_opinion"):
+        assert EvidenceClaim(type=claim_type, **data).text_public == text
+    assert EvidenceClaim(
+        type="mechanism", **{**data, "text_public": "Mô hình thử.", "text_technical": text},
+    ).text_technical == text
+
+
 def test_extended_evidence_claim_defaults_and_validation() -> None:
     claim = EvidenceClaim(
         id="C01",

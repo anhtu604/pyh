@@ -161,7 +161,8 @@
       "enum": [
         "evidence",
         "interpretation",
-        "professional_opinion"
+        "professional_opinion",
+        "mechanism"
       ],
       "title": "Type",
       "type": "string"

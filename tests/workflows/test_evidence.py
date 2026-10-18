@@ -184,3 +184,43 @@ def test_reject_topic_for_lack_of_evidence_enters_topic_rejected(tmp_path: Path)
     assert manifest.state == WorkflowState.TOPIC_REJECTED
     assert manifest.side_state is not None
     assert manifest.side_state.reason_code == "Không tìm thấy nghiên cứu lâm sàng nào đạt chuẩn"
+
+
+@pytest.mark.parametrize("status", ["unverified", "expression_of_concern", "clean"])
+def test_mechanism_requires_a_clean_referenced_source(tmp_path: Path, status: str) -> None:
+    project = _setup_project_at(tmp_path, WorkflowState.RESEARCH_IN_PROGRESS)
+    claim = EvidenceClaim(
+        id="M-TEST-01", type="mechanism", sources=["R-TEST-01"],
+        text_public="Mô hình thử gồm hai khối.", text_technical="Synthetic model.",
+    )
+    source = SourceRecord.model_validate({
+        "id": "R-TEST-01", "title": "Nguồn minh họa, không phải tài liệu y khoa",
+        "retraction_status": status, "synthetic_test_record": True,
+    })
+    # An unrelated clean record must not satisfy the claim's requirement.
+    unrelated = SourceRecord(
+        id="R-TEST-02", title="Nguồn thử khác", retraction_status="clean",
+        synthetic_test_record=True,
+    )
+    if status == "clean":
+        path, manifest = build_evidence_ledger(project, [claim], [source, unrelated])
+        assert path.is_file()
+        assert manifest.state == WorkflowState.EVIDENCE_READY
+    else:
+        with pytest.raises(ValueError, match="verified source"):
+            build_evidence_ledger(project, [claim], [source, unrelated])
+        assert not (project / "revisions/001/evidence/ledger.yaml").exists()
+        assert read_yaml(project / "project.yaml")["state"] == "research_in_progress"
+
+
+def test_mechanism_accepts_one_clean_source_among_multiple(tmp_path: Path) -> None:
+    project = _setup_project_at(tmp_path, WorkflowState.RESEARCH_IN_PROGRESS)
+    claim = EvidenceClaim(
+        id="M-TEST-01", type="mechanism", sources=["R-TEST-01", "R-TEST-02"],
+        text_public="Mô hình thử.", text_technical="Synthetic model.",
+    )
+    sources = [SourceRecord(
+        id=source_id, title="Nguồn minh họa", retraction_status=status,
+        synthetic_test_record=True,
+    ) for source_id, status in [("R-TEST-01", "unverified"), ("R-TEST-02", "clean")]]
+    assert build_evidence_ledger(project, [claim], sources)[0].is_file()

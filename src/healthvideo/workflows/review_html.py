@@ -19,6 +19,7 @@ from healthvideo.domain.license_ledger import LicenseLedger
 from healthvideo.domain.script import Script
 from healthvideo.domain.storyboard import Storyboard
 from healthvideo.domain.visual_budget import VisualCategory, calculate_visual_budget
+from healthvideo.storage.explainer import read_explainer
 from healthvideo.storage.files import canonical_json_hash, read_yaml
 
 _NOT_YET_MODELED = (
@@ -105,6 +106,42 @@ def _render_ai_clip_section(revision_root: Path, manifest: AssetManifest) -> str
     )
 
 
+def _render_mechanism_section(
+    revision_root: Path, claims: list[EvidenceClaim], sources: dict[str, SourceRecord],
+) -> str:
+    if not claims:
+        return ""
+    explainer = (
+        read_explainer(revision_root)
+        if (revision_root / "explainer" / "explainer.yaml").is_file()
+        else None
+    )
+    rows = []
+    for claim in claims:
+        source_text = "; ".join(
+            escape(source_id) + (
+                f": {escape(sources[source_id].title)}" if source_id in sources else ""
+            )
+            for source_id in claim.sources
+        )
+        visuals = "".join(
+            f"<li>{escape(layer.layer)}: {escape(layer.concept)}; "
+            f"{escape(layer.visual.motion)}</li>"
+            for layer in (explainer.layers if explainer is not None else ())
+            if claim.id in layer.claim_ids
+        )
+        rows.append(
+            f"<tr><td>{escape(claim.id)}</td><td>{escape(claim.text_public)}</td>"
+            f"<td>{source_text}</td><td>{'<ul>' + visuals + '</ul>' if visuals else ''}</td></tr>"
+        )
+    return (
+        '<section><h2>Cơ chế — cần kiểm độ đúng giải phẫu</h2>'
+        '<table border="1"><thead><tr><th>Claim</th><th>Câu công chúng</th>'
+        '<th>Nguồn</th><th>Lớp / Khái niệm / visual.motion</th></tr></thead><tbody>'
+        + "".join(rows) + "</tbody></table></section>"
+    )
+
+
 def render_medical_packet(revision_root: Path) -> str:
     ledger = read_yaml(revision_root / "evidence" / "ledger.yaml")
     sources = {
@@ -151,6 +188,8 @@ def render_medical_packet(revision_root: Path) -> str:
         )
     has_unmodeled = False
     for claim in claims:
+        if claim.type == "mechanism":
+            continue
         source_titles = ", ".join(
             escape(sources[source_id].title)
             for source_id in claim.sources
@@ -187,6 +226,9 @@ def render_medical_packet(revision_root: Path) -> str:
         )
 
     note_paragraph = f"<p>{escape(_NOT_YET_MODELED)}</p>" if has_unmodeled else ""
+    mechanism_section = _render_mechanism_section(
+        revision_root, [claim for claim in claims if claim.type == "mechanism"], sources,
+    )
     visual_budget_section = _render_visual_budget_section(storyboard)
     asset_manifest = AssetManifest.model_validate(
         read_yaml(revision_root / "assets" / "asset-manifest.yaml")
@@ -230,6 +272,7 @@ def render_medical_packet(revision_root: Path) -> str:
         "</tr></thead><tbody>"
         + "".join(rows)
         + "</tbody></table>"
+        + mechanism_section
         + (
             '<h2>Paper highlights</h2><table border="1"><thead><tr><th>Scene</th><th>Marker</th><th>Source</th><th>Page</th><th>Quote</th><th>Source-page rectangle (x,y,w,h)</th><th>Crop asset</th></tr></thead><tbody>'
             + "".join(highlight_rows)
