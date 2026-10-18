@@ -1,6 +1,186 @@
 {
   "version": 1,
   "skills": {
+    "build-iterated-agentic-loop": {
+      "source": "humanlayer/skills",
+      "sourceType": "github",
+      "skillPath": "plugins/build-iterated-agentic-loop/skills/build-iterated-agentic-loop/SKILL.md",
+      "computedHash": "8ff34ac22f6b9a2a72adb1a70d752b4d122a022ed655db75ef94d66ff02d8a9c"
+    },
+    "cavecrew": {
+      "source": "JuliusBrussee/caveman",
+      "sourceType": "github",
+      "skillPath": "skills/cavecrew/SKILL.md",
+      "computedHash": "32d5320fb7c8b717e8c434e250ac987bebf48f553d0444afbe8215ea38ae5c09"
+    },
+    "caveman": {
+      "source": "JuliusBrussee/caveman",
+      "sourceType": "github",
+      "skillPath": "skills/caveman/SKILL.md",
+      "computedHash": "fa7c0951349ae3782a20e55c6d1e72e4c23585b7932bb5e021c17c4f8f055a07"
+    },
+    "caveman-commit": {
+      "source": "JuliusBrussee/caveman",
+      "sourceType": "github",
+      "skillPath": "skills/caveman-commit/SKILL.md",
+      "computedHash": "b416cf134b0f33ddadeca7977aebdbb2d3db79a166d0fce2e1aabeec98132766"
+    },
+    "caveman-compress": {
+      "source": "JuliusBrussee/caveman",
+      "sourceType": "github",
+      "skillPath": "skills/caveman-compress/SKILL.md",
+      "computedHash": "32557f612fd652d87b9f21f6271ba10c36d6c237c607c88e27f4b79a1da2675e"
+    },
+    "caveman-discover": {
+      "source": "JuliusBrussee/caveman",
+      "sourceType": "github",
+      "skillPath": "skills/caveman-discover/SKILL.md",
+      "computedHash": "6850e0ca7bd7a35a1f447cbd342f91b76ece1fb2e3473ad894e51e69746df8a2"
+    },
+    "caveman-evidence-review": {
+      "source": "JuliusBrussee/caveman",
+      "sourceType": "github",
+      "skillPath": "skills/caveman-evidence-review/SKILL.md",
+      "computedHash": "6a2db0191082500739416c87ff896a7894f98aa867f15c70fe932e4d72edd327"
+    },
+    "caveman-explore": {
+      "source": "JuliusBrussee/caveman",
+      "sourceType": "github",
+      "skillPath": "skills/caveman-explore/SKILL.md",
+      "computedHash": "e22fc4edb9feb5046809c74d969b06092b8d7db851aa8502a53a185bba27c57a"
+    },
+    "caveman-help": {
+      "source": "JuliusBrussee/caveman",
+      "sourceType": "github",
+      "skillPath": "skills/caveman-help/SKILL.md",
+      "computedHash": "845394fef650bb63b44e2e28391de704505f881c6f968ebfdfb0278343ecbd7c"
+    },
+    "caveman-learn": {
+      "source": "JuliusBrussee/caveman",
+      "sourceType": "github",
+      "skillPath": "skills/caveman-learn/SKILL.md",
+      "computedHash": "d25fd3ece9b571e1cffd93ca2594ab1919471b27b9c1589fc1c8b7e9c7d6071b"
+    },
+    "caveman-manage": {
+      "source": "JuliusBrussee/caveman",
+      "sourceType": "github",
+      "skillPath": "skills/caveman-manage/SKILL.md",
+      "computedHash": "fdd3834941a8a576cae0ac96a38dfec6ac4bd26ef209ba9997468ca11aaf19f4"
+    },
+    "caveman-optimize": {
+      "source": "JuliusBrussee/caveman",
+      "sourceType": "github",
+      "skillPath": "skills/caveman-optimize/SKILL.md",
+      "computedHash": "5e859a3a8305b5559b2f528616f634324449a426054704d43ef0b6ec8c1d9807"
+    },
+    "caveman-review": {
+      "source": "JuliusBrussee/caveman",
+      "sourceType": "github",
+      "skillPath": "skills/caveman-review/SKILL.md",
+      "computedHash": "36a4007c5c0c6b90b5accfee1cd769a86e4963b651dece2ce5f17a223a0abb4b"
+    },
+    "caveman-setup": {
+      "source": "JuliusBrussee/caveman",
+      "sourceType": "github",
+      "skillPath": "skills/caveman-setup/SKILL.md",
+      "computedHash": "b12b9f8f3fe6b499334a4b319ae1a16aa2da5c2d11e5bc85efd3236eac5213aa"
+    },
+    "caveman-stats": {
+      "source": "JuliusBrussee/caveman",
+      "sourceType": "github",
+      "skillPath": "skills/caveman-stats/SKILL.md",
+      "computedHash": "5aba475d0e43a26d7448e6537902e3137beca3024663dfdecf1009cbe16bc299"
+    },
+    "character-animation-qa": {
+      "source": "calesthio/openmontage",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/character-animation-qa/SKILL.md",
+      "computedHash": "727ca3217c8d69cce95452c3d843db8c78536feaf8c61d0006bb2a62618ef9c7"
+    },
+    "d3-viz": {
+      "source": "calesthio/openmontage",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/d3-viz/SKILL.md",
+      "computedHash": "f16b782976ac2df47f91839385b4458944d90f23f109ff32a8f450bbdaf6431d"
+    },
+    "design-control-loop": {
+      "source": "humanlayer/skills",
+      "sourceType": "github",
+      "skillPath": "plugins/design-control-loop/skills/design-control-loop/SKILL.md",
+      "computedHash": "646d6a11e3a509e2edcda5efc304cd6f7520edad546c45b9f90b7b0614d4a541"
+    },
+    "gsap-core": {
+      "source": "greensock/gsap-skills",
+      "sourceType": "github",
+      "skillPath": "skills/gsap-core/SKILL.md",
+      "computedHash": "b891c9ed42d9319685250231085ebe21538f2c844613b277b9dd2b3ff529a542"
+    },
+    "gsap-timeline": {
+      "source": "greensock/gsap-skills",
+      "sourceType": "github",
+      "skillPath": "skills/gsap-timeline/SKILL.md",
+      "computedHash": "e7c07909bb427f74e1bda1ff716bd97ae166269382f7abbd649c0d1ba8f6e0ec"
+    },
+    "humanizer": {
+      "source": "blader/humanizer",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "f17e3360d6ad1a9f93774fbe89347376968c4060137ac04872baa49b3a4a4175"
+    },
+    "i-have-adhd": {
+      "source": "ayghri/i-have-adhd",
+      "sourceType": "github",
+      "skillPath": "skills/i-have-adhd/SKILL.md",
+      "computedHash": "ff5ac62815dc9c74709333f433e667ea76215126afb628e7dd8e021758a9e3a7"
+    },
+    "improve-claude-md": {
+      "source": "humanlayer/skills",
+      "sourceType": "github",
+      "skillPath": "plugins/improve-claude-md/skills/improve-claude-md/SKILL.md",
+      "computedHash": "27e3ef1847732d859cc8c8583ffb9768ebd18804fefae0fde718fe69dbf875d4"
+    },
+    "investigate-first": {
+      "source": "JuliusBrussee/caveman",
+      "sourceType": "github",
+      "skillPath": "skills/investigate-first/SKILL.md",
+      "computedHash": "59b581b5abfc0e19b7dd5a7c3bb2b16621ab5e94e085065c7b724a9c86cc3d4d"
+    },
+    "lean-build": {
+      "source": "JuliusBrussee/caveman",
+      "sourceType": "github",
+      "skillPath": "skills/lean-build/SKILL.md",
+      "computedHash": "6074721f1653e6e9d6381595b094284807b8d5d001d7d3977ec534679b16a63c"
+    },
+    "lottie-bodymovin": {
+      "source": "calesthio/openmontage",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/lottie-bodymovin/SKILL.md",
+      "computedHash": "0eece518ff73d47a172e8fed4c5e3b5e0113afd573124659021b3209f17289c9"
+    },
+    "migration": {
+      "source": "JuliusBrussee/caveman",
+      "sourceType": "github",
+      "skillPath": "skills/migration/SKILL.md",
+      "computedHash": "7348b2d21ca05bdecc1e4ec2c8b63515ccb1700c8a261fdbd458b04b7383945b"
+    },
+    "motion-design": {
+      "source": "whaleyxbt/claude-motion",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/motion-design/SKILL.md",
+      "computedHash": "779278e10c5f45d2cc5079a98294f9729cea892fd6197495da3d7016dc764ea2"
+    },
+    "motion-graphics": {
+      "source": "calesthio/openmontage",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/motion-graphics/SKILL.md",
+      "computedHash": "608c9298432465916a79851f92fd2ba88268255a0be1504b58058da653410a87"
+    },
+    "narrow-react-prop-types": {
+      "source": "humanlayer/skills",
+      "sourceType": "github",
+      "skillPath": "plugins/narrow-react-prop-types/skills/narrow-react-prop-types/SKILL.md",
+      "computedHash": "8330b9071e7c479be104efedbed34e3af87edda40600598302d944ccc43a8636"
+    },
     "pydantic": {
       "source": "pydantic/pydantic",
       "sourceType": "github",
@@ -11,25 +191,109 @@
       "source": "remotion-dev/skills",
       "sourceType": "github",
       "skillPath": "skills/remotion-best-practices/SKILL.md",
-      "computedHash": "e88011f31bac55fb2ce11b93bacd2c33401a6a5c01a4010c5fc6fabb0eb49837"
+      "computedHash": "299c7f56f80e01847da06d9fa14825adbe0b30ef5fe31c99b749213063e85e10"
     },
     "remotion-captions": {
       "source": "remotion-dev/skills",
       "sourceType": "github",
       "skillPath": "skills/remotion-captions/SKILL.md",
-      "computedHash": "2104ad0753c4f1e91685e5dc2ba2b5f50a69189c14d7c80ce9d96ca092f5f9e8"
+      "computedHash": "71bfad54e60226267ae14650c2798c975df6eb9da82945d8670f84c57abffcf8"
+    },
+    "remotion-docs": {
+      "source": "remotion-dev/skills",
+      "sourceType": "github",
+      "skillPath": "skills/remotion-docs/SKILL.md",
+      "computedHash": "1e9c15c18090acafb6bd5a4201136e7c415a3c00e867422f2038a480be74a27a"
+    },
+    "remotion-markup": {
+      "source": "remotion-dev/skills",
+      "sourceType": "github",
+      "skillPath": "skills/remotion-markup/SKILL.md",
+      "computedHash": "8e432da7f2bec44b6dd2364d5d42b419ae1414f2d70313b051e3bc1420873ab3"
+    },
+    "remotion-multimedia": {
+      "source": "remotion-dev/skills",
+      "sourceType": "github",
+      "skillPath": "skills/remotion-multimedia/SKILL.md",
+      "computedHash": "67297b2d0d9326f3504fb7ab5e68ce55417b4530bdf45627e92722f62d86c491"
     },
     "remotion-render": {
       "source": "remotion-dev/skills",
       "sourceType": "github",
       "skillPath": "skills/remotion-render/SKILL.md",
-      "computedHash": "d151704b9cabb54a4e25a62b84b3d527e37eea2df9bdc0802ab6dcb6d7d52307"
+      "computedHash": "935e84345a518ffa2cc97445c196bf73c1500746626ac7937f6dac9bca6d74ac"
+    },
+    "review-loop": {
+      "source": "whaleyxbt/claude-motion",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/review-loop/SKILL.md",
+      "computedHash": "7021bcc5ffca9c9ed2429fbc28104bfc91e3b7028177b8c0f6e7ab02a8fbab5b"
+    },
+    "safe-refactor": {
+      "source": "JuliusBrussee/caveman",
+      "sourceType": "github",
+      "skillPath": "skills/safe-refactor/SKILL.md",
+      "computedHash": "9df34a21a7a2c18ce13dbbe4a3f66b4e91df9e4bc33c1c9da8a80261583367ec"
+    },
+    "show-me": {
+      "source": "humanlayer/skills",
+      "sourceType": "github",
+      "skillPath": "plugins/show-me/skills/show-me/SKILL.md",
+      "computedHash": "cda500d566bcd2ca93a5aab44b4317bbd31ace508fca0383afe3091ac1662b4b"
+    },
+    "surgical-patch": {
+      "source": "JuliusBrussee/caveman",
+      "sourceType": "github",
+      "skillPath": "skills/surgical-patch/SKILL.md",
+      "computedHash": "028b9c3574142d19639d9f8eb11fbb01c58479f8f441e957d598a7215e79f95d"
+    },
+    "svg-character-animation": {
+      "source": "calesthio/openmontage",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/svg-character-animation/SKILL.md",
+      "computedHash": "65a17b9ab121f1fb11af63ff1cc8ab36accf96a36ce8decb82660fe26df6fbf0"
+    },
+    "threejs-animation": {
+      "source": "calesthio/openmontage",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/threejs-animation/SKILL.md",
+      "computedHash": "8c50b1493812bd88f3ed0637c0c3c5d846afdb322157b67b2ffba4ce8e552835"
+    },
+    "threejs-fundamentals": {
+      "source": "calesthio/openmontage",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/threejs-fundamentals/SKILL.md",
+      "computedHash": "e08d49571071f0f54ef2a76fdfcb96c16673e4fda478067727def4659feb80ca"
     },
     "typer": {
       "source": "fastapi/typer",
       "sourceType": "github",
       "skillPath": "typer/.agents/skills/typer/SKILL.md",
       "computedHash": "057cd64883164a1258f18b3acf034da54f27da716e6983c329653edd179bae38"
+    },
+    "verify-and-stop": {
+      "source": "JuliusBrussee/caveman",
+      "sourceType": "github",
+      "skillPath": "skills/verify-and-stop/SKILL.md",
+      "computedHash": "3d67de16a2b3c48b643bc511ebc4cb86e6c7105215d8428b6140cbcb73aba4e6"
+    },
+    "video-understand": {
+      "source": "calesthio/openmontage",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/video-understand/SKILL.md",
+      "computedHash": "098f2e869473b0e03c75fbf85009b0f46e75a2870ab52885faaae16578a211b8"
+    },
+    "visual-style": {
+      "source": "calesthio/openmontage",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/visual-style/SKILL.md",
+      "computedHash": "9b6545b4467ad420a311582abb4070850e24643b15e5856d907190ff5247ae7e"
+    },
+    "web-sims": {
+      "source": "whaleyxbt/claude-motion",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/web-sims/SKILL.md",
+      "computedHash": "1c5e3d7b60356a2063f8a5fc237f4f609d62ca7d475f3d3f43a5394845144dc0"
     }
   }
 }

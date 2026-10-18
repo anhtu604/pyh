@@ -1,81 +1,32 @@
-If the video being created is a multi-scene video, it should be structured in a special way.
-Create a new folder and put each scene in a separate file.
+# Multi-scene videos
 
-```tsx
-// SceneA.tsx
-export const SceneA: React.FC = () => {
- return // ...
-}
-```
+Put successive scenes in a named `Track`. Make each scene with
+`Interactive.create({layout: 'absolute-fill'})` and register it as a connected
+composition. Write each instance separately with inline timing and props.
 
-```tsx
-// SceneB.tsx
-export const SceneB: React.FC = () => {
-  return // ...
-} 
-```
+```tsx title="MyVideo.tsx"
+import {Track, useVideoConfig} from 'remotion';
+import {OpeningScene} from './OpeningScene';
+import {FeatureScene} from './FeatureScene';
 
-Install `@remotion/transitions` if not yet available:
+export const MyVideo = () => {
+  const {fps} = useVideoConfig();
 
-```
-npx remotion add @remotion/transitions
-```
-
-// MyVideo.tsx
-```tsx
-import {TransitionSeries} from '@remotion/transitions';
-
-const MyVideo: React.FC = () => {
   return (
-    <TransitionSeries>
-      <TransitionSeries.Sequence durationInFrames={4 * fps} name="SceneA">
-        <SceneA />
-      </TransitionSeries.Sequence>
-      <TransitionSeries.Sequence durationInFrames={4 * fps} name="SceneB">
-        <SceneB />
-      </TransitionSeries.Sequence>
-    </TransitionSeries>
-  )
-}
+    <Track name="Scenes">
+      <OpeningScene name="Opening" durationInFrames={3 * fps} />
+      <FeatureScene name="Feature" from={3 * fps} durationInFrames={4 * fps} />
+    </Track>
+  );
+};
 ```
 
-It could also make sense to register each scene individually in the root file so it can be edited there.
-If a composition with the same component is registered, one can double click the sequence in the main composition and jump to that composition.
+Follow the complete [Track + connected compositions example](../remotion-interactivity/timeline-structure.md)
+for scene definitions and `Root.tsx`. Register `OpeningScene`, `FeatureScene`,
+and `MyVideo` using those same exported component references, with representative
+inline defaults. At 30 fps, this parent lasts 210 frames.
 
-```tsx
-export const Root: React.FC = () => {
-  return (
-    <>
-      <Folder id="MyVideo-Scenes">
-        <Composition
-          id="Scene1"
-          component={Scene1}
-          durationInFrames={5 * fps}
-          fps={30}
-          width={1920}
-          height={1080}
-        />
-        <Composition
-          id="Scene2"
-          component={Scene2}
-          durationInFrames={5 * fps}
-          fps={30}
-          width={1920}
-          height={1080}
-        /> 
-      </Folder>
-      <Composition
-        id="MyVideo"
-        component={MyVideo}
-        durationInFrames={10 * fps}
-        fps={30}
-        width={1920}
-        height={1080}
-      /> 
-    </>
-  )
-}
-```
-
-This allows the user to trim the start and end of the durations visually and add [transitions](./transitions.md) later.
-Prefer inlining the `durationInFrames` values, because only then they are editable. It's okay if the value is redundant.
+When adding overlapping transitions, use
+[`TransitionSeries`](transitions.md) instead of `Track`. Keep each scene as the
+only child of its `TransitionSeries.Sequence`, and subtract transition overlaps
+from the parent duration.

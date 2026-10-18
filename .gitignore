@@ -23,3 +23,6 @@ projects/**/.healthvideo/
 
 # Skill symlinks: absolute paths, machine-specific; the real content lives in .agents/skills
 .claude/
+
+# Unlicensed style catalog: local reference only
+.refs/
