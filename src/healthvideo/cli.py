@@ -89,6 +89,7 @@ from healthvideo.workflows.review import (
     latest_approval,
 )
 from healthvideo.workflows.review_html import render_medical_packet, render_video_packet
+from healthvideo.workflows.screening import screen_candidates
 from healthvideo.workflows.topic import (
     create_topic,
     list_topics,
@@ -959,6 +960,22 @@ def evidence_search(
         typer.echo(str(error))
         raise typer.Exit(code=1) from error
     typer.echo(f"Tìm thấy {log.retrieved_count} tài liệu ứng viên.")
+
+
+@evidence_app.command("screen")
+@project_mutation("evidence_screen")
+def evidence_screen(
+    project_dir: ProjectDir,
+    criteria: Annotated[Path, typer.Option("--criteria", help="Screening criteria YAML")],
+    input_path: Annotated[Path, typer.Option("--input", help="Orientation candidates JSONL")],
+) -> None:
+    """Write advisory abstract screening for human review; no ledger selection."""
+    try:
+        output = screen_candidates(project_dir, criteria, input_path)
+    except (OSError, TypeError, ValueError) as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
+    typer.echo(f"Advisory screening for human review: {output}")
 
 
 @evidence_app.command("ingest")

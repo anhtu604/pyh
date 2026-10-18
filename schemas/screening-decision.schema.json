@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "decision": {
+      "enum": [
+        "include",
+        "exclude",
+        "unsure"
+      ],
+      "title": "Decision",
+      "type": "string"
+    },
+    "probability": {
+      "anyOf": [
+        {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Probability"
+    },
+    "reason": {
+      "minLength": 1,
+      "title": "Reason",
+      "type": "string"
+    },
+    "reviewer": {
+      "minLength": 1,
+      "title": "Reviewer",
+      "type": "string"
+    }
+  },
+  "required": [
+    "decision",
+    "reason",
+    "reviewer"
+  ],
+  "title": "ScreeningDecision",
+  "type": "object"
+}

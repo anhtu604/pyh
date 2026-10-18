@@ -19,6 +19,7 @@ EXPECTED = {
         "revision_create",
         "topic_select",
         "evidence_search",
+        "evidence_screen",
         "evidence_ingest",
         "evidence_build_ledger",
     },

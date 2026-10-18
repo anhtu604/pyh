@@ -20,6 +20,7 @@ from healthvideo.domain.script import Script
 from healthvideo.domain.stage import StageManifest
 from healthvideo.domain.storyboard import Storyboard
 from healthvideo.domain.topic import TopicCard
+from healthvideo.evidence.screening import ScreeningCriteria, ScreeningDecision
 from healthvideo.render.input import RenderInput
 
 JSON_SCHEMA_DIALECT = "https://json-schema.org/draft/2020-12/schema"
@@ -41,6 +42,8 @@ SCHEMAS: dict[str, type[BaseModel]] = {
     "agent-review-response.schema.json": AgentReviewResponse,
     "project-lease.schema.json": ProjectLease,
     "backup-manifest.schema.json": BackupManifest,
+    "screening-criteria.schema.json": ScreeningCriteria,
+    "screening-decision.schema.json": ScreeningDecision,
 }
 
 

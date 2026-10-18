@@ -144,6 +144,7 @@ class CandidateSource(BaseModel):
     pmid: str | None = None
     abstract: str = ""
     venue: str = ""
+    pub_type: str = ""
 
 
 class SourceSelection(BaseModel):
