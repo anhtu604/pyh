@@ -95,16 +95,38 @@ theo chương có sẵn. Chạy full test sau merge. Không merge các nhánh M8
   theo tỷ lệ spec §7 (cơ chế 55–70%, bằng chứng 15–25%, chữ/outro 10–15%, AI ≤5%).
 - Test: schema, render input, visual budget.
 
+## Task 6b — Merge `feat/m8-2-clips` (Codex giải xung đột, Claude review)
+
+Merge nhánh M8.2 (outline chương, clip plan, render clip 9:16, cổng 1/2 cho clip, E2E) vào
+`master`. Xung đột dự kiến ở `domain/evidence.py`, `workflows/review_html.py`,
+`workflows/gate_review.py`, `workflows/produce.py`, `tests/helpers.py`, `README.md`,
+`tools/export_schemas.py`: giữ cả hai phía (explain-first + long-form/clip). Không mang
+`tools/agy_check.py` và plan M8.2 (lịch sử agy). Full test + vitest + typecheck phải xanh.
+
+## Task 6c — Giới hạn mới + thẻ mời YouTube (spec §12)
+
+- Clip: 60–180 giây (`CLIP_MIN_FRAMES`/`CLIP_MAX_FRAMES`), 1–6 clip mỗi plan.
+- Outline: tổng 10–25 phút; số chương 4–8.
+- Profile `vertical_clip`: cho phép tới 180 giây.
+- Thẻ cuối clip "xem bản đầy đủ trên YouTube": chữ lấy từ cấu hình brand, mascot pose
+  `welcome` (spec §13), render tự động cuối mỗi clip (không phải scene trong storyboard, không phải claim).
+- Lint storyboard: cảnh báo khi mascot có mặt trên 35% số frame (spec §13).
+- Gói đăng: caption TikTok của từng clip có chỗ trống `<YOUTUBE_URL>`; không tự đăng.
+
 ## Task 7 — Thư viện cơ quan + scene Remotion (TypeScript)
 
-- `video/src/anatomy/`: `palette.ts` (Kurzgesagt-like: nền xanh đậm, màu bão hòa, không viền
-  đen, bóng mềm), `ArterySection.tsx` (mặt cắt động mạch: thành mạch, lòng mạch, dòng hồng cầu;
+- `video/src/anatomy/`: `palette.ts` (Kurzgesagt-like trên token brand: nền navy, màu bão hòa,
+  không viền đen, chiều sâu bằng lớp màu phẳng), `ArterySection.tsx` (mặt cắt động mạch: thành mạch, lòng mạch, dòng hồng cầu;
   `state`, `severity` điều khiển độ dày thành và lòng hẹp), `Heart.tsx` (tim bơm theo nhịp).
   Chuyển động **chỉ** từ `useCurrentFrame()`/`interpolate`/`spring`; không dùng thư viện chạy
   theo đồng hồ thực.
 - Scenes: `AnatomyScene`, `ProcessScene`, `ComparisonScene` (hai trạng thái cạnh nhau),
-  `TimelapseScene` (severity tăng theo frame). Dùng layout 16:9 từ Task 0.
-- Đọc skill `motion-design`, `remotion-markup` trước khi viết.
+  `TimelapseScene` (severity tăng theo frame). Mỗi scene dựng được ở cả 16:9 và 9:16 từ cùng props (khung dọc xếp lại bố cục, ví dụ so sánh trên–dưới; không crop), dùng bảng layout có sẵn.
+- `MascotGuide`: hiển thị asset mascot đã đăng ký của cảnh (`visual_assets` role mascot) với
+  spring vào, nhấp nhô nhẹ, crossfade khi đổi pose; vị trí theo spec §13 cho 16:9 và 9:16.
+  Palette giải phẫu dẫn xuất từ token brand (navy/teal/yellow/off_white + màu mô/máu), màu
+  phẳng nhiều lớp, không gradient/glow/filter.
+- Đọc skill `motion-design`, `remotion-markup`, `svg-character-animation` trước khi viết.
 - Test vitest: render từng scene ở vài frame, severity đổi hình học, typecheck.
 
 ## Task 8 — `healthvideo review frames` (contact sheet, spec §7)
@@ -118,13 +140,13 @@ theo chương có sẵn. Chạy full test sau merge. Không merge các nhánh M8
 ## Task 9 — Thí điểm (người dùng + Claude, không giao Codex)
 
 `do-huyet-ap-khong-trieu-chung`: orientation → brief do bác sĩ xác nhận → ledger + explainer
-→ script → cổng 1 → produce 3–5 phút 16:9 → review frames → cổng 2. Đo tiêu chí spec §10.
+→ outline + script + clip plan → cổng 1 → produce video dài 10–15 phút 16:9 + 1–3 clip 9:16
+→ review frames → cổng 2 → gói đăng. Đo tiêu chí spec §10.
 
 ## Thứ tự và song song
 
 ```text
-T0 → T1 → T2 → T3 → T4 → T5
-          └──────────→ T6 → T7 → T8 → T9
+T0 → T1 → T2 → T3 → T4 → T5 → T6 → T6b → T6c → T7 → T8 → T9
 ```
 
 T7 (TypeScript, `video/`) chỉ phụ thuộc T6 (contract props). T5 độc lập với T6–T8.

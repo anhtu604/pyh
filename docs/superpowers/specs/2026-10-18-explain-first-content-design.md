@@ -186,9 +186,63 @@ P1–P3 (Python) và P4 (TypeScript) độc lập nên Codex có thể làm song
 
 ## 11. Quyết định đã chốt (18-10-2026)
 
-1. **Định dạng thí điểm:** 3–5 phút, 16:9 (1920×1080). Tái dùng format profile
-   `youtube_long` và render theo chương đã làm xong trên nhánh `feat/m8-1-long-form`
-   (merge vào `master` ở Task 0 của plan); không mở lại phần còn lại của M8.
+1. **Định dạng:** ~~thí điểm 3–5 phút 16:9~~ — thay bằng §12 (điều chỉnh 18-10-2026).
 2. **Phong cách hoạt họa:** 2D phẳng kiểu Kurzgesagt — hình khối đơn giản, màu bão hòa
    trên nền tối, bóng đổ mềm, không viền đen. Tự vẽ, không chép từ kho tham khảo.
 3. **Sàng lọc mặc định:** `dual_llm`; `jev` bổ sung khi người dùng cung cấp API.
+
+## 12. Sản phẩm đầu ra mỗi chủ đề (điều chỉnh 18-10-2026)
+
+Mỗi chủ đề cho ra **hai loại sản phẩm** từ cùng một bộ kịch bản và storyboard đã qua cổng 1:
+
+| Sản phẩm | Khung | Thời lượng | Nền tảng | Vai trò |
+|---|---|---|---|---|
+| Video dài | 16:9, 1920×1080 | 10–15 phút, tối đa 25 phút khi chủ đề cần | YouTube | bản đầy đủ: đủ 7 nhịp, lặp nhịp 2–6 theo chương |
+| Clip ngắn (1–6 clip) | 9:16, 1080×1920 | 1–3 phút mỗi clip | TikTok (và Shorts) | trích một mạch trọn vẹn, cuối clip mời sang YouTube xem bản đầy đủ |
+
+Quy tắc:
+
+- **Clip không viết lời mới.** Clip chỉ tham chiếu cảnh có sẵn trong storyboard đã duyệt
+  (đã làm ở M8.2 `clip-plan.yaml`), nên cổng 1 bao phủ cả clip. Clip phải mang theo câu giới
+  hạn (caveat) của mọi claim nó dùng; thiếu thì bị chặn.
+- Mỗi clip nên chứa một mạch "bình thường → hỏng" (nhịp 2/3 → 4/5) để tự đứng được; bằng
+  chứng và hành động có thể rút gọn nhưng không được bỏ caveat.
+- **Lời mời sang YouTube** là thẻ thương hiệu cố định cuối clip (giống `brand_outro`), lấy chữ
+  từ cấu hình brand, không phải claim y khoa nên không cần nguồn. Gói đăng TikTok có caption
+  chứa chỗ trống `<YOUTUBE_URL>` để người đăng điền sau khi video dài lên YouTube. Không tự đăng.
+- Cảnh hoạt họa cơ chế phải dựng được ở cả hai khung (16:9 và 9:16) từ cùng props; khung dọc
+  xếp lại bố cục (ví dụ so sánh bình thường/bệnh trên–dưới thay vì trái–phải), không crop.
+- Cổng 2 duyệt video dài và mọi clip (đã có ở M8.2).
+
+Tái dùng: nhánh `feat/m8-2-clips` (dàn ý chương, clip plan, render clip 9:16, cổng 1/2 cho
+clip, E2E đến đóng gói) được merge vào `master`, sau đó chỉnh giới hạn: clip 60–180 giây và
+1–6 clip; tổng video dài 10–25 phút.
+
+## 13. Mascot PYH trong mạch explain-first (bổ sung 18-10-2026)
+
+Mascot bác sĩ–người hướng dẫn của M6.3 (ba pose `welcome`, `explain`, `caution`; màu
+navy/teal/yellow/off_white) là **người dẫn đường xuyên suốt** cả video dài lẫn clip:
+
+| Nhịp | Pose | Vai trò |
+|---|---|---|
+| 1 Mở | `welcome` | chào, đặt câu hỏi của người xem |
+| 2–5 Cơ chế | `explain` | xuất hiện ngắn ở góc, chỉ tay về cơ quan đang hoạt họa; không che hình |
+| 6 Bằng chứng | `explain` (tùy chọn) | dẫn vào biểu đồ |
+| 7 Giới hạn + hành động | `caution` | nhắc câu giới hạn và nhóm không áp dụng |
+| Thẻ cuối clip | `welcome` | mời sang YouTube xem bản đầy đủ |
+
+Quy tắc:
+
+- Giữ nguyên ranh giới M6.3: mascot trang trí là `mascot_reaction` (không chữ, số, claim);
+  mascot mang chú thích y khoa phải là `mascot_medical_annotation` và đi qua cổng 1.
+  Không áo blouse, không ống nghe, không tư thế khám hay kê đơn.
+- **Phong cách thống nhất:** thư viện cơ quan dùng chung token màu của brand profile (nền
+  navy, teal, điểm nhấn vàng; thêm màu mô/máu cho giải phẫu). "Kiểu Kurzgesagt" đạt bằng hình
+  khối đơn giản và chiều sâu nhiều lớp màu phẳng, **không** dùng gradient/glow/filter — đúng
+  quy tắc SVG của M6.3.
+- **Chuyển động nhẹ, điều khiển bằng frame:** xuất hiện bằng spring, nhấp nhô nhẹ khi đứng,
+  chuyển pose bằng crossfade ngắn. Không làm rig khớp phức tạp (vẫn ngoài phạm vi M6.3).
+- Vị trí: 16:9 góc dưới trái hoặc phải đối diện cơ quan; 9:16 dải dưới trong vùng an toàn
+  TikTok (tránh cột nút bên phải và chú thích ở đáy).
+- Mascot là gia vị, không chiếm sóng: lint storyboard cảnh báo khi mascot có mặt trên 35%
+  số frame của video.
