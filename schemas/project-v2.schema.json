@@ -108,6 +108,15 @@
       "title": "Artifact Hashes",
       "type": "object"
     },
+    "content_profile": {
+      "default": "legacy",
+      "enum": [
+        "legacy",
+        "explain_first_v1"
+      ],
+      "title": "Content Profile",
+      "type": "string"
+    },
     "language": {
       "default": "vi",
       "title": "Language",

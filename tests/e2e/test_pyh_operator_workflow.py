@@ -17,7 +17,7 @@ from healthvideo.domain.invalidation import (
 )
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.topic import TopicCard
-from healthvideo.storage.files import read_yaml
+from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.tts.silent import SilentTTS
 from healthvideo.workflows.author import save_author_brief
 from healthvideo.workflows.create_project_v2 import create_project_v2
@@ -30,7 +30,11 @@ from healthvideo.workflows.package import package_project
 from healthvideo.workflows.produce import produce_project
 from healthvideo.workflows.review_html import render_medical_packet, render_video_packet
 from healthvideo.workflows.topic import select_topic
-from tests.helpers import ORIENTATION_SCOPE, complete_orientation_fixture
+from tests.helpers import (
+    ORIENTATION_SCOPE,
+    complete_orientation_fixture,
+    write_explainer_fixture,
+)
 
 FROZEN = datetime(2026, 9, 10, 7, 30, tzinfo=UTC)
 SOURCE = Path("tests/fixtures/golden-project-v2/revisions/001")
@@ -48,6 +52,9 @@ def test_pyh_golden_stops_at_both_human_gates(tmp_path: Path) -> None:
         tmp_path, "muoi-va-huyet-ap", "Ăn mặn và tăng huyết áp", now=FROZEN
     )
     revision = project / "revisions" / "001"
+    manifest = read_yaml(project / "project.yaml")
+    manifest["content_profile"] = "legacy"
+    write_yaml_atomic(project / "project.yaml", manifest)
     card = TopicCard.model_validate(read_yaml(SOURCE / "topic" / "card.yaml"))
     select_topic(project, card, now=FROZEN)
     complete_orientation_fixture(project, now=FROZEN)
@@ -64,6 +71,7 @@ def test_pyh_golden_stops_at_both_human_gates(tmp_path: Path) -> None:
         now=FROZEN,
     )
     frozen_ledger = read_yaml(SOURCE / "evidence" / "ledger.yaml")
+    write_explainer_fixture(revision, frozen_ledger["claims"][0]["id"])
     build_evidence_ledger(
         project,
         [EvidenceClaim.model_validate(item) for item in frozen_ledger["claims"]],

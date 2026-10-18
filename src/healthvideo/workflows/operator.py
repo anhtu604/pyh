@@ -97,6 +97,12 @@ def get_next_action(project_dir: Path) -> OperatorAction:
         raise TypeError(f"Unsupported validated project manifest at {project_dir / 'project.yaml'}")
 
     reason_code = manifest.side_state.reason_code if manifest.side_state is not None else None
+    explainer_reminder = ""
+    if (
+        manifest.content_profile == "explain_first_v1"
+        and not (layout.artifact_root / "explainer/explainer.yaml").is_file()
+    ):
+        explainer_reminder = " Create explainer/explainer.yaml before evidence_ready."
     match manifest.state:
         case WorkflowState.IDEA:
             return _action(
@@ -140,7 +146,7 @@ def get_next_action(project_dir: Path) -> OperatorAction:
                 layout.project_dir,
                 layout.artifact_root,
                 OperatorActionKind.RESEARCH,
-                "Research and validate the evidence for the confirmed brief.",
+                "Research and validate the evidence for the confirmed brief." + explainer_reminder,
                 "evidence/ledger.yaml",
                 "/pyh tiếp tục",
             )
@@ -149,7 +155,7 @@ def get_next_action(project_dir: Path) -> OperatorAction:
                 layout.project_dir,
                 layout.artifact_root,
                 OperatorActionKind.RESEARCH,
-                "Continue research and validate the evidence ledger.",
+                "Continue research and validate the evidence ledger." + explainer_reminder,
                 "evidence/ledger.yaml",
                 "/pyh tiếp tục",
             )

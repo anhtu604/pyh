@@ -16,7 +16,7 @@ from healthvideo.workflows.author import save_author_brief
 from healthvideo.workflows.create_project_v2 import create_project_v2
 from healthvideo.workflows.evidence import build_evidence_ledger, record_question
 from healthvideo.workflows.topic import select_topic
-from tests.helpers import complete_orientation_fixture
+from tests.helpers import complete_orientation_fixture, write_explainer_fixture
 
 SOURCE = Path("tests/fixtures/golden-project-v2/revisions/001")
 NOW = datetime(2026, 9, 17, tzinfo=UTC)
@@ -24,6 +24,9 @@ NOW = datetime(2026, 9, 17, tzinfo=UTC)
 
 def _evidence_ready(tmp_path: Path) -> Path:
     project = create_project_v2(tmp_path, "draft-test", "Draft test", now=NOW)
+    manifest = read_yaml(project / "project.yaml")
+    manifest["content_profile"] = "legacy"
+    write_yaml_atomic(project / "project.yaml", manifest)
     select_topic(project, TopicCard.model_validate(read_yaml(SOURCE / "topic/card.yaml")))
     complete_orientation_fixture(project, now=NOW)
     save_author_brief(
@@ -42,6 +45,7 @@ def _evidence_ready(tmp_path: Path) -> Path:
         ),
     )
     ledger = read_yaml(SOURCE / "evidence/ledger.yaml")
+    write_explainer_fixture(project / "revisions/001", ledger["claims"][0]["id"])
     build_evidence_ledger(
         project,
         [EvidenceClaim.model_validate(item) for item in ledger["claims"]],

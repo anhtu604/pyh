@@ -19,6 +19,7 @@ from healthvideo.domain.state_graph import TransitionContext, transition_v2
 from healthvideo.domain.storyboard import Storyboard
 from healthvideo.domain.visual_budget import validate_visual_budget
 from healthvideo.qa.script import review_script
+from healthvideo.storage.explainer import read_explainer
 from healthvideo.storage.files import (
     canonical_json_hash,
     read_yaml,
@@ -40,15 +41,30 @@ def _validate(
     script: Script,
     storyboard: Storyboard,
     assets: AssetManifest,
+    *,
+    project: ProjectManifestV2,
 ) -> None:
     ledger = read_yaml(revision / "evidence/ledger.yaml")
     if not script.lines or not storyboard.scenes:
         raise ValueError("draft requires nonempty script lines and storyboard scenes")
     claims = [EvidenceClaim.model_validate(item) for item in ledger.get("claims", [])]
-    issues = review_script(script, claims, [])
+    explainer = None
+    if project.content_profile == "explain_first_v1":
+        if script.format_profile != "explain_first_v1":
+            raise ValueError(
+                "explain_first_v1 project requires script format_profile explain_first_v1"
+            )
+        if not (revision / "explainer/explainer.yaml").is_file():
+            raise ValueError("explain_first_v1 requires explainer/explainer.yaml")
+        explainer = read_explainer(revision)
+    issues = review_script(script, claims, [], explainer=explainer)
     blocking = [issue for issue in issues if issue.code == "unknown_claim"]
     if blocking:
         raise ValueError("script references unknown claim: " + blocking[0].message)
+    if project.content_profile == "explain_first_v1":
+        errors = [issue for issue in issues if issue.severity == "error"]
+        if errors:
+            raise ValueError(f"script review error ({errors[0].code}): {errors[0].message}")
     validate_visual_budget(storyboard)
     validate_hook_outro(script, storyboard, require_brand=True)
     resolve_citations(
@@ -86,7 +102,7 @@ def submit_draft(
         write_yaml_atomic(
             staging / "assets/asset-manifest.yaml", assets.model_dump(mode="json")
         )
-        _validate(staging, script, storyboard, assets)
+        _validate(staging, script, storyboard, assets, project=project)
         script_data = read_yaml(staging / "script/script.yaml")
         context = TransitionContext(
             active_revision=project.active_revision,
@@ -113,7 +129,7 @@ def submit_medical_review(project_dir: Path) -> ProjectManifestV2:
     script = Script.model_validate(script_data)
     storyboard = Storyboard.model_validate(read_yaml(revision / "storyboard/storyboard.yaml"))
     assets = AssetManifest.model_validate(read_yaml(revision / "assets/asset-manifest.yaml"))
-    _validate(revision, script, storyboard, assets)
+    _validate(revision, script, storyboard, assets, project=project)
     context = TransitionContext(
         active_revision=project.active_revision,
         current_input_hash=canonical_json_hash(script_data),

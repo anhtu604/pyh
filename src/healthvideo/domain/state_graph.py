@@ -431,5 +431,11 @@ def transition_v2(
     rule = MAIN_RULES.get((project.state, target))
     if rule is None:
         raise TransitionError(f"invalid v2 transition: {project.state} -> {target}")
+    if (
+        project.content_profile == "explain_first_v1"
+        and project.state is WorkflowState.RESEARCH_IN_PROGRESS
+        and target is WorkflowState.EVIDENCE_READY
+    ):
+        _rule("explainer/explainer.yaml").validate(project, context)
     rule.validate(project, context)
     return project.model_copy(update={"state": target, "side_state": None})

@@ -30,7 +30,7 @@ REVISION_DIRECTORIES = (
 def create_project_v2(root: Path, slug: str, title: str, *, now: datetime) -> Path:
     """Create a schema-2.0 project and publish its initial revision once."""
     del now
-    manifest = ProjectManifestV2(slug=slug)
+    manifest = ProjectManifestV2(slug=slug, content_profile="explain_first_v1")
     project_dir = root / manifest.slug
     root.mkdir(parents=True, exist_ok=True)
     if project_dir.exists():

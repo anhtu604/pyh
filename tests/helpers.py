@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from healthvideo.domain.evidence import CandidateSource
+from healthvideo.domain.explainer import Explainer
 from healthvideo.domain.gate_review import GateKind
 from healthvideo.domain.orientation import (
     CompletedOrientation,
@@ -23,6 +24,7 @@ from healthvideo.render.run import (
     RENDER_INPUT_NAME,
     production_run_dir,
 )
+from healthvideo.storage.explainer import write_explainer
 from healthvideo.storage.files import read_yaml, sha256_file, write_yaml_atomic
 from healthvideo.tts.base import TTSRequest
 from healthvideo.tts.silent import SilentTTS
@@ -521,3 +523,13 @@ def complete_orientation_fixture(project_dir: Path, *, now: datetime) -> None:
         ),
         now=now,
     )
+
+
+def write_explainer_fixture(revision: Path, claim_id: str) -> None:
+    """Add a synthetic mechanism map bound to an existing fixture claim."""
+    from tests.domain.test_explainer import explainer_data
+
+    data = explainer_data()
+    for layer in data["layers"]:
+        layer["claim_ids"] = [claim_id]
+    write_explainer(revision, Explainer.model_validate(data))

@@ -16,8 +16,10 @@ from healthvideo.domain.evidence import (
     SourceRecord,
     SourceSelection,
 )
+from healthvideo.domain.explainer import validate_claim_refs
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
+from healthvideo.storage.explainer import read_explainer
 from healthvideo.storage.files import canonical_json_hash, read_yaml, write_yaml_atomic
 
 
@@ -141,6 +143,17 @@ def build_evidence_ledger(
     }
 
     manifest = ProjectManifestV2.model_validate(read_yaml(project_dir / "project.yaml"))
+    validated_artifacts = {"evidence/ledger.yaml"}
+    if (
+        manifest.content_profile == "explain_first_v1"
+        and manifest.state is WorkflowState.RESEARCH_IN_PROGRESS
+    ):
+        revision = project_dir / "revisions" / manifest.active_revision
+        if not (revision / "explainer/explainer.yaml").is_file():
+            raise ValueError("Create explainer/explainer.yaml before evidence_ready")
+        explainer = read_explainer(revision)
+        validate_claim_refs(explainer, {claim.id for claim in claims})
+        validated_artifacts.add("explainer/explainer.yaml")
     ev_dir = project_dir / "revisions" / manifest.active_revision / "evidence"
     ev_dir.mkdir(parents=True, exist_ok=True)
     ledger_path = ev_dir / "ledger.yaml"
@@ -151,7 +164,7 @@ def build_evidence_ledger(
         context = TransitionContext(
             active_revision=manifest.active_revision,
             current_input_hash=input_hash,
-            validated_artifacts=frozenset({"evidence/ledger.yaml"}),
+            validated_artifacts=frozenset(validated_artifacts),
         )
         manifest = transition_v2(manifest, WorkflowState.EVIDENCE_READY, context)
         write_yaml_atomic(project_dir / "project.yaml", manifest.model_dump(mode="json"))
