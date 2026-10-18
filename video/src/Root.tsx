@@ -50,7 +50,7 @@ export const verticalClipDefaults: RenderInput = {
   audio_file: 'audio/clips/CL01.wav',
   scenes: [{...defaultProps.scenes[0], duration_frames: 1710}],
   youtube_cta: {text: 'Xem bản đầy đủ trên YouTube',
-    mascot_path: 'clips/cta/welcome.svg', duration_frames: 90},
+    mascot_path: 'clips/cta/welcome.svg', logo_path: 'clips/cta/logo.svg', duration_frames: 90},
 };
 
 export const RemotionRoot: React.FC = () => (

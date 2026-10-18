@@ -54,7 +54,7 @@ export const HealthVideo: React.FC<RenderInput> = (rawInput) => {
       {youtube_cta && (
         <Sequence from={Math.max(...scenes.map((s) => s.start_frame + s.duration_frames))}
           durationInFrames={youtube_cta.duration_frames}>
-          <YouTubeEndCard text={youtube_cta.text} mascotPath={youtube_cta.mascot_path} />
+          <YouTubeEndCard text={youtube_cta.text} mascotPath={youtube_cta.mascot_path} logoPath={youtube_cta.logo_path} />
         </Sequence>
       )}
     </AbsoluteFill>

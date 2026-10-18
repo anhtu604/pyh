@@ -61,7 +61,7 @@ it('centres text and mascot as one group with a shared spring and literal YouTub
     clock.frame = 45;
     const settled = render('Visit YouTube then YouTube again');
     expect(settled.match(/color:#F4B942/g)).toHaveLength(2);
-    expect(settled).toContain('font-size:72px;font-weight:700');
+    expect(settled).toContain('font-size:72px;font-weight:800');
     expect(settled).toContain('color:#F7F4EC');
     expect(settled).toContain(`left:${group.left}px;top:${group.top}px`);
     expect(settled).toContain(`left:${mascot.left}px;top:${mascot.top}px`);
@@ -70,5 +70,35 @@ it('centres text and mascot as one group with a shared spring and literal YouTub
     clock.frame = 0;
     expect(render('Visit YouTube')).toContain('opacity:0;transform:translateY(40px)');
     expect(render('Visit YouTube')).not.toBe(settled);
+  }
+});
+
+
+it('places a reverse logo below the mascot with a 32px gap in both formats', () => {
+  for (const layout of Object.values(LAYOUTS)) {
+    const {group, mascot, logo} = endCardGeometry(layout.frame.width, layout.frame.height);
+    expect(logo.height).toBe(layout.frame.height > layout.frame.width ? 64 : 48);
+    expect(logo.width / logo.height).toBeCloseTo(760 / 300);
+    expect(logo.top - mascot.top - mascot.height).toBe(32);
+    expect(logo.left + logo.width / 2).toBeCloseTo(group.width / 2);
+    expect(logo.top + logo.height).toBe(group.height);
+    const html = renderToStaticMarkup(<LayoutContext.Provider value={layout}>
+      <YouTubeEndCard text="Xem b?n ??y ?? tr?n YouTube" mascotPath="welcome.png" logoPath="custom/logo.svg" />
+    </LayoutContext.Provider>);
+    expect(html).toContain('/static/custom/logo.svg');
+    expect(html).toContain('Be Vietnam Pro');
+    expect(html).toContain('font-weight:800');
+  }
+});
+
+it('flips a right-side guide toward content, leaving left-side and centred guides unflipped', () => {
+  const scene = {visual_assets: [{path: 'explain.png', role: 'mascot' as const, pose: 'explain' as const}]};
+  for (const layout of Object.values(LAYOUTS)) {
+    const render = (left: number) => renderToStaticMarkup(<LayoutContext.Provider value={layout}>
+      <MascotGuide scene={scene} box={{left, top: 100, width: 100, height: 120}} />
+    </LayoutContext.Provider>);
+    expect(render(layout.frame.width - 200)).toContain('scaleX(-1)');
+    expect(render(50)).not.toContain('scaleX(-1)');
+    expect(render(layout.frame.width / 2 - 50)).not.toContain('scaleX(-1)');
   }
 });

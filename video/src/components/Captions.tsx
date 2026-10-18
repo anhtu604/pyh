@@ -1,3 +1,4 @@
+import {FONT_FAMILY} from '../fonts';
 import React from 'react';
 import {useCurrentFrame} from 'remotion';
 import {useLayout} from '../layout';
@@ -99,9 +100,9 @@ export const Captions: React.FC<CaptionsProps> = ({text, durationInFrames}) => {
           <text
             key={row[0]?.index}
             fill={CAPTION_TEXT_COLOR}
-            fontFamily="Arial, sans-serif"
+            fontFamily={FONT_FAMILY}
             fontSize={String(c.fontSize)}
-            fontWeight="700"
+            fontWeight="600"
             textAnchor="middle"
             x={String(c.width / 2)}
             y={c.rowY[rowIndex === 0 ? 0 : 1]}

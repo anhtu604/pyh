@@ -156,6 +156,7 @@ export const RenderInputSchema = z.object({
   youtube_cta: z.object({
     text: z.string().regex(/\S/),
     mascot_path: safeRelativePath,
+    logo_path: safeRelativePath.default('clips/cta/logo.svg'),
     duration_frames: z.literal(90).default(90),
   }).nullable().optional(),
   scenes: z.array(SceneSchema).default([]),

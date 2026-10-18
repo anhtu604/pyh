@@ -464,6 +464,11 @@
           "title": "Duration Frames",
           "type": "integer"
         },
+        "logo_path": {
+          "default": "clips/cta/logo.svg",
+          "title": "Logo Path",
+          "type": "string"
+        },
         "mascot_path": {
           "default": "clips/cta/welcome.svg",
           "title": "Mascot Path",

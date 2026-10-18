@@ -94,10 +94,8 @@ def test_outline_four_chapters_ten_minutes():
     assert FORMAT_SPECS["vertical_clip"].max_frames == 5400
 
 
-def test_brand_cta_default_and_nonblank():
-    from pathlib import Path
-
-    brand = load_brand_profile(Path("profiles/brand.vi.yaml"))
+def test_brand_cta_default_and_nonblank(brand_profile_path):
+    brand = load_brand_profile(brand_profile_path)
     assert brand.cta.youtube_full_video == "Xem bản đầy đủ trên YouTube"
     for text in ("", "  ", "\n"):
         with pytest.raises(ValidationError):
@@ -114,10 +112,8 @@ def test_mascot_share_is_frame_weighted_warning(frames, warns):
     assert report.passed  # Legacy visual budget remains nonblocking.
 
 
-def test_clip_uses_custom_brand_invitation():
-    from pathlib import Path
-
-    brand = load_brand_profile(Path("profiles/brand.vi.yaml"))
+def test_clip_uses_custom_brand_invitation(brand_profile_path):
+    brand = load_brand_profile(brand_profile_path)
     custom = type(brand).model_validate(
         {
             **brand.model_dump(),

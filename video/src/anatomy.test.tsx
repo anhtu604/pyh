@@ -129,10 +129,11 @@ describe('visual regression fixes', () => {
       expect(box.top + box.height * 1.075).toBeLessThan(l.mascot.top);
     }
   });
-  it.each([['youtube_long', 380], ['vertical_clip', 450]] as const)('sizes the %s mascot for about 300/360 visible pixels', (format, height) => {
+  it.each([['youtube_long', 324], ['vertical_clip', 450]] as const)('caps the %s mascot height within the approved frame proportion', (format, height) => {
     const box = LAYOUTS[format].mechanism.mascot;
     expect(box.height).toBe(height);
-    expect(box.width).toBeGreaterThanOrEqual(height * 760 / 900);
+    expect(box.height).toBeLessThanOrEqual(LAYOUTS[format].frame.height * (format === 'youtube_long' ? 0.30 : 0.24));
+    expect(box.width).toBeGreaterThanOrEqual(Math.floor(height * 760 / 900));
     const output = html(AnatomyScene, scene, format);
     expect(output).toContain(`height:${height}px`);
     expect(output).toContain('background-color:#F7F4EC');

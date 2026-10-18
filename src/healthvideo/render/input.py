@@ -17,11 +17,13 @@ class YouTubeCTA(BaseModel):
 
     text: str = Field(pattern=r"\S")
     mascot_path: str = "clips/cta/welcome.svg"
+    logo_path: str = "clips/cta/logo.svg"
     duration_frames: Literal[90] = 90
 
     @model_validator(mode="after")
     def validate_path(self) -> "YouTubeCTA":
         _validate_relative_posix_path(self.mascot_path, "YouTube CTA")
+        _validate_relative_posix_path(self.logo_path, "YouTube CTA logo")
         return self
 
 

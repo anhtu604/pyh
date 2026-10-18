@@ -72,6 +72,11 @@
           "title": "Navy",
           "type": "string"
         },
+        "night": {
+          "pattern": "^#[0-9A-F]{6}$",
+          "title": "Night",
+          "type": "string"
+        },
         "off_white": {
           "pattern": "^#[0-9A-F]{6}$",
           "title": "Off White",
@@ -93,14 +98,53 @@
         "teal",
         "yellow",
         "off_white",
-        "charcoal"
+        "charcoal",
+        "night"
       ],
       "title": "BrandColors",
+      "type": "object"
+    },
+    "MascotArtwork": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "title": "MascotArtwork",
       "type": "object"
     },
     "MascotIdentity": {
       "additionalProperties": false,
       "properties": {
+        "artwork": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/MascotArtwork"
+              },
+              "propertyNames": {
+                "$ref": "#/$defs/MascotPose"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Artwork"
+        },
         "poses": {
           "items": {
             "$ref": "#/$defs/MascotPose"

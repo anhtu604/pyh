@@ -13,8 +13,8 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture
-def brand():
-    return load_brand_profile(ROOT / "profiles/brand.vi.yaml")
+def brand(brand_profile_path):
+    return load_brand_profile(brand_profile_path)
 
 
 @pytest.mark.parametrize(

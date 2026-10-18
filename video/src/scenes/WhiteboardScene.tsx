@@ -1,3 +1,4 @@
+import {FONT_FAMILY} from '../fonts';
 import React from 'react';
 import {interpolate, useCurrentFrame} from 'remotion';
 import {Captions} from '../components/Captions';
@@ -18,7 +19,7 @@ export const SourceMarker = ({sourceMarker}: {sourceMarker: string}): React.JSX.
       border: '4px solid #202124',
       borderRadius: 18,
       color: '#202124',
-      fontFamily: 'Arial, sans-serif',
+      fontFamily: FONT_FAMILY,
       fontSize: m.fontSize,
       fontWeight: 800,
       padding: '12px 22px',
@@ -60,7 +61,7 @@ export const WhiteboardScene: React.FC<WhiteboardSceneProps> = ({scene}) => {
       <div
         style={{
           color: '#202124',
-          fontFamily: 'Arial, sans-serif',
+          fontFamily: FONT_FAMILY,
           fontSize: layout.narration.fontSize,
           fontWeight: 800,
           left: layout.narration.left,

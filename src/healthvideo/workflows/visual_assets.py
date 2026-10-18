@@ -36,7 +36,7 @@ from healthvideo.storage.files import (
 from healthvideo.visuals.brand import render_pyh_logo
 from healthvideo.visuals.charts import render_count_chart
 from healthvideo.visuals.highlights import crop_highlight
-from healthvideo.visuals.mascot import render_mascot, render_mascot_annotation
+from healthvideo.visuals.mascot import mascot_asset, render_mascot_annotation
 from healthvideo.visuals.whiteboard import (
     WhiteboardPayload,
     WhiteboardTemplate,
@@ -597,11 +597,13 @@ def create_mascot_reaction_asset(
 ) -> Path:
     """Create a declared decorative PYH guide pose without content inputs."""
     brand = load_brand_profile(BRAND_PROFILE_PATH)
+    content, suffix = mascot_asset(brand, pose)
     return _register_generated_svg(
         project_dir,
         scene_id=scene_id,
         asset_name=asset_name,
-        svg_bytes=render_mascot(brand, pose),
+        svg_bytes=content,
+        suffix=suffix,
         kind=AssetKind.MASCOT_REACTION,
         semantic=False,
         pose=pose,
@@ -658,6 +660,8 @@ def create_mascot_annotation_asset(
         source_marker=source_marker,
     )
     brand = load_brand_profile(BRAND_PROFILE_PATH)
+    if brand.mascot.artwork is not None:
+        raise ValueError("Use medical_text beside mascot_reaction for artwork annotations")
     return _register_generated_svg(
         project_dir,
         scene_id=scene_id,
@@ -779,6 +783,7 @@ def _register_generated_svg(
     rights_basis: str,
     role: Literal["whiteboard", "mascot", "brand"],
     classification_reason: str,
+    suffix: str = ".svg",
 ) -> Path:
     project = ProjectManifestV2.model_validate(read_yaml(project_dir / "project.yaml"))
     if project.state not in {
@@ -796,7 +801,9 @@ def _register_generated_svg(
     scene = next((item for item in storyboard.scenes if item.id == scene_id), None)
     if scene is None:
         raise ValueError("visual asset scene does not exist")
-    path = f"assets/{asset_name}.svg"
+    if suffix != ".svg" and not (suffix == ".png" and kind is AssetKind.MASCOT_REACTION):
+        raise ValueError("PNG is only supported for mascot_reaction")
+    path = f"assets/{asset_name}{suffix}"
     reference = VisualAssetRef(path=path, role=role, pose=pose)
     existing_ref = next((item for item in scene.visual_assets if item.path == path), None)
     if existing_ref is not None and existing_ref != reference:
@@ -859,7 +866,7 @@ def _register_generated_svg(
     staged = Path(mkdtemp(prefix=".assets-visual-", dir=revision))
     try:
         shutil.copytree(asset_dir, staged, dirs_exist_ok=True)
-        (staged / f"{asset_name}.svg").write_bytes(svg_bytes)
+        (staged / f"{asset_name}{suffix}").write_bytes(svg_bytes)
         write_yaml_atomic(
             staged / "asset-manifest.yaml", updated_manifest.model_dump(mode="json")
         )

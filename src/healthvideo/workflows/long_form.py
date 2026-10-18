@@ -6,7 +6,12 @@ from hashlib import sha256
 from pathlib import Path
 
 from healthvideo.domain.asset_manifest import AssetKind, AssetManifest, AssetRecord
-from healthvideo.domain.brand import BrandProfile, MascotPose, load_brand_profile
+from healthvideo.domain.brand import (
+    BrandProfile,
+    LogoVariant,
+    MascotPose,
+    load_brand_profile,
+)
 from healthvideo.domain.clip_plan import ClipPlan, validate_clip_plan
 from healthvideo.domain.evidence import EvidenceClaim
 from healthvideo.domain.license_ledger import LicenseEntry, LicenseLedger
@@ -20,7 +25,8 @@ from healthvideo.render.input import (
 )
 from healthvideo.render.remotion import build_render_argv
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
-from healthvideo.visuals.mascot import render_mascot
+from healthvideo.visuals.brand import render_pyh_logo
+from healthvideo.visuals.mascot import mascot_asset
 from healthvideo.workflows.visual_assets import BRAND_PROFILE_PATH
 
 OUTLINE_ARTIFACT = "script/outline.yaml"
@@ -73,7 +79,11 @@ def clip_render_input(
     return RenderInput.model_validate(
         {
             **result.model_dump(),
-            "youtube_cta": YouTubeCTA(text=brand.cta.youtube_full_video).model_dump(),
+            "youtube_cta": YouTubeCTA(
+                text=brand.cta.youtube_full_video,
+                mascot_path=("clips/cta/welcome.png" if brand.mascot.artwork is not None
+                             else "clips/cta/welcome.svg"),
+            ).model_dump(),
         }
     )
 
@@ -122,38 +132,37 @@ def _register_clip_mascot(
     staging_dir: Path, brand: BrandProfile, revision: str
 ) -> None:
     """Register a render-owned decorative asset without changing reviewed artifacts."""
-    path = "clips/cta/welcome.svg"
-    svg = render_mascot(brand, MascotPose.WELCOME)
-    target = staging_dir / path
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(svg)
-    record = AssetRecord(
-        path=path,
-        kind=AssetKind.MASCOT_REACTION,
-        semantic=False,
-        classification_reason="Fixed welcome pose with no content fields.",
-        sha256=sha256(svg).hexdigest(),
-        source="built_in:pyh-mascot",
-        license=brand.assets.license,
-        creator=brand.assets.creator,
-        revision=revision,
-        rights_required=True,
-        storyboard_role="mascot",
+    content, suffix = mascot_asset(brand, MascotPose.WELCOME)
+    assets = (
+        (f"clips/cta/welcome{suffix}", content, AssetKind.MASCOT_REACTION,
+         "mascot", "built_in:pyh-mascot", "Fixed welcome pose with no content fields."),
+        ("clips/cta/logo.svg", render_pyh_logo(brand, LogoVariant.REVERSE), AssetKind.FLOURISH,
+         "brand", "built_in:pyh-logo", "Fixed decorative PYH reverse logo geometry."),
     )
-    entry = LicenseEntry(
-        path=path,
-        source=record.source,
-        creator=record.creator,
-        license=record.license,
-        rights_basis=record.license,
-        revision=revision,
-        sha256=record.sha256,
+    records = []
+    entries = []
+    for path, content, kind, role, source, reason in assets:
+        target = staging_dir / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
+        record = AssetRecord(
+            path=path, kind=kind, semantic=False, classification_reason=reason,
+            sha256=sha256(content).hexdigest(), source=source,
+            license=brand.assets.license, creator=brand.assets.creator,
+            revision=revision, rights_required=True, storyboard_role=role,
+        )
+        records.append(record)
+        entries.append(LicenseEntry(
+            path=path, source=record.source, creator=record.creator,
+            license=record.license, rights_basis=record.license,
+            revision=revision, sha256=record.sha256,
+        ))
+    directory = staging_dir / "clips/cta"
+    write_yaml_atomic(
+        directory / "asset-manifest.yaml",
+        AssetManifest(assets=tuple(records)).model_dump(mode="json"),
     )
     write_yaml_atomic(
-        target.parent / "asset-manifest.yaml",
-        AssetManifest(assets=(record,)).model_dump(mode="json"),
-    )
-    write_yaml_atomic(
-        target.parent / "license-ledger.yaml",
-        LicenseLedger(entries=(entry,)).model_dump(mode="json"),
+        directory / "license-ledger.yaml",
+        LicenseLedger(entries=tuple(entries)).model_dump(mode="json"),
     )

@@ -1,3 +1,4 @@
+import {FONT_FAMILY} from '../fonts';
 import React from 'react';
 import {Img, interpolate, staticFile, useCurrentFrame} from 'remotion';
 import {Captions} from '../components/Captions';
@@ -46,7 +47,7 @@ export const EvidenceHighlightScene: React.FC<EvidenceHighlightSceneProps> = ({s
           borderRadius: 28,
           bottom: layout.quote.bottom,
           color: '#202124',
-          fontFamily: 'Arial, sans-serif',
+          fontFamily: FONT_FAMILY,
           fontSize: layout.quote.fontSize,
           fontWeight: 700,
           left: layout.quote.inset,

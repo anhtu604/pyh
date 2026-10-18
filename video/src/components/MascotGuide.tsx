@@ -14,7 +14,7 @@ export const MascotGuide: React.FC<{scene: Pick<Scene, 'visual_assets'>; box?: B
   const asset = scene.visual_assets?.find((item) => item.role === 'mascot');
   if (!asset) return null;
   return <div style={{...box, position: 'absolute', opacity: groupEntrance ? 1 : entrance,
-    transform: `translateY(${(groupEntrance ? 0 : (1 - entrance) * 32) + Math.sin(frame / fps * 2) * 4}px)`}}>
+    transform: `translateY(${(groupEntrance ? 0 : (1 - entrance) * 32) + Math.sin(frame / fps * 2) * 4}px)${box.left + box.width / 2 > layout.frame.width / 2 ? ' scaleX(-1)' : ''}`}}>
     <div data-mascot-plate="true" style={{position: 'absolute', left: 0,
       top: (box.height - box.width) / 2, width: box.width, height: box.width,
       borderRadius: '50%', backgroundColor: brand.off_white}} />

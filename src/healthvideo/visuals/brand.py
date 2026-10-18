@@ -1,45 +1,45 @@
 """Font-free deterministic SVG marks for the PYH identity."""
 
 from healthvideo.domain.brand import BrandProfile, LogoVariant
+from healthvideo.visuals._logo_glyphs import TAGLINE, WORDMARK
 
 
 def render_pyh_logo(brand: BrandProfile, variant: LogoVariant) -> bytes:
-    """Render the approved P-bubble, Y-check, and H-plus geometry."""
-    if variant is LogoVariant.MONOGRAM:
-        body = _mark(brand, compact=True, one_color=False)
-        view_box = "0 0 320 320"
-    elif variant is LogoVariant.ONE_COLOR:
-        body = _mark(brand, compact=False, one_color=True)
-        view_box = "0 0 760 260"
-    else:
-        body = _mark(brand, compact=False, one_color=False)
-        view_box = "0 0 760 260"
-    return (
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{view_box}" '
-        'role="img" aria-label="PYH">\n'
-        f"{body}"
-        "</svg>\n"
-    ).encode()
-
-
-def _mark(brand: BrandProfile, *, compact: bool, one_color: bool) -> str:
-    navy = brand.colors.navy
-    teal = navy if one_color else brand.colors.teal
-    yellow = navy if one_color else brand.colors.yellow
-    transform = ' transform="translate(-16 30) scale(.46)"' if compact else ""
-    return (
-        f'<g id="pyh-wordmark"{transform}>\n'
-        f'  <path id="pyh-p-bubble" fill="{navy}" fill-rule="evenodd" '
-        'd="M50 35h145c70 0 110 38 110 98s-40 97-110 97h-55v-60h52c31 0 48-13 48-37s-17-38-48-38h-77v135H50V35zm65 75h76c15 0 23 8 23 23s-8 22-23 22h-76v-45z"/>\n'
-        f'  <path id="pyh-y-stem" fill="{navy}" d="M315 35h70l38 57 38-57h70l-76 112v83h-65v-83L315 35z"/>\n'
-        f'  <path id="pyh-y-check" fill="none" stroke="{yellow}" stroke-linecap="round" '
-        'stroke-linejoin="round" stroke-width="25" d="M402 72l26 25 61-66"/>\n'
-        f'  <path id="pyh-h-frame" fill="{teal}" d="M555 35h65v70h75V35h65v195h-65v-70h-75v70h-65V35z"/>\n'
-        f'  <path id="pyh-h-plus" fill="{navy}" d="M641 86h33v28h28v33h-28v28h-33v-28h-28v-33h28V86z"/>\n'
-        "</g>\n"
+    """Render the approved bubble symbol and precomputed type outlines."""
+    c = brand.colors
+    avatar = variant is LogoVariant.MONOGRAM
+    mono = variant is LogoVariant.ONE_COLOR
+    x, y, s = (80, 72, 160) if avatar else (40, 50, 150)
+    r = s * .28
+    bubble = (
+        f'M{x+r} {y}H{x+s-r}Q{x+s} {y} {x+s} {y+r}'
+        f'V{y+s-r}Q{x+s} {y+s} {x+s-r} {y+s}'
+        f'H{x+s*.42}L{x+s*.12} {y+s*1.2}L{x+s*.2} {y+s}'
+        f'H{x+r}Q{x} {y+s} {x} {y+s-r}V{y+r}Q{x} {y} {x+r} {y}Z'
     )
-
-
-def render_phy_logo(brand: BrandProfile, variant: LogoVariant) -> bytes:
-    """Return canonical PYH bytes through the legacy public API name."""
-    return render_pyh_logo(brand, variant)
+    body = ''
+    if avatar:
+        body += f'<rect x="40" y="40" width="240" height="240" rx="53" fill="{c.navy}"/>\n'
+    if mono:
+        # Filled outline of the round-capped check; even-odd makes it transparent.
+        hole = (
+            'M73.8 135.1L99.3 159.1Q106.5 165.9 113.9 158.4L159.9 104.4'
+            'Q166.3 97 158.9 90.6Q151.5 84.2 145.1 91.6L105.3 137.8'
+            'L87.2 120.9Q80.1 114.2 73.4 121.3Q66.7 128.4 73.8 135.1Z'
+        )
+        body += f'<path id="pyh-bubble" fill="{c.navy}" fill-rule="evenodd" d="{bubble} {hole}"/>\n'
+    else:
+        body += f'<path id="pyh-bubble" fill="{c.teal}" d="{bubble}"/>\n'
+        body += (
+            f'<path id="pyh-check" fill="none" stroke="{c.yellow}" stroke-width="{s*.13:.1f}" '
+            f'stroke-linecap="round" stroke-linejoin="round" d="M{x+s*.27} {y+s*.52}'
+            f'L{x+s*.44} {y+s*.68}L{x+s*.75} {y+s*.32}"/>\n'
+        )
+    if not avatar:
+        ink = c.off_white if variant is LogoVariant.REVERSE else c.navy
+        sub = ink if mono or variant is LogoVariant.REVERSE else c.charcoal
+        body += f'<path id="pyh-wordmark" fill="{ink}" d="{WORDMARK}"/>\n'
+        body += f'<path id="pyh-tagline" fill="{sub}" d="{TAGLINE}"/>\n'
+    view_box = '0 0 320 320' if avatar else '0 0 760 300'
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{view_box}" '
+            f'role="img" aria-label="PYH">\n{body}</svg>\n').encode()

@@ -39,15 +39,15 @@ export const LAYOUTS: Record<FormatProfile, FrameLayout> = {
       outroBrand: {left: 130, top: 250, width: 520, height: 340},
       outroMascot: {left: 650, top: 250, width: 320, height: 360},
       whiteboard: {left: 90, top: 190, width: 900, height: 980},
-      explain: {left: 390, top: 650, width: 570, height: 690},
-      standard: {left: 60, top: 650, width: 570, height: 690},
+      explain: {left: 390, top: 1100, width: 380, height: 450},
+      standard: {left: 60, top: 1100, width: 380, height: 450},
     },
   },
   youtube_long: {
     mechanism: {
       subject: {left: 590, top: 130, width: 850, height: 800},
       comparison: [{left: 350, top: 160, width: 650, height: 680}, {left: 1100, top: 160, width: 650, height: 680}],
-      axis: 'row', mascot: {left: 20, top: 610, width: 324, height: 380},
+      axis: 'row', mascot: {left: 20, top: 610, width: 274, height: 324},
     },
     frame: {width: 1920, height: 1080},
     captions: {left: 360, bottom: 60, width: 1200, height: 120, fontSize: 44,
@@ -62,10 +62,10 @@ export const LAYOUTS: Record<FormatProfile, FrameLayout> = {
     assets: {
       brand: {left: 1320, top: 60, width: 520, height: 300},
       outroBrand: {left: 200, top: 200, width: 520, height: 340},
-      outroMascot: {left: 1300, top: 200, width: 400, height: 400},
+      outroMascot: {left: 1300, top: 200, width: 274, height: 324},
       whiteboard: {left: 460, top: 60, width: 1000, height: 760},
-      explain: {left: 1380, top: 180, width: 460, height: 620},
-      standard: {left: 80, top: 180, width: 460, height: 620},
+      explain: {left: 1480, top: 420, width: 274, height: 324},
+      standard: {left: 80, top: 610, width: 274, height: 324},
     },
   },
 };

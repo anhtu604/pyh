@@ -10,15 +10,15 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture
-def brand():
-    return load_brand_profile(ROOT / "profiles/brand.vi.yaml")
+def brand(brand_profile_path):
+    return load_brand_profile(brand_profile_path)
 
 
 @pytest.mark.parametrize("pose", list(MascotPose))
 def test_mascot_pose_is_safe_and_deterministic(brand, pose: MascotPose) -> None:
     svg = render_mascot(brand, pose)
     assert svg == render_mascot(brand, pose)
-    assert f'aria-label="PYH guide {pose.value}"'.encode() in svg
+    assert f'aria-label="PYH guide placeholder {pose.value}"'.encode() in svg
     assert svg.endswith(b"\n")
     for marker in (b"mascot-p-badge", b"mascot-h-seam", b"mascot-y-check", b"mascot-short-hair"):
         assert marker in svg
@@ -39,3 +39,22 @@ def test_mascot_api_cannot_accept_semantic_or_arbitrary_content() -> None:
     source = inspect.getsource(render_mascot).lower()
     for forbidden in ("stethoscope", "white-coat", "prescription", "patient"):
         assert forbidden not in source
+
+
+@pytest.mark.parametrize("pose", list(MascotPose))
+def test_mascot_asset_returns_placeholder(brand, pose) -> None:
+    from healthvideo.visuals import mascot
+
+    assert mascot.mascot_asset(brand, pose) == (render_mascot(brand, pose), ".svg")
+
+
+@pytest.mark.parametrize("pose", list(MascotPose))
+def test_mascot_asset_returns_artwork(artwork_brand, pose) -> None:
+    from healthvideo.domain.brand import BrandProfile
+    from healthvideo.visuals import mascot
+
+    data, root = artwork_brand
+    brand = BrandProfile.model_validate(data)
+    content, suffix = mascot.mascot_asset(brand, pose)
+    assert suffix == ".png"
+    assert content == (root / data["mascot"]["artwork"][pose]["path"]).read_bytes()

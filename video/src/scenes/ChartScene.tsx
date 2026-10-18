@@ -1,3 +1,4 @@
+import {FONT_FAMILY} from '../fonts';
 import React from 'react';
 import {Img, staticFile} from 'remotion';
 import {Captions} from '../components/Captions';
@@ -19,7 +20,7 @@ export const ChartScene: React.FC<{scene: Scene}> = ({scene}) => {
         style={{...layoutChart.image, objectFit: 'contain', position: 'absolute'}}
       />
       <div
-        style={{bottom: layoutChart.narrationBottom, color: '#202124', fontFamily: 'Arial, sans-serif', fontSize: layoutChart.narrationFontSize,
+        style={{bottom: layoutChart.narrationBottom, color: '#202124', fontFamily: FONT_FAMILY, fontSize: layoutChart.narrationFontSize,
           fontWeight: 800, left: layoutChart.narrationInset, lineHeight: 1.15, position: 'absolute', right: layoutChart.narrationInset,
           textAlign: 'center'}}
       >

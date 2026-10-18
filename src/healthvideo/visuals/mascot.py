@@ -26,7 +26,7 @@ def render_mascot(brand: BrandProfile, pose: MascotPose) -> bytes:
     arms = _ARMS[pose]
     return (
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 900" role="img" '
-        f'aria-label="PYH guide {pose.value}">\n'
+        f'aria-label="PYH guide placeholder {pose.value}">\n'
         f'<g id="mascot-pose-{pose.value}" stroke="{colors.navy}" stroke-width="34" '
         'stroke-linecap="round" stroke-linejoin="round" fill="none">\n'
         f'{arms}'
@@ -62,3 +62,12 @@ def render_mascot_annotation(
         f'{escape(annotation, quote=True)}</text></g>\n'
     )
     return base.replace("</svg>\n", f"{bubble}</svg>\n").encode()
+
+
+
+def mascot_asset(brand: BrandProfile, pose: MascotPose) -> tuple[bytes, str]:
+    """Select validated artwork, falling back to the fixed SVG placeholder."""
+    if brand.mascot.artwork is not None:
+        artwork = brand.mascot.artwork[pose]
+        return artwork.resolved_path().read_bytes(), ".png"
+    return render_mascot(brand, pose), ".svg"

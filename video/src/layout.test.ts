@@ -13,12 +13,12 @@ const inside = (box: Box, frame: {width: number; height: number}) =>
   box.left >= 0 && box.top >= 0 && box.left + box.width <= frame.width && box.top + box.height <= frame.height;
 
 describe('layouts', () => {
-  it('vertical table equals the pre-M8 pixel values', () => {
+  it('keeps vertical captions and narrative geometry', () => {
     const v = LAYOUTS.vertical_clip;
     expect(v.frame).toEqual({width: 1080, height: 1920});
     expect(v.captions).toMatchObject({left: 72, bottom: 174, width: 936, height: 136, fontSize: 48, maxWords: 6});
     expect(v.narration).toEqual({left: 96, right: 96, top: 760, fontSize: 72});
-    expect(v.assets.standard).toEqual({left: 60, top: 650, width: 570, height: 690});
+
   });
 
   it('every landscape box fits in 1920x1080', () => {
@@ -45,4 +45,15 @@ describe('layouts', () => {
     expect(landscape).toContain('top:380px');
     expect(html(LAYOUTS.vertical_clip)).toContain('viewBox="0 0 936 136"');
   });
+});
+
+
+it('limits all regular mascot boxes to 24% vertical and 30% landscape', () => {
+  for (const layout of Object.values(LAYOUTS)) {
+    const limit = layout.frame.height * (layout.frame.height > layout.frame.width ? 0.24 : 0.30);
+    for (const box of [layout.mechanism.mascot, layout.assets.standard, layout.assets.explain, layout.assets.outroMascot]) {
+      expect(box.height).toBeLessThanOrEqual(limit);
+      expect(inside(box, layout.frame)).toBe(true);
+    }
+  }
 });

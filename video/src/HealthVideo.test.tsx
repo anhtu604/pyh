@@ -56,7 +56,7 @@ describe('HealthVideo visual asset layer', () => {
       schema_version: '1.0', id: 'OUTRO', start_frame: 90, duration_frames: 60,
       narration: 'Cảm ơn', visual: 'brand_outro',
       source_marker: undefined, evidence_highlight: undefined,
-      visual_assets: [{path: 'assets/phy.svg', role: 'brand'}],
+      visual_assets: [{path: 'assets/pyh.svg', role: 'brand'}],
     }]});
     const root = renderVideo(props);
     const sequences = React.Children.toArray(root.props.children).slice(1) as React.ReactElement<{

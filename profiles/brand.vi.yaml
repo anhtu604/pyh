@@ -9,14 +9,19 @@ colors:
   yellow: "#F4B942"
   off_white: "#F7F4EC"
   charcoal: "#263238"
+  night: "#0A1C2E"
 assets:
   creator: "Protect Your Health"
-  license: "PYH internal original artwork"
+  license: "PYH internal artwork; mascot AI-generated for PYH (Gamma, 2026-10-18)"
 mascot:
   poses:
     - welcome
     - explain
     - caution
+  artwork:
+    welcome: {path: assets/brand/mascot/welcome.png, sha256: "731be4719c7dab9658d55b043901ae2fcc2f3ec569cf360d65db33cc4dc5ff87"}
+    explain: {path: assets/brand/mascot/explain.png, sha256: "636bc2b913c207d653d549c423117c8d4877eeb138fb55bca2cfae936fdf87b2"}
+    caution: {path: assets/brand/mascot/caution.png, sha256: "3da60b4a2a14418ad520dd36701896755bb41a693e5a8f90b748782cb1ac42db"}
 
 cta:
   youtube_full_video: "Xem bản đầy đủ trên YouTube"

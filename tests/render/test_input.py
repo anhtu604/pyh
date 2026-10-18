@@ -357,3 +357,14 @@ def test_render_input_is_immutable() -> None:
 
     with pytest.raises(ValidationError):
         result.width = 720
+
+
+
+def test_cta_logo_default_and_path_validation() -> None:
+    from healthvideo.render.input import YouTubeCTA
+
+    assert YouTubeCTA(text="YouTube").logo_path == "clips/cta/logo.svg"
+    assert YouTubeCTA(text="YouTube", mascot_path="cta.png", logo_path="brand.svg").logo_path == "brand.svg"
+    for path in ("../logo.svg", "/logo.svg", "C:/logo.svg", "a\\logo.svg"):
+        with pytest.raises(ValueError):
+            YouTubeCTA(text="YouTube", logo_path=path)

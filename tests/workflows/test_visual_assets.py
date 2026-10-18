@@ -862,3 +862,32 @@ def test_highlight_retry_after_promotion_failure_is_gate_safe(
         read_yaml(revision / "assets/license-ledger.yaml")
     )
     assert len([e for e in rights.entries if e.path == "assets/paper-excerpt.png"]) == 1
+
+
+
+def test_artwork_registration_and_annotation_guard(project, artwork_brand, monkeypatch) -> None:
+    from healthvideo.domain.brand import BrandProfile
+
+    data, root = artwork_brand
+    brand = BrandProfile.model_validate(data)
+    monkeypatch.setattr(visual_assets, "load_brand_profile", lambda _: brand)
+    target = create_mascot_reaction_asset(
+        project, scene_id="S01", asset_name="artwork", pose=MascotPose.WELCOME
+    )
+    assert target.suffix == ".png"
+    assert target.read_bytes() == (root / data["mascot"]["artwork"]["welcome"]["path"]).read_bytes()
+    revision = project / "revisions/001"
+    manifest = load_asset_manifest(revision / "assets/asset-manifest.yaml")
+    validate_asset_manifest(revision, manifest)
+    validate_license_ledger(manifest, LicenseLedger.model_validate(
+        read_yaml(revision / "assets/license-ledger.yaml")), "001")
+    record = next(item for item in manifest.assets if item.path == "assets/artwork.png")
+    assert record.kind == AssetKind.MASCOT_REACTION
+    assert record.semantic is False
+    before = (revision / "assets/asset-manifest.yaml").read_bytes()
+    with pytest.raises(ValueError, match="medical_text.*mascot_reaction"):
+        create_mascot_annotation_asset(
+            project, scene_id="S01", asset_name="no-raster", pose=MascotPose.EXPLAIN,
+            annotation="Fixture", claim_id="C01", source_id="R01", source_marker="[1]",
+        )
+    assert (revision / "assets/asset-manifest.yaml").read_bytes() == before

@@ -50,3 +50,16 @@ it('appends the fixed YouTube card outside storyboard scenes', () => {
     youtube_cta: {text: 'Custom YouTube invitation', mascot_path: 'clips/cta/welcome.svg', duration_frames: 90}}))
     .toEqual({durationInFrames: 5400, width: 1080, height: 1920});
 });
+
+
+it('accepts PNG mascots and defaults the logo for legacy CTA input', () => {
+  const input = {...verticalClipDefaults, youtube_cta: {text: 'YouTube', mascot_path: 'clips/cta/welcome.png'}};
+  const parsed = parseRenderInput(input);
+  expect(parsed.youtube_cta?.mascot_path).toBe('clips/cta/welcome.png');
+  expect(parsed.youtube_cta?.logo_path).toBe('clips/cta/logo.svg');
+  expect(parseRenderInput({...input, youtube_cta: {...input.youtube_cta, logo_path: 'brand/reverse.svg'}})
+    .youtube_cta?.logo_path).toBe('brand/reverse.svg');
+  for (const path of ['../logo.svg', '/logo.svg', 'C:/logo.svg', 'a\\logo.svg']) {
+    expect(() => parseRenderInput({...input, youtube_cta: {...input.youtube_cta, logo_path: path}})).toThrow();
+  }
+});
