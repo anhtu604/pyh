@@ -11,6 +11,7 @@ from healthvideo.domain.author import AuthorBrief
 from healthvideo.domain.backup import BackupManifest
 from healthvideo.domain.brand import BrandProfile
 from healthvideo.domain.evidence import EvidenceClaim
+from healthvideo.domain.explainer import Explainer
 from healthvideo.domain.lease import ProjectLease
 from healthvideo.domain.license_ledger import LicenseLedger
 from healthvideo.domain.project_v2 import ProjectManifestV2
@@ -29,6 +30,7 @@ SCHEMAS: dict[str, type[BaseModel]] = {
     "project-v2.schema.json": ProjectManifestV2,
     "topic-card.schema.json": TopicCard,
     "evidence.schema.json": EvidenceClaim,
+    "explainer.schema.json": Explainer,
     "author-brief.schema.json": AuthorBrief,
     "script.schema.json": Script,
     "storyboard.schema.json": Storyboard,

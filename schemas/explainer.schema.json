@@ -1,0 +1,223 @@
+{
+  "$defs": {
+    "Analogy": {
+      "additionalProperties": false,
+      "properties": {
+        "limits": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Limits",
+          "type": "string"
+        },
+        "text": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "limits"
+      ],
+      "title": "Analogy",
+      "type": "object"
+    },
+    "ExplainerLayer": {
+      "additionalProperties": false,
+      "properties": {
+        "analogy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Analogy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "claim_ids": {
+          "default": [],
+          "items": {
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "title": "Claim Ids",
+          "type": "array"
+        },
+        "concept": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Concept",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Id",
+          "type": "string"
+        },
+        "layer": {
+          "enum": [
+            "anatomy",
+            "physiology",
+            "pathophysiology",
+            "pathology"
+          ],
+          "title": "Layer",
+          "type": "string"
+        },
+        "plain_explanation": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Plain Explanation",
+          "type": "string"
+        },
+        "terms_introduced": {
+          "default": [],
+          "items": {
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "title": "Terms Introduced",
+          "type": "array"
+        },
+        "visual": {
+          "$ref": "#/$defs/LayerVisual"
+        }
+      },
+      "required": [
+        "id",
+        "layer",
+        "concept",
+        "plain_explanation",
+        "visual"
+      ],
+      "title": "ExplainerLayer",
+      "type": "object"
+    },
+    "LayerVisual": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "anatomy_animation",
+            "process_animation",
+            "comparison",
+            "timelapse"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "motion": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Motion",
+          "type": "string"
+        },
+        "reuse_of": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reuse Of"
+        },
+        "subject": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Subject",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "subject",
+        "motion"
+      ],
+      "title": "LayerVisual",
+      "type": "object"
+    },
+    "SkippedLayer": {
+      "additionalProperties": false,
+      "properties": {
+        "layer": {
+          "enum": [
+            "anatomy",
+            "physiology",
+            "pathophysiology",
+            "pathology"
+          ],
+          "title": "Layer",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "layer",
+        "reason"
+      ],
+      "title": "SkippedLayer",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "layers": {
+      "items": {
+        "$ref": "#/$defs/ExplainerLayer"
+      },
+      "minItems": 2,
+      "title": "Layers",
+      "type": "array"
+    },
+    "organ_system": {
+      "minLength": 1,
+      "pattern": "\\S",
+      "title": "Organ System",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "skipped_layers": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/SkippedLayer"
+      },
+      "title": "Skipped Layers",
+      "type": "array"
+    },
+    "topic_question": {
+      "minLength": 1,
+      "pattern": "\\S",
+      "title": "Topic Question",
+      "type": "string"
+    }
+  },
+  "required": [
+    "topic_question",
+    "organ_system",
+    "layers"
+  ],
+  "title": "Explainer",
+  "type": "object"
+}

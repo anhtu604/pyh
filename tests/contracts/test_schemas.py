@@ -18,6 +18,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
         ("pronunciation.schema.json", True),
         ("topic-card.schema.json", True),
         ("evidence.schema.json", True),
+        ("explainer.schema.json", True),
         ("author-brief.schema.json", False),
         ("script.schema.json", True),
         ("storyboard.schema.json", True),
