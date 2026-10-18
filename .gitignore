@@ -28,3 +28,6 @@ projects/**/.healthvideo/
 # Unlicensed style catalog: local reference only
 .refs/
 .agy-reports/
+
+# Disposable contact sheets/drafts, including synthetic QA projects outside projects/.
+**/renders/review-frames/

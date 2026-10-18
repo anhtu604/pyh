@@ -34,6 +34,7 @@ EXPECTED = {
 READ_ONLY = {
     "src/healthvideo/cli.py": {
         "status", "lease_inspect", "review_open", "security_audit", "script_lint",
+        "review_frames",  # Project state is read-only; only disposable render QA is written.
     },
     "src/healthvideo/commands/operator.py": {"status"},
 }

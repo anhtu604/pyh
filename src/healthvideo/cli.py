@@ -88,6 +88,7 @@ from healthvideo.workflows.review import (
     approve_video,
     latest_approval,
 )
+from healthvideo.workflows.review_frames import review_frames as create_review_frames
 from healthvideo.workflows.review_html import render_medical_packet, render_video_packet
 from healthvideo.workflows.screening import screen_candidates
 from healthvideo.workflows.topic import (
@@ -719,6 +720,25 @@ def review_reject(
         typer.echo(str(error))
         raise typer.Exit(code=1) from error
     typer.echo(f"Đã từ chối {gate.value}, nối lại tại {resume_state.value}")
+
+
+@review_app.command("frames")
+def review_frames(
+    project_dir: ProjectDir,
+    clip: Annotated[str | None, typer.Option(help="Clip ID, e.g. CL01; default: long video")] = None,
+    start: Annotated[float | None, typer.Option("--from", help="Start time in seconds")] = None,
+    end: Annotated[float | None, typer.Option("--to", help="Inclusive end time in seconds")] = None,
+    every: Annotated[float | None, typer.Option(help="Sample interval in seconds")] = None,
+) -> None:
+    """Create 4x2 QA contact sheets; read-only project state, writes render artifacts."""
+    try:
+        output = create_review_frames(
+            project_dir, runner=run_render_argv, clip=clip, start=start, end=end, every=every,
+        )
+    except (OSError, RuntimeError, TypeError, ValueError) as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
+    typer.echo(str(output))
 
 
 @review_app.command("open")

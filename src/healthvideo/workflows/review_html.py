@@ -23,6 +23,7 @@ from healthvideo.domain.visual_budget import calculate_visual_budget
 from healthvideo.storage.explainer import read_explainer
 from healthvideo.storage.files import canonical_json_hash, read_yaml
 from healthvideo.workflows.long_form import OUTLINE_ARTIFACT, load_clip_scenes
+from healthvideo.workflows.review_frames import mechanism_sheets
 
 _NOT_YET_MODELED = (
     "chưa có trong hệ thống: population, certainty, applicability, "
@@ -346,11 +347,23 @@ def render_video_packet(revision_root: Path) -> str:
         f'<video controls src="../renders/{escape(relative)}"></video>'
         for clip_id, relative in sorted(manifest.get("clips", {}).items())
     )
+    sheets = mechanism_sheets(revision_root)
+    sheet_section = (
+        '<section><h2>Mechanism contact sheets (QA)</h2>'
+        '<p>QA aids; medical and video approvals are still required.</p>'
+        + "".join(
+            f'<figure><img style="max-width:100%" alt="{escape(path.parent.parent.name)} '
+            f'mechanism frames" src="../{escape(path.relative_to(revision_root).as_posix())}">'
+            f'<figcaption>{escape(path.parent.parent.name)} / {escape(path.name)}</figcaption>'
+            '</figure>' for path in sheets
+        ) + '</section>' if sheets else ""
+    )
     return (
         '<!doctype html><html lang="vi"><head><meta charset="utf-8">'
         "<title>Gói duyệt video</title></head><body>"
         '<video controls src="../renders/video.mp4"></video>'
         + clip_videos
+        + sheet_section
         + budget_section
         + f"<pre>{escape(str(manifest))}</pre>"
         f"<pre>{escape(str(qa))}</pre>"
