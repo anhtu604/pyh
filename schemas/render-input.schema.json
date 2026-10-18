@@ -204,6 +204,19 @@
         }
       ],
       "properties": {
+        "chapter_id": {
+          "anyOf": [
+            {
+              "pattern": "^CH\\d{2}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Chapter Id"
+        },
         "claim_id": {
           "anyOf": [
             {
@@ -349,6 +362,15 @@
       "title": "Audio File",
       "type": "string"
     },
+    "format_profile": {
+      "default": "vertical_clip",
+      "enum": [
+        "vertical_clip",
+        "youtube_long"
+      ],
+      "title": "Format Profile",
+      "type": "string"
+    },
     "fps": {
       "const": 30,
       "default": 30,
@@ -356,8 +378,11 @@
       "type": "integer"
     },
     "height": {
-      "const": 1920,
       "default": 1920,
+      "enum": [
+        1920,
+        1080
+      ],
       "title": "Height",
       "type": "integer"
     },
@@ -387,8 +412,11 @@
       "type": "string"
     },
     "width": {
-      "const": 1080,
       "default": 1080,
+      "enum": [
+        1080,
+        1920
+      ],
       "title": "Width",
       "type": "integer"
     }

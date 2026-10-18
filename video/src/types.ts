@@ -1,4 +1,5 @@
 import {z} from 'zod';
+import {FORMAT_SIZES} from './format';
 
 const unitCoordinate = z.number().min(0).max(1);
 
@@ -81,6 +82,7 @@ export const SceneSchema = z
     narration: z.string(),
     script_line_id: z.string().nullable().optional(),
     claim_id: z.string().nullable().optional(),
+    chapter_id: z.string().regex(/^CH\d{2}$/).nullable().optional(),
     source_marker: z.string().regex(/\S/).nullable().optional(),
     visual: z.enum(['whiteboard', 'chart', 'evidence_highlight', 'ai_clip', 'brand_outro']),
     evidence_highlight: EvidenceHighlightSchema.nullable().optional(),
@@ -137,10 +139,19 @@ export const RenderInputSchema = z.object({
   audio_file: z.string(),
   scenes: z.array(SceneSchema).default([]),
   visual_budget_profile: z.enum(['legacy', 'm6_5_v1']).default('legacy'),
-  width: z.literal(1080).default(1080),
-  height: z.literal(1920).default(1920),
+  format_profile: z.enum(['vertical_clip', 'youtube_long']).default('vertical_clip'),
+  width: z.union([z.literal(1080), z.literal(1920)]).default(1080),
+  height: z.union([z.literal(1920), z.literal(1080)]).default(1920),
   fps: z.literal(30).default(30),
 }).superRefine((input, context) => {
+  const size = FORMAT_SIZES[input.format_profile];
+  if (input.width !== size.width || input.height !== size.height) {
+    context.addIssue({
+      code: 'custom',
+      path: ['width'],
+      message: `${input.format_profile} requires ${size.width}x${size.height}`,
+    });
+  }
   if (input.visual_budget_profile !== 'm6_5_v1') {
     return;
   }

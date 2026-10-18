@@ -7,6 +7,7 @@ import {OutroScene} from './scenes/OutroScene';
 import {WhiteboardScene} from './scenes/WhiteboardScene';
 import {VisualAsset} from './components/VisualAsset';
 import {CAPTION_BACKGROUND_COLOR, CAPTION_TEXT_COLOR} from './components/Captions';
+import {LAYOUTS, LayoutContext} from './layout';
 import {parseRenderInput} from './types';
 import type {RenderInput, SceneTiming} from './types';
 
@@ -16,9 +17,10 @@ export const activeSceneIndex = (scenes: SceneTiming[], frame: number): number =
   );
 
 export const HealthVideo: React.FC<RenderInput> = (rawInput) => {
-  const {audio_file, scenes} = parseRenderInput(rawInput);
+  const {audio_file, format_profile, scenes} = parseRenderInput(rawInput);
 
   return (
+    <LayoutContext.Provider value={LAYOUTS[format_profile]}>
     <AbsoluteFill style={{backgroundColor: CAPTION_BACKGROUND_COLOR, color: CAPTION_TEXT_COLOR}}>
       <Audio src={staticFile(audio_file)} />
       {scenes.map((scene) => (
@@ -40,5 +42,6 @@ export const HealthVideo: React.FC<RenderInput> = (rawInput) => {
         </Sequence>
       ))}
     </AbsoluteFill>
+    </LayoutContext.Provider>
   );
 };

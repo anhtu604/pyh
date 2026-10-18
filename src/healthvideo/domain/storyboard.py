@@ -4,6 +4,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from healthvideo.domain.brand import MascotPose
+from healthvideo.domain.format_profile import FormatProfile
 from healthvideo.domain.visual_budget import VisualBudgetOverride, VisualBudgetProfile
 
 
@@ -113,6 +114,7 @@ class Scene(BaseModel):
     narration: str
     script_line_id: str | None = None
     claim_id: str | None = None
+    chapter_id: str | None = Field(default=None, pattern=r"^CH\d{2}$")
     source_marker: str | None = Field(
         default=None, json_schema_extra={"pattern": r"\S"}
     )
@@ -165,6 +167,24 @@ class Storyboard(BaseModel):
     scenes: tuple[Scene, ...] = Field(default_factory=tuple)
     visual_budget_profile: VisualBudgetProfile = "legacy"
     visual_budget_override: VisualBudgetOverride | None = None
+    format_profile: FormatProfile = "vertical_clip"
+
+    @model_validator(mode="after")
+    def validate_chapters(self) -> "Storyboard":
+        if self.format_profile != "youtube_long":
+            return self
+        seen: list[str] = []
+        for scene in self.scenes:
+            if scene.chapter_id is None:
+                raise ValueError(f"Scene {scene.id}: youtube_long scene requires chapter_id")
+            if seen and seen[-1] == scene.chapter_id:
+                continue
+            if scene.chapter_id in seen:
+                raise ValueError(
+                    f"Scene {scene.id}: chapter {scene.chapter_id} must be contiguous"
+                )
+            seen.append(scene.chapter_id)
+        return self
 
     @model_validator(mode="after")
     def validate_visual_budget_activation(self) -> "Storyboard":

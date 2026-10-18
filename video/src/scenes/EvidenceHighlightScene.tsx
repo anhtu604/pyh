@@ -1,6 +1,7 @@
 import React from 'react';
 import {Img, interpolate, staticFile, useCurrentFrame} from 'remotion';
 import {Captions} from '../components/Captions';
+import {useLayout} from '../layout';
 import type {Scene} from '../types';
 import {highlightImageLayout, highlightObjectFit, localHighlightRect} from './highlightGeometry';
 
@@ -10,13 +11,14 @@ type EvidenceHighlightSceneProps = {
 
 export const EvidenceHighlightScene: React.FC<EvidenceHighlightSceneProps> = ({scene}) => {
   const frame = useCurrentFrame();
+  const layout = useLayout();
   const highlight = scene.evidence_highlight;
   if (highlight === null || highlight === undefined) {
     throw new Error('evidence_highlight scene requires an evidence highlight');
   }
 
   const local = localHighlightRect(highlight);
-  const imageLayout = highlightImageLayout(highlight);
+  const imageLayout = highlightImageLayout(highlight, layout.frame);
 
   const highlightedWidth = interpolate(frame, [0, 18], [0, local.width * imageLayout.width], {
     extrapolateRight: 'clamp',
@@ -42,16 +44,16 @@ export const EvidenceHighlightScene: React.FC<EvidenceHighlightSceneProps> = ({s
         style={{
           backgroundColor: 'rgba(255, 253, 247, 0.95)',
           borderRadius: 28,
-          bottom: 390,
+          bottom: layout.quote.bottom,
           color: '#202124',
           fontFamily: 'Arial, sans-serif',
-          fontSize: 46,
+          fontSize: layout.quote.fontSize,
           fontWeight: 700,
-          left: 72,
+          left: layout.quote.inset,
           lineHeight: 1.3,
           padding: 36,
           position: 'absolute',
-          right: 72,
+          right: layout.quote.inset,
         }}
       >
         <span>{highlight.quote}</span>
