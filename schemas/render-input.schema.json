@@ -454,6 +454,32 @@
       ],
       "title": "VisualAssetRef",
       "type": "object"
+    },
+    "YouTubeCTA": {
+      "additionalProperties": false,
+      "properties": {
+        "duration_frames": {
+          "const": 90,
+          "default": 90,
+          "title": "Duration Frames",
+          "type": "integer"
+        },
+        "mascot_path": {
+          "default": "clips/cta/welcome.svg",
+          "title": "Mascot Path",
+          "type": "string"
+        },
+        "text": {
+          "pattern": "\\S",
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "YouTubeCTA",
+      "type": "object"
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -520,6 +546,17 @@
       ],
       "title": "Width",
       "type": "integer"
+    },
+    "youtube_cta": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/YouTubeCTA"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     }
   },
   "required": [

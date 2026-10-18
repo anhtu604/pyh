@@ -16,8 +16,8 @@ class FormatSpec:
 
 
 FORMAT_SPECS: dict[str, FormatSpec] = {
-    "vertical_clip": FormatSpec(1080, 1920, 45 * FPS, 90 * FPS),
-    # ponytail: 60 s floor keeps fixtures small; the 15-min editorial target is
+    "vertical_clip": FormatSpec(1080, 1920, 45 * FPS, 180 * FPS),
+    # ponytail: 60 s floor keeps fixtures small; the 10-min editorial target is
     # outline QA (M8.2), not a renderer rule.
     "youtube_long": FormatSpec(1920, 1080, 60 * FPS, 25 * 60 * FPS),
 }

@@ -61,6 +61,17 @@ def test_produce_renders_each_clip_vertical(tmp_path: Path) -> None:
     )
     assert (clip_input["width"], clip_input["height"]) == (1080, 1920)
     assert [scene["id"] for scene in clip_input["scenes"]] == ["S01", "S02"]
+    assert clip_input["youtube_cta"]["duration_frames"] == 90
+    mascot = renders / clip_input["youtube_cta"]["mascot_path"]
+    assert b"mascot-pose-welcome" in mascot.read_bytes()
+    assert b"<text" not in mascot.read_bytes()
+    assets = read_yaml(renders / "clips/cta/asset-manifest.yaml")
+    assert assets["assets"][0]["kind"] == "mascot_reaction"
+    assert assets["assets"][0]["semantic"] is False
+    from healthvideo.storage.files import sha256_file
+    assert assets["assets"][0]["sha256"] == sha256_file(mascot)
+    rights = read_yaml(renders / "clips/cta/license-ledger.yaml")
+    assert rights["entries"][0]["sha256"] == sha256_file(mascot)
     assert (renders / "audio" / "clips" / "CL01.wav").is_file()
     assert all((renders / relative).is_file() for relative in manifest["clips"].values())
     assert calls[-1][0] == "ffmpeg"
@@ -85,3 +96,27 @@ def test_video_packet_lists_clips(tmp_path: Path) -> None:
     project_dir, _ = _produced(tmp_path)
     html = render_video_packet(project_dir / "revisions" / "001")
     assert "../renders/clips/CL01.mp4" in html
+
+
+def test_mascot_warning_in_both_review_packets_and_produce_qa(tmp_path: Path) -> None:
+    from healthvideo.domain.brand import MascotPose
+    from healthvideo.workflows.review_html import render_medical_packet
+    from healthvideo.workflows.visual_assets import create_mascot_reaction_asset
+
+    project = create_long_form_project_fixture(tmp_path)
+    revision = project / "revisions/001"
+    for number in (1, 2, 3):
+        create_mascot_reaction_asset(
+            project, scene_id=f"S{number:02d}", asset_name=f"test-guide-{number}",
+            pose=MascotPose.WELCOME,
+        )
+    assert "Mascot share exceeds 35%" in render_medical_packet(revision)
+    before = (revision / "storyboard/storyboard.yaml").read_bytes()
+    approve_gate(project, GateKind.MEDICAL, reviewer=REVIEWER, now=REVIEWED_AT)
+    produce_project(project, SilentTTS(), _runner([]))
+    assert (revision / "storyboard/storyboard.yaml").read_bytes() == before
+    assert "Mascot share exceeds 35%" in render_video_packet(revision)
+    qa = json.loads((revision / "reviews/video-qa.json").read_text(encoding="utf-8"))
+    assert qa["visual_budget"]["mascot_frames"] == 2700
+    assert qa["visual_budget"]["warnings"]
+    approve_gate(project, GateKind.VIDEO, reviewer=REVIEWER, now=REVIEWED_AT)

@@ -9,7 +9,20 @@ from healthvideo.domain.visual_budget import VisualBudgetProfile
 
 FRAMES_PER_SECOND = 30
 MIN_DURATION_FRAMES = 45 * FRAMES_PER_SECOND
-MAX_DURATION_FRAMES = 90 * FRAMES_PER_SECOND
+MAX_DURATION_FRAMES = 180 * FRAMES_PER_SECOND
+
+
+class YouTubeCTA(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    text: str = Field(pattern=r"\S")
+    mascot_path: str = "clips/cta/welcome.svg"
+    duration_frames: Literal[90] = 90
+
+    @model_validator(mode="after")
+    def validate_path(self) -> "YouTubeCTA":
+        _validate_relative_posix_path(self.mascot_path, "YouTube CTA")
+        return self
 
 
 class RenderInput(BaseModel):
@@ -30,6 +43,7 @@ class RenderInput(BaseModel):
 
     schema_version: str = "1.0"
     title: str
+    youtube_cta: YouTubeCTA | None = None
     audio_file: str
     scenes: tuple[Scene, ...] = Field(default_factory=tuple)
     visual_budget_profile: VisualBudgetProfile = "legacy"
@@ -45,6 +59,12 @@ class RenderInput(BaseModel):
             raise ValueError(
                 f"{self.format_profile} requires {spec.width}x{spec.height}"
             )
+        if self.youtube_cta is not None:
+            final_frame = max(
+                (scene.start_frame + scene.duration_frames for scene in self.scenes), default=0
+            ) + self.youtube_cta.duration_frames
+            if self.format_profile != "vertical_clip" or not 1800 <= final_frame <= 5400:
+                raise ValueError("YouTube CTA clip duration must be between 1800 and 5400 frames")
         for scene in self.scenes:
             clips = sum(asset.role == "ai_clip" for asset in scene.visual_assets)
             if clips and scene.visual != "ai_clip":

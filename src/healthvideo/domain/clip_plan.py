@@ -13,8 +13,9 @@ from healthvideo.domain.evidence import EvidenceClaim
 from healthvideo.domain.storyboard import Scene, Storyboard
 
 FPS = 30
-CLIP_MIN_FRAMES = 30 * FPS
-CLIP_MAX_FRAMES = 90 * FPS
+CLIP_MIN_FRAMES = 60 * FPS
+CLIP_MAX_FRAMES = 180 * FPS
+CLIP_CTA_FRAMES = 3 * FPS
 
 
 class ClipSpec(BaseModel):
@@ -32,7 +33,7 @@ class ClipPlan(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     schema_version: Literal["1.0"] = "1.0"
-    clips: tuple[ClipSpec, ...] = Field(min_length=3, max_length=6)
+    clips: tuple[ClipSpec, ...] = Field(min_length=1, max_length=6)
 
     @model_validator(mode="after")
     def _unique_ids(self) -> "ClipPlan":
@@ -69,7 +70,7 @@ def validate_clip_plan(
     resolved: dict[str, tuple[Scene, ...]] = {}
     for clip in plan.clips:
         scenes = resolve_clip_scenes(clip, storyboard)
-        frames = sum(scene.duration_frames for scene in scenes)
+        frames = sum(scene.duration_frames for scene in scenes) + CLIP_CTA_FRAMES
         if not CLIP_MIN_FRAMES <= frames <= CLIP_MAX_FRAMES:
             raise ValueError(
                 f"{clip.id}: duration {frames} frames must be between "

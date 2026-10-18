@@ -215,6 +215,19 @@ def _package_v2(layout: ProjectLayout) -> Path:
         )
         write_text_atomic(staging_dir / CAPTION_NAME, _caption(script, citations))
         write_text_atomic(staging_dir / SOURCES_NAME, _sources(script, citations))
+        for clip_id, relative in render_manifest.get("clips", {}).items():
+            # Gate 2 freshness above binds these final MP4 bytes.
+            clip_dir = staging_dir / "clips"
+            clip_dir.mkdir(exist_ok=True)
+            shutil.copy2(renders_dir / relative, clip_dir / f"{clip_id}.mp4")
+            if sha256_file(clip_dir / f"{clip_id}.mp4") != video_approval.artifact_hashes.get(
+                f"renders/{relative}"
+            ):
+                raise ValueError("packaged clip does not match current video approval")
+            write_text_atomic(
+                clip_dir / f"{clip_id}.caption.txt",
+                _caption(script, citations) + "\n<YOUTUBE_URL>\n",
+            )
         if ai_disclosure is not None:
             write_text_atomic(staging_dir / AI_DISCLOSURE_NAME, ai_disclosure)
         write_text_atomic(
@@ -579,6 +592,10 @@ def _manifest_json(
             "video": _approval_binding(video_approval),
         },
         "payload_sha256": {
+            **{
+                path.relative_to(staging_dir).as_posix(): sha256_file(path)
+                for path in sorted((staging_dir / "clips").glob("*")) if path.is_file()
+            },
             CAPTION_NAME: sha256_file(staging_dir / CAPTION_NAME),
             OUTPUT_NAME: sha256_file(staging_dir / OUTPUT_NAME),
             SOURCES_NAME: sha256_file(staging_dir / SOURCES_NAME),

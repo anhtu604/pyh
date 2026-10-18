@@ -6,7 +6,7 @@ from healthvideo.domain.evidence import EvidenceClaim
 from healthvideo.domain.storyboard import Scene, Storyboard
 
 LAYOUT = (("S01", "CH01", 900, "C01"), ("S02", "CH02", 900, "C02"), ("S03", "CH03", 900, None),
-          ("S04", "CH04", 900, None), ("S05", "CH05", 900, None), ("S06", "CH05", 600, None))
+          ("S04", "CH04", 900, None), ("S05", "CH05", 900, None), ("S06", "CH05", 900, None))
 
 
 def _board(profile: str = "youtube_long") -> Storyboard:
@@ -81,8 +81,8 @@ def test_caveat_must_be_in_ledger() -> None:
         validate_clip_plan(_plan(), _board(), {"C01": CLAIMS["C01"]})
 
 
-@pytest.mark.parametrize(("first", "last", "frames"), [("S06", "S06", 600), ("S01", "S04", 3600)])
-def test_clip_must_last_30_to_90_seconds(first: str, last: str, frames: int) -> None:
+@pytest.mark.parametrize(("first", "last", "frames"), [("S06", "S06", 990), ("S01", "S06", 5490)])
+def test_clip_must_last_60_to_180_seconds_including_cta(first: str, last: str, frames: int) -> None:
     plan = _with(_clip("CL01", first, last))
     with pytest.raises(ValueError, match=f"CL01: duration {frames} frames"):
         validate_clip_plan(plan, _board(), CLAIMS)
@@ -104,9 +104,9 @@ def test_hook_inside_range() -> None:
         validate_clip_plan(plan, _board(), CLAIMS)
 
 
-def test_plan_needs_three_to_six_clips() -> None:
+def test_plan_needs_one_to_six_clips() -> None:
     with pytest.raises(ValidationError):
-        _plan(_clip("CL01", "S01", "S02"), _clip("CL02", "S03", "S04"))
+        ClipPlan(clips=())
     with pytest.raises(ValidationError):
         _plan(*(_clip(f"CL{i:02d}", "S03", "S04") for i in range(1, 8)))
 

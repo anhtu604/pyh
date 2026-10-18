@@ -12,6 +12,7 @@ from healthvideo.assets import (
     referenced_storyboard_assets,
 )
 from healthvideo.domain.asset_manifest import load_asset_manifest
+from healthvideo.domain.brand import load_brand_profile
 from healthvideo.domain.gate_review import GateApprovalRecord, GateKind
 from healthvideo.domain.hook_outro import validate_hook_outro
 from healthvideo.domain.project import ProjectManifest, ProjectState, transition
@@ -59,7 +60,10 @@ from healthvideo.workflows.long_form import (
     render_clips,
 )
 from healthvideo.workflows.review import ensure_approval_current
-from healthvideo.workflows.visual_assets import recover_chart_asset_binding
+from healthvideo.workflows.visual_assets import (
+    BRAND_PROFILE_PATH,
+    recover_chart_asset_binding,
+)
 
 Runner = Callable[[list[str]], int]
 AUTHOR_PROFILE_PATH = (
@@ -239,7 +243,7 @@ def _produce_v2(
     visual_budget_report = validate_visual_budget(storyboard)
     visual_budget_qa = (
         visual_budget_report.model_dump(mode="json")
-        if storyboard.visual_budget_profile != "legacy"
+        if storyboard.visual_budget_profile != "legacy" or visual_budget_report.mascot_frames
         else None
     )
     validate_hook_outro(script, storyboard, require_brand=script.format_profile == "hook_outro_v1")
@@ -261,6 +265,10 @@ def _produce_v2(
     asset_hashes.update(
         {relative: sha256_file(path) for relative, path in visual_paths.items()}
     )
+    clip_brand = (
+        load_brand_profile(BRAND_PROFILE_PATH)
+        if storyboard.format_profile == "youtube_long" else None
+    )
     input_hash = canonical_json_hash(
         {
             "production": _input_hash(
@@ -275,7 +283,8 @@ def _produce_v2(
             "provider_identity": provider_identity_data,
             "renderer_identity": renderer_identity_data,
             **(
-                {"clip_plan": read_yaml(layout.artifact_root / CLIP_PLAN_ARTIFACT)}
+                {"clip_plan": read_yaml(layout.artifact_root / CLIP_PLAN_ARTIFACT),
+                 "clip_brand": clip_brand.model_dump(mode="json")}
                 if storyboard.format_profile == "youtube_long"
                 else {}
             ),
@@ -390,6 +399,8 @@ def _produce_v2(
                 staging_dir,
                 synthesize=synthesize_clip,
                 runner=runner,
+                brand=clip_brand,
+                revision=project.active_revision,
             )
             chapter_parts = render_long_form(
                 render_input_path=staged_render_input,

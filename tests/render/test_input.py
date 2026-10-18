@@ -10,7 +10,7 @@ from healthvideo.domain.storyboard import (
 from healthvideo.render.input import audio_timing_qa, build_render_input
 
 
-@pytest.mark.parametrize("frames", [600, 4200])
+@pytest.mark.parametrize("frames", [600, 5401])
 def test_v2_duration_tracks_content_while_v1_keeps_legacy_range(frames: int) -> None:
     board = Storyboard(title="variable", scenes=(Scene(
         id="S01", start_frame=0, duration_frames=frames,
@@ -339,7 +339,7 @@ def test_build_render_input_rejects_dot_highlight_image_with_scene_id(
         build_render_input(board, audio_file="audio/narration.wav")
 
 
-@pytest.mark.parametrize("duration_frames", [1349, 2701])
+@pytest.mark.parametrize("duration_frames", [1349, 5401])
 def test_build_render_input_enforces_video_duration_range(duration_frames: int) -> None:
     board = Storyboard(
         title="Muối", scenes=[valid_highlight_scene(duration_frames=duration_frames)]

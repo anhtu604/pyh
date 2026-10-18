@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from healthvideo.domain.storyboard import Storyboard
 
-MIN_TARGET_SECONDS = 15 * 60
+MIN_TARGET_SECONDS = 10 * 60
 MAX_TARGET_SECONDS = 25 * 60
 
 
@@ -26,7 +26,7 @@ class Outline(BaseModel):
 
     schema_version: Literal["1.0"] = "1.0"
     title: str = Field(min_length=1)
-    chapters: tuple[OutlineChapter, ...] = Field(min_length=5, max_length=8)
+    chapters: tuple[OutlineChapter, ...] = Field(min_length=4, max_length=8)
 
     @model_validator(mode="after")
     def _check_chapters(self) -> "Outline":

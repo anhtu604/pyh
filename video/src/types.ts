@@ -137,6 +137,11 @@ export const RenderInputSchema = z.object({
   schema_version: z.string().default('1.0'),
   title: z.string(),
   audio_file: z.string(),
+  youtube_cta: z.object({
+    text: z.string().regex(/\S/),
+    mascot_path: safeRelativePath,
+    duration_frames: z.literal(90).default(90),
+  }).nullable().optional(),
   scenes: z.array(SceneSchema).default([]),
   visual_budget_profile: z.enum(['legacy', 'm6_5_v1']).default('legacy'),
   format_profile: z.enum(['vertical_clip', 'youtube_long']).default('vertical_clip'),
@@ -144,6 +149,12 @@ export const RenderInputSchema = z.object({
   height: z.union([z.literal(1920), z.literal(1080)]).default(1920),
   fps: z.literal(30).default(30),
 }).superRefine((input, context) => {
+  if (input.youtube_cta) {
+    const frames = Math.max(0, ...input.scenes.map((s) => s.start_frame + s.duration_frames)) + 90;
+    if (input.format_profile !== 'vertical_clip' || frames < 1800 || frames > 5400) {
+      context.addIssue({code: 'custom', path: ['youtube_cta'], message: 'CTA clip duration must be 60-180 s'});
+    }
+  }
   const size = FORMAT_SIZES[input.format_profile];
   if (input.width !== size.width || input.height !== size.height) {
     context.addIssue({

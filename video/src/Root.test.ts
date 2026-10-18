@@ -30,9 +30,9 @@ describe('format profile', () => {
 });
 
 describe('vertical clip', () => {
-  it('defaults to a 30 s 9:16 clip', () => {
+  it('defaults to a 60 s 9:16 clip including CTA', () => {
     expect(metadataFromProps(verticalClipDefaults))
-      .toEqual({durationInFrames: 900, width: 1080, height: 1920});
+      .toEqual({durationInFrames: 1800, width: 1080, height: 1920});
   });
 
   it('accepts a Python clip render input (re-timed, no chapter)', () => {
@@ -43,4 +43,10 @@ describe('vertical clip', () => {
       ]};
     expect(metadataFromProps(clip)).toEqual({durationInFrames: 1500, width: 1080, height: 1920});
   });
+});
+
+it('appends the fixed YouTube card outside storyboard scenes', () => {
+  expect(metadataFromProps({...verticalClipDefaults, scenes: [{...scene, duration_frames: 5310}],
+    youtube_cta: {text: 'Custom YouTube invitation', mascot_path: 'clips/cta/welcome.svg', duration_frames: 90}}))
+    .toEqual({durationInFrames: 5400, width: 1080, height: 1920});
 });

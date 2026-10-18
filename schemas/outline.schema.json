@@ -50,7 +50,7 @@
         "$ref": "#/$defs/OutlineChapter"
       },
       "maxItems": 8,
-      "minItems": 5,
+      "minItems": 4,
       "title": "Chapters",
       "type": "array"
     },

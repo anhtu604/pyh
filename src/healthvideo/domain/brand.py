@@ -63,6 +63,14 @@ class MascotIdentity(BaseModel):
         return self
 
 
+class BrandCTA(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    youtube_full_video: str = Field(
+        default="Xem bản đầy đủ trên YouTube", pattern=r"\S"
+    )
+
+
 class BrandProfile(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -71,6 +79,7 @@ class BrandProfile(BaseModel):
     colors: BrandColors
     assets: BrandAssets
     mascot: MascotIdentity
+    cta: BrandCTA = Field(default_factory=BrandCTA)
 
 
 def load_brand_profile(path: Path) -> BrandProfile:

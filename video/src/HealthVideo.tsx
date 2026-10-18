@@ -3,6 +3,7 @@ import {AbsoluteFill, Audio, Sequence, staticFile} from 'remotion';
 import {AiClipScene} from './scenes/AiClipScene';
 import {EvidenceHighlightScene} from './scenes/EvidenceHighlightScene';
 import {ChartScene} from './scenes/ChartScene';
+import {YouTubeEndCard} from './scenes/YouTubeEndCard';
 import {OutroScene} from './scenes/OutroScene';
 import {WhiteboardScene} from './scenes/WhiteboardScene';
 import {VisualAsset} from './components/VisualAsset';
@@ -17,7 +18,7 @@ export const activeSceneIndex = (scenes: SceneTiming[], frame: number): number =
   );
 
 export const HealthVideo: React.FC<RenderInput> = (rawInput) => {
-  const {audio_file, format_profile, scenes} = parseRenderInput(rawInput);
+  const {audio_file, format_profile, scenes, youtube_cta} = parseRenderInput(rawInput);
 
   return (
     <LayoutContext.Provider value={LAYOUTS[format_profile]}>
@@ -41,6 +42,12 @@ export const HealthVideo: React.FC<RenderInput> = (rawInput) => {
           ))}
         </Sequence>
       ))}
+      {youtube_cta && (
+        <Sequence from={Math.max(...scenes.map((s) => s.start_frame + s.duration_frames))}
+          durationInFrames={youtube_cta.duration_frames}>
+          <YouTubeEndCard text={youtube_cta.text} mascotPath={youtube_cta.mascot_path} />
+        </Sequence>
+      )}
     </AbsoluteFill>
     </LayoutContext.Provider>
   );

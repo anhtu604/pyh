@@ -63,5 +63,5 @@ def test_render_input_rejects_size_that_mismatches_profile() -> None:
 
 
 def test_specs_match_spec_document() -> None:
-    assert FORMAT_SPECS["vertical_clip"].max_frames == 90 * 30
+    assert FORMAT_SPECS["vertical_clip"].max_frames == 180 * 30
     assert FORMAT_SPECS["youtube_long"].max_frames == 25 * 60 * 30

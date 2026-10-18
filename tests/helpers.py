@@ -423,7 +423,7 @@ def create_long_form_project_fixture(root: Path) -> Path:
     first.update({"duration_frames": 900, "chapter_id": "CH01"})
     scenes = [first]
     chapters = ("CH01", "CH02", "CH03", "CH04", "CH05", "CH05")
-    frames = (900, 900, 900, 900, 900, 600)
+    frames = (900, 900, 900, 900, 900, 900)
     start = 900
     for index in range(1, 6):
         scene = {

@@ -34,7 +34,7 @@ export const durationFromScenes = (scenes: Scene[]): number =>
 
 export const metadataFromProps = (props: unknown) => {
   const input = parseRenderInput(props);
-  return {durationInFrames: durationFromScenes(input.scenes), width: input.width, height: input.height};
+  return {durationInFrames: durationFromScenes(input.scenes) + (input.youtube_cta?.duration_frames ?? 0), width: input.width, height: input.height};
 };
 
 const longFormDefaults: RenderInput = {
@@ -48,7 +48,9 @@ const longFormDefaults: RenderInput = {
 export const verticalClipDefaults: RenderInput = {
   ...defaultProps,
   audio_file: 'audio/clips/CL01.wav',
-  scenes: [{...defaultProps.scenes[0], duration_frames: 900}],
+  scenes: [{...defaultProps.scenes[0], duration_frames: 1710}],
+  youtube_cta: {text: 'Xem bản đầy đủ trên YouTube',
+    mascot_path: 'clips/cta/welcome.svg', duration_frames: 90},
 };
 
 export const RemotionRoot: React.FC = () => (
@@ -77,7 +79,7 @@ export const RemotionRoot: React.FC = () => (
       id="VerticalClip"
       component={HealthVideo}
       defaultProps={verticalClipDefaults}
-      durationInFrames={900}
+      durationInFrames={1800}
       fps={30}
       width={1080}
       height={1920}

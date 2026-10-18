@@ -31,9 +31,9 @@ _NOT_YET_MODELED = (
 
 
 def _render_visual_budget_section(storyboard: Storyboard) -> str:
-    if storyboard.visual_budget_profile != "m6_5_v1":
-        return ""
     report = calculate_visual_budget(storyboard)
+    if storyboard.visual_budget_profile == "legacy" and not report.mascot_frames:
+        return ""
     rows = []
     for category in report.effective_bounds:
         frames = report.category_frames[category]
@@ -58,6 +58,9 @@ def _render_visual_budget_section(storyboard: Storyboard) -> str:
         f"<p>Profile: {escape(report.profile)}</p>"
         f"<p>Tổng timeline: {report.total_frames} frame</p>"
         f"<p>Override: {'có' if report.override_active else 'không'}</p>"
+        + f"<p>Mascot: {report.mascot_frames} frames "
+        f"({report.mascot_basis_points / 100:.2f}%)</p>"
+        + "".join(f'<p role="status">Warning: {escape(w)}</p>' for w in report.warnings)
         + rationale
         + '<table border="1"><thead><tr><th>Nhóm</th><th>Frame</th>'
         "<th>Tỷ lệ</th><th>Giới hạn hiệu lực</th></tr></thead><tbody>"

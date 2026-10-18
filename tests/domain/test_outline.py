@@ -43,14 +43,14 @@ def test_valid_outline_matches_storyboard() -> None:
     validate_outline(_outline(), _board(), {"C01"})
 
 
-def test_outline_needs_five_to_eight_chapters() -> None:
-    with pytest.raises(ValidationError, match="at least 5"):
-        _outline(_chapters(CHAPTERS[:4], seconds=300))
+def test_outline_needs_four_to_eight_chapters() -> None:
+    with pytest.raises(ValidationError, match="at least 4"):
+        _outline(_chapters(CHAPTERS[:3], seconds=300))
     with pytest.raises(ValidationError, match="at most 8"):
         _outline(_chapters(tuple(f"CH{i:02d}" for i in range(1, 10)), seconds=120))
 
 
-def test_outline_target_must_be_15_to_25_minutes() -> None:
+def test_outline_target_must_be_10_to_25_minutes() -> None:
     with pytest.raises(ValidationError, match="outline target 500 s"):
         _outline(_chapters(seconds=100))
     with pytest.raises(ValidationError, match="outline target 1600 s"):

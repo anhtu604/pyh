@@ -21,6 +21,19 @@
       "title": "BrandAssets",
       "type": "object"
     },
+    "BrandCTA": {
+      "additionalProperties": false,
+      "properties": {
+        "youtube_full_video": {
+          "default": "Xem bản đầy đủ trên YouTube",
+          "pattern": "\\S",
+          "title": "Youtube Full Video",
+          "type": "string"
+        }
+      },
+      "title": "BrandCTA",
+      "type": "object"
+    },
     "BrandCanvas": {
       "additionalProperties": false,
       "properties": {
@@ -123,6 +136,9 @@
     },
     "colors": {
       "$ref": "#/$defs/BrandColors"
+    },
+    "cta": {
+      "$ref": "#/$defs/BrandCTA"
     },
     "mascot": {
       "$ref": "#/$defs/MascotIdentity"

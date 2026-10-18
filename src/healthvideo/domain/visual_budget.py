@@ -83,6 +83,9 @@ class VisualBudgetReport(BaseModel):
     category_basis_points: dict[VisualCategory, int]
     effective_bounds: dict[VisualCategory, PercentRange]
     passed: bool
+    mascot_frames: int = Field(default=0, ge=0)
+    mascot_basis_points: int = Field(default=0, ge=0)
+    warnings: tuple[str, ...] = ()
 
 
 DEFAULT_VISUAL_BOUNDS: Mapping[VisualCategory, PercentRange] = MappingProxyType({
@@ -159,7 +162,19 @@ def calculate_visual_budget(storyboard: Storyboard) -> VisualBudgetReport:
         <= bound.max_percent * total_frames
         for category, bound in bounds.items()
     )
+    mascot_frames = sum(
+        scene.duration_frames for scene in storyboard.scenes
+        if any(asset.role == "mascot" for asset in scene.visual_assets)
+    )
+    mascot_total = sum(scene.duration_frames for scene in storyboard.scenes)
+    warnings = (
+        ("Mascot share exceeds 35% of storyboard frames.",)
+        if 100 * mascot_frames > 35 * mascot_total else ()
+    )
     return VisualBudgetReport(
+        mascot_frames=mascot_frames,
+        mascot_basis_points=10_000 * mascot_frames // mascot_total if mascot_total else 0,
+        warnings=warnings,
         profile=storyboard.visual_budget_profile,
         override_active=storyboard.visual_budget_override is not None,
         total_frames=total_frames,

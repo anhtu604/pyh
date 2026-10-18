@@ -247,6 +247,9 @@ def test_m65_production_records_visual_qa_and_reuses_valid_promoted_cache(
     assert qa["visual_budget"] == {
         "profile": "m6_5_v1",
         "override_active": False,
+        "mascot_frames": 0,
+        "mascot_basis_points": 0,
+        "warnings": [],
         "total_frames": 1000,
         "category_frames": {
             "whiteboard_svg": 750,

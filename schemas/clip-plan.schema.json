@@ -65,7 +65,7 @@
         "$ref": "#/$defs/ClipSpec"
       },
       "maxItems": 6,
-      "minItems": 3,
+      "minItems": 1,
       "title": "Clips",
       "type": "array"
     },

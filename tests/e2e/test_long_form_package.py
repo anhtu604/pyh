@@ -1,10 +1,11 @@
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from healthvideo.domain.gate_review import GateKind
-from healthvideo.storage.files import read_yaml
+from healthvideo.storage.files import read_yaml, sha256_file
 from healthvideo.tts.silent import SilentTTS
 from healthvideo.workflows.gate_review import approve_gate
 from healthvideo.workflows.package import package_project
@@ -36,9 +37,19 @@ def test_long_form_runs_from_medical_review_to_packaged(tmp_path: Path) -> None:
     assert {f"renders/clips/CL0{n}.mp4" for n in (1, 2, 3)} <= approval["artifact_hashes"].keys()
 
     publish = package_project(project_dir)
+    payloads = json.loads((publish / "manifest.json").read_text(encoding="utf-8"))["payload_sha256"]
+    for clip_id in ("CL01", "CL02", "CL03"):
+        for suffix in ("mp4", "caption.txt"):
+            relative = f"clips/{clip_id}.{suffix}"
+            assert payloads[relative] == sha256_file(publish / relative)
 
     assert read_yaml(project_dir / "project.yaml")["state"] == "packaged"
     assert (publish / "video.mp4").is_file()
+    for clip_id in ("CL01", "CL02", "CL03"):
+        assert (publish / "clips" / f"{clip_id}.mp4").is_file()
+        assert "<YOUTUBE_URL>" in (
+            publish / "clips" / f"{clip_id}.caption.txt"
+        ).read_text(encoding="utf-8").splitlines()
 
 
 def test_package_refuses_clip_changed_after_video_review(tmp_path: Path) -> None:
