@@ -12,6 +12,7 @@ from healthvideo.domain.hook_outro import OUTRO_TEXT
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.script import Script
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
+from healthvideo.domain.storyboard import Storyboard
 from healthvideo.qa.script import review_script
 from healthvideo.storage.explainer import write_explainer
 from healthvideo.storage.files import read_yaml, sha256_file, write_yaml_atomic
@@ -212,3 +213,22 @@ def test_explain_first_rejects_legacy_script_without_changes(
 
     assert {path: path.read_bytes() for path in project.rglob("*") if path.is_file()} == before
     assert not list(revision.parent.glob(".001.draft-*"))
+
+
+def test_youtube_long_still_requires_explainer_before_evidence_ready(tmp_path: Path) -> None:
+    project = _project(tmp_path, "explain_first_v1")
+    revision = project / "revisions/001"
+    path = revision / "storyboard/storyboard.yaml"
+    data = read_yaml(path)
+    data["format_profile"] = "youtube_long"
+    for scene in data["scenes"]:
+        scene["chapter_id"] = "CH01"
+    board = Storyboard.model_validate(data)
+    write_yaml_atomic(path, board.model_dump(mode="json"))
+    before = (project / "project.yaml").read_bytes()
+    with pytest.raises(ValueError, match="explainer/explainer.yaml before evidence_ready"):
+        build_evidence_ledger(project, [_claim()], [])
+    assert (project / "project.yaml").read_bytes() == before
+    _explainer(project)
+    _, manifest = build_evidence_ledger(project, [_claim()], [])
+    assert manifest.state == WorkflowState.EVIDENCE_READY

@@ -27,3 +27,4 @@ projects/**/.healthvideo/
 
 # Unlicensed style catalog: local reference only
 .refs/
+.agy-reports/

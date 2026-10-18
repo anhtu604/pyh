@@ -16,11 +16,13 @@ from pathlib import Path
 from healthvideo.domain.asset_manifest import AssetKind, AssetManifest
 from healthvideo.domain.evidence import EvidenceClaim, SourceRecord
 from healthvideo.domain.license_ledger import LicenseLedger
+from healthvideo.domain.outline import Outline
 from healthvideo.domain.script import Script
 from healthvideo.domain.storyboard import Storyboard
 from healthvideo.domain.visual_budget import calculate_visual_budget
 from healthvideo.storage.explainer import read_explainer
 from healthvideo.storage.files import canonical_json_hash, read_yaml
+from healthvideo.workflows.long_form import OUTLINE_ARTIFACT, load_clip_scenes
 
 _NOT_YET_MODELED = (
     "chưa có trong hệ thống: population, certainty, applicability, "
@@ -139,6 +141,33 @@ def _render_mechanism_section(
         '<table border="1"><thead><tr><th>Claim</th><th>Câu công chúng</th>'
         '<th>Nguồn</th><th>Lớp / Khái niệm / visual.motion</th></tr></thead><tbody>'
         + "".join(rows) + "</tbody></table></section>"
+    )
+
+
+def _render_long_form_section(revision_root: Path, storyboard: Storyboard) -> str:
+    if storyboard.format_profile != "youtube_long":
+        return ""
+    outline = Outline.model_validate(read_yaml(revision_root / OUTLINE_ARTIFACT))
+    chapter_rows = "".join(
+        f"<tr><td>{escape(chapter.id)}</td><td>{escape(chapter.title)}</td>"
+        f"<td>{escape(chapter.goal)}</td><td>{escape(', '.join(chapter.claim_ids))}</td>"
+        f"<td>{chapter.target_seconds}</td></tr>"
+        for chapter in outline.chapters
+    )
+    clip_rows = "".join(
+        f"<tr><td>{escape(clip_id)}</td>"
+        f"<td>{escape(', '.join(scene.id for scene in scenes))}</td>"
+        f"<td>{escape(' '.join(scene.narration for scene in scenes))}</td>"
+        f"<td>{escape(', '.join(sorted({s.claim_id for s in scenes if s.claim_id})))}</td></tr>"
+        for clip_id, scenes in load_clip_scenes(revision_root, storyboard).items()
+    )
+    return (
+        '<section><h2>Dàn ý chương</h2><table border="1"><thead><tr>'
+        "<th>Chương</th><th>Tiêu đề</th><th>Mục tiêu</th><th>Claim</th><th>Giây dự kiến</th>"
+        f"</tr></thead><tbody>{chapter_rows}</tbody></table></section>"
+        '<section><h2>Clip dọc 9:16 cắt từ kịch bản</h2><table border="1"><thead><tr>'
+        "<th>Clip</th><th>Cảnh</th><th>Lời thoại</th><th>Claim</th>"
+        f"</tr></thead><tbody>{clip_rows}</tbody></table></section>"
     )
 
 
@@ -284,6 +313,7 @@ def render_medical_packet(revision_root: Path) -> str:
         + visual_budget_section
         + ai_clip_section
         + hook_outro_section
+        + _render_long_form_section(revision_root, storyboard)
         + "</body></html>"
     )
 
@@ -308,10 +338,16 @@ def render_video_packet(revision_root: Path) -> str:
             status = "không khớp report tái tính"
         budget_section += f"<p>QA production: {status}</p>"
 
+    clip_videos = "".join(
+        f"<h2>Clip {escape(clip_id)}</h2>"
+        f'<video controls src="../renders/{escape(relative)}"></video>'
+        for clip_id, relative in sorted(manifest.get("clips", {}).items())
+    )
     return (
         '<!doctype html><html lang="vi"><head><meta charset="utf-8">'
         "<title>Gói duyệt video</title></head><body>"
         '<video controls src="../renders/video.mp4"></video>'
+        + clip_videos
         + budget_section
         + f"<pre>{escape(str(manifest))}</pre>"
         f"<pre>{escape(str(qa))}</pre>"

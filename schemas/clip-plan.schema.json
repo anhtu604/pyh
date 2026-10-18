@@ -1,0 +1,84 @@
+{
+  "$defs": {
+    "ClipSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "first_scene_id": {
+          "title": "First Scene Id",
+          "type": "string"
+        },
+        "hook_scene_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hook Scene Id"
+        },
+        "id": {
+          "pattern": "^CL\\d{2}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "last_scene_id": {
+          "title": "Last Scene Id",
+          "type": "string"
+        },
+        "outro_scene_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Outro Scene Id"
+        },
+        "title": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "first_scene_id",
+        "last_scene_id"
+      ],
+      "title": "ClipSpec",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "clips": {
+      "items": {
+        "$ref": "#/$defs/ClipSpec"
+      },
+      "maxItems": 6,
+      "minItems": 3,
+      "title": "Clips",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "clips"
+  ],
+  "title": "ClipPlan",
+  "type": "object"
+}

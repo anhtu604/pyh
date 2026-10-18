@@ -10,10 +10,12 @@ from healthvideo.domain.asset_manifest import AssetManifest
 from healthvideo.domain.author import AuthorBrief
 from healthvideo.domain.backup import BackupManifest
 from healthvideo.domain.brand import BrandProfile
+from healthvideo.domain.clip_plan import ClipPlan
 from healthvideo.domain.evidence import EvidenceClaim
 from healthvideo.domain.explainer import Explainer
 from healthvideo.domain.lease import ProjectLease
 from healthvideo.domain.license_ledger import LicenseLedger
+from healthvideo.domain.outline import Outline
 from healthvideo.domain.project_v2 import ProjectManifestV2
 from healthvideo.domain.pronunciation import PronunciationLexicon
 from healthvideo.domain.script import Script
@@ -44,6 +46,8 @@ SCHEMAS: dict[str, type[BaseModel]] = {
     "backup-manifest.schema.json": BackupManifest,
     "screening-criteria.schema.json": ScreeningCriteria,
     "screening-decision.schema.json": ScreeningDecision,
+    "outline.schema.json": Outline,
+    "clip-plan.schema.json": ClipPlan,
 }
 
 
