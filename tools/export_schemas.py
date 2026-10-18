@@ -18,7 +18,7 @@ from healthvideo.domain.project_v2 import ProjectManifestV2
 from healthvideo.domain.pronunciation import PronunciationLexicon
 from healthvideo.domain.script import Script
 from healthvideo.domain.stage import StageManifest
-from healthvideo.domain.storyboard import Storyboard
+from healthvideo.domain.storyboard import MECHANISM_VISUALS, Storyboard
 from healthvideo.domain.topic import TopicCard
 from healthvideo.evidence.screening import ScreeningCriteria, ScreeningDecision
 from healthvideo.render.input import RenderInput
@@ -68,7 +68,18 @@ def _annotate_storyboard_contract(schema: dict[str, object]) -> None:
                     "evidence_highlight": {"$ref": "#/$defs/EvidenceHighlight"},
                 },
             },
-        }
+        },
+        {
+            "if": {
+                "properties": {"visual": {"enum": list(MECHANISM_VISUALS)}},
+                "required": ["visual"],
+            },
+            "then": {
+                "required": ["anatomy"],
+                "properties": {"anatomy": {"$ref": "#/$defs/SceneAnatomy"}},
+            },
+            "else": {"properties": {"anatomy": {"type": "null"}}},
+        },
     ]
 
 

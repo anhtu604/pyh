@@ -17,6 +17,7 @@ class VisualCategory(StrEnum):
     WHITEBOARD_SVG = "whiteboard_svg"
     CHART_CROP = "chart_crop"
     AI_CLIP = "ai_clip"
+    MECHANISM = "mechanism"
 
 
 class PercentRange(BaseModel):
@@ -69,7 +70,7 @@ class VisualBudgetOverride(BaseModel):
         return self
 
 
-VisualBudgetProfile = Literal["legacy", "m6_5_v1"]
+VisualBudgetProfile = Literal["legacy", "m6_5_v1", "explain_first_v1"]
 
 
 class VisualBudgetReport(BaseModel):
@@ -90,12 +91,23 @@ DEFAULT_VISUAL_BOUNDS: Mapping[VisualCategory, PercentRange] = MappingProxyType(
     VisualCategory.AI_CLIP: PercentRange(min_percent=0, max_percent=10),
 })
 
+EXPLAIN_FIRST_VISUAL_BOUNDS: Mapping[VisualCategory, PercentRange] = MappingProxyType({
+    VisualCategory.MECHANISM: PercentRange(min_percent=55, max_percent=70),
+    VisualCategory.CHART_CROP: PercentRange(min_percent=15, max_percent=25),
+    VisualCategory.WHITEBOARD_SVG: PercentRange(min_percent=10, max_percent=15),
+    VisualCategory.AI_CLIP: PercentRange(min_percent=0, max_percent=5),
+})
+
 _VISUAL_CATEGORIES: dict[str, VisualCategory] = {
     "whiteboard": VisualCategory.WHITEBOARD_SVG,
     "brand_outro": VisualCategory.WHITEBOARD_SVG,
     "chart": VisualCategory.CHART_CROP,
     "evidence_highlight": VisualCategory.CHART_CROP,
     "ai_clip": VisualCategory.AI_CLIP,
+    "anatomy_animation": VisualCategory.MECHANISM,
+    "process_animation": VisualCategory.MECHANISM,
+    "comparison": VisualCategory.MECHANISM,
+    "timelapse": VisualCategory.MECHANISM,
 }
 
 
@@ -107,6 +119,8 @@ def classify_scene_visual(visual: str) -> VisualCategory:
 
 
 def _effective_bounds(storyboard: Storyboard) -> dict[VisualCategory, PercentRange]:
+    if storyboard.visual_budget_profile == "explain_first_v1":
+        return dict(EXPLAIN_FIRST_VISUAL_BOUNDS)
     override = storyboard.visual_budget_override
     if override is None:
         return dict(DEFAULT_VISUAL_BOUNDS)
@@ -118,14 +132,15 @@ def _effective_bounds(storyboard: Storyboard) -> dict[VisualCategory, PercentRan
 
 
 def calculate_visual_budget(storyboard: Storyboard) -> VisualBudgetReport:
-    enabled = storyboard.visual_budget_profile == "m6_5_v1"
-    category_frames = {category: 0 for category in VisualCategory}
+    enabled = storyboard.visual_budget_profile != "legacy"
+    bounds = _effective_bounds(storyboard)
+    category_frames = {category: 0 for category in bounds}
     expected_start = 0
     for scene in storyboard.scenes:
         if enabled and scene.start_frame != expected_start:
             raise ValueError("M6.5 storyboard timeline must be contiguous from frame 0")
         category = classify_scene_visual(scene.visual)
-        category_frames[category] += scene.duration_frames
+        category_frames[category] = category_frames.get(category, 0) + scene.duration_frames
         expected_start = scene.start_frame + scene.duration_frames
 
     total_frames = expected_start if storyboard.scenes else 0
@@ -138,7 +153,6 @@ def calculate_visual_budget(storyboard: Storyboard) -> VisualBudgetReport:
         category: (10_000 * frames) // total_frames if total_frames else 0
         for category, frames in category_frames.items()
     }
-    bounds = _effective_bounds(storyboard)
     within_bounds = all(
         bound.min_percent * total_frames
         <= 100 * category_frames[category]
@@ -158,7 +172,7 @@ def calculate_visual_budget(storyboard: Storyboard) -> VisualBudgetReport:
 
 def validate_visual_budget(storyboard: Storyboard) -> VisualBudgetReport:
     report = calculate_visual_budget(storyboard)
-    if storyboard.visual_budget_profile == "m6_5_v1" and not report.passed:
+    if storyboard.visual_budget_profile != "legacy" and not report.passed:
         failures = []
         for category, bound in report.effective_bounds.items():
             frames = report.category_frames[category]

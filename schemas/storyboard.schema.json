@@ -227,9 +227,54 @@
               "evidence_highlight"
             ]
           }
+        },
+        {
+          "else": {
+            "properties": {
+              "anatomy": {
+                "type": "null"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "visual": {
+                "enum": [
+                  "anatomy_animation",
+                  "process_animation",
+                  "comparison",
+                  "timelapse"
+                ]
+              }
+            },
+            "required": [
+              "visual"
+            ]
+          },
+          "then": {
+            "properties": {
+              "anatomy": {
+                "$ref": "#/$defs/SceneAnatomy"
+              }
+            },
+            "required": [
+              "anatomy"
+            ]
+          }
         }
       ],
       "properties": {
+        "anatomy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SceneAnatomy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "chapter_id": {
           "anyOf": [
             {
@@ -270,6 +315,18 @@
             }
           ],
           "default": null
+        },
+        "explainer_layer_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Explainer Layer Id"
         },
         "id": {
           "title": "Id",
@@ -320,7 +377,11 @@
             "chart",
             "evidence_highlight",
             "ai_clip",
-            "brand_outro"
+            "brand_outro",
+            "anatomy_animation",
+            "process_animation",
+            "comparison",
+            "timelapse"
           ],
           "title": "Visual",
           "type": "string"
@@ -342,6 +403,45 @@
         "visual"
       ],
       "title": "Scene",
+      "type": "object"
+    },
+    "SceneAnatomy": {
+      "additionalProperties": false,
+      "properties": {
+        "motion": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Motion",
+          "type": "string"
+        },
+        "severity": {
+          "default": 0,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Severity",
+          "type": "number"
+        },
+        "state": {
+          "enum": [
+            "normal",
+            "diseased"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "subject": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Subject",
+          "type": "string"
+        }
+      },
+      "required": [
+        "subject",
+        "state",
+        "motion"
+      ],
+      "title": "SceneAnatomy",
       "type": "object"
     },
     "VisualAssetRef": {
@@ -454,7 +554,8 @@
       "default": "legacy",
       "enum": [
         "legacy",
-        "m6_5_v1"
+        "m6_5_v1",
+        "explain_first_v1"
       ],
       "title": "Visual Budget Profile",
       "type": "string"

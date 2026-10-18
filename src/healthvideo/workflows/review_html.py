@@ -18,7 +18,7 @@ from healthvideo.domain.evidence import EvidenceClaim, SourceRecord
 from healthvideo.domain.license_ledger import LicenseLedger
 from healthvideo.domain.script import Script
 from healthvideo.domain.storyboard import Storyboard
-from healthvideo.domain.visual_budget import VisualCategory, calculate_visual_budget
+from healthvideo.domain.visual_budget import calculate_visual_budget
 from healthvideo.storage.explainer import read_explainer
 from healthvideo.storage.files import canonical_json_hash, read_yaml
 
@@ -33,7 +33,7 @@ def _render_visual_budget_section(storyboard: Storyboard) -> str:
         return ""
     report = calculate_visual_budget(storyboard)
     rows = []
-    for category in VisualCategory:
+    for category in report.effective_bounds:
         frames = report.category_frames[category]
         basis_points = report.category_basis_points[category]
         bounds = report.effective_bounds[category]

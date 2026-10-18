@@ -4,8 +4,20 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from healthvideo.domain.brand import MascotPose
+from healthvideo.domain.explainer import Nonblank
 from healthvideo.domain.format_profile import FormatProfile
 from healthvideo.domain.visual_budget import VisualBudgetOverride, VisualBudgetProfile
+
+MECHANISM_VISUALS = ("anatomy_animation", "process_animation", "comparison", "timelapse")
+
+
+class SceneAnatomy(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    subject: Nonblank
+    state: Literal["normal", "diseased"]
+    severity: float = Field(default=0, ge=0, le=1)
+    motion: Nonblank
 
 
 class VisualAssetRef(BaseModel):
@@ -118,7 +130,12 @@ class Scene(BaseModel):
     source_marker: str | None = Field(
         default=None, json_schema_extra={"pattern": r"\S"}
     )
-    visual: Literal["whiteboard", "chart", "evidence_highlight", "ai_clip", "brand_outro"]
+    visual: Literal[
+        "whiteboard", "chart", "evidence_highlight", "ai_clip", "brand_outro",
+        "anatomy_animation", "process_animation", "comparison", "timelapse",
+    ]
+    explainer_layer_id: str | None = Field(default=None, exclude_if=lambda v: v is None)
+    anatomy: SceneAnatomy | None = Field(default=None, exclude_if=lambda v: v is None)
     evidence_highlight: EvidenceHighlight | None = None
     visual_assets: tuple[VisualAssetRef, ...] = ()
 
@@ -131,6 +148,10 @@ class Scene(BaseModel):
 
     @model_validator(mode="after")
     def validate_scene(self) -> "Scene":
+        if self.visual in MECHANISM_VISUALS and self.anatomy is None:
+            raise ValueError(f"Scene {self.id}: {self.visual} requires anatomy")
+        if self.visual not in MECHANISM_VISUALS and self.anatomy is not None:
+            raise ValueError(f"Scene {self.id}: {self.visual} forbids anatomy")
         if self.start_frame < 0:
             raise ValueError(f"Scene {self.id}: start_frame must be at least 0")
         if self.duration_frames <= 0:

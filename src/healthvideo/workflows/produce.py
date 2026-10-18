@@ -63,6 +63,16 @@ AUTHOR_PROFILE_PATH = (
 V2_RENDER_MANIFEST_NAME = "render-manifest.json"
 V2_VIDEO_QA_ARTIFACT = "reviews/video-qa.json"
 CHAPTER_CACHE_DIRECTORY = "renders-cache"
+SUPPORTED_ANATOMY_SUBJECTS = ("artery_cross_section", "heart")
+
+
+def _validate_anatomy_subjects(storyboard: Storyboard) -> None:
+    for scene in storyboard.scenes:
+        if scene.anatomy is not None and scene.anatomy.subject not in SUPPORTED_ANATOMY_SUBJECTS:
+            raise ValueError(
+                f"Scene {scene.id}: unsupported anatomy subject {scene.anatomy.subject!r}; "
+                f"supported subjects: {', '.join(SUPPORTED_ANATOMY_SUBJECTS)}"
+            )
 
 
 def produce_project(
@@ -100,6 +110,7 @@ def _produce_v1(
     storyboard = Storyboard.model_validate(
         read_yaml(project_dir / "storyboard" / "storyboard.yaml")
     )
+    _validate_anatomy_subjects(storyboard)
     author_profile = read_yaml(AUTHOR_PROFILE_PATH)
     provider_name = _provider_name(tts)
     asset_hashes = evidence_asset_hashes(project_dir, storyboard)
@@ -219,10 +230,11 @@ def _produce_v2(
     storyboard = Storyboard.model_validate(
         read_yaml(layout.artifact_root / "storyboard" / "storyboard.yaml")
     )
+    _validate_anatomy_subjects(storyboard)
     visual_budget_report = validate_visual_budget(storyboard)
     visual_budget_qa = (
         visual_budget_report.model_dump(mode="json")
-        if storyboard.visual_budget_profile == "m6_5_v1"
+        if storyboard.visual_budget_profile != "legacy"
         else None
     )
     validate_hook_outro(script, storyboard, require_brand=script.format_profile == "hook_outro_v1")

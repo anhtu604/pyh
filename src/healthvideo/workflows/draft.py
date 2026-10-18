@@ -57,6 +57,20 @@ def _validate(
         if not (revision / "explainer/explainer.yaml").is_file():
             raise ValueError("explain_first_v1 requires explainer/explainer.yaml")
         explainer = read_explainer(revision)
+        layers = {layer.id: layer for layer in explainer.layers}
+        for scene in storyboard.scenes:
+            if scene.explainer_layer_id is None:
+                continue
+            layer = layers.get(scene.explainer_layer_id)
+            if layer is None:
+                raise ValueError(
+                    f"Scene {scene.id}: unknown explainer layer {scene.explainer_layer_id}"
+                )
+            if scene.visual != layer.visual.kind:
+                raise ValueError(
+                    f"Scene {scene.id}: visual must match explainer layer "
+                    f"{layer.id}: {layer.visual.kind}"
+                )
     issues = review_script(script, claims, [], explainer=explainer)
     blocking = [issue for issue in issues if issue.code == "unknown_claim"]
     if blocking:

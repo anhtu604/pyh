@@ -181,6 +181,7 @@ def test_storyboard_schema_adds_optional_visual_budget_contract(tmp_path: Path) 
     assert schema["properties"]["visual_budget_profile"]["enum"] == [
         "legacy",
         "m6_5_v1",
+        "explain_first_v1",
     ]
     assert schema["properties"]["visual_budget_override"]["default"] is None
     assert schema["$defs"]["PercentRange"]["properties"]["min_percent"][
