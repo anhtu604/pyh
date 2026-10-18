@@ -73,6 +73,17 @@ export const EvidenceHighlightSchema = z
     }
   });
 
+export const AnatomySchema = z.object({
+  subject: z.enum(['artery_cross_section', 'heart']),
+  state: z.enum(['normal', 'diseased']),
+  severity: z.number().min(0).max(1),
+  motion: z.string(),
+});
+export type Anatomy = z.input<typeof AnatomySchema>;
+export const MECHANISM_VISUALS = ['anatomy_animation', 'process_animation', 'comparison', 'timelapse'] as const;
+export const isMechanismVisual = (visual: string): boolean =>
+  (MECHANISM_VISUALS as readonly string[]).includes(visual);
+
 export const SceneSchema = z
   .object({
     schema_version: z.string().default('1.0'),
@@ -84,11 +95,16 @@ export const SceneSchema = z
     claim_id: z.string().nullable().optional(),
     chapter_id: z.string().regex(/^CH\d{2}$/).nullable().optional(),
     source_marker: z.string().regex(/\S/).nullable().optional(),
-    visual: z.enum(['whiteboard', 'chart', 'evidence_highlight', 'ai_clip', 'brand_outro']),
+    visual: z.enum(['whiteboard', 'chart', 'evidence_highlight', 'ai_clip', 'brand_outro', ...MECHANISM_VISUALS]),
+    anatomy: AnatomySchema.optional(),
+    explainer_layer_id: z.string().optional(),
     evidence_highlight: EvidenceHighlightSchema.nullable().optional(),
     visual_assets: z.array(VisualAssetRefSchema).default([]),
   })
   .superRefine((scene, context) => {
+    if (isMechanismVisual(scene.visual) && !scene.anatomy) {
+      context.addIssue({code: 'custom', path: ['anatomy'], message: `${scene.visual} requires anatomy`});
+    }
     const paths = scene.visual_assets.map((asset) => asset.path);
     if (new Set(paths).size !== paths.length) {
       context.addIssue({
@@ -143,7 +159,7 @@ export const RenderInputSchema = z.object({
     duration_frames: z.literal(90).default(90),
   }).nullable().optional(),
   scenes: z.array(SceneSchema).default([]),
-  visual_budget_profile: z.enum(['legacy', 'm6_5_v1']).default('legacy'),
+  visual_budget_profile: z.enum(['legacy', 'm6_5_v1', 'explain_first_v1']).default('legacy'),
   format_profile: z.enum(['vertical_clip', 'youtube_long']).default('vertical_clip'),
   width: z.union([z.literal(1080), z.literal(1920)]).default(1080),
   height: z.union([z.literal(1920), z.literal(1080)]).default(1920),

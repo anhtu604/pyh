@@ -16,9 +16,10 @@ export const visualAssetBox = (
   return asset.pose === 'explain' ? a.explain : a.standard;
 };
 
-export const VisualAsset: React.FC<{asset: VisualAssetRef; outro?: boolean}> = ({asset, outro = false}) => {
+export const VisualAsset: React.FC<{asset: VisualAssetRef; outro?: boolean; box?: VisualAssetBox}> = ({asset, outro = false, box: overrideBox}) => {
   const frame = useCurrentFrame();
-  const box = visualAssetBox(asset, outro, useLayout());
+  const layout = useLayout();
+  const box = overrideBox ?? visualAssetBox(asset, outro, layout);
   const opacity = interpolate(frame, [0, 10], [0, 1], {extrapolateRight: 'clamp'});
   return (
     <Img

@@ -4,6 +4,7 @@ import type {FormatProfile} from './format';
 export type Box = {left: number; top: number; width: number; height: number};
 
 export type FrameLayout = {
+  mechanism: {subject: Box; comparison: [Box, Box]; axis: 'row' | 'column'; mascot: Box};
   frame: {width: number; height: number};
   captions: {left: number; bottom: number; width: number; height: number;
     fontSize: number; maxTextWidth: number; rowY: [number, number]; maxWords: number};
@@ -18,6 +19,11 @@ export type FrameLayout = {
 
 export const LAYOUTS: Record<FormatProfile, FrameLayout> = {
   vertical_clip: {
+    mechanism: {
+      subject: {left: 212, top: 260, width: 656, height: 846},
+      comparison: [{left: 260, top: 130, width: 560, height: 500}, {left: 260, top: 670, width: 560, height: 500}],
+      axis: 'column', mascot: {left: 350, top: 1230, width: 380, height: 450},
+    },
     frame: {width: 1080, height: 1920},
     captions: {left: 72, bottom: 174, width: 936, height: 136, fontSize: 48,
       maxTextWidth: 900, rowY: [52, 116], maxWords: 6},
@@ -38,6 +44,11 @@ export const LAYOUTS: Record<FormatProfile, FrameLayout> = {
     },
   },
   youtube_long: {
+    mechanism: {
+      subject: {left: 590, top: 130, width: 850, height: 800},
+      comparison: [{left: 350, top: 160, width: 650, height: 680}, {left: 1100, top: 160, width: 650, height: 680}],
+      axis: 'row', mascot: {left: 20, top: 610, width: 324, height: 380},
+    },
     frame: {width: 1920, height: 1080},
     captions: {left: 360, bottom: 60, width: 1200, height: 120, fontSize: 44,
       maxTextWidth: 1160, rowY: [48, 104], maxWords: 10},

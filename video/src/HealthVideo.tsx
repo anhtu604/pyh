@@ -9,7 +9,11 @@ import {WhiteboardScene} from './scenes/WhiteboardScene';
 import {VisualAsset} from './components/VisualAsset';
 import {CAPTION_BACKGROUND_COLOR, CAPTION_TEXT_COLOR} from './components/Captions';
 import {LAYOUTS, LayoutContext} from './layout';
-import {parseRenderInput} from './types';
+import {isMechanismVisual, parseRenderInput} from './types';
+import {AnatomyScene} from './scenes/AnatomyScene';
+import {ProcessScene} from './scenes/ProcessScene';
+import {ComparisonScene} from './scenes/ComparisonScene';
+import {TimelapseScene} from './scenes/TimelapseScene';
 import type {RenderInput, SceneTiming} from './types';
 
 export const activeSceneIndex = (scenes: SceneTiming[], frame: number): number =>
@@ -26,7 +30,11 @@ export const HealthVideo: React.FC<RenderInput> = (rawInput) => {
       <Audio src={staticFile(audio_file)} />
       {scenes.map((scene) => (
         <Sequence key={scene.id} from={scene.start_frame} durationInFrames={scene.duration_frames}>
-          {scene.visual === 'brand_outro' ? (
+          {scene.visual === 'anatomy_animation' ? <AnatomyScene scene={scene} />
+          : scene.visual === 'process_animation' ? <ProcessScene scene={scene} />
+          : scene.visual === 'comparison' ? <ComparisonScene scene={scene} />
+          : scene.visual === 'timelapse' ? <TimelapseScene scene={scene} />
+          : scene.visual === 'brand_outro' ? (
             <OutroScene scene={scene} />
           ) : scene.visual === 'evidence_highlight' ? (
             <EvidenceHighlightScene scene={scene} />
@@ -37,7 +45,8 @@ export const HealthVideo: React.FC<RenderInput> = (rawInput) => {
           ) : (
             <WhiteboardScene scene={scene} />
           )}
-          {scene.visual_assets.filter((asset) => asset.role !== 'chart' && asset.role !== 'ai_clip').map((asset) => (
+          {scene.visual_assets.filter((asset) => asset.role !== 'chart' && asset.role !== 'ai_clip' &&
+            !(isMechanismVisual(scene.visual) && asset.role === 'mascot')).map((asset) => (
             <VisualAsset asset={asset} outro={scene.visual === 'brand_outro'} key={asset.path} />
           ))}
         </Sequence>
