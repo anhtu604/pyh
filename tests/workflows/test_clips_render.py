@@ -90,6 +90,10 @@ def test_produce_renders_each_clip_vertical(tmp_path: Path, artwork_brand, monke
     assert calls[-1][0] == "ffmpeg"
     clip_calls = [c for c in calls if c[0] != "ffmpeg" and not any(a.startswith("--frames") for a in c)]
     assert len(clip_calls) == 3
+    html = render_video_packet(renders.parent)
+    assert html.count("mascot đang dùng hình tạm") == (0 if artwork else 1)
+    # The informational warning must allow Gate 2 approval in both cases.
+    approve_gate(project_dir, GateKind.VIDEO, reviewer=REVIEWER, now=REVIEWED_AT)
 
 
 def test_video_gate_binds_clips(tmp_path: Path) -> None:

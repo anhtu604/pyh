@@ -171,6 +171,77 @@ def test_video_packet_references_the_mp4_by_relative_path_not_embedded(
     assert len(html.encode("utf-8")) < 5000
 
 
+@pytest.mark.parametrize("suffix, warning_count", [(".svg", 1), (".png", 0)])
+@pytest.mark.parametrize("target", ["main", "clip_scene", "clip_cta"])
+def test_video_packet_warns_from_recorded_mascot_not_current_storyboard(
+    tmp_path: Path, suffix: str, warning_count: int, target: str,
+) -> None:
+    from healthvideo.render.input import build_render_input
+    from healthvideo.workflows.gate_review import (
+        hash_reviewed_artifacts,
+        video_reviewed_paths,
+    )
+
+    project = create_v2_project_fixture(tmp_path)
+    advance_v2_project_to_video_review(
+        project, now=datetime(2026, 9, 11, 9, 0, tzinfo=UTC)
+    )
+    revision = project / "revisions/001"
+    renders = revision / "renders"
+    board = Storyboard.model_validate(read_yaml(revision / "storyboard/storyboard.yaml"))
+    data = build_render_input(board, "audio/narration.wav", duration_policy="v2").model_dump(
+        mode="json"
+    )
+    # Other SVGs, including an unused placeholder, must not trigger the warning.
+    data["scenes"][0]["visual_assets"] = [{"path": "assets/logo.svg", "role": "brand"}]
+    (renders / "unused-placeholder.svg").write_text("<svg/>", encoding="utf-8")
+    if target == "clip_cta":
+        data["youtube_cta"] = {"text": "Synthetic CTA", "mascot_path": f"clips/cta/welcome{suffix}"}
+    else:
+        data["scenes"][0]["visual_assets"].extend([
+            {"path": f"assets/guide-{pose}{suffix}", "role": "mascot", "pose": pose}
+            for pose in ("welcome", "explain")
+        ])
+    input_path = renders / (
+        "render-input.json" if target == "main" else "clips/CL01.render-input.json"
+    )
+    input_path.parent.mkdir(parents=True, exist_ok=True)
+    input_path.write_text(json.dumps(data), encoding="utf-8")
+    if target != "main":
+        manifest_path = renders / "render-manifest.json"
+        manifest = read_yaml(manifest_path)
+        manifest["clips"] = {"CL01": "clips/CL01.mp4"}
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        (renders / "clips/CL01.mp4").write_bytes(b"synthetic-mp4")
+    # The editable storyboard now says the opposite of what was rendered.
+    current = board.model_dump(mode="json")
+    current["scenes"][0]["visual_assets"] = [{
+        "path": "assets/current.png" if suffix == ".svg" else "assets/current.svg",
+        "role": "mascot", "pose": "welcome",
+    }]
+    write_yaml_atomic(revision / "storyboard/storyboard.yaml", current)
+    before = hash_reviewed_artifacts(video_reviewed_paths(revision))
+
+    html = render_video_packet(revision)
+
+    assert html.count("mascot đang dùng hình tạm") == warning_count
+    if warning_count:
+        assert '<p role="status">mascot đang dùng hình tạm</p>' in html
+    assert hash_reviewed_artifacts(video_reviewed_paths(revision)) == before
+
+
+def test_video_packet_ignores_mascot_in_unreferenced_clip_input(tmp_path: Path) -> None:
+    project = create_v2_project_fixture(tmp_path)
+    revision = project / "revisions/001"
+    clip_input = revision / "renders/clips/CL99.render-input.json"
+    clip_input.parent.mkdir(parents=True, exist_ok=True)
+    clip_input.write_text(json.dumps({
+        "youtube_cta": {"mascot_path": "clips/cta/welcome.svg"},
+    }), encoding="utf-8")
+
+    assert "mascot đang dùng hình tạm" not in render_video_packet(revision)
+
+
 def test_medical_packet_renders_certainty_and_population_when_present(
     tmp_path: Path,
 ) -> None:
@@ -292,3 +363,4 @@ def test_legacy_video_packet_has_no_m6_5_section(tmp_path: Path) -> None:
     html = render_video_packet(project_dir / "revisions/001")
 
     assert "Ngân sách visual M6.5" not in html and "QA production" not in html
+    assert "mascot đang dùng hình tạm" not in html

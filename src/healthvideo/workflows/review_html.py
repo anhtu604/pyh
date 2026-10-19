@@ -322,9 +322,43 @@ def render_medical_packet(revision_root: Path) -> str:
     )
 
 
+def _uses_placeholder_mascot(renders: Path, clips: dict[str, str]) -> bool:
+    """Inspect saved render inputs, never the mutable brand profile or storyboard.
+
+    mascot_asset records SVG paths for the fixed rig and PNG paths for artwork.
+    Only inputs belonging to this packet count; older packets may have no input.
+    """
+    inputs = [renders / "render-input.json"]
+    for relative in clips.values():
+        path = (renders / relative).with_suffix(".render-input.json")
+        if path.resolve().is_relative_to(renders.resolve()):
+            inputs.append(path)
+    for path in inputs:
+        if not path.is_file():
+            continue
+        data = read_yaml(path)
+        mascot_paths = [
+            asset["path"]
+            for scene in data.get("scenes", [])
+            for asset in scene.get("visual_assets", [])
+            if asset.get("role") == "mascot"
+        ]
+        cta = data.get("youtube_cta")
+        if cta and "mascot_path" in cta:
+            mascot_paths.append(cta["mascot_path"])
+        if any(Path(relative).suffix == ".svg" for relative in mascot_paths):
+            return True
+    return False
+
+
 def render_video_packet(revision_root: Path) -> str:
     manifest_path = revision_root / "renders" / "render-manifest.json"
     manifest = read_yaml(manifest_path) if manifest_path.is_file() else {}
+    mascot_warning = (
+        f'<p role="status">{escape("mascot đang dùng hình tạm")}</p>'
+        if _uses_placeholder_mascot(revision_root / "renders", manifest.get("clips", {}))
+        else ""
+    )
     qa_path = revision_root / "reviews" / "video-qa.json"
     qa = read_yaml(qa_path) if qa_path.is_file() else {}
     storyboard = Storyboard.model_validate(
@@ -364,6 +398,7 @@ def render_video_packet(revision_root: Path) -> str:
         '<video controls src="../renders/video.mp4"></video>'
         + clip_videos
         + sheet_section
+        + mascot_warning
         + budget_section
         + f"<pre>{escape(str(manifest))}</pre>"
         f"<pre>{escape(str(qa))}</pre>"
