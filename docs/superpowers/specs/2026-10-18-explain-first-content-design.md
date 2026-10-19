@@ -246,3 +246,51 @@ Quy tắc:
   TikTok (tránh cột nút bên phải và chú thích ở đáy).
 - Mascot là gia vị, không chiếm sóng: lint storyboard cảnh báo khi mascot có mặt trên 35%
   số frame của video.
+
+## 14. Giọng nội dung: kiến thức, độ hấp dẫn và hài hước (bổ sung 19-10-2026)
+
+Người dùng chốt: mỗi video phải cân bằng ba thứ — **đúng kiến thức**, **đủ hấp dẫn để người
+xem muốn xem tiếp và chia sẻ**, và **có tiếng cười**. Giữ hướng "người bình thường chia sẻ,
+hơi châm biếm" đã chốt ngày 30-09.
+
+Tiếng cười lấy từ:
+
+- Ngộ nhận và thói quen phổ biến ("không đau thì chắc không sao"), lời quảng cáo thổi phồng,
+  mẹo truyền miệng. Châm biếm **niềm tin**, không châm biếm **người**.
+- Ẩn dụ đời thường ở §3, chọn cách nói buồn cười nhưng không sai cơ chế.
+- Mascot phản ứng (`mascot_reaction`): ngạc nhiên, lắc đầu, đắc ý — không chữ, không claim.
+- Chuyện hoặc câu tự trào của bác sĩ, **chỉ khi bác sĩ tự cung cấp**; không bịa trải nghiệm.
+
+Giới hạn:
+
+- Không đùa về người bệnh, cái chết, ngoại hình, vùng miền, nghề nghiệp hay nhóm yếu thế.
+- Không phóng đại nguy cơ, không dọa để câu view. Hook không được hứa điều video không có.
+- Câu đùa chứa số liệu hoặc nhận định y khoa thì vẫn là claim: phải có nguồn trong ledger và
+  qua cổng 1. Bác sĩ duyệt cả câu đùa ở cổng 1.
+
+Nhịp hấp dẫn:
+
+- Nhịp 1 có hook trong 3 giây đầu: một câu hỏi, một ngộ nhận hoặc một tình huống quen.
+- Cứ 30–45 giây có một "điểm thưởng": câu đùa, hình lật ngược, ẩn dụ bất ngờ hoặc câu hỏi
+  cho người xem. Clip 9:16 cần ít nhất một điểm thưởng trong 15 giây đầu.
+- Mỗi video có một câu chốt ngắn, dễ nhớ, dễ nhắc lại, đặt ở nhịp 7.
+- Tiêu đề, thumbnail và caption khớp đúng nội dung video.
+
+Giọng viết và giọng đọc:
+
+- Kịch bản đọc như người thật nói chuyện, không như bản tin hay bài báo. Tránh các dấu hiệu văn
+  AI (kết câu gọn gàng giả tạo, cặp "không… không… chỉ là…", câu cảm thán dàn dựng); dự kiến
+  có lint tiếng Việt dựa trên bộ mẫu humanizer.
+- Giọng đọc chọn giữa VoiceStudio và VieNeu, ưu tiên giọng có nhấn nhá, ngắt nghỉ và cảm xúc
+  thay vì đọc đều. Đang so sánh; khi người dùng chọn xong thì ghi vào đây.
+
+## 15. Chọn chủ đề (bổ sung 19-10-2026)
+
+1. **Haiku 5.5** (`claude-haiku-5-5`) kéo nhiều chủ đề ứng viên. Mỗi ứng viên ghi tín hiệu kèm
+   nguồn; không gọi chủ đề là "đang hot" khi không có dữ liệu.
+2. **Jev** chấm và chọn ra các chủ đề hay. Ngoài các tiêu chí hiện có trên thẻ chủ đề
+   (`novelty`, `preventive_value`, `evidence_readiness`, `clarity`, `harm_risk`,
+   `production_cost`), cần thêm tiêu chí độ hấp dẫn và tiềm năng hài hước. Thiết kế chi tiết
+   làm riêng.
+3. Bác sĩ chọn chủ đề cuối cùng; mỗi chủ đề được xử lý trong một phiên chat Claude Code riêng.
+   Claude điều phối và nghiệm thu, còn agy CLI và Codex CLI là bên thực hiện.
