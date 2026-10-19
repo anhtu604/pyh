@@ -27,6 +27,13 @@ from tests.helpers import (
 runner = CliRunner()
 
 
+def test_review_reject_help_lists_resume_states() -> None:
+    result = runner.invoke(app, ["review", "reject", "--help"])
+    assert result.exit_code == 0
+    assert "research_in_progress" in result.stdout
+    assert "production_in_progress" in result.stdout
+
+
 def test_version_command() -> None:
     result = CliRunner().invoke(app, ["version"])
     assert result.exit_code == 0

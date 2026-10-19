@@ -303,17 +303,6 @@ def reject_gate(
         resume_state=resume_state,
         artifact_hashes=bound_hashes,
     )
-    timestamp = now.astimezone().strftime("%Y%m%dT%H%M%S%f")
-    target_dir = revision_root / "reviews" / kind.value
-    target_dir.mkdir(parents=True, exist_ok=True)
-    rejection_path = target_dir / f"{timestamp}-rejected.yaml"
-    counter = 1
-    while rejection_path.is_file():
-        rejection_path = target_dir / f"{timestamp}-rejected-{counter}.yaml"
-        counter += 1
-
-    write_yaml_once(rejection_path, record.model_dump(mode="json"))
-
     context = TransitionContext(
         active_revision=project.active_revision,
         current_input_hash=canonical_json_hash(bound_hashes),
@@ -327,6 +316,16 @@ def reject_gate(
         resume_state=resume_state,
         entered_at=now,
     )
+    timestamp = now.astimezone().strftime("%Y%m%dT%H%M%S%f")
+    target_dir = revision_root / "reviews" / kind.value
+    target_dir.mkdir(parents=True, exist_ok=True)
+    rejection_path = target_dir / f"{timestamp}-rejected.yaml"
+    counter = 1
+    while rejection_path.is_file():
+        rejection_path = target_dir / f"{timestamp}-rejected-{counter}.yaml"
+        counter += 1
+
+    write_yaml_once(rejection_path, record.model_dump(mode="json"))
     write_yaml_atomic(project_dir / "project.yaml", changed.model_dump(mode="json"))
     return record
 

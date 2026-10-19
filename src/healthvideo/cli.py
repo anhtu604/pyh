@@ -22,6 +22,7 @@ from healthvideo.domain.gate_review import GateKind
 from healthvideo.domain.project import ProjectManifest
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.review import ReviewKind, ReviewRecord
+from healthvideo.domain.state_graph import SIDE_EXIT_RULES
 from healthvideo.domain.topic import TopicCard
 from healthvideo.evidence.clients import EuropePMCClient, PubMedClient
 from healthvideo.process import prepare_subprocess_argv, resolve_pnpm_argv
@@ -370,7 +371,21 @@ REJECT_CONFIRMATION = "REJECT"
 Gate = Annotated[GateKind, typer.Option("--gate", help="medical hoặc video")]
 Reason = Annotated[str, typer.Option("--reason", help="Lý do từ chối")]
 ResumeTo = Annotated[
-    str, typer.Option("--resume-to", help="Trạng thái nối lại sau khi sửa")
+    str,
+    typer.Option(
+        "--resume-to",
+        help="Trạng thái nối lại sau khi sửa ("
+        + "; ".join(
+            f"{gate}: " + "|".join(sorted(
+                target.value for source, target in SIDE_EXIT_RULES if source is side
+            ))
+            for gate, side in (
+                ("medical", WorkflowState.NEEDS_MEDICAL_REVISION),
+                ("video", WorkflowState.NEEDS_PRODUCTION_REVISION),
+            )
+        )
+        + ")",
+    ),
 ]
 ResumeTarget = Annotated[str, typer.Option("--to", help="Trạng thái muốn quay lại")]
 ReasonClass = Annotated[

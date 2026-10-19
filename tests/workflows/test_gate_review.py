@@ -9,7 +9,11 @@ import healthvideo.tts.pronunciation as pronunciation_module
 import healthvideo.workflows.ai_clips as ai_clips_module
 from healthvideo.domain.gate_review import GateKind
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
-from healthvideo.domain.state_graph import TransitionContext, transition_v2
+from healthvideo.domain.state_graph import (
+    TransitionContext,
+    TransitionError,
+    transition_v2,
+)
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.video_ai.base import VeoRequest, VeoResult, VideoProbeResult
 from healthvideo.workflows.ai_clips import AIClipRights, generate_ai_clip
@@ -528,6 +532,28 @@ def test_reject_gate_requires_non_blank_reason(tmp_path: Path) -> None:
             resume_state=WorkflowState.DRAFT_READY,
             now=NOW,
         )
+
+
+def test_reject_gate_invalid_resume_state_leaves_no_record(tmp_path: Path) -> None:
+    project_dir = create_v2_project_fixture(tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW)
+    manifest_path = project_dir / "project.yaml"
+    original = manifest_path.read_bytes()
+    active_revision = read_yaml(manifest_path)["active_revision"]
+
+    with pytest.raises(TransitionError, match="not a valid exit"):
+        reject_gate(
+            project_dir,
+            GateKind.MEDICAL,
+            reviewer=REVIEWER,
+            reason="Cần sửa bằng chứng.",
+            resume_state=WorkflowState.EVIDENCE_READY,
+            now=NOW,
+        )
+
+    reviews = project_dir / "revisions" / active_revision / "reviews" / "medical"
+    assert not list(reviews.glob("*-rejected*.yaml"))
+    assert manifest_path.read_bytes() == original
+    assert read_yaml(manifest_path)["state"] == "awaiting_medical_review"
 
 
 def test_approve_video_hashes_render_manifest_and_mp4(tmp_path: Path) -> None:
