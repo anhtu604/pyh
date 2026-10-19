@@ -6,13 +6,14 @@ from urllib.request import Request
 import pytest
 
 from healthvideo.domain.evidence import (
+    CandidateSource,
     EvidenceClaim,
     EvidenceQuestion,
     SourceRecord,
     SourceSelection,
 )
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
-from healthvideo.evidence.clients import PubMedClient
+from healthvideo.evidence.clients import ProviderResponseError, PubMedClient
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.workflows.evidence import (
     build_evidence_ledger,
@@ -111,6 +112,13 @@ def test_search_literature_appends_search_log_and_candidates(tmp_path: Path) -> 
     candidates_file = project_dir / "revisions" / "001" / "evidence" / "candidates.jsonl"
     assert candidates_file.is_file()
     assert "Salt trial" in candidates_file.read_text(encoding="utf-8")
+    second = search_literature(project_dir, question, [client], now=now)
+    saved = read_yaml(search_log_file)
+    assert saved == {
+        "schema_version": "1.0",
+        "searches": [log.model_dump(mode="json"), second.model_dump(mode="json")],
+    }
+    assert len(candidates_file.read_text(encoding="utf-8").splitlines()) == 2
 
 
 def test_record_source_selections_splits_included_and_excluded(tmp_path: Path) -> None:
@@ -224,3 +232,62 @@ def test_mechanism_accepts_one_clean_source_among_multiple(tmp_path: Path) -> No
         synthetic_test_record=True,
     ) for source_id, status in [("R-TEST-01", "unverified"), ("R-TEST-02", "clean")]]
     assert build_evidence_ledger(project, [claim], sources)[0].is_file()
+
+
+class WorkingClient:
+    name = "working"
+
+    def search(self, query: str, limit: int = 10) -> list[CandidateSource]:
+        return [CandidateSource(source_id="fake-1", database="fake", title="Synthetic trial")]
+
+
+class BlockedClient:
+    name = "pubmed"
+
+    def search(self, query: str, limit: int = 10) -> list[CandidateSource]:
+        raise ProviderResponseError("NCBI IP blocked")
+
+
+def test_search_records_provider_failure_and_keeps_working_candidates(tmp_path: Path) -> None:
+    project = _setup_project_at(tmp_path, WorkflowState.RESEARCH_IN_PROGRESS)
+    question = EvidenceQuestion(patient_population="test", intervention="test", outcome="test")
+    log = search_literature(project, question, [BlockedClient(), WorkingClient()])
+    failed, completed = log.provider_outcomes
+    assert failed.provider == "pubmed"
+    assert failed.status == "failed"
+    assert failed.failure_class == "ProviderResponseError"
+    assert failed.error_summary == "NCBI IP blocked"
+    assert completed.status == "completed"
+    assert completed.result_count == 1
+    candidates = project / "revisions/001/evidence/candidates.jsonl"
+    assert json.loads(candidates.read_text(encoding="utf-8"))["source_id"] == "fake-1"
+
+
+@pytest.mark.parametrize("existing", ["legacy", "empty"])
+def test_search_preserves_legacy_log_and_accepts_empty_file(tmp_path: Path, existing: str) -> None:
+    project = _setup_project_at(tmp_path, WorkflowState.RESEARCH_IN_PROGRESS)
+    question = EvidenceQuestion(patient_population="test", intervention="test", outcome="test")
+    path = project / "revisions/001/evidence/search-log.yaml"
+    legacy = {
+        "database": "multi", "query": "old", "searched_at": "2026-09-12T10:00:00+00:00",
+        "total_results": 1, "retrieved_count": 1,
+    }
+    if existing == "legacy":
+        write_yaml_atomic(path, legacy)
+    else:
+        path.write_text("", encoding="utf-8")
+    log = search_literature(project, question, [WorkingClient()])
+    searches = read_yaml(path)["searches"]
+    assert searches == ([legacy] if existing == "legacy" else []) + [log.model_dump(mode="json")]
+
+
+def test_search_records_zero_results(tmp_path: Path) -> None:
+    class EmptyClient:
+        def search(self, query: str, limit: int = 10) -> list[CandidateSource]:
+            return []
+
+    project = _setup_project_at(tmp_path, WorkflowState.RESEARCH_IN_PROGRESS)
+    question = EvidenceQuestion(patient_population="test", intervention="test", outcome="test")
+    outcome, = search_literature(project, question, [EmptyClient()]).provider_outcomes
+    assert outcome.status == "zero_results"
+    assert outcome.result_count == 0

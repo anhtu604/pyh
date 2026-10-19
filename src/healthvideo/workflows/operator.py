@@ -11,6 +11,7 @@ from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.storage.files import read_yaml
 from healthvideo.storage.lease import read_write_lease
 from healthvideo.storage.project_layout import ProjectLayout, resolve_project_layout
+from healthvideo.workflows.orientation import read_authoritative_orientation
 
 
 class OperatorActionKind(StrEnum):
@@ -154,14 +155,21 @@ def get_next_action(project_dir: Path) -> OperatorAction:
                 "/pyh tìm hiểu chủ đề",
             )
         case WorkflowState.AWAITING_EDITORIAL_DIRECTION:
+            try:
+                completed = read_authoritative_orientation(layout.project_dir)
+                artifact_path = f"orientation/completed/{completed.run_id}.yaml"
+            except ValueError:
+                artifact_path = "orientation/completed"
+                reason_code = "authoritative_orientation_missing"
             return _action(
                 layout.project_dir,
                 layout.artifact_root,
                 OperatorActionKind.AWAIT_EDITORIAL_DIRECTION,
                 "Present the orientation findings, limits and options, then ask the "
                 "doctor for their own editorial view before any brief is confirmed.",
-                "orientation/editorial-orientation.yaml",
+                artifact_path,
                 "/pyh chốt nội dung",
+                reason_code=reason_code,
             )
         case WorkflowState.AUTHOR_BRIEF_READY:
             return _action(

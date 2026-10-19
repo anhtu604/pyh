@@ -1,11 +1,12 @@
 """Validated, non-decisional artifacts for pre-brief editorial orientation."""
 
 from collections.abc import Sequence
-from typing import Annotated, Literal
+from typing import TYPE_CHECKING, Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from healthvideo.domain.evidence import CandidateSource
+if TYPE_CHECKING:
+    from healthvideo.domain.evidence import CandidateSource
 
 _SHA256_HEX_PATTERN = r"^[0-9a-f]{64}$"
 _RUN_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"
@@ -164,7 +165,7 @@ class CompletedOrientation(BaseModel):
                 raise ValueError("editorial option context source must be included")
         return self
 
-    def validate_candidate_binding(self, candidates: Sequence[CandidateSource]) -> None:
+    def validate_candidate_binding(self, candidates: "Sequence[CandidateSource]") -> None:
         """Prove included source IDs resolve to unique candidates in this run."""
         candidate_ids = [candidate.source_id for candidate in candidates]
         if len(candidate_ids) != len(set(candidate_ids)):

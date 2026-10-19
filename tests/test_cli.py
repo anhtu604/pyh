@@ -1032,3 +1032,35 @@ def test_ai_clip_cli_builds_authoring_request_after_opt_in(
     assert captured["scene_id"] == "S04"
     assert captured["requested_seed"] == 9
     assert isinstance(captured["rights"], AIClipRights)
+
+
+@pytest.mark.parametrize("all_failed", [False, True])
+def test_cli_evidence_search_surfaces_provider_failures(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, all_failed: bool
+) -> None:
+    from healthvideo.evidence.clients import ProviderResponseError
+
+    class BlockedClient:
+        name = "pubmed"
+
+        def search(self, query: str, limit: int = 10) -> list[CandidateSource]:
+            raise ProviderResponseError("NCBI IP blocked")
+
+    class WorkingClient:
+        def search(self, query: str, limit: int = 10) -> list[CandidateSource]:
+            return [CandidateSource(source_id="fake-1", database="fake", title="Synthetic trial")]
+
+    clients = [BlockedClient()] if all_failed else [BlockedClient(), WorkingClient()]
+    monkeypatch.setattr("healthvideo.cli.get_default_clients", lambda: clients)
+    project = tmp_path / "project"
+    manifest = ProjectManifestV2(
+        slug="test", state=WorkflowState.RESEARCH_IN_PROGRESS, active_revision="001"
+    )
+    write_yaml_atomic(project / "project.yaml", manifest.model_dump(mode="json"))
+
+    result = runner.invoke(app, ["evidence", "search", str(project), "--query", "synthetic"])
+
+    assert result.exit_code == (1 if all_failed else 0)
+    lines = result.stdout.splitlines()
+    assert f"Tìm thấy {0 if all_failed else 1} tài liệu ứng viên." in lines
+    assert "pubmed: ProviderResponseError: NCBI IP blocked" in lines

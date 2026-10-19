@@ -7,6 +7,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from healthvideo.domain.orientation import ProviderOutcome
+
 # ponytail: Substring matching can flag negations and miss paraphrases; medical review is still required.
 MECHANISM_EFFECT_KEYWORDS = ("giảm nguy cơ", "hiệu quả", "nên dùng", "có ích")
 
@@ -133,6 +135,7 @@ class SearchLogRecord(BaseModel):
     searched_at: datetime
     total_results: int = 0
     retrieved_count: int = 0
+    provider_outcomes: tuple[ProviderOutcome, ...] = ()
 
 
 class CandidateSource(BaseModel):

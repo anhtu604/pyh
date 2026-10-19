@@ -17,10 +17,12 @@ from healthvideo.domain.evidence import (
     SourceSelection,
 )
 from healthvideo.domain.explainer import validate_claim_refs
+from healthvideo.domain.orientation import ProviderOutcome
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
 from healthvideo.storage.explainer import read_explainer
 from healthvideo.storage.files import canonical_json_hash, read_yaml, write_yaml_atomic
+from healthvideo.workflows.orientation import _provider_name, _search_one
 
 
 def record_question(
@@ -63,17 +65,32 @@ def search_literature(
 
     query = " ".join(question.search_keywords)
     candidates: list[CandidateSource] = []
-    for client in clients:
+    outcomes: list[ProviderOutcome] = []
+    for index, client in enumerate(clients):
+        provider = _provider_name(client, index)
+        query_id = f"{provider}-{index}"
         try:
-            if hasattr(client, "fetch_summaries"):
-                pmids = client.search(query, limit=10)
-                items = client.fetch_summaries(pmids)
-                candidates.extend(items)
-            elif hasattr(client, "search"):
-                items = client.search(query, limit=10)
-                candidates.extend(items)
-        except (TypeError, ValueError, OSError):
-            pass
+            found = _search_one(client, query)
+        except (TypeError, ValueError, OSError) as error:
+            outcomes.append(
+                ProviderOutcome(
+                    provider=provider,
+                    query_id=query_id,
+                    status="failed",
+                    failure_class=type(error).__name__,
+                    error_summary=str(error) or type(error).__name__,
+                )
+            )
+            continue
+        candidates.extend(found)
+        outcomes.append(
+            ProviderOutcome(
+                provider=provider,
+                query_id=query_id,
+                status="completed" if found else "zero_results",
+                result_count=len(found),
+            )
+        )
 
     candidates_path = ev_dir / "candidates.jsonl"
     with candidates_path.open("a", encoding="utf-8") as f:
@@ -88,9 +105,17 @@ def search_literature(
         searched_at=timestamp,
         total_results=len(candidates),
         retrieved_count=len(candidates),
+        provider_outcomes=tuple(outcomes),
     )
     search_log_path = ev_dir / "search-log.yaml"
-    write_yaml_atomic(search_log_path, log.model_dump(mode="json"))
+    previous = (
+        read_yaml(search_log_path)
+        if search_log_path.is_file() and search_log_path.read_text(encoding="utf-8").strip()
+        else {}
+    )
+    searches = previous.get("searches", [previous] if previous else [])
+    searches.append(log.model_dump(mode="json"))
+    write_yaml_atomic(search_log_path, {"schema_version": "1.0", "searches": searches})
     return log
 
 

@@ -155,4 +155,31 @@ def test_editorial_direction_asks_for_the_doctors_own_words(tmp_path: Path) -> N
     )
 
     assert "orientation" in action.message.lower()
-    assert action.artifact == tmp_path / WorkflowState.AWAITING_EDITORIAL_DIRECTION.value / "revisions/001/orientation/editorial-orientation.yaml"
+    assert action.artifact == tmp_path / WorkflowState.AWAITING_EDITORIAL_DIRECTION.value / "revisions/001/orientation/completed"
+
+    assert "authoritative_orientation_missing" in action.message
+
+
+def test_editorial_direction_points_at_authoritative_completed_record(tmp_path: Path) -> None:
+    from healthvideo.workflows.orientation import (
+        complete_orientation,
+        run_orientation_search,
+    )
+    from tests.workflows.test_orientation import (
+        FROZEN_NOW,
+        StubClient,
+        _candidate,
+        _completed,
+        _researching_project,
+    )
+
+    project = _researching_project(tmp_path)
+    run_orientation_search(project, [StubClient("pubmed", [_candidate()])], now=FROZEN_NOW)
+    completed = _completed(project, run_id="editorial-run")
+    complete_orientation(project, completed, now=FROZEN_NOW)
+
+    action = get_next_action(project)
+
+    assert action.artifact == project / "revisions/001/orientation/completed/editorial-run.yaml"
+    assert action.artifact.is_file()
+    assert "authoritative_orientation_missing" not in action.message

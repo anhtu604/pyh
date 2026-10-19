@@ -980,6 +980,11 @@ def evidence_search(
         typer.echo(str(error))
         raise typer.Exit(code=1) from error
     typer.echo(f"Tìm thấy {log.retrieved_count} tài liệu ứng viên.")
+    failed = [outcome for outcome in log.provider_outcomes if outcome.status == "failed"]
+    for outcome in failed:
+        typer.echo(f"{outcome.provider}: {outcome.failure_class}: {outcome.error_summary}")
+    if log.provider_outcomes and len(failed) == len(log.provider_outcomes):
+        raise typer.Exit(code=1)
 
 
 @evidence_app.command("screen")
