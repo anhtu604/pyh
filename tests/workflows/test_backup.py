@@ -278,3 +278,22 @@ def _rehash_manifest_entry(snapshot: Path, changed: Path) -> None:
         encoding="utf-8",
     )
 
+
+
+def test_backup_round_trip_keeps_reopened_gate_history(tmp_path: Path) -> None:
+    from healthvideo.domain.gate_review import GateKind
+    from healthvideo.domain.project_v2 import WorkflowState
+    from healthvideo.workflows.gate_review import approve_gate, reopen_gate
+    from tests.helpers import advance_v2_project_to_video_review
+
+    project = create_v2_project_fixture(tmp_path / "source")
+    advance_v2_project_to_video_review(project, now=NOW)
+    approve_gate(project, GateKind.VIDEO, reviewer="BS An", now=NOW)
+    record = reopen_gate(project, GateKind.MEDICAL, reviewer="BS An", reason="Revise",
+                         changed=["storyboard/storyboard.yaml"],
+                         resume_state=WorkflowState.DRAFT_READY, now=NOW)
+    snapshot = create_backup(project, tmp_path / "backups", backup_id="reopened", now=NOW)
+    restored = restore_backup(snapshot, tmp_path / "restored")
+    for path in (project / "revisions/001/reviews").rglob("*.yaml"):
+        assert (restored / path.relative_to(project)).read_bytes() == path.read_bytes()
+    assert len(record.superseded_approvals) == 2

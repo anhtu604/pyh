@@ -112,6 +112,26 @@ Get-CimInstance Win32_Process -Filter "Name='taskkill.exe'" | ForEach-Object {
 }
 ```
 
+## 7. Mở lại cổng y khoa sau duyệt
+
+Khi artifact đã duyệt cần sửa, `review reopen` (`review_reopen` trong write lease)
+chỉ nhận cổng medical và thay đổi được invalidation engine xếp mức medical:
+
+```powershell
+healthvideo review reopen "<project>" --gate medical --reviewer "<name>" --reason "<text>" --changed storyboard/storyboard.yaml --resume-to draft_ready
+healthvideo review resume "<project>" --gate medical --to draft_ready
+```
+
+Gõ `REOPEN` để xác nhận (hoặc `--yes` khi đã có quyết định rõ ràng). Có thể lặp
+`--changed`; `--resume-to` nhận `draft_ready` hoặc `research_in_progress`.
+Approval y khoa và video hiện tại được chuyển nguyên bytes vào lịch sử
+`reviews/medical/` và `reviews/video/`; record reopened ghi lý do, hash cũ và mới.
+Sau resume về `draft_ready`, dùng `operator draft` để nộp bản sửa rồi
+`operator submit-medical` và qua cổng duyệt lại. Lệnh không tạo approval.
+Nếu tiến trình dừng giữa chuyển approval và ghi project, trạng thái cũ vẫn còn
+nhưng thiếu approval hiện tại nên production từ chối; kiểm tra lịch sử để phục hồi,
+không tự dựng lại approval. Recovery check tự động là hướng nâng cấp sau.
+
 ## Khi có lỗi
 
 | Tình huống | Dữ liệu được giữ | Bước an toàn tiếp theo |

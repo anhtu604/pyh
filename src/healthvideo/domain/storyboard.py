@@ -226,3 +226,16 @@ class Storyboard(BaseModel):
                         "120, 180, or 240 frames"
                     )
         return self
+
+
+SUPPORTED_ANATOMY_SUBJECTS = ("artery_cross_section", "heart")
+
+
+def validate_anatomy_subjects(storyboard: Storyboard) -> None:
+    """Require anatomy subjects supported by the renderer."""
+    for scene in storyboard.scenes:
+        if scene.anatomy is not None and scene.anatomy.subject not in SUPPORTED_ANATOMY_SUBJECTS:
+            raise ValueError(
+                f"Scene {scene.id}: unsupported anatomy subject {scene.anatomy.subject!r}; "
+                f"supported subjects: {', '.join(SUPPORTED_ANATOMY_SUBJECTS)}"
+            )

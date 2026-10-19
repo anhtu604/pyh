@@ -16,7 +16,7 @@ from healthvideo.domain.hook_outro import validate_hook_outro
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.script import Script
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
-from healthvideo.domain.storyboard import Storyboard
+from healthvideo.domain.storyboard import Storyboard, validate_anatomy_subjects
 from healthvideo.domain.visual_budget import validate_visual_budget
 from healthvideo.qa.script import review_script
 from healthvideo.storage.explainer import read_explainer
@@ -80,6 +80,7 @@ def _validate(
         if errors:
             raise ValueError(f"script review error ({errors[0].code}): {errors[0].message}")
     validate_visual_budget(storyboard)
+    validate_anatomy_subjects(storyboard)
     validate_hook_outro(script, storyboard, require_brand=True)
     resolve_citations(
         script,
@@ -99,8 +100,8 @@ def submit_draft(
 ) -> ProjectManifestV2:
     """Promote a complete validated draft without leaving partial revision files."""
     project = _project(project_dir)
-    if project.state is not WorkflowState.EVIDENCE_READY:
-        raise ValueError("draft submission requires evidence_ready")
+    if project.state not in {WorkflowState.EVIDENCE_READY, WorkflowState.DRAFT_READY}:
+        raise ValueError("draft submission requires evidence_ready or draft_ready")
     script = Script.model_validate(read_yaml(script_file))
     storyboard = Storyboard.model_validate(read_yaml(storyboard_file))
     assets = AssetManifest.model_validate(read_yaml(assets_file))
@@ -123,7 +124,11 @@ def submit_draft(
             current_input_hash=canonical_json_hash(script_data),
             validated_artifacts=frozenset({"script/script.yaml"}),
         )
-        changed = transition_v2(project, WorkflowState.DRAFT_READY, context)
+        changed = (
+            transition_v2(project, WorkflowState.DRAFT_READY, context)
+            if project.state is WorkflowState.EVIDENCE_READY
+            else project
+        )
         replace_directory_atomic(staging, revision)
         promoted = True
         write_yaml_atomic(project_dir / "project.yaml", changed.model_dump(mode="json"))

@@ -8,8 +8,9 @@ reject/resume path v1 never had. v1 stays untouched; this module never imports i
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from healthvideo.assets import referenced_storyboard_assets
 from healthvideo.domain.asset_manifest import (
@@ -21,12 +22,22 @@ from healthvideo.domain.gate_review import (
     GateApprovalRecord,
     GateKind,
     GateRejectionRecord,
+    GateReopenRecord,
 )
 from healthvideo.domain.hook_outro import validate_hook_outro
+from healthvideo.domain.invalidation import (
+    ArtifactChange,
+    InvalidationLevel,
+    evaluate_invalidation,
+)
 from healthvideo.domain.license_ledger import LicenseLedger, validate_license_ledger
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.script import Script
-from healthvideo.domain.state_graph import TransitionContext, transition_v2
+from healthvideo.domain.state_graph import (
+    _POST_MEDICAL_GATE_STATES,
+    TransitionContext,
+    transition_v2,
+)
 from healthvideo.domain.storyboard import Storyboard
 from healthvideo.domain.visual_budget import validate_visual_budget
 from healthvideo.storage.files import (
@@ -351,3 +362,91 @@ def resume_gate(
     changed = transition_v2(project, target, context)
     write_yaml_atomic(project_dir / "project.yaml", changed.model_dump(mode="json"))
     return changed.state
+
+
+def reopen_gate(
+    project_dir: Path,
+    kind: GateKind,
+    *,
+    reviewer: str,
+    reason: str,
+    changed: list[str],
+    resume_state: WorkflowState,
+    now: datetime,
+) -> GateReopenRecord:
+    """Reopen medical review, preserving superseded approvals as audit history."""
+    if kind is not GateKind.MEDICAL:
+        raise ValueError("only the medical gate can be reopened")
+    project = _load_project(project_dir)
+    if project.state not in _POST_MEDICAL_GATE_STATES:
+        raise ValueError(f"medical reopen is not allowed from {project.state.value}")
+    if not changed:
+        raise ValueError("changed artifacts must be nonempty")
+    for relative in changed:
+        if (
+            not relative
+            or "\\" in relative
+            or PurePosixPath(relative).is_absolute()
+            or PureWindowsPath(relative).drive
+            or ".." in PurePosixPath(relative).parts
+            or not PurePosixPath(relative).parts
+        ):
+            raise ValueError(f"changed artifact must be a revision-relative POSIX path: {relative!r}")
+    revision_root = _revision_root(project_dir, project)
+    manifest = load_asset_manifest(revision_root / "assets/asset-manifest.yaml")
+    decision = evaluate_invalidation(
+        [ArtifactChange(Path(path), frozenset()) for path in changed], manifest
+    )
+    reasons = sorted(decision.reason_codes)
+    if decision.level is not InvalidationLevel.MEDICAL:
+        raise ValueError(
+            f"change does not need medical re-review: {decision.level.name.lower()}: "
+            + ",".join(reasons)
+        )
+    prior = GateApprovalRecord.model_validate(
+        read_yaml(revision_root / MEDICAL_APPROVAL_ARTIFACT)
+    )
+    hashes = hash_reviewed_artifacts(medical_reviewed_paths(revision_root)) or {"none": "0" * 64}
+    context = TransitionContext(
+        active_revision=project.active_revision,
+        current_input_hash=canonical_json_hash(hashes),
+        validated_artifacts=frozenset(),
+    )
+    updated = transition_v2(
+        project, WorkflowState.NEEDS_MEDICAL_REVISION, context,
+        reason_code="medical_reopen:" + ",".join(reasons),
+        resume_state=resume_state, entered_at=now,
+    )
+    timestamp = now.astimezone().strftime("%Y%m%dT%H%M%S%f")
+
+    def history_path(gate: GateKind, suffix: str) -> Path:
+        directory = revision_root / "reviews" / gate.value
+        path = directory / f"{timestamp}-{suffix}.yaml"
+        counter = 1
+        while path.exists():
+            path = directory / f"{timestamp}-{suffix}-{counter}.yaml"
+            counter += 1
+        return path
+
+    moves = {
+        gate: history_path(gate, "superseded-approval")
+        for gate in GateKind
+        if (revision_root / _GATE_APPROVAL_ARTIFACT[gate]).exists()
+    }
+    record = GateReopenRecord(
+        kind=kind, reviewer=reviewer, reopened_at=now, from_state=project.state,
+        reason=reason, resume_state=resume_state, changed_artifacts=changed,
+        invalidation_reasons=reasons,
+        superseded_approvals={gate.value: path.relative_to(revision_root).as_posix()
+                              for gate, path in moves.items()},
+        prior_approval_hashes=prior.artifact_hashes, artifact_hashes=hashes,
+    )
+    record_path = history_path(kind, "reopened")
+    # ponytail: a crash between approval moves and project write keeps the old state
+    # without current approval, failing closed in production; upgrade = recovery check.
+    for gate, destination in moves.items():
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(revision_root / _GATE_APPROVAL_ARTIFACT[gate], destination)
+    write_yaml_once(record_path, record.model_dump(mode="json"))
+    write_yaml_atomic(project_dir / "project.yaml", updated.model_dump(mode="json"))
+    return record

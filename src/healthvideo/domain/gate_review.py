@@ -85,3 +85,45 @@ class GateRejectionRecord(BaseModel):
         if not value:
             raise ValueError("artifact_hashes must bind the reviewed artifacts")
         return value
+
+
+class GateReopenRecord(BaseModel):
+    """Audit trail of a medical gate reopened after artifact changes."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal["2.0"] = "2.0"
+    kind: GateKind
+    reviewer: str
+    reopened_at: datetime
+    from_state: WorkflowState
+    reason: str = Field(pattern=r"\S")
+    resume_state: WorkflowState
+    changed_artifacts: list[str] = Field(min_length=1)
+    invalidation_level: Literal["medical"] = "medical"
+    invalidation_reasons: list[str]
+    superseded_approvals: dict[str, str]
+    prior_approval_hashes: dict[str, str]
+    artifact_hashes: dict[str, str]
+
+    @field_validator("reviewer")
+    @classmethod
+    def _require_named_reviewer(cls, value: str) -> str:
+        reviewer = value.strip()
+        if not reviewer:
+            raise ValueError("reviewer must name the approving doctor")
+        return reviewer
+
+    @field_validator("reopened_at")
+    @classmethod
+    def _require_timezone(cls, value: datetime) -> datetime:
+        if value.utcoffset() is None:
+            raise ValueError("reopened_at must be timezone-aware")
+        return value
+
+    @field_validator("artifact_hashes")
+    @classmethod
+    def _require_artifact_hashes(cls, value: dict[str, str]) -> dict[str, str]:
+        if not value:
+            raise ValueError("artifact_hashes must bind the reviewed artifacts")
+        return value

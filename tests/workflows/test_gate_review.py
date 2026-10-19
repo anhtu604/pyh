@@ -23,6 +23,7 @@ from healthvideo.workflows.gate_review import (
     hash_reviewed_artifacts,
     medical_reviewed_paths,
     reject_gate,
+    reopen_gate,
     resume_gate,
 )
 from tests.helpers import (
@@ -614,3 +615,119 @@ def test_reject_video_without_semantic_issue_resumes_to_production_in_progress(
 
     manifest = ProjectManifestV2.model_validate(read_yaml(project_dir / "project.yaml"))
     assert manifest.state is WorkflowState.PRODUCTION_IN_PROGRESS
+
+
+def _approved_project(tmp_path: Path, *, video: bool = False) -> Path:
+    project = create_v2_project_fixture(
+        tmp_path, state=WorkflowState.DRAFT_READY if video else WorkflowState.AWAITING_MEDICAL_REVIEW
+    )
+    if video:
+        advance_v2_project_to_video_review(project, now=NOW)
+        approve_gate(project, GateKind.VIDEO, reviewer=REVIEWER, now=NOW)
+    else:
+        approve_gate(project, GateKind.MEDICAL, reviewer=REVIEWER, now=NOW)
+    return project
+
+
+@pytest.mark.parametrize("video", [False, True])
+def test_reopen_preserves_approval_bytes_and_prior_hashes(tmp_path: Path, video: bool) -> None:
+    project = _approved_project(tmp_path, video=video)
+    revision = project / "revisions/001"
+    old = {kind.value: (revision / f"reviews/{kind.value}-approval.yaml").read_bytes()
+           for kind in GateKind if kind is GateKind.MEDICAL or video}
+    prior = read_yaml(revision / MEDICAL_APPROVAL_ARTIFACT)["artifact_hashes"]
+    record = reopen_gate(
+        project, GateKind.MEDICAL, reviewer=REVIEWER, reason="Revise storyboard",
+        changed=["storyboard/storyboard.yaml"], resume_state=WorkflowState.DRAFT_READY, now=NOW,
+    )
+    manifest = ProjectManifestV2.model_validate(read_yaml(project / "project.yaml"))
+    assert manifest.state is WorkflowState.NEEDS_MEDICAL_REVISION
+    assert manifest.side_state.resume_state is WorkflowState.DRAFT_READY
+    assert manifest.side_state.reason_code.startswith("medical_reopen:")
+    assert record.prior_approval_hashes == prior
+    assert record.invalidation_reasons == sorted(record.invalidation_reasons)
+    for kind, content in old.items():
+        assert not (revision / f"reviews/{kind}-approval.yaml").exists()
+        assert (revision / record.superseded_approvals[kind]).read_bytes() == content
+    assert len(list((revision / "reviews/medical").glob("*-reopened.yaml"))) == 1
+
+
+@pytest.mark.parametrize(
+    ("kind", "changed", "resume", "match"),
+    [
+        (GateKind.MEDICAL, ["renders/video.mp4"], WorkflowState.DRAFT_READY, "medical re-review: video"),
+        (GateKind.MEDICAL, ["storyboard/storyboard.yaml"], WorkflowState.EVIDENCE_READY, "not a valid exit"),
+        (GateKind.VIDEO, ["storyboard/storyboard.yaml"], WorkflowState.DRAFT_READY, "only the medical"),
+        *[(GateKind.MEDICAL, [path], WorkflowState.DRAFT_READY, "POSIX path")
+          for path in ["../script.yaml", "/script.yaml", "C:/script.yaml", "a\\b", "", "."]],
+        (GateKind.MEDICAL, [], WorkflowState.DRAFT_READY, "nonempty"),
+    ],
+)
+def test_reopen_refusal_writes_nothing(tmp_path: Path, kind, changed, resume, match: str) -> None:
+    project = _approved_project(tmp_path)
+    before = {p.relative_to(project): p.read_bytes() for p in project.rglob("*") if p.is_file()}
+    with pytest.raises(ValueError, match=match):
+        reopen_gate(project, kind, reviewer=REVIEWER, reason="Revise", changed=changed,
+                    resume_state=resume, now=NOW)
+    assert {p.relative_to(project): p.read_bytes() for p in project.rglob("*") if p.is_file()} == before
+
+
+def test_reopen_refuses_pre_gate_state(tmp_path: Path) -> None:
+    project = create_v2_project_fixture(tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW)
+    with pytest.raises(ValueError, match="awaiting_medical_review"):
+        reopen_gate(project, GateKind.MEDICAL, reviewer=REVIEWER, reason="Revise",
+                    changed=["script/script.yaml"], resume_state=WorkflowState.DRAFT_READY, now=NOW)
+
+
+def test_reopen_resume_resubmit_and_approve(tmp_path: Path) -> None:
+    from healthvideo.workflows.draft import submit_draft, submit_medical_review
+
+    project = _approved_project(tmp_path)
+    revision = project / "revisions/001"
+    record = reopen_gate(project, GateKind.MEDICAL, reviewer=REVIEWER, reason="Revise",
+                         changed=["storyboard/storyboard.yaml"],
+                         resume_state=WorkflowState.DRAFT_READY, now=NOW)
+    resume_gate(project, GateKind.MEDICAL, target=WorkflowState.DRAFT_READY, now=NOW)
+    board = read_yaml(revision / "storyboard/storyboard.yaml")
+    board["scenes"][0]["narration"] += " Revised draft."
+    board_file = tmp_path / "new-board.yaml"
+    write_yaml_atomic(board_file, board)
+    submit_draft(project, revision / "script/script.yaml", board_file,
+                 revision / "assets/asset-manifest.yaml")
+    submit_medical_review(project)
+    approval = approve_gate(project, GateKind.MEDICAL, reviewer=REVIEWER, now=NOW)
+    assert approval.artifact_hashes != record.prior_approval_hashes
+    assert (revision / MEDICAL_APPROVAL_ARTIFACT).is_file()
+    assert (revision / record.superseded_approvals["medical"]).is_file()
+
+
+def test_reopen_collision_keeps_existing_history(tmp_path: Path) -> None:
+    project = _approved_project(tmp_path)
+    revision = project / "revisions/001"
+    directory = revision / "reviews/medical"
+    directory.mkdir()
+    timestamp = NOW.astimezone().strftime("%Y%m%dT%H%M%S%f")
+    for suffix in ("superseded-approval", "reopened"):
+        (directory / f"{timestamp}-{suffix}.yaml").write_bytes(b"existing audit history")
+    original = (revision / MEDICAL_APPROVAL_ARTIFACT).read_bytes()
+    record = reopen_gate(project, GateKind.MEDICAL, reviewer=REVIEWER, reason="Revise",
+                         changed=["storyboard/storyboard.yaml"],
+                         resume_state=WorkflowState.DRAFT_READY, now=NOW)
+    assert record.superseded_approvals["medical"].endswith("-superseded-approval-1.yaml")
+    assert (revision / record.superseded_approvals["medical"]).read_bytes() == original
+    assert (directory / f"{timestamp}-reopened-1.yaml").is_file()
+    for suffix in ("superseded-approval", "reopened"):
+        assert (directory / f"{timestamp}-{suffix}.yaml").read_bytes() == b"existing audit history"
+
+
+def test_reopen_missing_current_approval_writes_nothing(tmp_path: Path) -> None:
+    project = _approved_project(tmp_path)
+    revision = project / "revisions/001"
+    (revision / MEDICAL_APPROVAL_ARTIFACT).unlink()
+    original = (project / "project.yaml").read_bytes()
+    with pytest.raises(FileNotFoundError):
+        reopen_gate(project, GateKind.MEDICAL, reviewer=REVIEWER, reason="Revise",
+                    changed=["storyboard/storyboard.yaml"],
+                    resume_state=WorkflowState.DRAFT_READY, now=NOW)
+    assert (project / "project.yaml").read_bytes() == original
+    assert not (revision / "reviews/medical").exists()

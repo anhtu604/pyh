@@ -9,6 +9,7 @@ changes workflow state, renders, packages or publishes.
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -18,6 +19,7 @@ from healthvideo.domain.gate_review import (
     GateApprovalRecord,
     GateKind,
     GateRejectionRecord,
+    GateReopenRecord,
 )
 from healthvideo.domain.project import ProjectManifest
 from healthvideo.domain.review import ReviewKind, ReviewRecord
@@ -202,8 +204,14 @@ def _v2_bindings(root: Path) -> tuple[list[Binding], list[Path]]:
         for kind in GateKind:
             reviews = revision / "reviews"
             for rejection in sorted((reviews / kind.value).glob("*.yaml")):
+                if re.fullmatch(r".+-superseded-approval(?:-\d+)?\.yaml", rejection.name):
+                    model = GateApprovalRecord
+                elif re.fullmatch(r".+-reopened(?:-\d+)?\.yaml", rejection.name):
+                    model = GateReopenRecord
+                else:
+                    model = GateRejectionRecord
                 _require_kind(
-                    GateRejectionRecord.model_validate(read_yaml(rejection)).kind,
+                    model.model_validate(read_yaml(rejection)).kind,
                     kind,
                     rejection.relative_to(root).as_posix(),
                 )

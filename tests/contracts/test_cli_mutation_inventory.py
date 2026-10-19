@@ -15,6 +15,7 @@ EXPECTED = {
         "review_video",
         "review_approve",
         "review_reject",
+        "review_reopen",
         "review_resume",
         "revision_create",
         "topic_select",

@@ -68,7 +68,12 @@ from healthvideo.workflows.evidence import (
     record_source_selections,
     search_literature,
 )
-from healthvideo.workflows.gate_review import approve_gate, reject_gate, resume_gate
+from healthvideo.workflows.gate_review import (
+    approve_gate,
+    reject_gate,
+    reopen_gate,
+    resume_gate,
+)
 from healthvideo.workflows.hook_outro import author_hook_outro
 from healthvideo.workflows.migrate import (
     MigrationPlan,
@@ -368,6 +373,7 @@ SkipConfirmation = Annotated[
     bool, typer.Option("--yes", help=f"Bỏ qua xác nhận gõ {CONFIRMATION}")
 ]
 REJECT_CONFIRMATION = "REJECT"
+REOPEN_CONFIRMATION = "REOPEN"
 Gate = Annotated[GateKind, typer.Option("--gate", help="medical hoặc video")]
 Reason = Annotated[str, typer.Option("--reason", help="Lý do từ chối")]
 ResumeTo = Annotated[
@@ -735,6 +741,37 @@ def review_reject(
         typer.echo(str(error))
         raise typer.Exit(code=1) from error
     typer.echo(f"Đã từ chối {gate.value}, nối lại tại {resume_state.value}")
+
+
+@review_app.command("reopen")
+@project_mutation("review_reopen")
+def review_reopen(
+    project_dir: ProjectDir,
+    gate: Gate,
+    reviewer: Reviewer,
+    reason: Reason,
+    changed: Annotated[list[str], typer.Option("--changed", help="Revision-relative POSIX path")],
+    resume_to: Annotated[str, typer.Option("--resume-to", help="draft_ready|research_in_progress")],
+    yes: SkipConfirmation = False,
+) -> None:
+    """Mở lại cổng y khoa khi artifact đã duyệt cần thay đổi."""
+    if not yes:
+        typed = typer.prompt(f"Gõ {REOPEN_CONFIRMATION} để mở lại {gate.value}")
+        if typed.strip() != REOPEN_CONFIRMATION:
+            typer.echo(f"Đã hủy: cần gõ {REOPEN_CONFIRMATION} để xác nhận.")
+            raise typer.Exit(code=1)
+    try:
+        record = reopen_gate(
+            project_dir, gate, reviewer=reviewer, reason=reason, changed=changed,
+            resume_state=WorkflowState(resume_to), now=datetime.now().astimezone(),
+        )
+    except (FileNotFoundError, FileExistsError, TypeError, ValueError) as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
+    typer.echo(
+        f"Đã mở lại cổng {gate.value} ({record.from_state.value} → needs_medical_revision), "
+        f"nối lại tại {record.resume_state.value}"
+    )
 
 
 @review_app.command("frames")

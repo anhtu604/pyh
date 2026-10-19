@@ -4,6 +4,7 @@ import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from healthvideo.cli import app
@@ -107,3 +108,41 @@ def test_missing_semantic_asset_prevents_medical_submission(tmp_path: Path) -> N
     result = runner.invoke(app, ["operator", "submit-medical", str(project)])
     assert result.exit_code != 0
     assert _state(project) is WorkflowState.DRAFT_READY
+
+
+def test_submit_draft_at_draft_ready_replaces_storyboard(tmp_path: Path) -> None:
+    from healthvideo.workflows.draft import submit_draft
+
+    project = _evidence_ready(tmp_path)
+    assert CliRunner().invoke(app, _draft_args(project)).exit_code == 0
+    board = read_yaml(SOURCE / "storyboard/storyboard.yaml")
+    board["scenes"][0]["narration"] += " Revised draft."
+    board_file = tmp_path / "revised.yaml"
+    write_yaml_atomic(board_file, board)
+    submit_draft(project, SOURCE / "script/script.yaml", board_file,
+                 SOURCE / "assets/asset-manifest.yaml")
+    assert _state(project) is WorkflowState.DRAFT_READY
+    assert read_yaml(project / "revisions/001/storyboard/storyboard.yaml")["scenes"][0]["narration"] == board["scenes"][0]["narration"]
+
+
+@pytest.mark.parametrize("medical", [False, True])
+def test_unsupported_anatomy_subject_refused_before_submission(tmp_path: Path, medical: bool) -> None:
+    from healthvideo.workflows.draft import submit_draft, submit_medical_review
+
+    project = _evidence_ready(tmp_path)
+    if medical:
+        assert CliRunner().invoke(app, _draft_args(project)).exit_code == 0
+    board = read_yaml(SOURCE / "storyboard/storyboard.yaml")
+    board["scenes"][0]["visual"] = "anatomy_animation"
+    board["scenes"][0]["anatomy"] = {"subject": "kidney", "state": "normal", "motion": "pulse"}
+    board_file = (project / "revisions/001/storyboard/storyboard.yaml" if medical
+                  else tmp_path / "unsupported.yaml")
+    write_yaml_atomic(board_file, board)
+    before = (project / "project.yaml").read_bytes()
+    with pytest.raises(ValueError, match="unsupported anatomy subject"):
+        if medical:
+            submit_medical_review(project)
+        else:
+            submit_draft(project, SOURCE / "script/script.yaml", board_file,
+                         SOURCE / "assets/asset-manifest.yaml")
+    assert (project / "project.yaml").read_bytes() == before

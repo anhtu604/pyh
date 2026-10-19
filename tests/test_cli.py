@@ -1071,3 +1071,20 @@ def test_cli_evidence_search_surfaces_provider_failures(
     lines = result.stdout.splitlines()
     assert f"Tìm thấy {0 if all_failed else 1} tài liệu ứng viên." in lines
     assert "pubmed: ProviderResponseError: NCBI IP blocked" in lines
+
+
+@pytest.mark.parametrize("changed,exit_code", [("storyboard/storyboard.yaml", 0), ("renders/video.mp4", 1)])
+def test_review_reopen_cli(tmp_path: Path, changed: str, exit_code: int) -> None:
+    from datetime import UTC, datetime
+
+    from healthvideo.domain.gate_review import GateKind
+    from healthvideo.workflows.gate_review import approve_gate
+
+    project = create_v2_project_fixture(tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW)
+    approve_gate(project, GateKind.MEDICAL, reviewer="BS An", now=datetime.now(UTC))
+    result = runner.invoke(app, [
+        "review", "reopen", str(project), "--gate", "medical", "--reviewer", "BS An",
+        "--reason", "Revise storyboard", "--changed", changed, "--resume-to", "draft_ready", "--yes",
+    ])
+    assert result.exit_code == exit_code, result.stdout
+    assert ("\u0110\u00e3 m\u1edf l\u1ea1i c\u1ed5ng medical" if exit_code == 0 else "medical re-review") in result.stdout
