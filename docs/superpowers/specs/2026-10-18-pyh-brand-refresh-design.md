@@ -184,7 +184,7 @@ Task 7 đã commit (`9408a3b`), `video/src` sạch. Triển khai một đợt, t
 - Video: Zod nhận `logo_path` và `.png`; thẻ cuối có logo; mascot lật khi ở nửa phải; font
   dùng `FONT_FAMILY`.
 - Claude tự xem: logo bốn biến thể, ba pose placeholder, một khung cơ chế 16:9 và 9:16, thẻ
-  cuối 16:9 và 9:16 (Remotion still ra `.tmp/brand-review/`).
+  cuối 9:16 và ảnh duyệt bố cục 16:9 (CTA trong schema chỉ dành cho `vertical_clip`; still ra `.tmp/brand-review/`).
 - `python -m pytest -q`, `python -m ruff check src tests tools`, schema export không có diff
   ngoài dự kiến, `pnpm --dir video test`, `pnpm --dir video typecheck`, `git diff --check`.
 - README thêm dòng tiến độ trong cùng commit.
