@@ -102,6 +102,19 @@ Project v2 cũ mặc định `vertical_clip`, nên hành vi cũ và test cũ gi�
 - Chưa xác minh được VoiceStudio hỗ trợ tiếng Việt tốt đến đâu. Plan phải có bước
   benchmark nghe mù với VieNeu-TTS (bản 09-09 §23) trước khi khóa provider.
 
+### 5.1. Quyết định khóa giọng (19-10-2026)
+
+- Người dùng nghe mù 6 clip cùng một đoạn thử (3 VieNeu v3 Turbo, 3 VoiceStudio 0.5.6
+  OmniVoice gồm clone `anh-tu` và giọng thiết kế) và chọn **VieNeu v3 Turbo, preset
+  `Thái Sơn`, sampling mặc định** (temperature 0,8). Thay quyết định 30-09 chọn VoiceStudio
+  `anh-tu` trên nhánh `feat/m8-3-voicestudio` (chưa merge).
+- Lệnh: `healthvideo produce <project> --tts vieneu --voice "Thái Sơn"` (ONNX CPU, loudnorm).
+  Code vẫn không mặc định giọng; `--voice` vẫn bắt buộc.
+- Số đo trên đoạn thử 157 từ (faster-whisper medium): 45,9 s, 3,42 từ/giây, WER 0, RTF 0,37
+  khi model đã nạp; `tts-benchmark` cả tiến trình: RTF 0,44, WER 0,045, đạt mọi ngưỡng.
+- Không dùng temperature 1,0: ASR cho thấy bỏ mất cụm "não hoặc thận".
+- VieNeu lấy mẫu ngẫu nhiên, nên mỗi lần tổng hợp lại vẫn phải qua cổng duyệt video.
+
 ## 6. Sửa trực quan
 
 ### 6.1. Remotion Studio (toàn video)
