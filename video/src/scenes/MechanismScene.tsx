@@ -12,6 +12,7 @@ export const MechanismScene: React.FC<{scene: Scene; kind: MechanismKind}> = ({s
   const frame = useCurrentFrame();
   const layout = useLayout().mechanism;
   if (!scene.anatomy) throw new Error(`${scene.visual} requires anatomy`);
+  const light = scene.visual_assets?.some((asset) => asset.role === 'mascot') ?? false;
   const anatomy = scene.anatomy;
   const Organ = anatomy.subject === 'artery_cross_section' ? ArterySection
     : anatomy.subject === 'heart' ? Heart : null;
@@ -20,13 +21,13 @@ export const MechanismScene: React.FC<{scene: Scene; kind: MechanismKind}> = ({s
     {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'}) : anatomy.severity;
   const zoom = kind === 'anatomy' ? interpolate(frame, [0, 30], [1.15, 1],
     {extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.bezier(0.16, 1, 0.3, 1)}) : 1;
-  return <AbsoluteFill style={{backgroundColor: brand.night}}>
+  return <AbsoluteFill style={{backgroundColor: light ? brand.off_white : brand.night, color: light ? brand.navy : brand.off_white}}>
     {kind === 'comparison' ? <div style={{position: 'absolute', inset: 0, display: 'flex', flexDirection: layout.axis}}>
       {layout.comparison.map((box, i) => <div key={i} style={{...box, position: 'absolute'}}>
-        <Organ state={i === 0 ? 'normal' : 'diseased'} severity={i === 0 ? 0 : severity} />
+        <Organ state={i === 0 ? 'normal' : 'diseased'} severity={i === 0 ? 0 : severity} lightBackground={light} />
       </div>)}
     </div> : <div style={{...layout.subject, position: 'absolute', transform: `scale(${zoom})`}}>
-      <Organ state={kind === 'timelapse' ? 'diseased' : anatomy.state} severity={severity} emphasizeFlow={kind === 'process'} />
+      <Organ state={kind === 'timelapse' ? 'diseased' : anatomy.state} severity={severity} emphasizeFlow={kind === 'process'} lightBackground={light} />
     </div>}
     <MascotGuide scene={scene} />
   </AbsoluteFill>;

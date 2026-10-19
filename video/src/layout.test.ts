@@ -48,12 +48,16 @@ describe('layouts', () => {
 });
 
 
-it('limits all regular mascot boxes to 24% vertical and 30% landscape', () => {
+it('uses presenter windows at the cut line, clear of captions and vertical buttons', () => {
   for (const layout of Object.values(LAYOUTS)) {
-    const limit = layout.frame.height * (layout.frame.height > layout.frame.width ? 0.24 : 0.30);
+    const vertical = layout.frame.height > layout.frame.width;
+    const cut = vertical ? layout.frame.height - layout.captions.bottom - layout.captions.height : layout.frame.height;
     for (const box of [layout.mechanism.mascot, layout.assets.standard, layout.assets.explain, layout.assets.outroMascot]) {
-      expect(box.height).toBeLessThanOrEqual(limit);
+      expect(box.height / layout.frame.height).toBeCloseTo(vertical ? 0.30 : 0.38);
+      expect(box.top + box.height).toBe(cut);
       expect(inside(box, layout.frame)).toBe(true);
+      if (vertical) expect(box.left + box.width).toBeLessThanOrEqual(layout.frame.width * 0.88);
+      else expect(box.left + box.width).toBeLessThanOrEqual(layout.captions.left);
     }
   }
 });

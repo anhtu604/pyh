@@ -137,4 +137,4 @@ def test_checked_in_artwork_loads_and_validates() -> None:
     dimensions = {asset.png_dimensions() for asset in brand.mascot.artwork.values()}
     assert len(dimensions) == 1
     width, height = dimensions.pop()
-    assert width == height and width >= 768
+    assert min(width, height) >= 768

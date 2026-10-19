@@ -221,3 +221,43 @@ nguyên.
   trong `assets/brand/mascot/`, khai báo trong `mascot.artwork` với SHA-256. `creator`/`license`
   ghi rõ nguồn: ảnh tạo bằng AI theo yêu cầu của PYH.
 - Placeholder SVG chỉ còn là đường dự phòng khi thiếu artwork.
+
+## 11. Mascot kiểu người dẫn (18-10-2026, thay §5.5 và phần mascot của §6)
+
+Tham khảo kênh Vui Vẻ (YouTube `83yfLZpp2U4`, `lzPkXdsqogc`), người dùng đã duyệt cả ba hướng.
+
+### 11.1. Viền nướng sẵn vào PNG
+
+- Bỏ đĩa tròn `off_white` sau mascot ở mọi nơi (`MascotGuide`, thẻ cuối).
+- Mỗi pose có hai lớp viền tính trên kênh alpha: viền trong màu `night`, dày khoảng 1,6% chiều
+  cao nhân vật; viền ngoài `off_white` mảnh hơn (khoảng một nửa viền trong) kiểu sticker.
+  Đặt trên nền sáng hay tối thì nhân vật đều tách khỏi nền. Không dùng CSS/SVG filter.
+- Script `tools/build_mascot_artwork.py` (Pillow, xác định) đọc ảnh gốc chưa viền ở
+  `assets/brand/mascot/source/<pose>.png`, rồi ghi `assets/brand/mascot/<pose>.png`. Ảnh được
+  cắt sát theo nhân vật cộng viền và một lề nhỏ, ba pose cùng kích thước canvas. Không bắt buộc
+  canvas vuông; cạnh ngắn vẫn ≥ 768. Cập nhật SHA-256 trong profile.
+
+### 11.2. Vị trí người dẫn, cắt ở cạnh dưới
+
+- Mascot đứng ở một bên khung, đối diện vùng nội dung, bị cắt ngang đùi: chỉ thấy khoảng 65%
+  phía trên của nhân vật.
+- **16:9:** đường cắt là cạnh dưới khung. Phần nhìn thấy cao khoảng 38% chiều cao khung.
+- **9:16:** đường cắt là mép trên của dải phụ đề (dải đáy dành cho phụ đề và giao diện
+  TikTok). Phần nhìn thấy cao khoảng 30% chiều cao khung, nằm ngoài cột nút bên phải.
+- Ảnh luôn hướng phải. Đứng ở nửa phải khung thì lật ngang để nhìn vào nội dung (đã có).
+- Chuyển động: spring trồi lên từ đường cắt, nhấp nhô nhẹ; không để lộ khoảng trống dưới
+  đường cắt.
+- Giới hạn 30%/24% của §5.5 được thay bằng các mức trên. Vẫn không che phụ đề, source marker
+  hay vật thể đang hoạt họa chính.
+
+### 11.3. Nền sáng cho cảnh có mascot
+
+- Cảnh cơ chế (`MechanismScene` và các cảnh dùng nó) có mascot thì dùng nền `off_white`;
+  không có mascot thì giữ nền `night`. Chữ và nét trên cảnh phải đủ tương phản với nền sáng.
+- Thẻ cuối giữ nền `night`. Mascot `welcome` toàn thân, không đĩa tròn, cao khoảng 30% khung
+  9:16; viền off_white giúp nhân vật nổi trên nền tối.
+
+### 11.4. Để sau
+
+Thêm biểu cảm (ngạc nhiên, suy nghĩ, đắc ý) từ cùng nhân vật B bằng AI. Việc này chưa làm
+trong đợt này.

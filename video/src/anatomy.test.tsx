@@ -65,8 +65,9 @@ describe('mechanism scenes', () => {
             clock.frame = frame;
             const output = html(Component, {...scene, anatomy: {...scene.anatomy!, subject}}, format);
             expect(output).toContain('<svg');
-            expect(output).toContain('background-color:#0A1C2E');
-            expect(output).toContain('data-mascot-plate="true"');
+            expect(output).toContain('background-color:#F7F4EC');
+            expect(output).toContain('data-mascot-presenter="true"');
+            expect(output).not.toContain('data-mascot-plate');
             expect(output).toContain('/static/assets/explain.svg');
             expect(output).not.toContain(scene.narration);
             expect(output).not.toMatch(/NaN|Infinity|linearGradient|radialGradient|filter=|animation:/);
@@ -120,24 +121,30 @@ describe('visual regression fixes', () => {
     expect(output).toContain('data-vessel="pulmonary-trunk"');
     expect(output).toContain('viewBox="40 10 440 540"');
   });
-  it('centres vertical subject, comparisons and mascot at frame x=540', () => {
-    const l = LAYOUTS.vertical_clip.mechanism;
-    for (const box of [l.subject, ...l.comparison, l.mascot]) {
-      expect(Math.abs(box.left + box.width / 2 - 540)).toBeLessThanOrEqual(2);
-    }
-    for (const box of [l.subject, ...l.comparison]) {
-      expect(box.top + box.height * 1.075).toBeLessThan(l.mascot.top);
+  it('keeps organs opposite the presenter without overlapping its window', () => {
+    for (const layout of Object.values(LAYOUTS)) {
+      const l = layout.mechanism;
+      for (const box of [l.subject, ...l.comparison]) {
+        if (layout.frame.height > layout.frame.width) {
+          expect(box.top + box.height * 1.075).toBeLessThan(l.mascot.top);
+          expect(box.left + box.width / 2).toBeGreaterThan(l.mascot.left + l.mascot.width / 2);
+        } else {
+          expect(box.left).toBeGreaterThanOrEqual(l.mascot.left + l.mascot.width);
+        }
+      }
     }
   });
-  it.each([['youtube_long', 324], ['vertical_clip', 450]] as const)('caps the %s mascot height within the approved frame proportion', (format, height) => {
-    const box = LAYOUTS[format].mechanism.mascot;
-    expect(box.height).toBe(height);
-    expect(box.height).toBeLessThanOrEqual(LAYOUTS[format].frame.height * (format === 'youtube_long' ? 0.30 : 0.24));
-    expect(box.width).toBeGreaterThanOrEqual(Math.floor(height * 760 / 900));
-    const output = html(AnatomyScene, scene, format);
-    expect(output).toContain(`height:${height}px`);
-    expect(output).toContain('background-color:#F7F4EC');
-    expect(output).toContain('border-radius:50%');
+  it.each([AnatomyScene, ProcessScene, ComparisonScene, TimelapseScene])('%s selects the background by mascot presence, not by other assets', (Component) => {
+    expect(html(Component)).toContain(`background-color:${brand.off_white};color:${brand.navy}`);
+    for (const visual_assets of [[], [{path: 'brand.svg', role: 'brand' as const}]]) {
+      const output = html(Component, {...scene, visual_assets});
+      expect(output).toContain(`background-color:${brand.night};color:${brand.off_white}`);
+      expect(output).not.toContain('data-mascot-presenter');
+    }
+  });
+  it('gives the process arrow contrast on both backgrounds', () => {
+    expect(html(ProcessScene)).toContain(`stroke="${brand.navy}"`);
+    expect(html(ProcessScene, {...scene, visual_assets: []})).toContain(`stroke="${brand.yellow}"`);
   });
 });
 

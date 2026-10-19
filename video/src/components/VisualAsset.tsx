@@ -1,5 +1,6 @@
 import React from 'react';
 import {Img, interpolate, staticFile, useCurrentFrame} from 'remotion';
+import {PresenterMascot} from './PresenterMascot';
 import {LAYOUTS, useLayout} from '../layout';
 import type {FrameLayout} from '../layout';
 import type {VisualAssetRef} from '../types';
@@ -20,6 +21,7 @@ export const VisualAsset: React.FC<{asset: VisualAssetRef; outro?: boolean; box?
   const frame = useCurrentFrame();
   const layout = useLayout();
   const box = overrideBox ?? visualAssetBox(asset, outro, layout);
+  if (asset.role === 'mascot') return <PresenterMascot asset={asset} box={box} />;
   const opacity = interpolate(frame, [0, 10], [0, 1], {extrapolateRight: 'clamp'});
   return (
     <Img

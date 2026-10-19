@@ -3,7 +3,7 @@ import {useCurrentFrame, useVideoConfig} from 'remotion';
 import type {Anatomy} from '../types';
 import {anatomyColors as c, brand} from './palette';
 
-export type OrganProps = Pick<Anatomy, 'state' | 'severity'> & {emphasizeFlow?: boolean};
+export type OrganProps = Pick<Anatomy, 'state' | 'severity'> & {emphasizeFlow?: boolean; lightBackground?: boolean};
 export const arteryGeometry = (state: Anatomy['state'], severity: number, frame: number, fps: number) => {
   const disease = state === 'diseased' ? Math.max(0, Math.min(1, severity)) : 0;
   const pulse = Math.sin(frame / fps * Math.PI * 2 * 1.1);
@@ -13,7 +13,7 @@ export const arteryGeometry = (state: Anatomy['state'], severity: number, frame:
     flowSpeed: 52 - disease * 33, cellCount: 9 + Math.round(disease * 9)};
 };
 
-export const ArterySection: React.FC<OrganProps> = ({state, severity, emphasizeFlow = false}) => {
+export const ArterySection: React.FC<OrganProps> = ({state, severity, emphasizeFlow = false, lightBackground = false}) => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
   const g = arteryGeometry(state, severity, frame, fps);
@@ -36,6 +36,6 @@ export const ArterySection: React.FC<OrganProps> = ({state, severity, emphasizeF
         <ellipse cy="-4" rx="10" ry="5" fill={c.bloodLight} />
       </g>;
     })}
-    {emphasizeFlow && <path d="M240 510 H320 L306 498 M320 510 L306 522" fill="none" stroke={brand.yellow} strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />}
+    {emphasizeFlow && <path d="M240 510 H320 L306 498 M320 510 L306 522" fill="none" stroke={lightBackground ? brand.navy : brand.yellow} strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />}
   </svg>;
 };

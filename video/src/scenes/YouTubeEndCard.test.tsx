@@ -15,13 +15,14 @@ vi.mock('remotion', async (original) => ({
   useCurrentFrame: () => clock.frame, useVideoConfig: () => ({fps: 30}),
 }));
 
-it('shows configured text, brand colours and the welcome asset through MascotGuide', () => {
+it('shows configured text, brand colours and the full-body welcome asset without a plate', () => {
   const output = renderToStaticMarkup(<YouTubeEndCard text="Custom YouTube invitation" mascotPath="clips/cta/welcome.svg" />);
   expect(output.replace(/<[^>]+>/g, '')).toContain('Custom YouTube invitation');
   expect(output).toContain('/static/clips/cta/welcome.svg');
   expect(output).toContain(brand.off_white);
   expect(output).toContain(brand.night);
-  expect(output).toContain('data-mascot-plate="true"');
+  expect(output).not.toContain('data-mascot-plate');
+  expect(output).not.toContain('data-mascot-presenter');
   expect(output).toContain('PYH mascot welcome');
   const box = LAYOUTS.vertical_clip.mechanism.mascot;
   expect(box.left + box.width).toBeLessThan(1080 * 0.85);
@@ -37,7 +38,7 @@ it('enters then bobs deterministically, uses only a registered mascot, and suppo
     clock.frame = 45;
     const settled = render();
     expect(settled).toContain('/static/registered/caution.svg');
-    expect(settled).toContain(`left:${layout.mechanism.mascot.left}px`);
+    expect(settled).toContain(`left:${layout.mechanism.mascot.left}${layout.mechanism.mascot.left ? 'px' : ''};`);
     expect(render()).toBe(settled);
     clock.frame = 55;
     expect(render()).not.toBe(settled);
@@ -53,8 +54,9 @@ it('centres text and mascot as one group with a shared spring and literal YouTub
     expect(group.top + group.height / 2).toBe(layout.frame.height / 2);
     expect(group.left + mascot.left + mascot.width / 2).toBeCloseTo(layout.frame.width / 2, 6);
     if (layout.frame.height > layout.frame.width) {
-      expect(group.top).toBeGreaterThanOrEqual(layout.frame.height / 3);
-      expect(group.top + group.height).toBeLessThanOrEqual(layout.frame.height * 2 / 3);
+      expect(mascot.height / layout.frame.height).toBeCloseTo(0.30);
+      expect(group.top).toBeGreaterThanOrEqual(200);
+      expect(group.top + group.height).toBeLessThanOrEqual(layout.frame.height - layout.captions.bottom - layout.captions.height);
       expect(group.left + group.width).toBeLessThanOrEqual(layout.frame.width * 0.85);
     }
     const render = (text: string) => renderToStaticMarkup(<LayoutContext.Provider value={layout}><YouTubeEndCard text={text} mascotPath="cta.svg" /></LayoutContext.Provider>);

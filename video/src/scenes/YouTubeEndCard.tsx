@@ -2,14 +2,13 @@ import {FONT_FAMILY} from '../fonts';
 import React from 'react';
 import {AbsoluteFill, Img, staticFile, spring, useCurrentFrame, useVideoConfig} from 'remotion';
 import {brand} from '../anatomy/palette';
-import {MascotGuide} from '../components/MascotGuide';
 import {useLayout} from '../layout';
 
 export const endCardGeometry = (width: number, height: number) => {
   const vertical = height > width;
   const groupWidth = vertical ? 740 : 1200;
-  const mascotHeight = vertical ? 350 : 300;
-  const mascotWidth = mascotHeight * 380 / 450;
+  const mascotHeight = vertical ? height * 0.30 : 300;
+  const mascotWidth = mascotHeight * 998 / 1351;
   const logoHeight = vertical ? 64 : 48;
   const logoWidth = logoHeight * 760 / 300;
   const groupHeight = 174 + 16 + mascotHeight + 32 + logoHeight;
@@ -35,7 +34,7 @@ export const YouTubeEndCard: React.FC<{text: string; mascotPath: string; logoPat
           {i > 0 && <span style={{color: brand.yellow}}>YouTube</span>}{part}
         </React.Fragment>)}</span>
       </div>
-      <MascotGuide box={mascot} groupEntrance scene={{visual_assets: [{path: mascotPath, role: 'mascot', pose: 'welcome'}]}} />
+      <Img aria-label="PYH mascot welcome" src={staticFile(mascotPath)} style={{...mascot, position: 'absolute', objectFit: 'contain'}} />
       <Img aria-label="PYH logo" src={staticFile(logoPath)} style={{...logo, position: 'absolute', objectFit: 'contain'}} />
     </div>
   </AbsoluteFill>;
