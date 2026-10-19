@@ -8,6 +8,7 @@ from pathlib import Path
 
 from healthvideo.domain.project import ProjectManifest
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
+from healthvideo.storage.files import read_yaml
 from healthvideo.storage.lease import read_write_lease
 from healthvideo.storage.project_layout import ProjectLayout, resolve_project_layout
 
@@ -118,16 +119,37 @@ def get_next_action(project_dir: Path) -> OperatorAction:
                 layout.project_dir,
                 layout.artifact_root,
                 OperatorActionKind.ORIENTATION_RESEARCH,
-                "Research and validate orientation sources for this topic.",
+                "Author a scope file from the topic card, then run "
+                f'`healthvideo operator orientation "{layout.project_dir}" '
+                "--scope <scope-input.yaml>`.",
                 "orientation/scope.yaml",
                 "/pyh tìm hiểu chủ đề",
             )
         case WorkflowState.ORIENTATION_RESEARCH_IN_PROGRESS:
+            search_log = layout.artifact_root / "orientation/search-log.yaml"
+            outcomes = (
+                read_yaml(search_log).get("provider_outcomes", [])
+                if search_log.is_file() and search_log.read_text(encoding="utf-8").strip()
+                else []
+            )
+            ready_to_complete = (
+                bool(outcomes)
+                and all(item.get("status") in {"completed", "zero_results"} for item in outcomes)
+                and any(item.get("status") == "completed" for item in outcomes)
+                and (layout.artifact_root / "orientation/candidates.jsonl").is_file()
+            )
             return _action(
                 layout.project_dir,
                 layout.artifact_root,
                 OperatorActionKind.ORIENTATION_RESEARCH,
-                "Resume orientation research; record source failures rather than guessing.",
+                (
+                    "Prepare a completed record using only recorded candidates, then run "
+                    f'`healthvideo operator orientation-complete "{layout.project_dir}" '
+                    '--file <completed.yaml>`.'
+                    if ready_to_complete else
+                    f'Run `healthvideo operator orientation-search "{layout.project_dir}"`; '
+                    "record source failures rather than guessing."
+                ),
                 "orientation/scope.yaml",
                 "/pyh tìm hiểu chủ đề",
             )

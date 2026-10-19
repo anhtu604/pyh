@@ -9,9 +9,10 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from yaml import YAMLError
 
 from healthvideo.domain.author import AuthorBrief
-from healthvideo.domain.orientation import OrientationScope
+from healthvideo.domain.orientation import CompletedOrientation, OrientationScope
 from healthvideo.domain.topic import TopicCard
 from healthvideo.storage.files import read_yaml
 from healthvideo.storage.lease import read_write_lease
@@ -20,7 +21,11 @@ from healthvideo.workflows.create_project_v2 import create_project_v2
 from healthvideo.workflows.draft import submit_draft, submit_medical_review
 from healthvideo.workflows.operations import project_mutation
 from healthvideo.workflows.operator import get_next_action, render_status
-from healthvideo.workflows.orientation import begin_orientation
+from healthvideo.workflows.orientation import (
+    begin_orientation,
+    complete_orientation,
+    run_orientation_search,
+)
 from healthvideo.workflows.topic import select_topic
 
 app = typer.Typer(no_args_is_help=True)
@@ -94,6 +99,46 @@ def orientation(
             project_dir, OrientationScope.model_validate(read_yaml(scope))
         )
     except (OSError, TypeError, ValueError) as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
+    typer.echo(changed.state.value)
+
+
+@app.command("orientation-search")
+@project_mutation("operator_orientation_search")
+def orientation_search(
+    project_dir: Annotated[Path, typer.Argument(help="Thư mục project")],
+) -> None:
+    """Search orientation sources and report each provider's outcome as JSON."""
+    # Import lazily: cli registers this operator app and owns the shared factory.
+    from healthvideo.cli import get_default_clients
+
+    try:
+        result = run_orientation_search(
+            project_dir, get_default_clients(), now=datetime.now().astimezone()
+        )
+    except (OSError, TypeError, ValueError) as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
+    typer.echo(json.dumps({
+        "provider_outcomes": [item.model_dump(mode="json") for item in result.provider_outcomes],
+        "candidate_count": len(result.candidates),
+    }, ensure_ascii=False))
+
+
+@app.command("orientation-complete")
+@project_mutation("operator_orientation_complete")
+def orientation_complete(
+    project_dir: Annotated[Path, typer.Argument(help="Thư mục project")],
+    file: Annotated[Path, typer.Option("--file", help="Completed orientation YAML")],
+) -> None:
+    """Validate a candidate-bound completed record and open editorial direction."""
+    try:
+        completed = CompletedOrientation.model_validate(read_yaml(file))
+        changed = complete_orientation(
+            project_dir, completed, now=datetime.now().astimezone()
+        )
+    except (OSError, TypeError, ValueError, YAMLError) as error:
         typer.echo(str(error))
         raise typer.Exit(code=1) from error
     typer.echo(changed.state.value)

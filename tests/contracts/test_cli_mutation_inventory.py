@@ -26,6 +26,8 @@ EXPECTED = {
     "src/healthvideo/commands/operator.py": {
         "select",
         "orientation",
+        "orientation_search",
+        "orientation_complete",
         "brief",
         "draft",
         "submit_medical",
