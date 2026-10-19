@@ -166,8 +166,9 @@ def run_orientation_search(
     clients: Sequence[Any],
     *,
     now: datetime,
+    queries: Sequence[str] = (),
 ) -> OrientationRunResult:
-    """Search each provider once, keeping failures distinct from empty results."""
+    """Search each query with every provider, preserving failures and first candidates."""
     manifest = _read_manifest(project_dir)
     if manifest.state is not WorkflowState.ORIENTATION_RESEARCH_IN_PROGRESS:
         raise ValueError(
@@ -177,41 +178,54 @@ def run_orientation_search(
 
     orientation_dir = _orientation_dir(project_dir, manifest)
     scope = read_yaml(orientation_dir / "scope.yaml")
-    query = scope["topic_question"]
+    search_queries = [query.strip() for query in queries]
+    if any(not query for query in search_queries):
+        raise ValueError("search queries must not be blank")
+    if not search_queries:
+        search_queries = [scope["topic_question"]]
 
     outcomes: list[ProviderOutcome] = []
     candidates: list[CandidateSource] = []
-    for index, client in enumerate(clients):
-        provider = _provider_name(client, index)
-        query_id = f"{provider}-{index}"
-        try:
-            found = _search_one(client, query)
-        except (TypeError, ValueError, OSError) as error:
+    seen_source_ids: set[str] = set()
+    query_records: list[dict[str, Any]] = []
+    for query in search_queries:
+        query_ids: list[str] = []
+        query_records.append({"query": query, "query_ids": query_ids})
+        for index, client in enumerate(clients):
+            provider = _provider_name(client, index)
+            query_id = f"{provider}-{len(outcomes)}"
+            query_ids.append(query_id)
+            try:
+                found = _search_one(client, query)
+            except (TypeError, ValueError, OSError) as error:
+                outcomes.append(
+                    ProviderOutcome(
+                        provider=provider,
+                        query_id=query_id,
+                        status="failed",
+                        failure_class=type(error).__name__,
+                        error_summary=str(error) or type(error).__name__,
+                    )
+                )
+                continue
+            for candidate in found:
+                if candidate.source_id not in seen_source_ids:
+                    candidates.append(candidate)
+                    seen_source_ids.add(candidate.source_id)
             outcomes.append(
                 ProviderOutcome(
                     provider=provider,
                     query_id=query_id,
-                    status="failed",
-                    failure_class=type(error).__name__,
-                    error_summary=str(error) or type(error).__name__,
+                    status="completed" if found else "zero_results",
+                    result_count=len(found),
                 )
             )
-            continue
-        candidates.extend(found)
-        outcomes.append(
-            ProviderOutcome(
-                provider=provider,
-                query_id=query_id,
-                status="completed" if found else "zero_results",
-                result_count=len(found),
-            )
-        )
 
     write_yaml_atomic(
         orientation_dir / "search-log.yaml",
         {
             "schema_version": "1.0",
-            "query": query,
+            "queries": query_records,
             "searched_at": now.isoformat(),
             "provider_outcomes": [
                 outcome.model_dump(mode="json") for outcome in outcomes

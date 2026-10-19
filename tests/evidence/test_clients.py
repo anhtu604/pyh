@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 from urllib.request import Request
 
 import pytest
@@ -7,6 +8,7 @@ import pytest
 from healthvideo.evidence.clients import (
     CrossrefClient,
     EuropePMCClient,
+    ProviderResponseError,
     PubMedClient,
     ScopusPolicyError,
     check_scopus_policy,
@@ -121,3 +123,66 @@ def test_local_source_caching(tmp_path: Path) -> None:
     assert get_cached_response(cache_dir, key) is None
     store_cached_response(cache_dir, key, data)
     assert get_cached_response(cache_dir, key) == data
+
+
+@pytest.mark.parametrize("credentials", [True, False])
+def test_pubmed_credentials_in_both_requests(monkeypatch, credentials) -> None:
+    monkeypatch.delenv("NCBI_EMAIL", raising=False)
+    monkeypatch.delenv("NCBI_API_KEY", raising=False)
+    if credentials:
+        monkeypatch.setenv("NCBI_EMAIL", "doctor@example.org")
+        monkeypatch.setenv("NCBI_API_KEY", "test-key")
+    requests = []
+
+    def transport(req: Request) -> bytes:
+        requests.append(parse_qs(urlsplit(req.full_url).query))
+        return b"{}"
+
+    client = PubMedClient(transport=transport)
+    client.search("sodium")
+    client.fetch_summaries(["9"])
+    assert len(requests) == 2
+    for params in requests:
+        assert params["email"] == [
+            "doctor@example.org" if credentials else "healthvideo@example.org"
+        ]
+        if credentials:
+            assert params["api_key"] == ["test-key"]
+        else:
+            assert "api_key" not in params
+
+
+def test_pubmed_explicit_credentials_override_environment(monkeypatch) -> None:
+    monkeypatch.setenv("NCBI_EMAIL", "env@example.org")
+    monkeypatch.setenv("NCBI_API_KEY", "env-key")
+    requests = []
+
+    def transport(req: Request) -> bytes:
+        requests.append(parse_qs(urlsplit(req.full_url).query))
+        return b"{}"
+
+    client = PubMedClient(email="explicit@example.org", api_key="explicit-key", transport=transport)
+    client.search("sodium")
+    client.fetch_summaries(["9"])
+    for params in requests:
+        assert params["email"] == ["explicit@example.org"]
+        assert params["api_key"] == ["explicit-key"]
+
+
+@pytest.mark.parametrize("body", [b"  <html>private response</html>", b"invalid JSON"])
+@pytest.mark.parametrize("method", ["search", "fetch_summaries", "europepmc"])
+def test_non_json_response_is_safe_provider_error(body, method) -> None:
+    client = (
+        EuropePMCClient(transport=lambda req: body) if method == "europepmc"
+        else PubMedClient(transport=lambda req: body)
+    )
+    with pytest.raises(ProviderResponseError, match="non-JSON") as caught:
+        if method == "fetch_summaries":
+            client.fetch_summaries(["9"])
+        else:
+            client.search("sodium")
+    message = str(caught.value)
+    assert "<html>" not in message
+    assert "private response" not in message
+    assert "invalid JSON" not in message
+    assert ("Europe PMC" if method == "europepmc" else "PubMed") in message

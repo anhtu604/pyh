@@ -16,6 +16,7 @@ from healthvideo.domain.orientation import (
 )
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.topic import TopicCard
+from healthvideo.evidence.clients import ProviderResponseError
 from healthvideo.storage.files import read_yaml
 from healthvideo.storage.immutable import write_yaml_once
 from healthvideo.workflows.create_project_v2 import create_project_v2
@@ -379,3 +380,77 @@ def test_changed_scope_discards_the_previous_working_candidates(
     assert candidate_file.read_text(encoding="utf-8") == ""
     with pytest.raises(ValueError, match="included candidate is missing"):
         complete_orientation(project, _completed(project), now=FROZEN_NOW)
+
+
+@pytest.mark.parametrize("queries", [(), ("  sodium reduction  ", "blood pressure")])
+def test_search_queries_and_scope_binding(tmp_path: Path, queries) -> None:
+    project = _researching_project(tmp_path)
+    orientation = project / "revisions/001/orientation"
+    scope_before = (orientation / "scope.yaml").read_bytes()
+    calls = []
+
+    class RecordingClient(StubClient):
+        def search(self, query: str, limit: int = 10) -> list[CandidateSource]:
+            calls.append((query, self.name))
+            return super().search(query, limit)
+
+    result = run_orientation_search(
+        project, [RecordingClient("X", []), RecordingClient("Y", [])],
+        now=FROZEN_NOW, queries=queries,
+    )
+    expected = [query.strip() for query in queries] or [SCOPE.topic_question]
+    assert calls == [(query, name) for query in expected for name in ("X", "Y")]
+    ids = [f"{name}-{index}" for index, (_, name) in enumerate(calls)]
+    assert [outcome.query_id for outcome in result.provider_outcomes] == ids
+    log = read_yaml(orientation / "search-log.yaml")
+    assert log["queries"] == [
+        {"query": query, "query_ids": ids[index * 2:index * 2 + 2]}
+        for index, query in enumerate(expected)
+    ]
+    assert set(log) == {"schema_version", "searched_at", "queries", "provider_outcomes"}
+    assert (orientation / "scope.yaml").read_bytes() == scope_before
+    stages = list((project / "revisions/001/workflow/stages/orientation_search").glob("*.yaml"))
+    assert stages
+    assert read_yaml(stages[-1])["input_hash"] == read_yaml(orientation / "scope.yaml")[
+        "topic_input_hash"
+    ]
+
+
+def test_search_keeps_first_candidate_per_source_id(tmp_path: Path) -> None:
+    project = _researching_project(tmp_path)
+    first = _candidate()
+    duplicate = first.model_copy(update={"title": "Later metadata"})
+    result = run_orientation_search(
+        project, [StubClient("X", [first]), StubClient("Y", [duplicate, _candidate("other")])],
+        now=FROZEN_NOW, queries=["sodium", "blood pressure"],
+    )
+    assert result.candidates == (first, _candidate("other"))
+    lines = (project / "revisions/001/orientation/candidates.jsonl").read_text(
+        encoding="utf-8"
+    ).splitlines()
+    assert len(lines) == 2
+    assert [outcome.result_count for outcome in result.provider_outcomes] == [1, 2, 1, 2]
+
+
+@pytest.mark.parametrize("queries", [[""], ["  "], ["sodium", "\t"]])
+def test_search_rejects_blank_queries_before_search(tmp_path: Path, queries) -> None:
+    project = _researching_project(tmp_path)
+    with pytest.raises(ValueError, match="blank"):
+        run_orientation_search(project, [], now=FROZEN_NOW, queries=queries)
+    assert not (project / "revisions/001/orientation/search-log.yaml").exists()
+
+
+def test_provider_response_error_is_recorded_as_failed(tmp_path: Path) -> None:
+    project = _researching_project(tmp_path)
+
+    class HTMLClient:
+        def search(self, query: str, limit: int = 10):
+            raise ProviderResponseError("PubMed returned a non-JSON response")
+
+    result = run_orientation_search(project, [HTMLClient()], now=FROZEN_NOW)
+    outcome = result.provider_outcomes[0]
+    assert outcome.status == "failed"
+    assert outcome.failure_class == "ProviderResponseError"
+    assert outcome.result_count is None
+    log = read_yaml(project / "revisions/001/orientation/search-log.yaml")
+    assert log["provider_outcomes"][0]["failure_class"] == "ProviderResponseError"

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import urllib.parse
 import urllib.request
@@ -20,6 +21,25 @@ DEFAULT_USER_AGENT = "HealthVideo/0.1.0 (https://github.com/anhtu604/pyh; mailto
 def _default_transport(req: urllib.request.Request) -> bytes:
     with urllib.request.urlopen(req, timeout=15) as resp:
         return resp.read()
+
+
+class ProviderResponseError(ValueError):
+    """A provider returned a response that cannot be read as JSON."""
+
+
+def _load_json(raw: bytes, provider: str) -> dict:
+    message = f"{provider} returned a non-JSON (likely HTML) response"
+    if provider == "PubMed":
+        message += (
+            "; NCBI may be blocking this IP — set NCBI_EMAIL / NCBI_API_KEY "
+            "or retry from another network"
+        )
+    if raw.lstrip().startswith(b"<"):
+        raise ProviderResponseError(message)
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        raise ProviderResponseError(message) from None
 
 
 class ScopusPolicyError(Exception):
@@ -53,11 +73,15 @@ def store_cached_response(cache_dir: Path, key: str, data: bytes) -> Path:
 class PubMedClient:
     def __init__(
         self,
-        email: str = "healthvideo@example.org",
+        email: str | None = None,
         tool: str = "healthvideo",
         transport: Transport | None = None,
+        api_key: str | None = None,
     ) -> None:
-        self.email = email
+        self.email = (
+            email if email is not None else os.environ.get("NCBI_EMAIL", "healthvideo@example.org")
+        )
+        self.api_key = api_key if api_key is not None else os.environ.get("NCBI_API_KEY")
         self.tool = tool
         self.transport = transport or _default_transport
         self.base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"
@@ -71,10 +95,12 @@ class PubMedClient:
             "email": self.email,
             "tool": self.tool,
         }
+        if self.api_key:
+            params["api_key"] = self.api_key
         url = f"{self.base_url}esearch.fcgi?{urllib.parse.urlencode(params)}"
         req = urllib.request.Request(url, headers={"User-Agent": DEFAULT_USER_AGENT})
         raw = self.transport(req)
-        data = json.loads(raw)
+        data = _load_json(raw, "PubMed")
         return data.get("esearchresult", {}).get("idlist", [])
 
     def fetch_summaries(self, pmids: list[str]) -> list[CandidateSource]:
@@ -87,10 +113,12 @@ class PubMedClient:
             "email": self.email,
             "tool": self.tool,
         }
+        if self.api_key:
+            params["api_key"] = self.api_key
         url = f"{self.base_url}esummary.fcgi?{urllib.parse.urlencode(params)}"
         req = urllib.request.Request(url, headers={"User-Agent": DEFAULT_USER_AGENT})
         raw = self.transport(req)
-        data = json.loads(raw)
+        data = _load_json(raw, "PubMed")
         result_dict = data.get("result", {})
         uids = result_dict.get("uids", [])
         candidates: list[CandidateSource] = []
@@ -132,7 +160,7 @@ class EuropePMCClient:
         url = f"{self.base_url}search?{urllib.parse.urlencode(params)}"
         req = urllib.request.Request(url, headers={"User-Agent": DEFAULT_USER_AGENT})
         raw = self.transport(req)
-        data = json.loads(raw)
+        data = _load_json(raw, "Europe PMC")
         results = data.get("resultList", {}).get("result", [])
         candidates: list[CandidateSource] = []
         for res in results:

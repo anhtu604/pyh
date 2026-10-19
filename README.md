@@ -124,6 +124,7 @@ applicability, per-claim doctor notes — hoãn sang M3).
 
 | Task | Deliverable | Status | Tests | Commit |
 | --- | --- | --- | --- | --- |
+| Orientation search tiếng Việt | Truy vấn tiếng Anh qua `--query` lặp lại, log theo truy vấn, khử trùng `source_id`; cấu hình NCBI qua môi trường và báo lỗi HTML an toàn; giữ scope/hash | complete | focused 152 passed; pytest 1311 passed, 3 skipped; Ruff; `git diff --check`; pilot rerun: Europe PMC 20 ứng viên, PubMed bị NCBI chặn IP (`ProviderResponseError`) | `feat: add orientation search queries and NCBI env config` |
 | Explain-first spec §14–§15 | Giọng nội dung: cân bằng kiến thức, độ hấp dẫn, hài hước (châm biếm niềm tin không châm biếm người; câu đùa có số liệu vẫn qua cổng 1; hook 3 giây, điểm thưởng 30–45 giây, câu chốt); giọng đọc chọn giữa VoiceStudio và VieNeu; chọn chủ đề: Haiku 5.5 kéo ứng viên → Jev chấm chọn → bác sĩ chốt, mỗi chủ đề một phiên chat | approved 2026-10-19 | spec self-review; `git diff --check` | `docs: add tone and topic selection to explain-first spec` |
 | Orientation CLI | `healthvideo operator orientation-search <project>` (PubMed + Europe PMC qua `get_default_clients`, ghi từng provider completed/zero_results/failed) và `operator orientation-complete <project> --file <completed.yaml>` (chỉ nhận ứng viên đã ghi, mở `awaiting_editorial_direction`); `operator status` hướng dẫn từng bước trong `message`; skill pyh cập nhật | complete | TDD; pytest 1294 passed, 3 skipped; Ruff; schema export không đổi; `git diff --check` | `feat: expose orientation search and complete in CLI` |
 | PYH brand thẻ cuối 16:9 | Giữ CTA `youtube_cta` chỉ cho `vertical_clip` (người dùng chốt 19-10-2026); thẻ cuối 16:9 chỉ là still duyệt bố cục (`.tmp/brand-review/end-16x9.png`, mascot 300 px, logo 48 px cách 32 px); spec §9 cập nhật | complete | Claude xem still 16:9; 9:16 không đổi pixel; pytest 1283 passed, 3 skipped; vitest 94 passed; typecheck; Ruff; schema export không đổi | `docs: scope 16:9 end card to review still` |
@@ -267,6 +268,9 @@ Python CLI điều phối artifact YAML/JSON theo schema. Domain thuần Python 
 khỏi TTS và renderer; Remotion nhận `render-input.json` bất biến.
 
 ## Lệnh kỹ thuật và tương thích v1
+
+PubMed đọc email liên hệ từ `NCBI_EMAIL` và API key tùy chọn từ `NCBI_API_KEY` trong môi trường.
+Đặt các giá trị này trước khi chạy; không lưu API key vào Git.
 
 ```powershell
 # Cài lại an toàn được: chỉ tạo/cập nhật .venv và dependencies trong repo.

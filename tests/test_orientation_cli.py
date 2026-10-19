@@ -165,3 +165,27 @@ def test_orientation_status_guides_begin_search_complete(tmp_path, monkeypatch):
     assert f'healthvideo operator orientation-complete "{project}" --file <completed.yaml>' in message
     begin_orientation(project, SCOPE.model_copy(update={"topic_question": "New scope?"}))
     assert "operator orientation-search " in guidance()
+
+
+def test_orientation_search_passes_repeatable_queries(tmp_path, monkeypatch):
+    project = _researching_project(tmp_path)
+    calls = []
+
+    class RecordingClient(StubClient):
+        def search(self, query: str, limit: int = 10):
+            calls.append(query)
+            return super().search(query, limit)
+
+    monkeypatch.setattr(
+        "healthvideo.cli.get_default_clients", lambda: [RecordingClient("pubmed", [])]
+    )
+    result = runner.invoke(
+        app, ["operator", "orientation-search", str(project), "--query", "a", "--query", "b"]
+    )
+    assert result.exit_code == 0, result.stdout
+    assert calls == ["a", "b"]
+    log = read_yaml(project / "revisions/001/orientation/search-log.yaml")
+    assert log["queries"] == [
+        {"query": "a", "query_ids": ["pubmed-0"]},
+        {"query": "b", "query_ids": ["pubmed-1"]},
+    ]

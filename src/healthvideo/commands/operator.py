@@ -108,6 +108,13 @@ def orientation(
 @project_mutation("operator_orientation_search")
 def orientation_search(
     project_dir: Annotated[Path, typer.Argument(help="Thư mục project")],
+    query: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--query",
+            help="Truy vấn tìm kiếm (tiếng Anh); lặp lại được; mặc định dùng topic_question",
+        ),
+    ] = None,
 ) -> None:
     """Search orientation sources and report each provider's outcome as JSON."""
     # Import lazily: cli registers this operator app and owns the shared factory.
@@ -115,7 +122,7 @@ def orientation_search(
 
     try:
         result = run_orientation_search(
-            project_dir, get_default_clients(), now=datetime.now().astimezone()
+            project_dir, get_default_clients(), now=datetime.now().astimezone(), queries=query or ()
         )
     except (OSError, TypeError, ValueError) as error:
         typer.echo(str(error))
