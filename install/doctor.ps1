@@ -14,5 +14,5 @@ if (-not (Test-Path $doctor -PathType Leaf)) {
 
 & $doctor doctor
 if ($LASTEXITCODE -ne 0) {
-    exit $LASTEXITCODE
+    throw 'Environment checks failed. Follow the doctor remedies above and rerun install/doctor.ps1.'
 }

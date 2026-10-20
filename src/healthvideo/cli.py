@@ -120,6 +120,12 @@ def build_vieneu_tts(*, python: Path, voice: str, precision: str) -> NormalizedT
     return NormalizedTTS(inner)
 
 
+# Configure before Typer handles eager options such as --help, including when
+# Python's UTF-8 mode is disabled on Windows. Captured streams may lack this API.
+for _stream in (sys.stdout, sys.stderr):
+    if callable(getattr(_stream, "reconfigure", None)):
+        _stream.reconfigure(encoding="utf-8")
+
 app = typer.Typer(no_args_is_help=True)
 project_app = typer.Typer(no_args_is_help=True)
 review_app = typer.Typer(no_args_is_help=True)
