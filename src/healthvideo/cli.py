@@ -510,7 +510,7 @@ def produce(
         raise typer.Exit(code=1) from error
     if dry_run:
         logical = build_render_argv(
-            output.parent / "render-input.json", output, output.parent
+            output.parent / "render-input.json", output, output.parent, stage_fonts=False
         )
         typer.echo(subprocess.list2cmdline(resolve_pnpm_argv(logical[1:])))
         return

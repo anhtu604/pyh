@@ -24,6 +24,11 @@ def test_youtube_long_renders_by_chapter(tmp_path: Path) -> None:
 
     def runner(argv: list[str]) -> int:
         calls.append(argv)
+        if "--public-dir" in argv:
+            public_dir = Path(argv[argv.index("--public-dir") + 1])
+            fonts = Path(__file__).resolve().parents[2] / "video/public/fonts"
+            for name in ("BeVietnamPro-SemiBold.woff2", "BeVietnamPro-ExtraBold.woff2", "OFL.txt"):
+                assert (public_dir / "fonts" / name).read_bytes() == (fonts / name).read_bytes()
         out = Path(argv[argv.index("--output") + 1]) if "--output" in argv else Path(argv[-1])
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(b"mp4")

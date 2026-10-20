@@ -34,6 +34,7 @@ def test_key_changes_with_text_renderer_and_assets() -> None:
     edited = _input(("CH01", 1800, "b"))
     assert chapter_cache_key(edited, chapter_spans(edited)[0], {}, RENDERER) != original
     assert chapter_cache_key(base, span, {}, {**RENDERER, "source_sha256": "y"}) != original
+    assert chapter_cache_key(base, span, {}, {**RENDERER, "fonts_sha256": "z"}) != original
 
 
 from pathlib import Path

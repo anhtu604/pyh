@@ -1,4 +1,5 @@
 import json
+import shutil
 from collections.abc import Callable
 from pathlib import Path
 
@@ -25,10 +26,17 @@ def renderer_identity() -> dict[str, str]:
     }
     if not source_hashes:
         raise FileNotFoundError("Remotion renderer source is missing")
+    fonts_dir = video_dir / "public" / "fonts"
+    font_hashes = {
+        path.relative_to(fonts_dir).as_posix(): sha256_file(path)
+        for path in sorted(fonts_dir.rglob("*"))
+        if path.is_file()
+    }
     return {
         "name": "remotion",
         "package_version": package_version,
         "source_sha256": canonical_json_hash(source_hashes),
+        "fonts_sha256": canonical_json_hash(font_hashes),
     }
 
 
@@ -39,12 +47,19 @@ def build_render_argv(
     *,
     frames: tuple[int, int] | None = None,
     muted: bool = False,
+    stage_fonts: bool = True,
 ) -> list[str]:
     """Build the cross-platform argv used to render the HealthVideo composition.
 
     Paths are absolute because ``pnpm --dir`` runs Remotion from ``video/``.
+    Stage renderer-owned fonts (and their license) before any runner is invoked.
+    Command previews can disable staging to keep dry runs read-only.
     """
     repository_root = Path(__file__).resolve().parents[3]
+    fonts_dir = repository_root / "video" / "public" / "fonts"
+    target_fonts = public_dir.resolve() / "fonts"
+    if stage_fonts and target_fonts != fonts_dir.resolve():
+        shutil.copytree(fonts_dir, target_fonts, dirs_exist_ok=True)
     argv = [
         "pnpm",
         "--dir",

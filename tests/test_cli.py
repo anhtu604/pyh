@@ -362,6 +362,7 @@ def test_produce_dry_run_prints_remotion_command_without_changing_state(
     assert "--dir" in result.stdout
     assert "video" in result.stdout
     assert not (project_dir / "renders" / "video.mp4").exists()
+    assert not list((project_dir / "renders").rglob("*.woff2"))
     assert (project_dir / "project.yaml").read_bytes() == original_manifest
 
 
