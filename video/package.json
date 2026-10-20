@@ -6,7 +6,8 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "render": "remotion render src/index.ts HealthVideo"
+    "render": "remotion render src/index.ts HealthVideo",
+    "studio": "remotion studio src/index.ts"
   },
   "dependencies": {
     "@remotion/cli": "4.0.522",

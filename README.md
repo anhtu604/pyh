@@ -147,6 +147,7 @@ applicability, per-claim doctor notes — hoãn sang M3).
 
 | Task | Deliverable | Status | Tests | Commit |
 | --- | --- | --- | --- | --- |
+| Xem trực quan | `healthvideo preview <project>` mở Remotion Studio từ run hiện hành v1/v2; chỉ xem, không lease/ghi/duyệt | complete (uncommitted) | TDD: 7 CLI tests; pytest 1336 passed, 3 skipped; Ruff; video 94 passed/typecheck; HTTP 200 trong 30,6 s, bytes không đổi; `git diff --check` | `feat: add healthvideo preview to open Remotion Studio` |
 | Cài `/pyh` một lệnh | Bộ cài PowerShell 5.1 dùng lại venv, VieNeu 3.6.4/Python 3.11 mặc định và `-SkipTts`; CLI UTF-8; doctor kiểm tra skill, Claude command và TTS; hướng dẫn Claude Code/Antigravity | complete | `powershell -NoProfile -ExecutionPolicy Bypass -File install/install.ps1` ×2; `.venv\Scripts\healthvideo.exe doctor`; `.venv\Scripts\python.exe -m pytest -q`; `.venv\Scripts\ruff.exe check src tests tools`; `git diff --check`; `--help` không có `PYTHONUTF8` | `feat: one-command install for /pyh in Claude Code and Antigravity` |
 | Orientation search tiếng Việt | Truy vấn tiếng Anh qua `--query` lặp lại, log theo truy vấn, khử trùng `source_id`; cấu hình NCBI qua môi trường và báo lỗi HTML an toàn; giữ scope/hash | complete | focused 152 passed; pytest 1311 passed, 3 skipped; Ruff; `git diff --check`; pilot rerun: Europe PMC 20 ứng viên, PubMed bị NCBI chặn IP (`ProviderResponseError`) | `feat: add orientation search queries and NCBI env config` |
 | Explain-first spec §14–§15 | Giọng nội dung: cân bằng kiến thức, độ hấp dẫn, hài hước (châm biếm niềm tin không châm biếm người; câu đùa có số liệu vẫn qua cổng 1; hook 3 giây, điểm thưởng 30–45 giây, câu chốt); giọng đọc chọn giữa VoiceStudio và VieNeu; chọn chủ đề: Haiku 5.5 kéo ứng viên → Jev chấm chọn → bác sĩ chốt, mỗi chủ đề một phiên chat | approved 2026-10-19 | spec self-review; `git diff --check` | `docs: add tone and topic selection to explain-first spec` |
@@ -507,6 +508,16 @@ do bác sĩ chọn; `--tts silent` giữ nguyên. Mọi lần tổng hợp lại
 duyệt video.
 
 ## Remotion preview
+
+### Xem trực quan
+
+Chạy `.venv\Scripts\healthvideo.exe preview <project>` rồi mở URL được in
+(mặc định `http://localhost:3000`) trong trình duyệt tích hợp của Antigravity IDE
+hoặc browser/preview pane của Claude Code. Studio có timeline và scrub frame;
+chọn `LongForm` (16:9) hoặc `VerticalClip` (9:16) theo format được lệnh chỉ dẫn.
+`--port 3100` đổi cổng; `--print-only` chỉ in argv và URL. Cần render hiện hành
+từ `produce` sau duyệt y khoa. Studio chỉ để xem: chỉnh props không lưu vào dự án
+và không tính là duyệt video. Ctrl+C dừng server; không tự động xuất bản.
 
 Frame kiểm tra gần nhất: [frame-001.png](tests/artifacts/frame-001.png) (1080 ×
 1920, nền trắng ngà, chữ than, bôi vàng). Đã chạy:
