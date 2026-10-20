@@ -2,9 +2,32 @@
 
 ## Bắt đầu với `/pyh`
 
+Trên Windows 11 / PowerShell 5.1, cần Python 3.11+, Node.js 22+, FFmpeg 8+
+trên PATH và pnpm 11+ hoặc Corepack. Mở thư mục repo rồi chạy một lệnh:
+
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File install/install.ps1
-# Trong Codex hoặc Claude Code:
+```
+
+Bộ cài dùng lại `.venv`, cài dependency Python/video và mặc định tạo môi trường
+Python 3.11 riêng tại `cache/tts-venv` với `vieneu==3.6.4`. Có thể chạy lại an toàn;
+TTS đã đúng phiên bản sẽ được bỏ qua. Nếu thiếu `uv`, bộ cài cài nó vào `.venv`.
+Model chỉ tải khi tổng hợp giọng lần đầu, nằm ngoài Git. Thêm `-SkipTts` vào lệnh
+trên để bỏ cài TTS; chạy lại không có switch này để bổ sung. Kiểm tra môi trường:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File install/doctor.ps1
+```
+
+Không cần sửa PATH hay đặt `PYTHONUTF8`; chạy CLI bằng
+`.venv\Scripts\healthvideo.exe` từ thư mục gốc repo. Nếu dùng PubMed, người dùng
+có thể tự đặt biến môi trường tùy chọn `NCBI_EMAIL` và `NCBI_API_KEY`; không commit
+giá trị hoặc credential. Trong Claude Code, dùng `/pyh status <project>`.
+Với Antigravity IDE hoặc `agy`, mở thư mục repo; skill `pyh` được tự nhận từ
+`.agents/skills/pyh/SKILL.md`, không cần thêm entry file.
+
+```text
+# Trong Codex, Claude Code hoặc Antigravity:
 # /pyh tìm chủ đề                  # xem/tạo topic card trong inbox cục bộ
 # /pyh chọn chủ đề                 # chọn card; tạo project v2 nếu chưa có
 # /pyh chốt brief                  # xem và xác nhận brief riêng trước nghiên cứu
@@ -126,6 +149,8 @@ applicability, per-claim doctor notes — hoãn sang M3).
 | --- | --- | --- | --- | --- |
 | Sửa font Remotion 404 | Stage `video/public/fonts/` (hai WOFF2 + OFL) vào `--public-dir` tại điểm dựng argv dùng chung cho long form/chapter/clip/vertical; renderer identity chứa hash font để vô hiệu cache khi đổi font; giữ nguyên render-input và dry run không ghi file | complete (uncommitted) | TDD; fake runner kiểm bytes font long form/clip/vertical; pytest 1345 passed, 3 skipped; Ruff; `git diff --check` | Chờ Claude review và commit |
 | Sửa `review reject` | `reject_gate` kiểm tra chuyển trạng thái trước khi ghi record từ chối (trước đây `--resume-to` sai vẫn để lại file từ chối mồ côi); `--resume-to` liệt kê trạng thái hợp lệ cho từng cổng | complete | TDD; pytest 1320 passed, 3 skipped; Ruff; `git diff --check` | `fix: validate reject transition before writing record` |
+| Xem trực quan | `healthvideo preview <project>` mở Remotion Studio từ run hiện hành v1/v2; chỉ xem, không lease/ghi/duyệt | complete (uncommitted) | TDD: 7 CLI tests; pytest 1336 passed, 3 skipped; Ruff; video 94 passed/typecheck; HTTP 200 trong 30,6 s, bytes không đổi; `git diff --check` | `feat: add healthvideo preview to open Remotion Studio` |
+| Cài `/pyh` một lệnh | Bộ cài PowerShell 5.1 dùng lại venv, VieNeu 3.6.4/Python 3.11 mặc định và `-SkipTts`; CLI UTF-8; doctor kiểm tra skill, Claude command và TTS; hướng dẫn Claude Code/Antigravity | complete | `powershell -NoProfile -ExecutionPolicy Bypass -File install/install.ps1` ×2; `.venv\Scripts\healthvideo.exe doctor`; `.venv\Scripts\python.exe -m pytest -q`; `.venv\Scripts\ruff.exe check src tests tools`; `git diff --check`; `--help` không có `PYTHONUTF8` | `feat: one-command install for /pyh in Claude Code and Antigravity` |
 | Orientation search tiếng Việt | Truy vấn tiếng Anh qua `--query` lặp lại, log theo truy vấn, khử trùng `source_id`; cấu hình NCBI qua môi trường và báo lỗi HTML an toàn; giữ scope/hash | complete | focused 152 passed; pytest 1311 passed, 3 skipped; Ruff; `git diff --check`; pilot rerun: Europe PMC 20 ứng viên, PubMed bị NCBI chặn IP (`ProviderResponseError`) | `feat: add orientation search queries and NCBI env config` |
 | Explain-first spec §14–§15 | Giọng nội dung: cân bằng kiến thức, độ hấp dẫn, hài hước (châm biếm niềm tin không châm biếm người; câu đùa có số liệu vẫn qua cổng 1; hook 3 giây, điểm thưởng 30–45 giây, câu chốt); giọng đọc chọn giữa VoiceStudio và VieNeu; chọn chủ đề: Haiku 5.5 kéo ứng viên → Jev chấm chọn → bác sĩ chốt, mỗi chủ đề một phiên chat | approved 2026-10-19 | spec self-review; `git diff --check` | `docs: add tone and topic selection to explain-first spec` |
 | Chốt giọng đọc | Nghe mù 6 clip cùng đoạn thử (VieNeu Adam/Thái Sơn t=0,8/Thái Sơn t=1,0; VoiceStudio anh-tu/anh-tu speed 0,9/nam-trung-nien); người dùng chọn VieNeu `Thái Sơn` mặc định → `produce --tts vieneu --voice "Thái Sơn"`; spec n2n §5.1; audio chỉ ở `.tmp/voice-compare/` | complete | `tts-benchmark` Thái Sơn: RTF 0,44, WER 0,045, đạt; không đổi code | `docs: lock VieNeu Thái Sơn narration voice` |
@@ -486,6 +511,16 @@ do bác sĩ chọn; `--tts silent` giữ nguyên. Mọi lần tổng hợp lại
 duyệt video.
 
 ## Remotion preview
+
+### Xem trực quan
+
+Chạy `.venv\Scripts\healthvideo.exe preview <project>` rồi mở URL được in
+(mặc định `http://localhost:3000`) trong trình duyệt tích hợp của Antigravity IDE
+hoặc browser/preview pane của Claude Code. Studio có timeline và scrub frame;
+chọn `LongForm` (16:9) hoặc `VerticalClip` (9:16) theo format được lệnh chỉ dẫn.
+`--port 3100` đổi cổng; `--print-only` chỉ in argv và URL. Cần render hiện hành
+từ `produce` sau duyệt y khoa. Studio chỉ để xem: chỉnh props không lưu vào dự án
+và không tính là duyệt video. Ctrl+C dừng server; không tự động xuất bản.
 
 Frame kiểm tra gần nhất: [frame-001.png](tests/artifacts/frame-001.png) (1080 ×
 1920, nền trắng ngà, chữ than, bôi vàng). Đã chạy:

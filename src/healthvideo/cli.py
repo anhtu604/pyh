@@ -1,3 +1,4 @@
+import json
 import re
 import subprocess
 import sys
@@ -28,6 +29,11 @@ from healthvideo.evidence.clients import EuropePMCClient, PubMedClient
 from healthvideo.process import prepare_subprocess_argv, resolve_pnpm_argv
 from healthvideo.qa.script import lint_project_script
 from healthvideo.render.remotion import build_render_argv
+from healthvideo.render.run import (
+    PRODUCTION_ARTIFACT,
+    RENDER_INPUT_NAME,
+    production_run_dir,
+)
 from healthvideo.security import audit_project
 from healthvideo.storage.files import read_yaml, write_text_atomic
 from healthvideo.storage.lease import (
@@ -36,6 +42,7 @@ from healthvideo.storage.lease import (
     read_write_lease,
     recover_stale_lease,
 )
+from healthvideo.storage.project_layout import resolve_project_layout
 from healthvideo.storage.revisions import create_revision
 from healthvideo.tts.asr import CommandASR
 from healthvideo.tts.base import TTSProvider
@@ -125,6 +132,12 @@ def build_vieneu_tts(*, python: Path, voice: str, precision: str) -> NormalizedT
     )
     return NormalizedTTS(inner)
 
+
+# Configure before Typer handles eager options such as --help, including when
+# Python's UTF-8 mode is disabled on Windows. Captured streams may lack this API.
+for _stream in (sys.stdout, sys.stderr):
+    if callable(getattr(_stream, "reconfigure", None)):
+        _stream.reconfigure(encoding="utf-8")
 
 app = typer.Typer(no_args_is_help=True)
 project_app = typer.Typer(no_args_is_help=True)
@@ -464,6 +477,57 @@ def run_render_argv(argv: list[str]) -> int:
         resolve_pnpm_argv(argv[1:]) if argv[0] == "pnpm" else prepare_subprocess_argv(argv)
     )
     return subprocess.run(resolved, check=False, shell=False).returncode
+
+
+@app.command()
+def preview(
+    project_dir: Annotated[Path, typer.Argument(help="Thư mục dự án có render")],
+    port: Annotated[int, typer.Option("--port", min=1, max=65535)] = 3000,
+    print_only: Annotated[
+        bool, typer.Option("--print-only", help="Chỉ in lệnh và URL, không mở Studio")
+    ] = False,
+) -> None:
+    """Xem video trong Remotion Studio; không ghi thay đổi hoặc duyệt video."""
+    try:
+        layout = resolve_project_layout(project_dir.resolve())
+        input_hash = layout.manifest.artifact_hashes.get(PRODUCTION_ARTIFACT)
+        run_dir = (
+            production_run_dir(layout.artifact_root, input_hash)
+            if input_hash and layout.schema_version == "1.0"
+            else layout.artifact_root / "renders"
+        ).resolve()
+        if not run_dir.is_relative_to(layout.artifact_root.resolve()):
+            raise ValueError("Production run phải nằm trong thư mục dự án")
+        props = run_dir / RENDER_INPUT_NAME
+        if not input_hash or not props.is_file():
+            typer.echo(
+                "Chưa có render hiện hành; xem preview sau khi chạy produce "
+                "(produce yêu cầu duyệt y khoa)."
+            )
+            raise typer.Exit(code=1)
+        render_input = json.loads(props.read_text(encoding="utf-8"))
+        composition = (
+            "LongForm (16:9)" if render_input.get("format_profile") == "youtube_long"
+            else "VerticalClip (9:16)"
+        )
+        argv = resolve_pnpm_argv([
+            "--dir", str(REPO_ROOT / "video"), "exec", "remotion", "studio", "src/index.ts",
+            "--props", str(props), "--port", str(port),
+            "--public-dir", str(run_dir), "--no-open",
+        ])
+        typer.echo(f"http://localhost:{port}")
+        typer.echo(f"Composition: {composition}; HealthVideo dùng cùng props.")
+        typer.echo("Studio chỉ để xem; thay đổi không lưu vào dự án và không duyệt video.")
+        if print_only:
+            typer.echo(subprocess.list2cmdline(argv))
+            return
+        result = subprocess.run(argv, check=False, shell=False)
+    except KeyboardInterrupt:
+        return
+    except (OSError, RuntimeError, TypeError, ValueError) as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
+    raise typer.Exit(code=result.returncode)
 
 
 @app.command()

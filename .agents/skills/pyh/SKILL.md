@@ -5,7 +5,11 @@ description: Operate one revisioned preventive-health video project from topic s
 
 # /pyh
 
-Interpret `discover`, `new`, `select`, `continue`, `edit`, `review`, `package`, and `status` (and their Vietnamese equivalents). Resolve the project path from the user's request or current project context. If ambiguous, list local projects or ask which project the user means.
+In this repo, every `healthvideo ...` command means `.venv\Scripts\healthvideo.exe ...` run from the repo root. If that executable is missing, stop and tell the user to run `powershell -NoProfile -ExecutionPolicy Bypass -File install/install.ps1`.
+
+Interpret `discover`, `new`, `select`, `continue`, `edit`, `review`, `package`, `preview` (`xem`), and `status` (and their Vietnamese equivalents). Resolve the project path from the user's request or current project context. If ambiguous, list local projects or ask which project the user means.
+
+`/pyh xem` runs `healthvideo preview <project>` in the background as a long-running server, then tells the user to open the printed URL: in Antigravity IDE via its built-in browser, in Claude Code via a browser/preview pane. Studio is for viewing; changes made in Studio are not saved to the project and never count as video approval.
 
 Read `AGENTS.md` and the required design/plan before changing workflow or schema. Use existing M1–M3 artifacts and commands. Load only references needed for the current topic. Never invent a source, DOI, PMID, medical result, number, or doctor's experience.
 

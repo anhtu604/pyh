@@ -9,8 +9,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
 
+import yaml
+
 from healthvideo.process import prepare_subprocess_argv, resolve_pnpm_argv
 
+REPO_ROOT = Path(__file__).resolve().parents[3]
 RunCommand = Callable[[list[str]], tuple[int, str]]
 Version = tuple[int, ...]
 
@@ -53,8 +56,47 @@ def check_environment(run: RunCommand) -> list[CheckResult]:
         ),
         _font_check(),
         _cuda_check(run),
+        *_pyh_checks(),
     ]
     return results
+
+
+def _pyh_checks() -> list[CheckResult]:
+    skill = REPO_ROOT / ".agents" / "skills" / "pyh" / "SKILL.md"
+    command = REPO_ROOT / ".claude" / "commands" / "pyh.md"
+    tts = REPO_ROOT / "cache" / "tts-venv" / "Scripts" / "python.exe"
+    skill_ok = False
+    try:
+        lines = skill.read_text(encoding="utf-8-sig").splitlines()
+        if lines and lines[0] == "---":
+            end = lines.index("---", 1)
+            metadata = yaml.safe_load("\n".join(lines[1:end]))
+            skill_ok = (
+                isinstance(metadata, dict)
+                and metadata.get("name") == "pyh"
+                and isinstance(metadata.get("description"), str)
+                and bool(metadata["description"].strip())
+            )
+    except (OSError, UnicodeError, ValueError, yaml.YAMLError):
+        pass
+    try:
+        command_ok = ".agents/skills/pyh/SKILL.md" in command.read_text(encoding="utf-8-sig")
+    except (OSError, UnicodeError):
+        command_ok = False
+    return [
+        CheckResult(
+            "pyh_skill", skill_ok, "valid" if skill_ok else "missing or invalid",
+            "required", "Restore .agents/skills/pyh/SKILL.md with name: pyh and a non-empty description in YAML frontmatter.",
+        ),
+        CheckResult(
+            "pyh_claude_command", command_ok, "valid" if command_ok else "missing or invalid",
+            "required", "Restore .claude/commands/pyh.md referencing .agents/skills/pyh/SKILL.md.",
+        ),
+        CheckResult(
+            "tts_venv", tts.is_file(), "present" if tts.is_file() else "missing",
+            "optional", "Rerun install/install.ps1 without -SkipTts.",
+        ),
+    ]
 
 
 def _remove_owned(path: Path, marker: bytes) -> None:

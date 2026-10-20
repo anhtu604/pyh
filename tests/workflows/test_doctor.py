@@ -1,10 +1,57 @@
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from healthvideo.cli import app
 from healthvideo.workflows import doctor
 from healthvideo.workflows.doctor import check_environment, check_project_filesystem
+
+
+def test_pyh_entry_points_pass_from_repo_root(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(doctor, "REPO_ROOT", tmp_path, raising=False)
+    skill = tmp_path / ".agents/skills/pyh/SKILL.md"
+    command = tmp_path / ".claude/commands/pyh.md"
+    tts = tmp_path / "cache/tts-venv/Scripts/python.exe"
+    for path in (skill, command, tts):
+        path.parent.mkdir(parents=True, exist_ok=True)
+    skill.write_text('---\nname: pyh\ndescription: >\n  Operate pyh\n---\n', encoding="utf-8")
+    command.write_text("Read `.agents/skills/pyh/SKILL.md`.", encoding="utf-8")
+    tts.touch()
+    checks = {item.name: item for item in check_environment(lambda _: (0, "24.14.0"))}
+    for name in ("pyh_skill", "pyh_claude_command", "tts_venv"):
+        assert checks[name].ok
+
+
+@pytest.mark.parametrize("frontmatter", [
+    None, "", "name: pyh\ndescription: hi", "---\nname: wrong\ndescription: hi\n---\n",
+    "---\nname: pyh\ndescription: '  '\n---\n", "---\nname: [\n---\n",
+    "---\n- pyh\n---\n", "---\nname: pyh\ndescription: 42\n---\n",
+])
+def test_pyh_missing_or_invalid_entries_fail_closed(tmp_path: Path, monkeypatch, frontmatter) -> None:
+    monkeypatch.setattr(doctor, "REPO_ROOT", tmp_path, raising=False)
+    if frontmatter is not None:
+        skill = tmp_path / ".agents/skills/pyh/SKILL.md"
+        skill.parent.mkdir(parents=True)
+        skill.write_text(frontmatter, encoding="utf-8")
+    checks = {item.name: item for item in check_environment(lambda _: (0, "24.14.0"))}
+    assert not checks["pyh_skill"].ok
+    assert checks["pyh_skill"].required == "required"
+    assert not checks["pyh_claude_command"].ok
+    assert checks["pyh_claude_command"].required == "required"
+    assert not checks["tts_venv"].ok
+    assert checks["tts_venv"].required == "optional"
+    assert "-SkipTts" in checks["tts_venv"].remedy
+    assert doctor.has_mandatory_failure(list(checks.values()))
+
+
+def test_pyh_command_must_reference_canonical_skill(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(doctor, "REPO_ROOT", tmp_path, raising=False)
+    command = tmp_path / ".claude/commands/pyh.md"
+    command.parent.mkdir(parents=True)
+    command.write_text("Use a different workflow.", encoding="utf-8")
+    checks = {item.name: item for item in check_environment(lambda _: (0, "24.14.0"))}
+    assert not checks["pyh_claude_command"].ok
 
 
 def test_doctor_reports_missing_ffmpeg() -> None:
