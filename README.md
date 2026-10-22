@@ -147,6 +147,7 @@ applicability, per-claim doctor notes — hoãn sang M3).
 
 | Task | Deliverable | Status | Tests | Commit |
 | --- | --- | --- | --- | --- |
+| Xưởng P3 Task 3.6 | 4 prompt cố định (`research`, `draft`, `revise_medical`, `revise_production`) + `render_prompt`, `HARD_RULES` (không bịa, không approve/set-pin, không commit, chỉ sửa project + SVG mới, không đăng) | complete | 43 passed; Ruff | `feat: add fixed agent prompts for factory steps` |
 | Xưởng P2 Task 2.1 | Gỡ lease, backup/restore, security-audit, doctor filesystem probe (`doctor --project`), `busy`/writer khỏi operator status; xóa 18 file (≈2.800 dòng), schema lease/backup; `/pyh` + AGENTS.md bỏ M7 | complete | pytest 1384 passed, 1 skipped; Ruff | `refactor: remove multi-writer lease, backup and security audit` |
 | Xưởng P3 Task 3.1+3.2 (module) | `approver_pin` (scrypt + salt, ghi nguyên tử, đổi PIN cần PIN cũ, file hỏng → không xác minh); hàng đợi `topics/queue.yaml` (`QueueEntry`, chặn slug trùng hàng đợi/project) — chưa nối CLI | complete (module) | 19 passed; Ruff | `feat: add approver PIN and topic queue modules` |
 | Xưởng P3 Task 3.3+3.4 | `runner.next_step` (trạng thái → bước kế, hai cổng → None); `agents.py` gọi Codex/agy, log UTF-8, lọc biến môi trường chứa PIN, chuyển agent chỉ khi hết quota, `AllAgentsExhausted` | complete | 33 passed (test_agents, test_runner); Ruff | `feat: add runner step map and agent quota failover` |
