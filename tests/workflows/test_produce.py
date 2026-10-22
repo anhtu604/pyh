@@ -1,4 +1,5 @@
 import json
+import wave
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -55,7 +56,11 @@ def test_m64_production_records_measured_audio_and_rejects_stale_qa(tmp_path: Pa
     qa_path = revision / "reviews/video-qa.json"
     qa = json.loads(qa_path.read_text(encoding="utf-8"))
     assert qa["audio_duration_ms"] > 0
-    assert qa["composition_duration_ms"] == 48000
+    timing = json.loads((revision / "renders/scene-timing.json").read_text(encoding="utf-8"))
+    assert qa["composition_duration_ms"] == round(sum(
+        scene["duration_frames"] for scene in timing["scenes"]
+    ) * 1000 / timing["fps"])
+    assert qa["composition_duration_ms"] < 48000
     assert qa["trailing_visual_ms"] >= 0
     qa.pop("audio_duration_ms")
     qa_path.write_text(json.dumps(qa), encoding="utf-8")
@@ -153,6 +158,7 @@ def _m65_project(
             "start_frame": 0,
             "duration_frames": whiteboard_frames,
             "narration": "Whiteboard synthetic.",
+            "script_line_id": "L01",
             "claim_id": "C01",
             "source_marker": "[1]",
             "visual": "whiteboard",
@@ -180,11 +186,30 @@ def _m65_project(
 
 
 class CountingSilent(SilentTTS):
-    def __init__(self) -> None:
+    def __init__(self, project: Path | None = None) -> None:
         self.calls = 0
+        self.line_frames: dict[str, int] | None = None
+        if project is not None:
+            root = project / "revisions/001"
+            script = read_yaml(root / "script/script.yaml")
+            board = read_yaml(root / "storyboard/storyboard.yaml")
+            self.line_frames = {
+                line["text"]: sum(s["duration_frames"] for s in board["scenes"]
+                                  if s.get("script_line_id") == line["id"]) - 9
+                for line in script["lines"]
+            }
 
     def synthesize(self, request: TTSRequest, output_path: Path) -> TTSResult:
         self.calls += 1
+        if self.line_frames is not None:
+            frames = self.line_frames[request.text]
+            assert frames > 0
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            with wave.open(str(output_path), "wb") as output:
+                output.setparams((1, 2, 24000, 0, "NONE", "not compressed"))
+                output.writeframes(b"\0\0" * (frames * 800))
+            return TTSResult(provider=self.provider_name, audio_file=output_path,
+                             duration_ms=round(frames * 1000 / 30))
         return super().synthesize(request, output_path)
 
 
@@ -234,7 +259,7 @@ def test_m65_production_records_visual_qa_and_reuses_valid_promoted_cache(
 ) -> None:
     project = _m65_project(tmp_path)
     revision = project / "revisions/001"
-    tts = CountingSilent()
+    tts = CountingSilent(project)
     render_calls: list[list[str]] = []
 
     def runner(argv: list[str]) -> int:
@@ -306,7 +331,7 @@ def test_m65_cache_rejects_each_tampered_visual_qa_field(
         _write_synthetic_output(argv)
         return 0
 
-    produce_project(project, SilentTTS(), runner)
+    produce_project(project, CountingSilent(project), runner)
     qa_path = revision / "reviews/video-qa.json"
     qa = json.loads(qa_path.read_text(encoding="utf-8"))
     replacements = {
@@ -343,7 +368,7 @@ def test_m65_recovery_verifies_staged_visual_qa_before_promotion(
 ) -> None:
     project = _m65_project(tmp_path)
     revision = project / "revisions/001"
-    tts = CountingSilent()
+    tts = CountingSilent(project)
     render_calls: list[list[str]] = []
 
     def runner(argv: list[str]) -> int:
@@ -377,6 +402,16 @@ AI_CLIP = "assets/ai-clips/S04.mp4"
 def _m66_approved_ai_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     project = _create_ai_project(tmp_path)
     _author_ai_clip(project)
+    board_path = project / "revisions/001/storyboard/storyboard.yaml"
+    board = read_yaml(board_path)
+    board["scenes"][0]["script_line_id"] = "L01"
+    board["scenes"][1]["script_line_id"] = "L01"
+    board["scenes"][2]["script_line_id"] = "L02"
+    write_yaml_atomic(board_path, board)
+    script_path = project / "revisions/001/script/script.yaml"
+    script = read_yaml(script_path)
+    script["lines"] = script["lines"][:2]
+    write_yaml_atomic(script_path, script)
     approve_gate(project, GateKind.MEDICAL, reviewer="doctor", now=V2_REVIEWED_AT)
 
     def no_provider(*_args: object, **_kwargs: object) -> None:
@@ -394,7 +429,7 @@ def test_m66_production_stages_one_approved_ai_clip_without_provider(
     project = _m66_approved_ai_project(tmp_path, monkeypatch)
     revision = project / "revisions/001"
     clip = revision / AI_CLIP
-    tts = CountingSilent()
+    tts = CountingSilent(project)
     render_inputs: list[dict] = []
 
     def runner(argv: list[str]) -> int:
@@ -427,7 +462,7 @@ def test_m66_production_stages_one_approved_ai_clip_without_provider(
     assert produce_project(
         project, NoSynthesis(), lambda _: pytest.fail("renderer invoked on recovery")
     ) == first
-    assert tts.calls == 1 and len(render_inputs) == 1
+    assert tts.calls == 2 and len(render_inputs) == 1
 
 
 def _resign_medical_approval(revision: Path) -> None:
@@ -1255,6 +1290,156 @@ def _write_synthetic_output(argv: list[str]) -> None:
     output = Path(argv[argv.index("--output") + 1])
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_bytes(b"synthetic-mp4")
+
+
+def test_v2_runtime_timing_is_hash_bound_and_preserves_approved_content(tmp_path):
+    project = _v2_medically_approved_project(tmp_path)
+    revision = project / "revisions/001"
+    board_path = revision / "storyboard/storyboard.yaml"
+    approved_bytes = board_path.read_bytes()
+    script = read_yaml(revision / "script/script.yaml")
+    requests: list[TTSRequest] = []
+
+    class Spy(SilentTTS):
+        def synthesize(self, request, output):
+            requests.append(request)
+            return super().synthesize(request, output)
+
+    def runner(argv):
+        _write_synthetic_output(argv)
+        return 0
+
+    produce_project(project, Spy(), runner)
+    timing_path = revision / "renders/scene-timing.json"
+    timing = json.loads(timing_path.read_text(encoding="utf-8"))
+    manifest = json.loads((revision / "renders/render-manifest.json").read_text(encoding="utf-8"))
+    assert manifest["scene_timing_sha256"] == sha256_file(timing_path)
+    assert len(manifest["line_audio_sha256"]) == len(script["lines"])
+    assert len(requests) == len(script["lines"])
+    assert [request.delivery_beats for request in requests] == [
+        (line.delivery.model_dump(mode="json"),)
+        for line in Script.model_validate(script).lines
+    ]
+    assert board_path.read_bytes() == approved_bytes
+    assert timing["scenes"][0]["duration_frames"] != 1350
+    timing["scenes"][0]["duration_frames"] += 1
+    timing_path.write_text(json.dumps(timing), encoding="utf-8")
+    with pytest.raises(ValueError, match="medically_approved"):
+        produce_project(project, NoSynthesis(), lambda _: pytest.fail("render called"))
+
+
+@pytest.mark.parametrize("field", ["audio_duration_ms", "composition_duration_ms",
+                                   "trailing_visual_ms", "max_scene_drift_ms"])
+def test_v2_all_profiles_refuse_missing_or_changed_timing_qa(tmp_path, field):
+    project = _v2_medically_approved_project(tmp_path)
+    revision = project / "revisions/001"
+
+    def runner(argv):
+        _write_synthetic_output(argv)
+        return 0
+
+    produce_project(project, SilentTTS(), runner)
+    qa_path = revision / "reviews/video-qa.json"
+    original = json.loads(qa_path.read_text(encoding="utf-8"))
+    for missing in (True, False):
+        qa = dict(original)
+        if missing:
+            del qa[field]
+        else:
+            qa[field] += 151
+        qa_path.write_text(json.dumps(qa), encoding="utf-8")
+        with pytest.raises(ValueError, match="medically_approved"):
+            produce_project(project, NoSynthesis(), lambda _: pytest.fail("render called"))
+
+
+@pytest.mark.parametrize("fault", ["tail", "drift"])
+def test_v2_fresh_timing_failure_blocks_before_render(tmp_path, monkeypatch, fault):
+    project = _v2_medically_approved_project(tmp_path)
+    original_project = (project / "project.yaml").read_bytes()
+    real_concat = produce_workflow.concat_scene_audio
+
+    def inject_fault(board, lines, output, *args, **kwargs):
+        alignment = real_concat(board, lines, output, *args, **kwargs)
+        if fault == "drift":
+            alignment[0]["audio_start_ms"] += 121
+        else:
+            with wave.open(str(output), "rb") as stream:
+                params = stream.getparams()
+                data = stream.readframes(stream.getnframes() - 48000)
+            with wave.open(str(output), "wb") as stream:
+                stream.setparams(params)
+                stream.writeframes(data)
+        return alignment
+
+    monkeypatch.setattr(produce_workflow, "concat_scene_audio", inject_fault)
+    with pytest.raises(ValueError, match="silence|drift|speech end"):
+        produce_project(project, SilentTTS(), lambda _: pytest.fail("render called"))
+    assert (project / "project.yaml").read_bytes() == original_project
+    assert not (project / "revisions/001/renders/video.mp4").exists()
+
+
+def test_v2_measured_runtime_visual_budget_blocks_before_render(tmp_path):
+    project = _m65_project(tmp_path)
+    revision = project / "revisions/001"
+    script_path = revision / "script/script.yaml"
+    script = read_yaml(script_path)
+    script["lines"].append({**script["lines"][0], "id": "L02",
+                            "text": "Synthetic long chart narration. " * 100})
+    write_yaml_atomic(script_path, script)
+    board_path = revision / "storyboard/storyboard.yaml"
+    data = read_yaml(board_path)
+    data["scenes"][1]["script_line_id"] = "L02"
+    write_yaml_atomic(board_path, data)
+    _resign_medical_approval(revision)
+    before = (project / "project.yaml").read_bytes()
+    tts = CountingSilent()
+    with pytest.raises(ValueError, match="visual budget failed"):
+        produce_project(project, tts, lambda _: pytest.fail("render called"))
+    assert tts.calls == 2
+    assert (project / "project.yaml").read_bytes() == before
+
+
+def test_v2_terminal_unvoiced_scene_cannot_hide_tail_in_padded_wav(tmp_path):
+    project = _v2_medically_approved_project(tmp_path)
+    revision = project / "revisions/001"
+    board_path = revision / "storyboard/storyboard.yaml"
+    data = read_yaml(board_path)
+    first = data["scenes"][0]
+    data["scenes"].append({
+        "id": "SILENT-TAIL", "start_frame": first["duration_frames"],
+        "duration_frames": 300, "narration": "", "visual": "whiteboard",
+    })
+    write_yaml_atomic(board_path, data)
+    _resign_medical_approval(revision)
+    before = (project / "project.yaml").read_bytes()
+    tts = CountingSilent()
+    with pytest.raises(ValueError, match="trailing visual silence"):
+        produce_project(project, tts, lambda _: pytest.fail("render called"))
+    assert tts.calls == 1
+    assert (project / "project.yaml").read_bytes() == before
+    assert not (revision / "renders/video.mp4").exists()
+
+
+def test_v2_cache_tail_qa_uses_speech_end_despite_full_length_padded_wav(tmp_path):
+    project = _v2_medically_approved_project(tmp_path)
+    revision = project / "revisions/001"
+
+    def runner(argv):
+        _write_synthetic_output(argv)
+        return 0
+
+    produce_project(project, SilentTTS(), runner)
+    qa_path = revision / "reviews/video-qa.json"
+    qa = json.loads(qa_path.read_text(encoding="utf-8"))
+    assert abs(qa["composition_duration_ms"] - qa["audio_duration_ms"]) <= 1
+    timing = json.loads((revision / "renders/scene-timing.json").read_text(encoding="utf-8"))
+    speech_end = max(item["speech_end_ms"] or 0 for item in timing["audio_alignment"])
+    assert qa["trailing_visual_ms"] == qa["composition_duration_ms"] - speech_end
+    assert 300 <= qa["trailing_visual_ms"] <= 334
+    qa["trailing_visual_ms"] = 0
+    qa_path.write_text(json.dumps(qa), encoding="utf-8")
+    with pytest.raises(ValueError, match="medically_approved"):
+        produce_project(project, NoSynthesis(), lambda _: pytest.fail("render called"))
 
 
 def _v2_medically_approved_project(tmp_path: Path) -> Path:

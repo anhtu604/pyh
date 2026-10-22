@@ -13,10 +13,36 @@ const inside = (box: Box, frame: {width: number; height: number}) =>
   box.left >= 0 && box.top >= 0 && box.left + box.width <= frame.width && box.top + box.height <= frame.height;
 
 describe('layouts', () => {
+  it.each(Object.keys(LAYOUTS) as (keyof typeof LAYOUTS)[])('%s gives both caption rows room for Vietnamese accents and descenders', (format) => {
+    const c = LAYOUTS[format].captions;
+    // Bundled Be Vietnam Pro SemiBold: Vietnamese ymax=1215, ymin=-240 / 1000 em.
+    const ascender = c.fontSize * 1.215;
+    const descender = c.fontSize * 0.24;
+    expect(c.rowY[0] - ascender).toBeGreaterThanOrEqual(4);
+    expect(c.height - c.rowY[1] - descender).toBeGreaterThanOrEqual(4);
+    expect(c.rowY[1] - ascender - c.rowY[0] - descender).toBeGreaterThanOrEqual(4);
+  });
+
+  it.each(Object.keys(LAYOUTS) as (keyof typeof LAYOUTS)[])('%s enlarges the chart into the space above captions', (format) => {
+    const l = LAYOUTS[format];
+    const image = l.chart.image;
+    expect(image.width).toBeGreaterThan(format === 'vertical_clip' ? 940 : 1400);
+    expect(image.height).toBeGreaterThan(format === 'vertical_clip' ? 1040 : 700);
+    expect(image.top + image.height + 24).toBeLessThanOrEqual(l.frame.height - l.captions.bottom - l.captions.height);
+    expect(inside(image, l.frame)).toBe(true);
+  });
+
+  it('gives a landscape 3:2 chart at least 15% more display area in each dimension', () => {
+    const image = LAYOUTS.youtube_long.chart.image;
+    const scale = Math.min(image.width / 1080, image.height / 720);
+    // The previous 1400x700 contain box was height limited at 700/720.
+    expect(scale).toBeGreaterThanOrEqual((700 / 720) * 1.15);
+    expect(image.top).toBeLessThanOrEqual(60);
+  });
   it('keeps vertical captions and narrative geometry', () => {
     const v = LAYOUTS.vertical_clip;
     expect(v.frame).toEqual({width: 1080, height: 1920});
-    expect(v.captions).toMatchObject({left: 72, bottom: 174, width: 936, height: 136, fontSize: 48, maxWords: 6});
+    expect(v.captions).toMatchObject({left: 72, bottom: 150, width: 936, height: 160, fontSize: 48, maxWords: 6});
     expect(v.narration).toEqual({left: 96, right: 96, top: 760, fontSize: 72});
 
   });
@@ -40,10 +66,10 @@ describe('layouts', () => {
       React.createElement(LayoutContext.Provider, {value: layout}, React.createElement(WhiteboardScene, {scene})),
     );
     const landscape = html(LAYOUTS.youtube_long);
-    expect(landscape).toContain('viewBox="0 0 1200 120"');
+    expect(landscape).toContain('viewBox="0 0 1200 148"');
     expect(landscape).toContain('width:1200px');
     expect(landscape).toContain('top:380px');
-    expect(html(LAYOUTS.vertical_clip)).toContain('viewBox="0 0 936 136"');
+    expect(html(LAYOUTS.vertical_clip)).toContain('viewBox="0 0 936 160"');
   });
 });
 

@@ -15,6 +15,7 @@ from healthvideo.workflows.package import package_project
 from healthvideo.workflows.produce import produce_project
 from tests.helpers import create_project_fixture, create_v2_project_fixture
 from tests.workflows.test_gate_review import _author_ai_clip, _create_ai_project
+from tests.workflows.test_produce import CountingSilent
 
 NOW = datetime(2026, 9, 12, 8, 0, tzinfo=UTC)
 
@@ -146,8 +147,19 @@ def test_v2_ai_package_adds_hashed_manual_disclosure_without_prompt(
 ) -> None:
     project_dir = _create_ai_project(tmp_path)
     _author_ai_clip(project_dir, decorative=decorative)
+    revision = project_dir / "revisions/001"
+    board_path = revision / "storyboard/storyboard.yaml"
+    board = read_yaml(board_path)
+    for scene in board["scenes"][:2]:
+        scene["script_line_id"] = "L01"
+    board["scenes"][-1]["script_line_id"] = "L04"
+    write_yaml_atomic(board_path, board)
+    script_path = revision / "script/script.yaml"
+    script = read_yaml(script_path)
+    script["lines"] = [script["lines"][0], script["lines"][3]]
+    write_yaml_atomic(script_path, script)
     approve_gate(project_dir, GateKind.MEDICAL, reviewer="BS Nguyễn Văn An", now=NOW)
-    produce_project(project_dir, SilentTTS(), _fake_renderer)
+    produce_project(project_dir, CountingSilent(project_dir), _fake_renderer)
     approve_gate(project_dir, GateKind.VIDEO, reviewer="BS Nguyễn Văn An", now=NOW)
 
     output = package_project(project_dir)

@@ -198,7 +198,7 @@ def approve_gate(
         )
         validate_visual_budget(storyboard)
         script = Script.model_validate(read_yaml(revision_root / "script/script.yaml"))
-        validate_hook_outro(script, storyboard, require_brand=True)
+        validate_hook_outro(script, storyboard, require_brand=True, allow_line_references=True)
         if storyboard.format_profile == "youtube_long":
             load_clip_scenes(revision_root, storyboard)
         referenced_storyboard_assets(revision_root, storyboard, manifest)

@@ -81,7 +81,7 @@ def _validate(
             raise ValueError(f"script review error ({errors[0].code}): {errors[0].message}")
     validate_visual_budget(storyboard)
     validate_anatomy_subjects(storyboard)
-    validate_hook_outro(script, storyboard, require_brand=True)
+    validate_hook_outro(script, storyboard, require_brand=True, allow_line_references=True)
     resolve_citations(
         script,
         ledger,

@@ -1,4 +1,5 @@
 import json
+import wave
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -16,6 +17,44 @@ from tests.helpers import create_long_form_project_fixture
 
 REVIEWED_AT = datetime(2026, 9, 30, 9, 0, tzinfo=UTC)
 REVIEWER = "BS Nguyễn Văn An"
+
+
+@pytest.mark.parametrize("frames", [1799, 5401])
+def test_measured_clip_bounds_name_the_clip(tmp_path: Path, frames: int) -> None:
+    from healthvideo.workflows.long_form import render_clips
+
+    project = create_long_form_project_fixture(tmp_path)
+    board = Storyboard.model_validate(read_yaml(project / "revisions/001/storyboard/storyboard.yaml"))
+    scene = board.scenes[0].model_copy(update={"duration_frames": frames - 90})
+    with pytest.raises(ValueError, match=f"CL01.*{frames} frames"):
+        render_clips({"CL01": [scene]}, board, tmp_path / "stage", line_wavs={},
+                     runner=lambda _: pytest.fail("Invalid clip rendered"))
+
+
+def test_clips_reuse_line_wavs_and_match_measured_scene_boundaries(tmp_path: Path) -> None:
+    from tests.workflows.test_produce import CountingSilent
+
+    project = create_long_form_project_fixture(tmp_path)
+    approve_gate(project, GateKind.MEDICAL, reviewer=REVIEWER, now=REVIEWED_AT)
+    tts = CountingSilent()
+    produce_project(project, tts, _runner([]))
+    assert tts.calls == 6  # one per script line, no extra clip TTS
+    run = project / "revisions/001/renders"
+    clip = json.loads((run / "clips/CL01.render-input.json").read_text(encoding="utf-8"))
+    content_frames = sum(scene["duration_frames"] for scene in clip["scenes"])
+    with wave.open(str(run / "audio/clips/CL01.wav"), "rb") as audio:
+        assert audio.getnframes() == (content_frames + 90) * audio.getframerate() // 30
+        clip_content = audio.readframes(content_frames * audio.getframerate() // 30)
+    with wave.open(str(run / "audio/narration.wav"), "rb") as audio:
+        assert clip_content == audio.readframes(content_frames * audio.getframerate() // 30)
+    qa_path = run / "clips/CL01.video-qa.json"
+    qa = json.loads(qa_path.read_text(encoding="utf-8"))
+    assert qa["trailing_visual_ms"] <= 334
+    assert qa["max_scene_drift_ms"] == 0
+    qa["max_scene_drift_ms"] = 121
+    qa_path.write_text(json.dumps(qa), encoding="utf-8")
+    with pytest.raises(ValueError, match="medically_approved"):
+        produce_project(project, tts, lambda _: pytest.fail("Bad cached clip reused"))
 
 
 def _runner(calls: list[list[str]]):
@@ -139,7 +178,10 @@ def test_mascot_warning_in_both_review_packets_and_produce_qa(tmp_path: Path) ->
     assert (revision / "storyboard/storyboard.yaml").read_bytes() == before
     assert "Mascot share exceeds 35%" in render_video_packet(revision)
     qa = json.loads((revision / "reviews/video-qa.json").read_text(encoding="utf-8"))
-    assert qa["visual_budget"]["mascot_frames"] == 2700
+    rendered = json.loads((revision / "renders/render-input.json").read_text(encoding="utf-8"))
+    assert qa["visual_budget"]["mascot_frames"] == sum(
+        scene["duration_frames"] for scene in rendered["scenes"][:3]
+    )
     assert qa["visual_budget"]["warnings"]
     approve_gate(project, GateKind.VIDEO, reviewer=REVIEWER, now=REVIEWED_AT)
 
@@ -157,17 +199,19 @@ def test_clip_cta_registers_reverse_logo_and_selected_mascot(tmp_path, artwork_b
     project = create_long_form_project_fixture(tmp_path / "fixture")
     board = Storyboard.model_validate(read_yaml(project / "revisions/001/storyboard/storyboard.yaml"))
     stage = tmp_path / "stage"
-    def voice(text, path):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(b"synthetic")
-        return 57000
+    from healthvideo.tts.base import TTSRequest
+    line_wavs = {}
+    for scene in board.scenes[:2]:
+        path = tmp_path / f"{scene.script_line_id}.wav"
+        SilentTTS().synthesize(TTSRequest(text=scene.narration, language="vi"), path)
+        line_wavs[scene.script_line_id] = path
     def run(argv):
         output = Path(argv[argv.index("--output") + 1])
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(b"synthetic")
         return 0
     # Existing fixture scenes each last 900 frames; two give a 60s clip plus CTA.
-    render_clips({"CL01": board.scenes[:2]}, board, stage, synthesize=voice,
+    render_clips({"CL01": board.scenes[:2]}, board, stage, line_wavs=line_wavs,
                  runner=run, brand=brand)
     result = json.loads((stage / "clips/CL01.render-input.json").read_text(encoding="utf-8"))
     suffix = ".png" if artwork else ".svg"

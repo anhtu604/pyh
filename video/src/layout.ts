@@ -11,7 +11,7 @@ export type FrameLayout = {
   narration: {left: number; right: number; top: number; fontSize: number};
   sourceMarker: {right: number; top: number; fontSize: number};
   whiteboardPath: string;
-  chart: {image: Box; narrationBottom: number; narrationFontSize: number; narrationInset: number};
+  chart: {image: Box};
   outroText: {left: number; top: number; width: number; fontSize: number};
   quote: {bottom: number; inset: number; fontSize: number};
   assets: {brand: Box; outroBrand: Box; outroMascot: Box; whiteboard: Box; explain: Box; standard: Box};
@@ -25,13 +25,13 @@ export const LAYOUTS: Record<FormatProfile, FrameLayout> = {
       axis: 'column', mascot: {left: 48, top: 1034, width: 660, height: 576},
     },
     frame: {width: 1080, height: 1920},
-    captions: {left: 72, bottom: 174, width: 936, height: 136, fontSize: 48,
-      maxTextWidth: 900, rowY: [52, 116], maxWords: 6},
+    // Preserve the caption band's top while padding the bundled font's stacked accents.
+    captions: {left: 72, bottom: 150, width: 936, height: 160, fontSize: 48,
+      maxTextWidth: 900, rowY: [64, 140], maxWords: 6},
     narration: {left: 96, right: 96, top: 760, fontSize: 72},
     sourceMarker: {right: 72, top: 96, fontSize: 52},
     whiteboardPath: 'M150 570 C 350 400, 650 740, 930 530',
-    chart: {image: {left: 70, top: 210, width: 940, height: 1040},
-      narrationBottom: 430, narrationFontSize: 58, narrationInset: 84},
+    chart: {image: {left: 40, top: 210, width: 1000, height: 1368}},
     outroText: {left: 90, top: 850, width: 900, fontSize: 54},
     quote: {bottom: 390, inset: 72, fontSize: 46},
     assets: {
@@ -50,13 +50,12 @@ export const LAYOUTS: Record<FormatProfile, FrameLayout> = {
       axis: 'row', mascot: {left: 0, top: 669.6, width: 470, height: 410.4},
     },
     frame: {width: 1920, height: 1080},
-    captions: {left: 500, bottom: 60, width: 1200, height: 120, fontSize: 44,
-      maxTextWidth: 1160, rowY: [48, 104], maxWords: 10},
+    captions: {left: 500, bottom: 32, width: 1200, height: 148, fontSize: 44,
+      maxTextWidth: 1160, rowY: [60, 130], maxWords: 10},
     narration: {left: 160, right: 160, top: 380, fontSize: 64},
     sourceMarker: {right: 72, top: 56, fontSize: 44},
     whiteboardPath: 'M260 300 C 620 180, 1180 460, 1660 280',
-    chart: {image: {left: 260, top: 90, width: 1400, height: 700},
-      narrationBottom: 210, narrationFontSize: 48, narrationInset: 160},
+    chart: {image: {left: 70, top: 60, width: 1780, height: 808}},
     outroText: {left: 360, top: 420, width: 1200, fontSize: 54},
     quote: {bottom: 200, inset: 160, fontSize: 40},
     assets: {

@@ -79,10 +79,17 @@ def test_pyh_golden_stops_at_both_human_gates(tmp_path: Path) -> None:
         now=FROZEN,
     )
     shutil.copy2(SOURCE / "assets" / "evidence-r01.svg", revision / "assets")
+    board = read_yaml(SOURCE / "storyboard/storyboard.yaml")
+    lines = read_yaml(SOURCE / "script/script.yaml")["lines"]
+    for scene, line in zip(board["scenes"], lines, strict=True):
+        assert scene["narration"] == line["text"]
+        scene["script_line_id"] = line["id"]
+    board_path = tmp_path / "bound-storyboard.yaml"
+    write_yaml_atomic(board_path, board)
     submit_draft(
         project,
         SOURCE / "script/script.yaml",
-        SOURCE / "storyboard/storyboard.yaml",
+        board_path,
         SOURCE / "assets/asset-manifest.yaml",
     )
     submit_medical_review(project)

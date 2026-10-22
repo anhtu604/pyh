@@ -42,7 +42,8 @@ def test_youtube_long_renders_by_chapter(tmp_path: Path) -> None:
     assert output == renders / "video.mp4" and output.is_file()
     assert (render_input["width"], render_input["height"]) == (1920, 1080)
     assert manifest["chapter_parts"][0].startswith("CH01-")
-    assert any("--frames=0-899" in call and "--muted" in call for call in calls)
+    end = render_input["scenes"][0]["duration_frames"] - 1
+    assert any(f"--frames=0-{end}" in call and "--muted" in call for call in calls)
     assert calls[-1][0] == "ffmpeg"
     assert read_yaml(project_dir / "project.yaml")["state"] == "awaiting_video_review"
     # project-level so a new revision reuses unchanged chapters (spec 4.1)

@@ -36,6 +36,13 @@ from healthvideo.render.run import (
     RENDER_INPUT_NAME,
     renders_directory,
 )
+from healthvideo.render.timing import (
+    PAD_FRAMES,
+    TIMING_POLICY_VERSION,
+    concat_scene_audio,
+    restore_timed_storyboard,
+    retime_storyboard,
+)
 from healthvideo.storage.files import (
     canonical_json_hash,
     read_yaml,
@@ -240,13 +247,15 @@ def _produce_v2(
         if storyboard.visual_budget_profile != "legacy" or visual_budget_report.mascot_frames
         else None
     )
-    validate_hook_outro(script, storyboard, require_brand=script.format_profile == "hook_outro_v1")
+    validate_hook_outro(
+        script, storyboard, require_brand=script.format_profile == "hook_outro_v1",
+        allow_line_references=True,
+    )
     author_profile = read_yaml(AUTHOR_PROFILE_PATH)
     pronunciation = load_pronunciation_lexicon(
         pronunciation_module.PRONUNCIATION_PROFILE_PATH
     )
     pronunciation_sha256 = pronunciation_hash(pronunciation)
-    narration = " ".join(line.text for line in script.lines)
     provider_name = _provider_name(tts)
     provider_identity_data = provider_identity(tts)
     renderer_identity_data = renderer_identity()
@@ -273,6 +282,7 @@ def _produce_v2(
                 asset_hashes,
                 renderer_identity_data,
             ),
+            "timing_policy": TIMING_POLICY_VERSION,
             "pronunciation_sha256": pronunciation_sha256,
             "provider_identity": provider_identity_data,
             "renderer_identity": renderer_identity_data,
@@ -284,12 +294,10 @@ def _produce_v2(
             ),
         }
     )
-    render_input = build_render_input(
-        storyboard, audio_file="audio/narration.wav", duration_policy="v2"
-    )
+    approved_storyboard = storyboard
     final_scene = storyboard.scenes[-1]
     final_frame = final_scene.start_frame + final_scene.duration_frames
-    require_timing = script.format_profile == "hook_outro_v1"
+    require_timing = True
     renders_dir = layout.artifact_root / "renders"
     output = renders_dir / OUTPUT_NAME
     cache_valid = _v2_run_is_valid(
@@ -299,6 +307,26 @@ def _produce_v2(
         renderer_identity=renderer_identity_data,
         require_timing=False,
     )
+    if cache_valid:
+        try:
+            timing_record = json.loads((renders_dir / "scene-timing.json").read_text(encoding="utf-8"))
+            if timing_record["fps"] != 30 or timing_record["pad_frames"] != PAD_FRAMES:
+                raise ValueError("Cached scene timing uses another timing policy")
+            storyboard = restore_timed_storyboard(approved_storyboard, timing_record)
+            visual_budget_report = validate_visual_budget(storyboard)
+            visual_budget_qa = (
+                visual_budget_report.model_dump(mode="json")
+                if storyboard.visual_budget_profile != "legacy" or visual_budget_report.mascot_frames
+                else None
+            )
+            final_frame = storyboard.scenes[-1].start_frame + storyboard.scenes[-1].duration_frames
+            expected_input = build_render_input(
+                storyboard, audio_file="audio/narration.wav", duration_policy="v2"
+            ).model_dump(mode="json")
+            cached_input = json.loads((renders_dir / RENDER_INPUT_NAME).read_text(encoding="utf-8"))
+            cache_valid = canonical_json_hash(expected_input) == canonical_json_hash(cached_input)
+        except (OSError, ValueError, KeyError, TypeError):
+            cache_valid = False
     if cache_valid and (require_timing or visual_budget_qa is not None):
         cache_valid = _v2_video_qa_is_valid(
             layout.artifact_root,
@@ -353,20 +381,45 @@ def _produce_v2(
     try:
         _copy_v2_assets(layout.artifact_root, staging_dir, storyboard, asset_hashes)
         staged_audio = staging_dir / "audio" / "narration.wav"
-        tts.synthesize(
-            TTSRequest(
-                text=apply_pronunciation(narration, pronunciation),
-                language=script.language,
-                delivery_beats=tuple(
-                    line.delivery.model_dump(mode="json") for line in script.lines
+        line_wavs: dict[str, Path] = {}
+        line_ms: dict[str, int] = {}
+        if len({line.id for line in script.lines}) != len(script.lines):
+            raise ValueError("Script line IDs must be unique for production timing")
+        for line in script.lines:
+            # IDs are reviewed identifiers, but must also be safe filenames.
+            if Path(line.id).name != line.id or any(c in line.id for c in "/\\:") or line.id in {".", ".."}:
+                raise ValueError(f"Unsafe script line id: {line.id}")
+            line_audio = staging_dir / "audio" / "lines" / f"{line.id}.wav"
+            line_audio.parent.mkdir(parents=True, exist_ok=True)
+            tts.synthesize(
+                TTSRequest(
+                    text=apply_pronunciation(line.text, pronunciation),
+                    language=script.language,
+                    delivery_beats=(line.delivery.model_dump(mode="json"),),
                 ),
-            ),
-            staged_audio,
+                line_audio,
+            )
+            line_wavs[line.id] = line_audio
+            line_ms[line.id] = inspect_wav(
+                line_audio, require_signal=getattr(tts, "require_signal", False)
+            ).duration_ms
+        storyboard, timing_record = retime_storyboard(approved_storyboard, line_ms)
+        timing_record["audio_alignment"] = concat_scene_audio(storyboard, line_wavs, staged_audio)
+        _write_json_atomic(staging_dir / "scene-timing.json", timing_record)
+        visual_budget_report = validate_visual_budget(storyboard)
+        visual_budget_qa = (
+            visual_budget_report.model_dump(mode="json")
+            if storyboard.visual_budget_profile != "legacy" or visual_budget_report.mascot_frames
+            else None
         )
-        audio_report = inspect_wav(
-            staged_audio, require_signal=getattr(tts, "require_signal", False)
+        render_input = build_render_input(
+            storyboard, audio_file="audio/narration.wav", duration_policy="v2"
         )
-        timing_qa = audio_timing_qa(audio_report.duration_ms, final_frame)
+        final_frame = storyboard.scenes[-1].start_frame + storyboard.scenes[-1].duration_frames
+        audio_report = inspect_wav(staged_audio)
+        timing_qa = audio_timing_qa(
+            audio_report.duration_ms, final_frame, timing_record=timing_record
+        )
         render_input_data = render_input.model_dump(mode="json")
         staged_render_input = staging_dir / RENDER_INPUT_NAME
         _write_json_atomic(staged_render_input, render_input_data)
@@ -374,24 +427,11 @@ def _produce_v2(
         chapter_parts: tuple[str, ...] = ()
         clip_outputs: dict[str, str] = {}
         if render_input.format_profile == "youtube_long":
-
-            def synthesize_clip(text: str, path: Path) -> int:
-                tts.synthesize(
-                    TTSRequest(
-                        text=apply_pronunciation(text, pronunciation),
-                        language=script.language,
-                    ),
-                    path,
-                )
-                return inspect_wav(
-                    path, require_signal=getattr(tts, "require_signal", False)
-                ).duration_ms
-
             clip_outputs = render_clips(
                 load_clip_scenes(layout.artifact_root, storyboard),
                 storyboard,
                 staging_dir,
-                synthesize=synthesize_clip,
+                line_wavs=line_wavs,
                 runner=runner,
                 brand=clip_brand,
                 revision=project.active_revision,
@@ -424,12 +464,27 @@ def _produce_v2(
                 "provider": provider_name,
                 "asset_sha256": dict(asset_hashes),
                 "render_input_sha256": canonical_json_hash(render_input_data),
+                "scene_timing_sha256": sha256_file(staging_dir / "scene-timing.json"),
+                "line_audio_sha256": {
+                    path.relative_to(staging_dir).as_posix(): sha256_file(path)
+                    for path in line_wavs.values()
+                },
                 "pronunciation_version": pronunciation.version,
                 "pronunciation_sha256": pronunciation_sha256,
                 "provider_identity": provider_identity_data,
                 "renderer_identity": renderer_identity_data,
                 **({"chapter_parts": list(chapter_parts)} if chapter_parts else {}),
                 **({"clips": clip_outputs} if clip_outputs else {}),
+                **({"clip_artifact_sha256": {
+                    path.relative_to(staging_dir).as_posix(): sha256_file(path)
+                    for clip_id in clip_outputs
+                    for path in (
+                        staging_dir / f"audio/clips/{clip_id}.wav",
+                        staging_dir / f"clips/{clip_id}.render-input.json",
+                        staging_dir / f"clips/{clip_id}.scene-timing.json",
+                        staging_dir / f"clips/{clip_id}.video-qa.json",
+                    )
+                }} if clip_outputs else {}),
             },
         )
         _write_json_atomic(
@@ -502,7 +557,7 @@ def _v2_run_is_valid(
     pronunciation_sha256: str,
     provider_identity: Mapping[str, str],
     renderer_identity: Mapping[str, str],
-    require_timing: bool = False,
+    require_timing: bool = True,
     final_frame: int | None = None,
     expected_visual_budget: Mapping[str, Any] | None = None,
 ) -> bool:
@@ -511,6 +566,7 @@ def _v2_run_is_valid(
         run_dir / RENDER_INPUT_NAME,
         run_dir / OUTPUT_NAME,
         run_dir / V2_RENDER_MANIFEST_NAME,
+        run_dir / "scene-timing.json",
     )
     if not all(path.is_file() for path in required_paths):
         return False
@@ -539,14 +595,30 @@ def _v2_run_is_valid(
         and manifest.get("pronunciation_sha256") == pronunciation_sha256
         and manifest.get("provider_identity") == dict(provider_identity)
         and manifest.get("renderer_identity") == dict(renderer_identity)
+        and manifest.get("scene_timing_sha256") == sha256_file(run_dir / "scene-timing.json")
         and manifest.get("render_input_sha256")
         == canonical_json_hash(render_input)
+    ):
+        return False
+    line_hashes = manifest.get("line_audio_sha256")
+    if not isinstance(line_hashes, dict) or not line_hashes or not all(
+        (run_dir / relative).is_file() and sha256_file(run_dir / relative) == expected
+        for relative, expected in line_hashes.items()
     ):
         return False
     if not all(
         (run_dir / relative).is_file() for relative in manifest.get("clips", {}).values()
     ):
         return False
+    if manifest.get("clips"):
+        clip_hashes = manifest.get("clip_artifact_sha256", {})
+        if not clip_hashes or not all(
+            (run_dir / relative).is_file() and sha256_file(run_dir / relative) == expected
+            for relative, expected in clip_hashes.items()
+        ):
+            return False
+        if not all(_clip_qa_is_valid(run_dir, clip_id) for clip_id in manifest["clips"]):
+            return False
     return all(
         (run_dir / relative).is_file()
         and sha256_file(run_dir / relative) == expected
@@ -563,7 +635,7 @@ def _validate_v2_staged_run(
     pronunciation_sha256: str,
     provider_identity: Mapping[str, str],
     renderer_identity: Mapping[str, str],
-    require_timing: bool = False,
+    require_timing: bool = True,
     final_frame: int | None = None,
     expected_visual_budget: Mapping[str, Any] | None = None,
 ) -> None:
@@ -592,7 +664,7 @@ def _promote_v2_video_qa_if_needed(
     revision_root: Path,
     input_hash: str,
     *,
-    require_timing: bool = False,
+    require_timing: bool = True,
     final_frame: int | None = None,
     expected_visual_budget: Mapping[str, Any] | None = None,
 ) -> None:
@@ -628,7 +700,7 @@ def _v2_video_qa_is_valid(
     revision_root: Path,
     input_hash: str,
     *,
-    require_timing: bool = False,
+    require_timing: bool = True,
     final_frame: int | None = None,
     expected_visual_budget: Mapping[str, Any] | None = None,
 ) -> bool:
@@ -688,16 +760,48 @@ def _timing_qa_is_valid(path: Path, run_dir: Path, final_frame: int | None) -> b
         composition_ms = data["composition_duration_ms"]
         trailing_ms = data["trailing_visual_ms"]
         measured_ms = inspect_wav(run_dir / "audio" / "narration.wav").duration_ms
-        expected = audio_timing_qa(measured_ms, final_frame)
+        timing_record = json.loads((run_dir / "scene-timing.json").read_text(encoding="utf-8"))
+        if timing_record.get("intentional_tail_frames", 0) != 0:
+            return False
+        expected = audio_timing_qa(measured_ms, final_frame, timing_record=timing_record)
+        drift_ms = data["max_scene_drift_ms"]
     except (OSError, ValueError, KeyError, TypeError):
         return False
     return (
         all(
             type(value) is int and value >= 0
-            for value in (audio_ms, composition_ms, trailing_ms)
+            for value in (audio_ms, composition_ms, trailing_ms, drift_ms)
         )
         and {key: data[key] for key in expected} == expected
     )
+
+
+def _clip_qa_is_valid(run_dir: Path, clip_id: str) -> bool:
+    try:
+        render_input = json.loads(
+            (run_dir / f"clips/{clip_id}.render-input.json").read_text(encoding="utf-8")
+        )
+        timing = json.loads(
+            (run_dir / f"clips/{clip_id}.scene-timing.json").read_text(encoding="utf-8")
+        )
+        scenes = render_input["scenes"]
+        end = scenes[-1]["start_frame"] + scenes[-1]["duration_frames"]
+        frames = end + render_input["youtube_cta"]["duration_frames"]
+        if not 1800 <= frames <= 5400 or timing.get("intentional_tail_frames") != 90:
+            return False
+        expected_alignment = [
+            (scene["id"], round(scene["start_frame"] * 1000 / 30)) for scene in scenes
+        ] + [(f"{clip_id}-CTA", round(end * 1000 / 30))]
+        if [(row["scene_id"], row["video_start_ms"]) for row in timing["audio_alignment"]] != expected_alignment:
+            return False
+        measured = inspect_wav(run_dir / f"audio/clips/{clip_id}.wav").duration_ms
+        expected = audio_timing_qa(measured, frames, timing_record=timing)
+        recorded = json.loads(
+            (run_dir / f"clips/{clip_id}.video-qa.json").read_text(encoding="utf-8")
+        )
+        return canonical_json_hash(recorded) == canonical_json_hash(expected)
+    except (OSError, ValueError, KeyError, TypeError, IndexError):
+        return False
 
 
 def _completed_v2_project(

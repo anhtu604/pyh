@@ -51,9 +51,9 @@ LEASE = Path(".healthvideo/write-lease.yaml")
 ENTERED_AT = datetime(2026, 9, 10, 7, 30, tzinfo=UTC)
 
 
-@pytest.mark.parametrize(("ai", "duration_ms"), [(False, 48000), (True, 63000)])
+@pytest.mark.parametrize("ai", [False, True])
 def test_golden_v2_crosses_process_boundaries_to_a_restorable_package(
-    tmp_path: Path, ai: bool, duration_ms: int
+    tmp_path: Path, ai: bool
 ) -> None:
     project, provider_requests = _prepare_v2_awaiting_medical(tmp_path, ai=ai)
     revision = project / "revisions/001"
@@ -74,7 +74,10 @@ def test_golden_v2_crosses_process_boundaries_to_a_restorable_package(
     assert (scenes[-1]["visual"], scenes[-1]["narration"]) == ("brand_outro", OUTRO_TEXT)
     assert "pyh-logo.svg" in json.dumps(scenes[-1])
     qa = json.loads((revision / "reviews/video-qa.json").read_text(encoding="utf-8"))
-    assert qa["composition_duration_ms"] == duration_ms
+    assert qa["composition_duration_ms"] == round(
+        sum(scene["duration_frames"] for scene in scenes) * 1000 / 30
+    )
+    assert qa["audio_duration_ms"] == qa["composition_duration_ms"]
     assert sorted(path.name for path in (revision / "reviews").glob("*-approval.yaml")) == [
         "medical-approval.yaml",
         "video-approval.yaml",
@@ -255,10 +258,19 @@ def _prepare_v2_awaiting_medical(
     board["visual_budget_profile"] = "m6_5_v1"
     board["scenes"][1]["visual"] = "ai_clip"
     durations = {"ai_clip": 180, "chart": 225, "evidence_highlight": 225, "whiteboard": 390}
+    script_path = revision / "script/script.yaml"
+    script = read_yaml(script_path)
+    # Synthetic narration must actually sustain these visual proportions with
+    # the subprocess worker's real SilentTTS; planned durations are no longer runtime.
+    words_per_scene = {"ai_clip": 15, "chart": 19, "evidence_highlight": 19, "whiteboard": 34}
     start = 0
-    for scene in board["scenes"]:
+    for scene, line in zip(board["scenes"], script["lines"], strict=True):
         scene["start_frame"], scene["duration_frames"] = start, durations[scene["visual"]]
+        count = words_per_scene[scene["visual"]]
+        text = " ".join((line["text"].split() * count)[:count])
+        scene["narration"] = line["text"] = text
         start += scene["duration_frames"]
+    write_yaml_atomic(script_path, script)
     write_yaml_atomic(revision / "storyboard/storyboard.yaml", board)
     author_hook_outro(project, duration_frames=90)
     create_brand_logo_asset(

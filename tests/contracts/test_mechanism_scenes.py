@@ -322,6 +322,11 @@ def test_produce_mechanism_needs_no_generated_asset_and_rejects_unknown_subject(
             },
         ]
     )
+    # One spoken line spans this consecutive six-scene visual explanation.
+    line = read_yaml(revision / "script/script.yaml")["lines"][0]
+    for scene in board["scenes"]:
+        scene["script_line_id"] = line["id"]
+        scene["narration"] = line["text"]
     write_yaml_atomic(revision / "storyboard/storyboard.yaml", board)
     write_yaml_atomic(revision / "assets/asset-manifest.yaml", {"assets": []})
     approve_gate(project, GateKind.MEDICAL, reviewer="test", now=V2_REVIEWED_AT)
@@ -351,5 +356,7 @@ def test_produce_mechanism_needs_no_generated_asset_and_rejects_unknown_subject(
             (revision / "reviews/video-qa.json").read_text(encoding="utf-8")
         )
         assert qa["visual_budget"]["profile"] == "explain_first_v1"
-        assert qa["visual_budget"]["category_frames"]["mechanism"] == 960
+        assert qa["visual_budget"]["category_frames"]["mechanism"] == sum(
+            scene["duration_frames"] for scene in payload["scenes"][:4]
+        )
         assert qa["visual_budget"]["passed"] is True

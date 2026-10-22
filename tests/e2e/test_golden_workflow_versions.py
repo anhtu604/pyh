@@ -1,5 +1,6 @@
 import json
 import shutil
+import wave
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
@@ -25,11 +26,14 @@ from healthvideo.domain.project import ProjectState, transition
 from healthvideo.domain.project_v2 import WorkflowState
 from healthvideo.domain.stage import StageManifest, StageStatus
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
+from healthvideo.domain.storyboard import Storyboard
+from healthvideo.domain.visual_budget import calculate_visual_budget
+from healthvideo.render.timing import retime_storyboard
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.storage.project_layout import resolve_project_layout
 from healthvideo.storage.revisions import create_revision
 from healthvideo.storage.stages import append_stage_manifest
-from healthvideo.tts.base import TTSRequest, TTSResult
+from healthvideo.tts.base import TTSRequest, TTSResult, word_timestamps
 from healthvideo.tts.silent import SilentTTS
 from healthvideo.video_ai.base import VeoRequest, VeoResult, VideoProbeResult
 from healthvideo.video_ai.veo import GoogleVeoTransport
@@ -45,7 +49,11 @@ from healthvideo.workflows.visual_assets import (
     create_brand_logo_asset,
     create_evidence_chart,
 )
-from tests.helpers import _advance_v2_state, create_v2_project_fixture
+from tests.helpers import (
+    _advance_v2_state,
+    create_long_form_project_fixture,
+    create_v2_project_fixture,
+)
 
 GOLDEN_PROJECTS = [
     Path("tests/fixtures/golden-project"),
@@ -53,6 +61,77 @@ GOLDEN_PROJECTS = [
 ]
 
 GOLDEN_ENTERED_AT = datetime(2026, 9, 10, 7, 30, tzinfo=UTC)
+
+
+class GoldenSceneTTS:
+    """Keep visual-budget fixtures at their intended duration using actual PCM audio."""
+
+    provider_name = "golden-scene-timing"
+
+    def __init__(self, revision_root: Path) -> None:
+        board = read_yaml(revision_root / "storyboard/storyboard.yaml")
+        self.duration_ms = {
+            scene["narration"]: (scene["duration_frames"] - 9) * 1000 // 30
+            for scene in board["scenes"]
+        }
+        self.calls: list[str] = []
+
+    def synthesize(self, request: TTSRequest, output: Path) -> TTSResult:
+        self.calls.append(request.text)
+        duration_ms = self.duration_ms[request.text]
+        output.parent.mkdir(parents=True, exist_ok=True)
+        with wave.open(str(output), "wb") as wav:
+            wav.setparams((1, 2, 24000, 0, "NONE", "not compressed"))
+            wav.writeframes(b"\0\0" * (duration_ms * 24))
+        return TTSResult(
+            provider=self.provider_name, audio_file=output, duration_ms=duration_ms,
+            word_timestamps=word_timestamps(request.text.split(), duration_ms),
+        )
+
+
+def test_video_review_recomputes_measured_runtime_budget_without_changing_medical_packet(
+    tmp_path: Path,
+) -> None:
+    project = create_v2_project_fixture(tmp_path)
+    revision = project / "revisions/001"
+    board_path = revision / "storyboard/storyboard.yaml"
+    raw = read_yaml(board_path)
+    raw["visual_budget_profile"] = "m6_5_v1"
+    raw["scenes"][0]["script_line_id"] = "L01"
+    write_yaml_atomic(board_path, raw)
+    approved = Storyboard.model_validate(raw)
+    medical = render_medical_packet(revision)
+    runtime, record = retime_storyboard(approved, {"L01": 1000})
+    (revision / "renders").mkdir(exist_ok=True)
+    (revision / "renders/scene-timing.json").write_text(json.dumps(record), encoding="utf-8")
+    (revision / "reviews").mkdir(exist_ok=True)
+    (revision / "reviews/video-qa.json").write_text(json.dumps({
+        "visual_budget": calculate_visual_budget(runtime).model_dump(mode="json"),
+    }), encoding="utf-8")
+
+    packet = render_video_packet(revision)
+
+    assert "QA production: khớp report tái tính" in packet
+    assert "Tổng timeline: 39 frame" in packet
+    assert render_medical_packet(revision) == medical
+
+
+def test_video_review_clip_source_spans_follow_measured_runtime(tmp_path: Path) -> None:
+    project = create_long_form_project_fixture(tmp_path)
+    revision = project / "revisions/001"
+    board = Storyboard.model_validate(read_yaml(revision / "storyboard/storyboard.yaml"))
+    _, record = retime_storyboard(board, {f"L{i:02}": 30000 for i in range(1, 7)})
+    (revision / "renders").mkdir(exist_ok=True)
+    (revision / "renders/scene-timing.json").write_text(json.dumps(record), encoding="utf-8")
+    (revision / "renders/render-manifest.json").write_text(json.dumps({
+        "clips": {"CL01": "clips/CL01.mp4", "CL02": "clips/CL02.mp4"},
+    }), encoding="utf-8")
+
+    packet = render_video_packet(revision)
+
+    assert "Source timeline: 0–1818 frame" in packet
+    assert "Source timeline: 1818–3636 frame" in packet
+    assert "Source timeline: 0–1800 frame" not in packet
 
 
 def test_m64_hook_outro_through_both_manual_gates_and_package(tmp_path: Path) -> None:
@@ -77,7 +156,10 @@ def test_m64_hook_outro_through_both_manual_gates_and_package(tmp_path: Path) ->
     assert render_input["scenes"][0]["start_frame"] == 0
     assert render_input["scenes"][-1]["visual"] == "brand_outro"
     qa = json.loads((revision / "reviews/video-qa.json").read_text(encoding="utf-8"))
-    assert qa["composition_duration_ms"] == 48000 and qa["audio_duration_ms"] > 0
+    runtime_frames = sum(scene["duration_frames"] for scene in render_input["scenes"])
+    assert qa["composition_duration_ms"] == round(runtime_frames * 1000 / 30)
+    assert qa["audio_duration_ms"] == qa["composition_duration_ms"]
+    assert qa["composition_duration_ms"] != 48000
     approve_gate(project, GateKind.VIDEO, reviewer="doctor", now=GOLDEN_ENTERED_AT)
     package = package_project(project)
     caption = (package / "caption.txt").read_text(encoding="utf-8")
@@ -126,21 +208,17 @@ def test_m65_zero_ai_budget_through_chart_outro_gates_and_package(tmp_path: Path
     assert any(record.storyboard_role == "brand" and record.sha256 for record in records.values())
     approve_gate(project, GateKind.MEDICAL, reviewer="doctor", now=GOLDEN_ENTERED_AT)
 
-    tts_calls: list[str] = []
+    tts = GoldenSceneTTS(revision)
     staged_charts: list[bytes] = []
-
-    class CountingSilent(SilentTTS):
-        def synthesize(self, request: TTSRequest, output_path: Path) -> TTSResult:
-            tts_calls.append(request.text)
-            return super().synthesize(request, output_path)
 
     def runner(argv: list[str]) -> int:
         props = Path(argv[argv.index("--props") + 1])
         staged_charts.append((props.parent / "assets/chart-count.svg").read_bytes())
         return _write_golden_video(argv)
 
-    produce_project(project, CountingSilent(), runner)
-    assert staged_charts == [chart.read_bytes()] and len(tts_calls) == 1
+    produce_project(project, tts, runner)
+    assert staged_charts == [chart.read_bytes()]
+    assert tts.calls == [line["text"] for line in read_yaml(revision / "script/script.yaml")["lines"]]
     render_input = json.loads((revision / "renders/render-input.json").read_text(encoding="utf-8"))
     scenes = render_input["scenes"]
     assert (scenes[0]["id"], scenes[0]["start_frame"], scenes[0]["visual"]) == ("S01", 0, "whiteboard")
@@ -150,8 +228,10 @@ def test_m65_zero_ai_budget_through_chart_outro_gates_and_package(tmp_path: Path
         {"path": "assets/chart-count.svg", "role": "chart", "pose": None}
     ]
     qa = json.loads((revision / "reviews/video-qa.json").read_text(encoding="utf-8"))
-    assert qa["composition_duration_ms"] == 60000 and qa["audio_duration_ms"] > 0
-    assert qa["visual_budget"]["category_frames"] == {"whiteboard_svg": 1350, "chart_crop": 450, "ai_clip": 0}
+    runtime_board = Storyboard.model_validate({**read_yaml(board_path), "scenes": scenes})
+    assert qa["composition_duration_ms"] == round(sum(s["duration_frames"] for s in scenes) * 1000 / 30)
+    assert qa["audio_duration_ms"] == qa["composition_duration_ms"]
+    assert qa["visual_budget"] == calculate_visual_budget(runtime_board).model_dump(mode="json")
     assert qa["visual_budget"]["passed"] is True
     assert "QA production: khớp report tái tính" in render_video_packet(revision)
     assert read_yaml(project / "project.yaml")["state"] == "awaiting_video_review"
@@ -230,21 +310,17 @@ def test_m66_ai_clip_through_both_manual_gates_and_disclosed_package(
     monkeypatch.setattr(ai_clips_module, "generate_ai_clip", no_provider)
     monkeypatch.setattr(ai_clips_module, "probe_ai_clip_media", no_provider)
     monkeypatch.setattr(GoogleVeoTransport, "generate", no_provider)
-    tts_calls: list[str] = []
+    tts = GoldenSceneTTS(revision)
     staged_clips: list[bytes] = []
-
-    class CountingSilent(SilentTTS):
-        def synthesize(self, request: TTSRequest, output_path: Path) -> TTSResult:
-            tts_calls.append(request.text)
-            return super().synthesize(request, output_path)
 
     def runner(argv: list[str]) -> int:
         props = Path(argv[argv.index("--props") + 1])
         staged_clips.append((props.parent / "assets/ai-clips/S02.mp4").read_bytes())
         return _write_golden_video(argv)
 
-    produce_project(project, CountingSilent(), runner)
-    assert staged_clips == [clip.read_bytes()] and len(tts_calls) == 1
+    produce_project(project, tts, runner)
+    assert staged_clips == [clip.read_bytes()]
+    assert tts.calls == [line["text"] for line in read_yaml(revision / "script/script.yaml")["lines"]]
     render_input = json.loads((revision / "renders/render-input.json").read_text(encoding="utf-8"))
     scenes = render_input["scenes"]
     assert (render_input["fps"], render_input["audio_file"]) == (30, "audio/narration.wav")
@@ -265,10 +341,10 @@ def test_m66_ai_clip_through_both_manual_gates_and_disclosed_package(
     ):
         assert forbidden_playback_prop not in ai_renderer
     qa = json.loads((revision / "reviews/video-qa.json").read_text(encoding="utf-8"))
-    assert qa["composition_duration_ms"] == 63000 and qa["audio_duration_ms"] > 0
-    assert qa["visual_budget"]["category_frames"] == {
-        "whiteboard_svg": 1260, "chart_crop": 450, "ai_clip": 180,
-    }
+    runtime_board = Storyboard.model_validate({**read_yaml(board_path), "scenes": scenes})
+    assert qa["composition_duration_ms"] == round(sum(s["duration_frames"] for s in scenes) * 1000 / 30)
+    assert qa["audio_duration_ms"] == qa["composition_duration_ms"]
+    assert qa["visual_budget"] == calculate_visual_budget(runtime_board).model_dump(mode="json")
     assert qa["visual_budget"]["passed"] is True
 
     approve_gate(project, GateKind.VIDEO, reviewer="doctor", now=GOLDEN_ENTERED_AT)
@@ -589,6 +665,14 @@ def test_v2_golden_copy_produces_and_packages_without_touching_either_fixture(
     }
     project_dir = tmp_path / "golden-project-v2"
     shutil.copytree(GOLDEN_PROJECTS[1], project_dir)
+    revision = project_dir / "revisions/001"
+    board_path = revision / "storyboard/storyboard.yaml"
+    board = read_yaml(board_path)
+    lines = read_yaml(revision / "script/script.yaml")["lines"]
+    for scene, line in zip(board["scenes"], lines, strict=True):
+        assert scene["narration"] == line["text"]
+        scene["script_line_id"] = line["id"]
+    write_yaml_atomic(board_path, board)
     _advance_v2_state(project_dir, WorkflowState.AWAITING_MEDICAL_REVIEW)
     approve_gate(
         project_dir,

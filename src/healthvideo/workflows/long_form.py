@@ -24,7 +24,9 @@ from healthvideo.render.input import (
     build_render_input,
 )
 from healthvideo.render.remotion import build_render_argv
+from healthvideo.render.timing import concat_scene_audio
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
+from healthvideo.tts.audio_checks import inspect_wav
 from healthvideo.visuals.brand import render_pyh_logo
 from healthvideo.visuals.mascot import mascot_asset
 from healthvideo.workflows.visual_assets import BRAND_PROFILE_PATH
@@ -93,23 +95,52 @@ def render_clips(
     storyboard: Storyboard,
     staging_dir: Path,
     *,
-    synthesize: Callable[[str, Path], int],
+    line_wavs: Mapping[str, Path],
     runner: Callable[[list[str]], int],
     brand: BrandProfile | None = None,
     revision: str = "001",
 ) -> dict[str, str]:
-    """Voice and render each approved clip; return clip ID -> mp4 path relative to the run."""
+    """Reuse measured line audio for each clip; return run-relative mp4 paths."""
     # ponytail: clips re-render with every long-form render; cache per clip if it gets slow.
     brand = brand or load_brand_profile(BRAND_PROFILE_PATH)
     _register_clip_mascot(staging_dir, brand, revision)
     outputs: dict[str, str] = {}
     for clip_id, scenes in clip_scenes.items():
+        frames = sum(scene.duration_frames for scene in scenes) + 90
+        if not 1800 <= frames <= 5400:
+            raise ValueError(
+                f"Clip {clip_id}: {frames} frames including CTA; requires 1800–5400 frames"
+            )
+        selected_lines = {scene.script_line_id for scene in scenes if scene.script_line_id}
         audio = f"audio/clips/{clip_id}.wav"
-        duration_ms = synthesize(
-            " ".join(scene.narration for scene in scenes), staging_dir / audio
-        )
-        audio_timing_qa(duration_ms, sum(scene.duration_frames for scene in scenes))
         render_input = clip_render_input(storyboard, scenes, audio, brand=brand)
+        # The reviewed clip content is followed by an intentional silent CTA.
+        cta = Scene(
+            id=f"{clip_id}-CTA", start_frame=frames - 90, duration_frames=90,
+            narration="", visual="whiteboard",
+        )
+        board = storyboard.model_copy(update={"scenes": (*render_input.scenes, cta)})
+        alignment = concat_scene_audio(
+            board, {line: line_wavs[line] for line in selected_lines}, staging_dir / audio,
+            source_board=storyboard,
+        )
+        duration_ms = inspect_wav(staging_dir / audio).duration_ms
+        timing_record = {
+            "schema_version": "1.0", "fps": 30, "audio_alignment": alignment,
+            "intentional_tail_frames": 90,
+        }
+        timing_qa = audio_timing_qa(
+            duration_ms, frames, timing_record=timing_record
+        )
+        timing_path = staging_dir / "clips" / f"{clip_id}.scene-timing.json"
+        timing_path.parent.mkdir(parents=True, exist_ok=True)
+        timing_path.write_text(
+            json.dumps(timing_record),
+            encoding="utf-8",
+        )
+        qa_path = staging_dir / "clips" / f"{clip_id}.video-qa.json"
+        qa_path.parent.mkdir(parents=True, exist_ok=True)
+        qa_path.write_text(json.dumps(timing_qa, sort_keys=True), encoding="utf-8")
         input_path = staging_dir / "clips" / f"{clip_id}.render-input.json"
         input_path.parent.mkdir(parents=True, exist_ok=True)
         input_path.write_text(

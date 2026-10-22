@@ -323,6 +323,7 @@ def create_v2_project_fixture(
                     "id": "S01",
                     "start_frame": 0,
                     "duration_frames": 225,
+                    "script_line_id": "L01",
                     "narration": "Ăn mặn có thể làm huyết áp tăng.",
                     "claim_id": "C01",
                     "source_marker": "[1]",
@@ -405,6 +406,8 @@ def create_long_form_project_fixture(root: Path) -> Path:
         "Nêm nhạt dần để vị giác quen.",
         "Tóm tắt các ý chính của video.",
     )
+    # Real measured SilentTTS audio must sustain each one-minute, two-scene clip.
+    texts = tuple(" ".join((text.split() * 80)[:80]) for text in texts)
     claims = {0: "C01", 1: "C02"}
     lines = []
     for index, text in enumerate(texts):
@@ -420,7 +423,7 @@ def create_long_form_project_fixture(root: Path) -> Path:
     board_path = revision_root / "storyboard" / "storyboard.yaml"
     board = read_yaml(board_path)
     first = board["scenes"][0]
-    first.update({"duration_frames": 900, "chapter_id": "CH01"})
+    first.update({"duration_frames": 900, "chapter_id": "CH01", "narration": texts[0]})
     scenes = [first]
     chapters = ("CH01", "CH02", "CH03", "CH04", "CH05", "CH05")
     frames = (900, 900, 900, 900, 900, 900)
@@ -431,6 +434,7 @@ def create_long_form_project_fixture(root: Path) -> Path:
             "start_frame": start,
             "duration_frames": frames[index],
             "narration": texts[index],
+            "script_line_id": f"L{index + 1:02d}",
             "visual": "whiteboard",
             "chapter_id": chapters[index],
         }

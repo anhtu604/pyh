@@ -1,5 +1,6 @@
+from collections.abc import Mapping
 from pathlib import PurePosixPath
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -10,6 +11,8 @@ from healthvideo.domain.visual_budget import VisualBudgetProfile
 FRAMES_PER_SECOND = 30
 MIN_DURATION_FRAMES = 45 * FRAMES_PER_SECOND
 MAX_DURATION_FRAMES = 180 * FRAMES_PER_SECOND
+MAX_TRAILING_VISUAL_MS = 1500
+MAX_SCENE_DRIFT_MS = 120
 
 
 class YouTubeCTA(BaseModel):
@@ -132,17 +135,47 @@ def build_render_input(
     )
 
 
-def audio_timing_qa(audio_duration_ms: int, final_frame: int) -> dict[str, int]:
+def audio_timing_qa(
+    audio_duration_ms: int, final_frame: int, *,
+    timing_record: Mapping[str, Any] | None = None,
+) -> dict[str, int]:
     """Refuse narration beyond the last reviewed frame; report measured tail."""
     if audio_duration_ms < 0 or final_frame <= 0:
         raise ValueError("audio duration and final frame must be positive")
     if 30 * audio_duration_ms > 1000 * (final_frame + 1):
         raise ValueError("narration WAV exceeds reviewed storyboard timeline")
     composition_ms = (1000 * final_frame + 29) // 30
+    trailing_ms = max(0, composition_ms - audio_duration_ms)
+    drift_ms = 0
+    if timing_record is not None:
+        alignment = timing_record["audio_alignment"]
+        if not alignment:
+            raise ValueError("Scene audio alignment is required")
+        speech_ends: list[int] = []
+        for item in alignment:
+            audio_start, video_start = item["audio_start_ms"], item["video_start_ms"]
+            if any(type(value) is not int or value < 0 for value in (audio_start, video_start)):
+                raise ValueError("Invalid scene audio alignment")
+            drift_ms = max(drift_ms, abs(audio_start - video_start))
+            speech_end = item["speech_end_ms"]
+            if speech_end is not None:
+                if type(speech_end) is not int or speech_end < video_start or speech_end > audio_duration_ms:
+                    raise ValueError("Invalid scene speech end")
+                speech_ends.append(speech_end)
+        intentional_frames = timing_record.get("intentional_tail_frames", 0)
+        if type(intentional_frames) is not int or not 0 <= intentional_frames <= final_frame:
+            raise ValueError("Invalid intentional tail frames")
+        trailing_ms = max(0, composition_ms - max(speech_ends, default=0)
+                          - round(intentional_frames * 1000 / 30))
+    if trailing_ms > MAX_TRAILING_VISUAL_MS:
+        raise ValueError(f"trailing visual silence {trailing_ms} ms exceeds {MAX_TRAILING_VISUAL_MS} ms")
+    if drift_ms > MAX_SCENE_DRIFT_MS:
+        raise ValueError(f"scene audio drift {drift_ms} ms exceeds {MAX_SCENE_DRIFT_MS} ms")
     return {
         "audio_duration_ms": audio_duration_ms,
         "composition_duration_ms": composition_ms,
-        "trailing_visual_ms": max(0, composition_ms - audio_duration_ms),
+        "trailing_visual_ms": trailing_ms,
+        "max_scene_drift_ms": drift_ms,
     }
 
 

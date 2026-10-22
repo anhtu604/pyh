@@ -26,9 +26,49 @@ def test_audio_timing_guard_uses_integer_frame_boundary() -> None:
         "audio_duration_ms": 1000,
         "composition_duration_ms": 1000,
         "trailing_visual_ms": 0,
+        "max_scene_drift_ms": 0,
     }
     with pytest.raises(ValueError, match="exceeds"):
         audio_timing_qa(1034, 30)
+
+
+def test_audio_timing_blocks_silent_tail() -> None:
+    with pytest.raises(ValueError, match="trailing"):
+        audio_timing_qa(1000, 90)
+
+
+def test_audio_timing_checks_speech_end_inside_a_padded_wav() -> None:
+    with pytest.raises(ValueError, match="trailing"):
+        audio_timing_qa(11300, 339, timing_record={"audio_alignment": [
+            {"scene_id": "spoken", "audio_start_ms": 0, "video_start_ms": 0, "speech_end_ms": 1000},
+            {"scene_id": "silent", "audio_start_ms": 1300, "video_start_ms": 1300, "speech_end_ms": None},
+        ]})
+
+
+def test_audio_timing_exempts_only_explicit_intentional_cta() -> None:
+    result = audio_timing_qa(4300, 129, timing_record={
+        "intentional_tail_frames": 90,
+        "audio_alignment": [
+            {"scene_id": "spoken", "audio_start_ms": 0, "video_start_ms": 0, "speech_end_ms": 1000},
+            {"scene_id": "CTA", "audio_start_ms": 1300, "video_start_ms": 1300, "speech_end_ms": None},
+        ],
+    })
+    assert result["trailing_visual_ms"] == 300
+
+
+def test_audio_timing_blocks_scene_drift() -> None:
+    with pytest.raises(ValueError, match="drift"):
+        audio_timing_qa(1000, 30, timing_record={"audio_alignment": [
+            {"scene_id": "S01", "audio_start_ms": 121, "video_start_ms": 0, "speech_end_ms": 1000},
+        ]})
+
+
+def test_audio_timing_accepts_limits() -> None:
+    result = audio_timing_qa(1000, 75, timing_record={"audio_alignment": [
+        {"scene_id": "S01", "audio_start_ms": 120, "video_start_ms": 0, "speech_end_ms": 1000},
+    ]})
+    assert result["trailing_visual_ms"] == 1500
+    assert result["max_scene_drift_ms"] == 120
 
 
 def valid_highlight_scene(**overrides: object) -> Scene:

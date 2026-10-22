@@ -13,7 +13,8 @@ export const heartGeometry = (state: Anatomy['state'], severity: number, frame: 
   const beatRate = 1.1 + disease * 0.2;
   const phase = (frame / fps * beatRate) % 1;
   const pulse = (p: number) => Math.sin(Math.min(1, p / 0.42) * Math.PI) ** 2;
-  const squeeze = pulse(phase);
+  // Keep a small elastic recoil during diastole as well as the main systolic squeeze.
+  const squeeze = pulse(phase) + Math.sin(phase * Math.PI * 2) * 0.12;
   const atrialSqueeze = pulse((phase + 0.18) % 1);
   const wallThickness = 24 + disease * 32;
   return {scaleX: 1 - squeeze * 0.055, scaleY: 1 - squeeze * 0.075,
@@ -27,6 +28,7 @@ export const Heart: React.FC<OrganProps & {cutaway?: boolean}> = ({state, severi
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
   const g = heartGeometry(state, severity, frame, fps);
+  const flowPosition = frame / fps * (emphasizeFlow ? 150 : 60);
   return <svg viewBox="40 10 440 540" width="100%" height="100%" role="img" aria-label="Stylised anterior heart"
     data-state={state} data-severity={severity} data-cutaway={cutaway}>
     {/* Filled vessel walls: the arch turns left and descends behind the base. */}
@@ -43,7 +45,7 @@ export const Heart: React.FC<OrganProps & {cutaway?: boolean}> = ({state, severi
       <path data-chamber="right-atrium" fill={c.heartDeep} d="M163 172 C123 167 96 214 113 265 C120 289 151 306 180 293 L211 226Z" />
       <path fill={c.heartMid} d="M157 184 C126 184 111 217 124 248 C134 267 154 272 169 264 L189 220Z" />
     </g>
-    <g data-chamber="ventricles" transform={`translate(${g.apex.x} ${g.apex.y}) scale(${g.scaleX} ${g.scaleY}) translate(${-g.apex.x} ${-g.apex.y})`}>
+    <g data-chamber="ventricles" data-beat-scale={g.scaleY} transform={`translate(${g.apex.x} ${g.apex.y}) scale(${g.scaleX} ${g.scaleY}) translate(${-g.apex.x} ${-g.apex.y})`}>
       <path data-heart-silhouette="true" fill={c.heartDeep}
         d={`M175 185 C215 163 302 165 350 192 C394 219 427 285 409 354 C400 418 377 477 ${g.apex.x} ${g.apex.y} C300 489 240 453 197 408 C147 359 113 301 128 244 C136 216 150 196 175 185Z`} />
       <path data-chamber="left-ventricle" fill={c.heartMid} d="M273 211 C320 188 370 213 391 264 C424 340 379 459 365 510 C318 458 287 384 277 318Z" />
@@ -55,10 +57,12 @@ export const Heart: React.FC<OrganProps & {cutaway?: boolean}> = ({state, severi
         <path data-septum="true" fill={c.heartLight} d="M267 246 C269 317 287 385 326 442 L310 429 C270 380 251 310 254 248Z" />
       </g>}
       {emphasizeFlow && [0, 1, 2].map((i) => <circle key={i} cx={215 + i * 52}
-        cy={285 + ((frame / fps * 75 + i * 25) % 65)} r="7" fill={brand.yellow} />)}
+        cy={285 + ((flowPosition + i * 25) % 65)} r="7" fill={brand.yellow} />)}
     </g>
     {/* Pulmonary trunk lies anterior to the aortic root and bifurcates at the base. */}
     <path data-vessel="pulmonary-trunk" fill={c.vesselDeep} d="M236 243 C215 219 215 188 229 164 L183 166 L100 184 L94 157 L178 133 L242 133 L279 120 L375 131 L372 161 L285 152 L263 170 C248 192 251 209 266 225Z" />
     <path fill={c.vesselLight} d="M236 231 C224 205 227 183 243 158 L282 137 L371 143 L372 153 L283 148 L254 169 C242 192 245 208 254 219Z" />
+    {emphasizeFlow && <path data-flow-arrow="true" transform={`translate(0 ${Math.sin(frame / fps * Math.PI * 2) * 14})`}
+      d="M442 304 L442 362 L433 351 L427 357 L446 380 L465 357 L459 351 L450 362 L450 304Z" fill={brand.yellow} />}
   </svg>;
 };

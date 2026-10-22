@@ -20,6 +20,7 @@ from healthvideo.domain.outline import Outline
 from healthvideo.domain.script import Script
 from healthvideo.domain.storyboard import Storyboard
 from healthvideo.domain.visual_budget import calculate_visual_budget
+from healthvideo.render.timing import restore_timed_storyboard
 from healthvideo.storage.explainer import read_explainer
 from healthvideo.storage.files import canonical_json_hash, read_yaml
 from healthvideo.workflows.long_form import OUTLINE_ARTIFACT, load_clip_scenes
@@ -364,6 +365,9 @@ def render_video_packet(revision_root: Path) -> str:
     storyboard = Storyboard.model_validate(
         read_yaml(revision_root / "storyboard" / "storyboard.yaml")
     )
+    timing_path = revision_root / "renders" / "scene-timing.json"
+    if timing_path.is_file():
+        storyboard = restore_timed_storyboard(storyboard, read_yaml(timing_path))
     budget_section = _render_visual_budget_section(storyboard)
     if budget_section:
         recorded = qa.get("visual_budget")
@@ -376,9 +380,20 @@ def render_video_packet(revision_root: Path) -> str:
             status = "không khớp report tái tính"
         budget_section += f"<p>QA production: {status}</p>"
 
+    clip_spans = (
+        {
+            clip_id: (min(scene.start_frame for scene in scenes),
+                      max(scene.start_frame + scene.duration_frames for scene in scenes))
+            for clip_id, scenes in load_clip_scenes(revision_root, storyboard).items()
+        }
+        if storyboard.format_profile == "youtube_long" and manifest.get("clips")
+        else {}
+    )
     clip_videos = "".join(
         f"<h2>Clip {escape(clip_id)}</h2>"
-        f'<video controls src="../renders/{escape(relative)}"></video>'
+        + (f"<p>Source timeline: {clip_spans[clip_id][0]}–{clip_spans[clip_id][1]} frame</p>"
+           if clip_id in clip_spans else "")
+        + f'<video controls src="../renders/{escape(relative)}"></video>'
         for clip_id, relative in sorted(manifest.get("clips", {}).items())
     )
     sheets = mechanism_sheets(revision_root)
