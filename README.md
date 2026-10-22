@@ -147,6 +147,7 @@ applicability, per-claim doctor notes — hoãn sang M3).
 
 | Task | Deliverable | Status | Tests | Commit |
 | --- | --- | --- | --- | --- |
+| Xưởng P5 Task 5.1 (module) | `discovery/`: YouTube Data API (cần `YOUTUBE_API_KEY`), Google Trends RSS VN, Reddit search; `collect` ghi `SourceFailure` thay vì nuốt lỗi; thẻ chủ đề không có số liệu thì `heat=None`; ghi `topics/discovered/<ngày>.yaml` — chưa nối CLI | complete (module) | 16 passed; Ruff | `feat: add free-source topic discovery modules` |
 | Xưởng P3 Task 3.6 | 4 prompt cố định (`research`, `draft`, `revise_medical`, `revise_production`) + `render_prompt`, `HARD_RULES` (không bịa, không approve/set-pin, không commit, chỉ sửa project + SVG mới, không đăng) | complete | 43 passed; Ruff | `feat: add fixed agent prompts for factory steps` |
 | Xưởng P2 Task 2.1 | Gỡ lease, backup/restore, security-audit, doctor filesystem probe (`doctor --project`), `busy`/writer khỏi operator status; xóa 18 file (≈2.800 dòng), schema lease/backup; `/pyh` + AGENTS.md bỏ M7 | complete | pytest 1384 passed, 1 skipped; Ruff | `refactor: remove multi-writer lease, backup and security audit` |
 | Xưởng P3 Task 3.1+3.2 (module) | `approver_pin` (scrypt + salt, ghi nguyên tử, đổi PIN cần PIN cũ, file hỏng → không xác minh); hàng đợi `topics/queue.yaml` (`QueueEntry`, chặn slug trùng hàng đợi/project) — chưa nối CLI | complete (module) | 19 passed; Ruff | `feat: add approver PIN and topic queue modules` |

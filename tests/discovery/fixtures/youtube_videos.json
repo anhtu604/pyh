@@ -1,0 +1,13 @@
+{
+  "kind": "youtube#videoListResponse",
+  "items": [
+    {
+      "id": "vid_101",
+      "statistics": {"viewCount": "15400"}
+    },
+    {
+      "id": "vid_202",
+      "statistics": {}
+    }
+  ]
+}
