@@ -44,7 +44,7 @@ def referenced_storyboard_assets(
 ) -> dict[str, Path]:
     """Resolve declared scene visuals and verify kind, location, and all bytes."""
     root = revision_root.resolve()
-    records = {record.path: record for record in manifest.assets}
+    records = {PurePosixPath(record.path).as_posix(): record for record in manifest.assets}
     allowed = {
         "brand": {AssetKind.FLOURISH},
         "mascot": {
@@ -52,6 +52,7 @@ def referenced_storyboard_assets(
             AssetKind.MASCOT_MEDICAL_ANNOTATION,
         },
         "whiteboard": {
+            AssetKind.ILLUSTRATION,
             AssetKind.BACKGROUND,
             AssetKind.TEXTURE,
             AssetKind.FLOURISH,
@@ -65,6 +66,13 @@ def referenced_storyboard_assets(
     referenced_roles: dict[str, str] = {}
     referenced_counts: dict[str, int] = {}
     for scene in storyboard.scenes:
+        for label in (*scene.labels, *scene.annotations):
+            target = records.get(_relative_posix_path(label.asset_path, scene.id).as_posix())
+            if target is not None and target.kind is AssetKind.ILLUSTRATION:
+                raise ValueError(
+                    f"Scene {scene.id}: AI illustration cannot carry anatomical labels, captions or data: "
+                    f"{label.asset_path}; draw text using Remotion or use an anatomical SVG"
+                )
         for reference in scene.visual_assets:
             relative = _relative_posix_path(reference.path, scene.id)
             record = records.get(relative.as_posix())
@@ -102,9 +110,14 @@ def referenced_storyboard_assets(
             if not resolved.is_relative_to(root):
                 raise ValueError(f"Scene {scene.id}: visual asset escapes revision")
             if not candidate.is_file():
+                if record.kind is AssetKind.ILLUSTRATION:
+                    # A reviewed recipe is materialized in produce; never rewrite that manifest.
+                    referenced_roles[relative.as_posix()] = reference.role
+                    referenced_counts[relative.as_posix()] = referenced_counts.get(relative.as_posix(), 0) + 1
+                    continue
                 raise FileNotFoundError(f"visual asset is missing: {reference.path}")
             actual = sha256_file(candidate)
-            if actual != record.sha256:
+            if record.sha256 is not None and actual != record.sha256:
                 raise ValueError(
                     f"visual asset sha256 mismatch for {reference.path}: "
                     f"expected {record.sha256}, found {actual}"

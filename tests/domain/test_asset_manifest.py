@@ -82,6 +82,12 @@ def test_mascot_annotation_must_be_semantic() -> None:
 
 @pytest.mark.parametrize("kind", sorted(DECORATIVE_KINDS))
 def test_decorative_kinds_may_be_marked_non_semantic(kind: AssetKind) -> None:
+    if kind is AssetKind.ILLUSTRATION:
+        from tests.test_flux import illustration_record
+
+        record = AssetRecord.model_validate(illustration_record())
+        assert record.semantic is False
+        return
     record = AssetRecord(
         **asset_payload(
             path="assets/bg-01.svg",
@@ -95,7 +101,7 @@ def test_decorative_kinds_may_be_marked_non_semantic(kind: AssetKind) -> None:
 
 
 @pytest.mark.parametrize(
-    "kind", sorted(DECORATIVE_KINDS - {AssetKind.MASCOT_REACTION})
+    "kind", sorted(DECORATIVE_KINDS - {AssetKind.MASCOT_REACTION, AssetKind.ILLUSTRATION})
 )
 def test_decorative_kinds_may_still_be_marked_semantic(kind: AssetKind) -> None:
     record = AssetRecord(**asset_payload(path="assets/bg-01.svg", kind=kind, semantic=True))

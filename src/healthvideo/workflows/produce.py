@@ -2,7 +2,7 @@ import json
 import os
 import shutil
 from collections.abc import Callable, Mapping
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from tempfile import mkdtemp
 from typing import Any
 
@@ -22,8 +22,13 @@ from healthvideo.audio.music import (
     generate_music,
     mix_with_ducking,
 )
-from healthvideo.domain.asset_manifest import load_asset_manifest
+from healthvideo.domain.asset_manifest import (
+    AssetKind,
+    AssetManifest,
+    load_asset_manifest,
+)
 from healthvideo.domain.brand import load_brand_profile
+from healthvideo.domain.format_profile import FORMAT_SPECS
 from healthvideo.domain.gate_review import GateApprovalRecord, GateKind
 from healthvideo.domain.hook_outro import validate_hook_outro
 from healthvideo.domain.license_ledger import LicenseEntry, LicenseLedger
@@ -67,6 +72,11 @@ from healthvideo.tts.pronunciation import (
     load_pronunciation_lexicon,
     pronunciation_hash,
 )
+from healthvideo.visuals.flux import (
+    generate_illustration,
+    illustration_recipe_hash,
+    validate_illustration_png,
+)
 from healthvideo.workflows.gate_review import (
     MEDICAL_APPROVAL_ARTIFACT,
     hash_reviewed_artifacts,
@@ -103,6 +113,49 @@ def _music_mood(root: Path) -> str:
         if specified:
             return "; ".join(specified)
     return DEFAULT_MOOD
+
+
+def _prepare_illustrations(
+    root: Path, storyboard: Storyboard, manifest: AssetManifest, *, generate: bool,
+) -> list[LicenseEntry]:
+    """Materialize reviewed decorative recipes without changing any medical artifact."""
+    spec = FORMAT_SPECS[storyboard.format_profile]
+    references = {PurePosixPath(ref.path).as_posix() for scene in storyboard.scenes for ref in scene.visual_assets}
+    rights = []
+    for asset in manifest.assets:
+        if asset.kind is not AssetKind.ILLUSTRATION or asset.path not in references:
+            continue
+        path = root.joinpath(*Path(asset.path).parts)
+        assert asset.prompt is not None and asset.seed is not None
+        recipe_hash = illustration_recipe_hash(asset.prompt, spec.width, spec.height, asset.seed)
+        receipt = path.with_suffix(".flux.json")
+        needs_generation = not path.is_file()
+        if asset.sha256 is None and path.is_file():
+            try:
+                needs_generation = json.loads(receipt.read_text(encoding="utf-8")) != {
+                    "recipe_sha256": recipe_hash, "sha256": sha256_file(path),
+                }
+            except (OSError, ValueError):
+                needs_generation = True
+        # The shared resolver has already checked path/symlink safety and label policy.
+        if needs_generation:
+            if not generate:
+                if not path.is_file():
+                    continue
+                raise ValueError(f"Production requires current illustration recipe provenance: {asset.path}")
+            generate_illustration(asset.prompt, out=path, width=spec.width, height=spec.height, seed=asset.seed)
+        validate_illustration_png(path, spec.width, spec.height)
+        digest = sha256_file(path)
+        if asset.sha256 is not None and asset.sha256 != digest:
+            raise ValueError(f"Generated illustration sha256 mismatch: {asset.path}")
+        if needs_generation and asset.sha256 is None:
+            _write_json_atomic(receipt, {"recipe_sha256": recipe_hash, "sha256": digest})
+        rights.append(LicenseEntry(
+            path=asset.path, source="generated:flux2-klein-4b", creator=asset.creator,
+            license="Apache-2.0", rights_basis="Generated unlabeled illustration using Apache-2.0 FLUX.2 klein 4B weights",
+            revision=asset.revision, sha256=digest,
+        ))
+    return rights
 
 
 def produce_project(
@@ -160,11 +213,19 @@ def _produce_v2(
     provider_name = _provider_name(tts)
     provider_identity_data = provider_identity(tts)
     renderer_identity_data = renderer_identity()
+    asset_manifest = load_asset_manifest(layout.artifact_root / "assets/asset-manifest.yaml")
+    # Validate pending declarations before any model invocation. All GPU subprocesses
+    # finish synchronously: FLUX first, then VieNeu, then ACE-Step.
+    referenced_storyboard_assets(layout.artifact_root, storyboard, asset_manifest)
+    illustration_rights = _prepare_illustrations(
+        layout.artifact_root, storyboard, asset_manifest,
+        generate=not dry_run and project.state is not WorkflowState.AWAITING_VIDEO_REVIEW,
+    )
     asset_hashes = evidence_asset_hashes(layout.artifact_root, storyboard)
     visual_paths = referenced_storyboard_assets(
         layout.artifact_root,
         storyboard,
-        load_asset_manifest(layout.artifact_root / "assets/asset-manifest.yaml"),
+        asset_manifest,
     )
     asset_hashes.update(
         {relative: sha256_file(path) for relative, path in visual_paths.items()}
@@ -310,6 +371,8 @@ def _produce_v2(
         storyboard, timing_record = retime_storyboard(approved_storyboard, line_ms)
         timing_record["audio_alignment"] = concat_scene_audio(storyboard, line_wavs, staged_audio)
         music_record = None
+        generated_rights = list(illustration_rights)
+        generated_visual_hashes: dict[str, str] = {}
         generated_audio_hashes: dict[str, str] = {}
         if music_settings is not None:
             # Keep the precisely timed voice for ASR and speech-only QA.
@@ -322,16 +385,25 @@ def _produce_v2(
             mix_with_ducking(voice_audio, music_audio, out=staged_audio,
                              music_db=MUSIC_DB, duck_db=DUCK_DB)
             music_record = {**music_settings, "sha256": sha256_file(music_audio)}
-            rights = LicenseLedger(entries=(LicenseEntry(
+            generated_rights.append(LicenseEntry(
                 path="audio/music.wav", source="generated:ace-step-1.5", creator="ACE-Step 1.5",
                 license="MIT", rights_basis="Generated instrumental using MIT-licensed ACE-Step 1.5 weights",
                 revision=project.active_revision, sha256=music_record["sha256"],
-            ),))
-            write_yaml_atomic(staging_dir / "license-ledger.yaml", rights.model_dump(mode="json"))
+            ))
             generated_audio_hashes = {
                 path.relative_to(staging_dir).as_posix(): sha256_file(path)
-                for path in (voice_audio, music_audio, staged_audio, staging_dir / "license-ledger.yaml")
+                for path in (voice_audio, music_audio, staged_audio)
             }
+        if generated_rights:
+            rights = LicenseLedger(entries=tuple(generated_rights))
+            ledger_path = staging_dir / "license-ledger.yaml"
+            write_yaml_atomic(ledger_path, rights.model_dump(mode="json"))
+            ledger_hash = sha256_file(ledger_path)
+            if music_settings is not None:
+                generated_audio_hashes["license-ledger.yaml"] = ledger_hash
+            if illustration_rights:
+                generated_visual_hashes = {entry.path: entry.sha256 for entry in illustration_rights}
+                generated_visual_hashes["license-ledger.yaml"] = ledger_hash
         _write_json_atomic(staging_dir / "scene-timing.json", timing_record)
         visual_budget_report = validate_visual_budget(storyboard)
         visual_budget_qa = visual_budget_report.model_dump(mode="json")
@@ -398,6 +470,7 @@ def _produce_v2(
                 "renderer_identity": renderer_identity_data,
                 "music": music_record,
                 "generated_audio_sha256": generated_audio_hashes,
+                "generated_visual_sha256": generated_visual_hashes,
                 **({"chapter_parts": list(chapter_parts)} if chapter_parts else {}),
                 **({"clips": clip_outputs} if clip_outputs else {}),
                 **({"clip_artifact_sha256": {
@@ -537,6 +610,20 @@ def _v2_run_is_valid(
     } != dict(music_settings):
         return False
     generated_hashes = manifest.get("generated_audio_sha256", {})
+    generated_visual_hashes = manifest.get("generated_visual_sha256", {})
+    if not isinstance(generated_visual_hashes, dict) or not all(
+        (run_dir / relative).is_file() and sha256_file(run_dir / relative) == digest
+        for relative, digest in generated_visual_hashes.items()
+    ):
+        return False
+    illustration_paths = {
+        relative for relative in asset_hashes if relative.startswith("assets/illustrations/")
+    }
+    if illustration_paths and (
+        set(generated_visual_hashes) != illustration_paths | {"license-ledger.yaml"}
+        or any(generated_visual_hashes[path] != asset_hashes[path] for path in illustration_paths)
+    ):
+        return False
     if manifest.get("music") is not None:
         if not isinstance(generated_hashes, dict) or not {
             "audio/music.wav", "audio/narration-voice.wav", "audio/narration.wav", "license-ledger.yaml",

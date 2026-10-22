@@ -15,6 +15,7 @@ projects/**/audio/
 projects/**/renders/
 projects/**/renders-cache/
 projects/**/assets/ai-clips/
+projects/**/assets/illustrations/
 projects/**/workflow/staged-ai-clips/
 projects/**/publish/
 projects/**/source-documents/

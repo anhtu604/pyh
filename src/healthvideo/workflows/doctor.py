@@ -12,6 +12,7 @@ import yaml
 
 from healthvideo.audio.music import music_python, music_weights
 from healthvideo.process import prepare_subprocess_argv, resolve_pnpm_argv
+from healthvideo.visuals.flux import flux_python, flux_weights, validate_flux_weights
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 RunCommand = Callable[[list[str]], tuple[int, str]]
@@ -58,8 +59,25 @@ def check_environment(run: RunCommand) -> list[CheckResult]:
         _cuda_check(run),
         *_pyh_checks(),
         *_music_checks(),
+        *_flux_checks(),
     ]
     return results
+
+
+def _flux_checks() -> list[CheckResult]:
+    python = flux_python(REPO_ROOT)
+    weights = flux_weights(REPO_ROOT)
+    ok, detected = True, str(weights)
+    try:
+        validate_flux_weights(weights)
+    except ValueError as error:
+        ok, detected = False, str(error)
+    return [
+        CheckResult("flux_venv", python.is_file(), str(python), "recommended",
+                    "Install CUDA torch, diffusers and transformers in cache/flux-venv or set HEALTHVIDEO_FLUX_PYTHON."),
+        CheckResult("flux_weights", ok, detected, "recommended",
+                    "Install local Apache-2.0 FLUX.2 klein 4B in cache/models/flux2-klein-4b; never use 9B/dev."),
+    ]
 
 
 def _music_checks() -> list[CheckResult]:

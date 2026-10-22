@@ -24,6 +24,7 @@ _REVISION_ID_PATTERN = r"^[0-9]{3}$"
 
 
 class AssetKind(StrEnum):
+    ILLUSTRATION = "illustration"
     EVIDENCE_HIGHLIGHT = "evidence_highlight"
     DATA_CHART = "data_chart"
     MEDICAL_DIAGRAM = "medical_diagram"
@@ -53,6 +54,7 @@ SEMANTIC_REQUIRED_KINDS: frozenset[AssetKind] = frozenset(
 # `semantic=false`.
 DECORATIVE_KINDS: frozenset[AssetKind] = frozenset(
     {
+        AssetKind.ILLUSTRATION,
         AssetKind.BACKGROUND,
         AssetKind.TEXTURE,
         AssetKind.FLOURISH,
@@ -75,13 +77,32 @@ class AssetRecord(BaseModel):
     which has the revision root to check it against.
     """
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    model_config = ConfigDict(extra="forbid", frozen=True, json_schema_extra={
+        "allOf": [{
+            "if": {"properties": {"kind": {"const": "illustration"}}, "required": ["kind"]},
+            "then": {
+                "required": ["prompt", "seed"],
+                "properties": {
+                    "prompt": {"type": "string", "pattern": r"\S"},
+                    "seed": {"type": "integer"},
+                    "semantic": {"const": False},
+                    "rights_required": {"const": False},
+                    "source": {"const": "generated:flux2-klein-4b"},
+                    "license": {"const": "Apache-2.0"},
+                    "path": {"pattern": r"^assets/illustrations/.+\.png$"},
+                },
+            },
+            "else": {"required": ["sha256"], "properties": {"sha256": {"type": "string"}}},
+        }],
+    })
 
     path: str = Field(pattern=r"\S")
     kind: AssetKind
     semantic: bool
     classification_reason: str | None = None
-    sha256: str = Field(pattern=_SHA256_HEX_PATTERN)
+    sha256: str | None = Field(default=None, pattern=_SHA256_HEX_PATTERN)
+    prompt: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    seed: int | None = Field(default=None, ge=0, lt=2**63, strict=True, exclude_if=lambda value: value is None)
     source: str = Field(pattern=r"\S")
     license: str = Field(pattern=r"\S")
     creator: str = Field(pattern=r"\S")
@@ -98,6 +119,21 @@ class AssetRecord(BaseModel):
 
     @model_validator(mode="after")
     def _enforce_semantic_policy(self) -> AssetRecord:
+        if self.kind is AssetKind.ILLUSTRATION:
+            if self.semantic or self.rights_required:
+                raise ValueError("AI illustration must be decorative (semantic=false, rights_required=false); use labeled SVG for medical meaning")
+            if not self.prompt or not self.prompt.strip() or self.seed is None:
+                raise ValueError("AI illustration requires a nonblank prompt and explicit seed")
+            if not self.path.startswith("assets/illustrations/") or not self.path.endswith(".png"):
+                raise ValueError("AI illustration path must be assets/illustrations/<name>.png")
+            if _posix_relative_path(self.path).as_posix() != self.path:
+                raise ValueError("AI illustration manifest path must use canonical relative POSIX spelling")
+            if self.source != "generated:flux2-klein-4b" or self.license != "Apache-2.0":
+                raise ValueError("AI illustration requires source generated:flux2-klein-4b and license Apache-2.0")
+        elif self.sha256 is None:
+            raise ValueError("Existing assets require sha256; only a pending illustration may omit it")
+        elif self.prompt is not None or self.seed is not None:
+            raise ValueError("Only an illustration asset may declare prompt/seed")
         if self.kind is AssetKind.MASCOT_REACTION and self.semantic:
             raise ValueError("asset kind 'mascot_reaction' must be semantic=false")
         if self.kind in SEMANTIC_REQUIRED_KINDS and not self.semantic:

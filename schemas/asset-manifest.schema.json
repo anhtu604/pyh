@@ -2,6 +2,7 @@
   "$defs": {
     "AssetKind": {
       "enum": [
+        "illustration",
         "evidence_highlight",
         "data_chart",
         "medical_diagram",
@@ -18,6 +19,60 @@
     },
     "AssetRecord": {
       "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "sha256": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "sha256"
+            ]
+          },
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "illustration"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "license": {
+                "const": "Apache-2.0"
+              },
+              "path": {
+                "pattern": "^assets/illustrations/.+\\.png$"
+              },
+              "prompt": {
+                "pattern": "\\S",
+                "type": "string"
+              },
+              "rights_required": {
+                "const": false
+              },
+              "seed": {
+                "type": "integer"
+              },
+              "semantic": {
+                "const": false
+              },
+              "source": {
+                "const": "generated:flux2-klein-4b"
+              }
+            },
+            "required": [
+              "prompt",
+              "seed"
+            ]
+          }
+        }
+      ],
       "description": "One tracked asset, its classification, and its provenance.\n\n``path`` must already be a safe POSIX-relative path with no ``..``\nsegment and no absolute root; whether it actually resolves inside a\ngiven revision is checked later by :func:`validate_asset_manifest`,\nwhich has the revision root to check it against.",
       "properties": {
         "classification_reason": {
@@ -50,6 +105,18 @@
           "title": "Path",
           "type": "string"
         },
+        "prompt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prompt"
+        },
         "revision": {
           "pattern": "^[0-9]{3}$",
           "title": "Revision",
@@ -60,14 +127,36 @@
           "title": "Rights Required",
           "type": "boolean"
         },
+        "seed": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 9223372036854775808,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seed"
+        },
         "semantic": {
           "title": "Semantic",
           "type": "boolean"
         },
         "sha256": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Sha256",
-          "type": "string"
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sha256"
         },
         "source": {
           "pattern": "\\S",
@@ -97,7 +186,6 @@
         "path",
         "kind",
         "semantic",
-        "sha256",
         "source",
         "license",
         "creator",

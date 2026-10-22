@@ -65,3 +65,18 @@ def artwork_brand(tmp_path, monkeypatch):
     data["mascot"]["artwork"] = artwork
     monkeypatch.setattr(brand, "REPO_ROOT", tmp_path, raising=False)
     return data, tmp_path
+
+
+@pytest.fixture(autouse=True)
+def synthetic_workflow_illustrations(monkeypatch):
+    """Keep production orchestration tests independent of FLUX weights and CUDA."""
+    from PIL import Image
+
+    from healthvideo.workflows import produce
+
+    def generate(prompt, *, out, width, height, seed, **kwargs):
+        out.parent.mkdir(parents=True, exist_ok=True)
+        Image.new("RGB", (width, height), "green").save(out, format="PNG")
+        return out
+
+    monkeypatch.setattr(produce, "generate_illustration", generate)

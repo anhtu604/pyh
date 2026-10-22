@@ -116,6 +116,15 @@ class EvidenceHighlight(BaseModel):
         return self
 
 
+class AssetTextLabel(BaseModel):
+    """Baked annotation declared by its target asset; overlay text belongs in Remotion."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    asset_path: str
+    text: Nonblank
+
+
 class Scene(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -138,6 +147,8 @@ class Scene(BaseModel):
     anatomy: SceneAnatomy | None = Field(default=None, exclude_if=lambda v: v is None)
     evidence_highlight: EvidenceHighlight | None = None
     visual_assets: tuple[VisualAssetRef, ...] = ()
+    labels: tuple[AssetTextLabel, ...] = Field(default=(), exclude_if=lambda value: not value)
+    annotations: tuple[AssetTextLabel, ...] = Field(default=(), exclude_if=lambda value: not value)
 
     @field_validator("source_marker")
     @classmethod
