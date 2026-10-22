@@ -147,6 +147,7 @@ applicability, per-claim doctor notes — hoãn sang M3).
 
 | Task | Deliverable | Status | Tests | Commit |
 | --- | --- | --- | --- | --- |
+| Xưởng P2 Task 2.7 | Bỏ task: visual budget là QA tỷ lệ hình, license ledger là sổ giấy phép có hash — giữ cả hai; ghi chú trong plan | dropped | — | `docs: drop task 2.7 from factory plan` |
 | Xưởng P2 Task 2.5+2.6 | Gỡ Veo/AI clip (`video_ai/`, `ai_clips`, `AiClipScene`, loại asset/scene AI) và `tts-benchmark`; giữ TTS, visual budget, license ledger | complete | pytest 1105 passed, 1 skipped; vitest 113; typecheck; Ruff | `refactor: remove Veo AI clips and TTS benchmark` |
 | Xưởng P6 Task 6.1 (model) | `domain/posts.py`: `PostSet` (2–3 tiêu đề YouTube, mô tả, tag ≤500 ký tự, caption TikTok/Shorts/Reels mỗi clip, bài Facebook, Community); `validate_posts` chặn câu có số liệu thiếu `[claim:…]`, claim chưa duyệt y khoa, mô tả thiếu chương/nguồn — chưa nối produce | complete (model) | 7 passed; Ruff | `feat: add multi-channel post model and claim check` |
 | Xưởng P4 Task 4.3 | `video/src/anatomy/library.json` là nguồn duy nhất; `registry.ts` chọn component; `approved.json` + `anatomy_library.library_status` đánh dấu component mới/đã sửa; contact sheet có mục riêng cho component chưa duyệt (chưa nối ghi duyệt vào cổng video) | complete | pytest 1203 passed; vitest 115; typecheck; Ruff | `feat: track anatomy library approval in video review` |

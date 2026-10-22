@@ -16,7 +16,7 @@
 |---|---|---|---|
 | P0 | Hoàn tất việc dở (A/V sync) | 0.1 | ☐ |
 | P1 | Dọn rác + tài liệu | 1.1–1.3 | ☐ |
-| P2 | Cắt code | 2.1–2.8 | ☐ |
+| P2 | Cắt code | 2.1–2.8 (2.7 bỏ) | 2.1–2.6 ✅ |
 | P3 | Hàng đợi, `run`, PIN | 3.1–3.6 | ☐ |
 | P4 | Giai đoạn 2 mới: FLUX, nhạc, thư viện SVG | 4.1–4.3 | ☐ |
 | P5 | Giai đoạn 1 mới: tìm chủ đề | 5.1 | ☐ |
@@ -147,6 +147,8 @@ Quy trình chung cho mỗi task P2: (1) thêm/sửa test khẳng định lệnh/
 - [ ] Test `test_removed_commands_absent` thêm `"tts-benchmark"`. CHECK, commit `refactor: remove TTS benchmark`.
 
 ### Task 2.7: Thay visual budget + license ledger bằng trường giấy phép trong asset manifest
+
+> **Bỏ (2026-10-23, quyết định của Claude):** đọc lại code thấy visual budget là QA tỷ lệ hình (whiteboard/chart/cơ chế), không phải ngân sách chi phí; license ledger là sổ giấy phép tường minh có hash. Cả hai (272 dòng) phục vụ kênh, nên giữ nguyên. Ảnh FLUX ghi vào license ledger với `license: generated:flux2-klein-4b`.
 
 **Files:** Delete `domain/visual_budget.py`, `domain/license_ledger.py`, test. Modify `domain/asset_manifest.py`, `domain/storyboard.py`, `render/input.py`, `workflows/{draft,gate_review,produce,review_html,long_form,visual_assets}.py`.
 
