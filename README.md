@@ -147,6 +147,7 @@ applicability, per-claim doctor notes — hoãn sang M3).
 
 | Task | Deliverable | Status | Tests | Commit |
 | --- | --- | --- | --- | --- |
+| Xưởng video: kế hoạch triển khai | 8 giai đoạn P0–P7, 25 task; theo dõi ở đầu file plan | approved | self-review | `docs: add video factory implementation plan` |
 | Xưởng video: spec tái cấu trúc | Cắt gọt tại chỗ, 4 giai đoạn, hàng đợi `run` Codex/agy, PIN chống tự duyệt, Claude chỉ rà code | approved | builder check; `git diff --check` | `docs: add video factory restructure design` |
 | Sửa font Remotion 404 | Stage `video/public/fonts/` (hai WOFF2 + OFL) vào `--public-dir` tại điểm dựng argv dùng chung cho long form/chapter/clip/vertical; renderer identity chứa hash font để vô hiệu cache khi đổi font; giữ nguyên render-input và dry run không ghi file | complete (uncommitted) | TDD; fake runner kiểm bytes font long form/clip/vertical; pytest 1345 passed, 3 skipped; Ruff; `git diff --check` | Chờ Claude review và commit |
 | Sửa `review reject` | `reject_gate` kiểm tra chuyển trạng thái trước khi ghi record từ chối (trước đây `--resume-to` sai vẫn để lại file từ chối mồ côi); `--resume-to` liệt kê trạng thái hợp lệ cho từng cổng | complete | TDD; pytest 1320 passed, 3 skipped; Ruff; `git diff --check` | `fix: validate reject transition before writing record` |
