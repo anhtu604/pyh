@@ -152,8 +152,7 @@ def test_cli_screens_without_command_config_or_ledger_mutation(tmp_path, monkeyp
     result = CliRunner().invoke(
         app,
         [
-            "evidence",
-            "screen",
+            "step", "evidence-screen",
             str(project),
             "--criteria",
             str(criteria_path),

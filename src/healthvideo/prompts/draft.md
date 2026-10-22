@@ -20,8 +20,15 @@
 - `healthvideo status {project}`
 
 ## Đầu ra
-- `script.yaml`, `storyboard.yaml`, `asset-manifest.yaml`, `outline.yaml`, `clip-plan.yaml` trong `revisions/<rev>/draft/`
-- Gói chờ duyệt cổng y khoa trong `revisions/<rev>/reviews/medical/` (và component SVG mới kèm test trong `video/src/anatomy/` nếu có)
+- `revisions/<rev>/script/script.yaml`, `revisions/<rev>/script/outline.yaml`, `revisions/<rev>/script/clip-plan.yaml`
+- `revisions/<rev>/storyboard/storyboard.yaml`, `revisions/<rev>/assets/asset-manifest.yaml`
+- Gói chờ duyệt cổng y khoa từ `revisions/<rev>/reviews/` qua `healthvideo review open {project} --gate medical` (và component SVG mới kèm test trong `video/src/anatomy/` nếu có)
 
 ## Xong khi
 - Trạng thái đích của project đạt `awaiting_medical_review`, kiểm tra bằng lệnh `healthvideo status {project}`.
+
+## Đường dẫn revision hiện hành
+Đọc `active_revision` từ `{project}/project.yaml`; `<rev>` là giá trị đó.
+- `revisions/<rev>/script/script.yaml`, `revisions/<rev>/script/outline.yaml`, `revisions/<rev>/script/clip-plan.yaml`
+- `revisions/<rev>/storyboard/storyboard.yaml`, `revisions/<rev>/assets/asset-manifest.yaml`
+- `revisions/<rev>/evidence/ledger.yaml`, `revisions/<rev>/explainer/explainer.yaml`

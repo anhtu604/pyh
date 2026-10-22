@@ -87,6 +87,16 @@ class PubMedClient:
         self.base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"
 
     def search(self, query: str, limit: int = 10) -> list[str]:
+        return self._search_result(query, limit).get("idlist", [])
+
+    def count(self, query: str) -> int:
+        """Return the total matching records, without downloading IDs."""
+        count = int(self._search_result(query, 0)["count"])
+        if count < 0:
+            raise ValueError("PubMed count cannot be negative")
+        return count
+
+    def _search_result(self, query: str, limit: int) -> dict:
         params = {
             "db": "pubmed",
             "term": query,
@@ -101,7 +111,7 @@ class PubMedClient:
         req = urllib.request.Request(url, headers={"User-Agent": DEFAULT_USER_AGENT})
         raw = self.transport(req)
         data = _load_json(raw, "PubMed")
-        return data.get("esearchresult", {}).get("idlist", [])
+        return data.get("esearchresult", {})
 
     def fetch_summaries(self, pmids: list[str]) -> list[CandidateSource]:
         if not pmids:

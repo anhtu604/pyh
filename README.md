@@ -147,6 +147,7 @@ applicability, per-claim doctor notes — hoãn sang M3).
 
 | Task | Deliverable | Status | Tests | Commit |
 | --- | --- | --- | --- | --- |
+| Xưởng P2 Task 2.8 (+ CLI 3.1/3.2/5.1) | CLI công khai: `topic discover/add/list`, `run` (tạm), `status`, `review open/approve/reject/reopen/set-pin`, `preview`, `produce`, `package`, `doctor`; lệnh còn lại vào nhóm ẩn `step`; `review approve` bắt buộc TTY + PIN, xóa alias `review medical/video`; `topic discover` (YouTube/Trends/Reddit + `PubMedClient.count`); `/pyh` 36 dòng; prompt khớp lệnh `step` | complete | pytest 1131 passed, 1 skipped; Ruff | `refactor: shrink CLI to the factory command surface` |
 | Xưởng P3 Task 3.5 (lõi) | `run_queue` + `RunDeps`/`RunReport`: tạo project, gọi agent hoặc bước Python theo `next_step`, dừng ở cổng, chạy lại đúng bước khi bị cắt, chặn chủ đề khi agent không đổi trạng thái/vượt 20 bước, dừng hẳn khi cả hai agent hết quota, ghi `topics/code-review.yaml` — chưa nối CLI `run` | complete (lõi) | 9 test run_queue; pytest toàn bộ xanh; Ruff | `feat: add run_queue core with injected dependencies` |
 | Xưởng P2 Task 2.7 | Bỏ task: visual budget là QA tỷ lệ hình, license ledger là sổ giấy phép có hash — giữ cả hai; ghi chú trong plan | dropped | — | `docs: drop task 2.7 from factory plan` |
 | Xưởng P2 Task 2.5+2.6 | Gỡ Veo/AI clip (`video_ai/`, `ai_clips`, `AiClipScene`, loại asset/scene AI) và `tts-benchmark`; giữ TTS, visual budget, license ledger | complete | pytest 1105 passed, 1 skipped; vitest 113; typecheck; Ruff | `refactor: remove Veo AI clips and TTS benchmark` |

@@ -55,7 +55,7 @@ def _state(project: Path) -> WorkflowState:
 
 def _draft_args(project: Path) -> list[str]:
     return [
-        "operator", "draft", str(project),
+        "step", "draft", str(project),
         "--script", str(SOURCE / "script/script.yaml"),
         "--storyboard", str(SOURCE / "storyboard/storyboard.yaml"),
         "--assets", str(SOURCE / "assets/asset-manifest.yaml"),
@@ -71,7 +71,7 @@ def test_cli_submits_draft_then_opens_medical_gate(tmp_path: Path) -> None:
     assert (project / "revisions/001/script/script.yaml").is_file()
     assert not (project / "revisions/001/reviews/medical-approval.yaml").exists()
 
-    submitted = runner.invoke(app, ["operator", "submit-medical", str(project)])
+    submitted = runner.invoke(app, ["step", "submit-medical", str(project)])
     assert submitted.exit_code == 0, submitted.stdout
     assert _state(project) is WorkflowState.AWAITING_MEDICAL_REVIEW
     assert not (project / "revisions/001/reviews/medical-approval.yaml").exists()
@@ -97,7 +97,7 @@ def test_missing_semantic_asset_prevents_medical_submission(tmp_path: Path) -> N
     runner = CliRunner()
     assert runner.invoke(app, _draft_args(project)).exit_code == 0
     (project / "revisions/001/assets/evidence-r01.svg").unlink()
-    result = runner.invoke(app, ["operator", "submit-medical", str(project)])
+    result = runner.invoke(app, ["step", "submit-medical", str(project)])
     assert result.exit_code != 0
     assert _state(project) is WorkflowState.DRAFT_READY
 

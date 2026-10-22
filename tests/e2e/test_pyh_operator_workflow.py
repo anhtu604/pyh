@@ -40,7 +40,7 @@ def test_selected_topic_research_keeps_both_doctor_gates_closed(tmp_path):
     select_topic(project, TopicCard.model_validate(read_yaml(SOURCE / "topic/card.yaml")))
     action = get_next_action(project)
     assert action.kind is OperatorActionKind.RESEARCH
-    assert "evidence search" in action.message
+    assert "step evidence-search" in action.message
     record_question(project, EvidenceQuestion(
         patient_population="adults", intervention="salt", outcome="BP",
         search_keywords=["sodium blood pressure"],

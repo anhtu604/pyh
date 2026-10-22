@@ -86,7 +86,7 @@ def test_strict_hook_claim_requires_bound_marker(project: Path) -> None:
 
 
 def test_cli_authors_outro(project: Path) -> None:
-    result = CliRunner().invoke(app, ["outro", "author", str(project), "--duration-frames", "90"])
+    result = CliRunner().invoke(app, ["step", "outro-author", str(project), "--duration-frames", "90"])
     assert result.exit_code == 0, result.output
     assert read_yaml(project / "revisions/001/script/script.yaml")["lines"][-1]["text"] == OUTRO_TEXT
 

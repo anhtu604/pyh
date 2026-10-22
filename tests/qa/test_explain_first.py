@@ -123,17 +123,17 @@ def test_cli_lint_loads_explainer_only_for_explain_first(tmp_path: Path, profile
         # A malformed explainer must not be opened for an old script.
         write_yaml_atomic(revision / "explainer/explainer.yaml", {"invalid": True})
     before = {p: p.read_bytes() for p in root.rglob("*") if p.is_file()}
-    result = CliRunner().invoke(app, ["script", "lint", str(root)])
+    result = CliRunner().invoke(app, ["step", "lint", str(root)])
     assert result.exit_code == (1 if profile == "explain_first_v1" else 0), result.output
     assert {p: p.read_bytes() for p in root.rglob("*") if p.is_file()} == before
     if profile == "explain_first_v1":
         assert "missing_explainer" in result.output
         write_explainer(revision, Explainer(**explainer_data()))
-        result = CliRunner().invoke(app, ["script", "lint", str(root)])
+        result = CliRunner().invoke(app, ["step", "lint", str(root)])
         assert result.exit_code == 0, result.output
         assert "warning" in result.output
         assert "arc_beat_ratio" in result.output
         write_yaml_atomic(revision / "script/script.yaml", script([line(4), line(3)]).model_dump())
-        result = CliRunner().invoke(app, ["script", "lint", str(root)])
+        result = CliRunner().invoke(app, ["step", "lint", str(root)])
         assert result.exit_code == 1
         assert "arc_beat_order" in result.output

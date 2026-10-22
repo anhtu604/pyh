@@ -38,7 +38,7 @@ def test_review_reject_help_lists_resume_states() -> None:
 
 
 def test_version_command() -> None:
-    result = CliRunner().invoke(app, ["version"])
+    result = CliRunner().invoke(app, ["step", "version"])
     assert result.exit_code == 0
     assert result.stdout.strip() == __version__
 
@@ -48,28 +48,21 @@ def test_operator_new_status_select_and_research(tmp_path) -> None:
 
     from healthvideo.domain.topic import TopicCard
 
-    created = runner.invoke(app, ["operator", "new", str(tmp_path), "--slug", "muoi-va-huyet-ap", "--title", "Ăn mặn"])
+    created = runner.invoke(app, ["step", "new", str(tmp_path), "--slug", "muoi-va-huyet-ap", "--title", "Ăn mặn"])
     project = tmp_path / "muoi-va-huyet-ap"
     assert created.exit_code == 0, created.stdout
     assert read_yaml(project / "project.yaml")["schema_version"] == "2.0"
-    initial = runner.invoke(app, ["operator", "status", str(project), "--json"])
+    initial = runner.invoke(app, ["status", str(project), "--json"])
     assert json.loads(initial.stdout)["kind"] == "choose_topic"
 
     card_file = tmp_path / "card.yaml"
     write_yaml_atomic(card_file, TopicCard(slug="muoi-va-huyet-ap", title="Ăn mặn", question="Ăn mặn ảnh hưởng huyết áp?", synthetic_test_record=True).model_dump(mode="json"))
-    selected = runner.invoke(app, ["operator", "select", str(project), "--file", str(card_file)])
+    selected = runner.invoke(app, ["step", "select", str(project), "--file", str(card_file)])
     assert selected.exit_code == 0, selected.stdout
-    status = runner.invoke(app, ["operator", "status", str(project), "--json"])
+    status = runner.invoke(app, ["status", str(project), "--json"])
     assert status.exit_code == 0
     assert json.loads(status.stdout)["kind"] == "research"
-    assert "evidence search" in json.loads(status.stdout)["message"]
-
-
-def test_operator_help_preserves_existing_cli_commands() -> None:
-    result = runner.invoke(app, ["--help"])
-    assert result.exit_code == 0
-    for name in ("operator", "review", "topic", "evidence", "produce", "package"):
-        assert name in result.stdout
+    assert "step evidence-search" in json.loads(status.stdout)["message"]
 
 
 def test_operator_status_is_read_only_without_writer_fields(tmp_path) -> None:
@@ -82,14 +75,14 @@ def test_operator_status_is_read_only_without_writer_fields(tmp_path) -> None:
         if path.is_file()
     }
 
-    readable = runner.invoke(app, ["operator", "status", str(project), "--json"])
+    readable = runner.invoke(app, ["status", str(project), "--json"])
     assert readable.exit_code == 0, readable.stdout
     payload = json.loads(readable.stdout)
     assert payload["kind"] == "prepare_medical_review"
     assert "busy" not in payload
     assert "writer" not in payload
 
-    text = runner.invoke(app, ["operator", "status", str(project)])
+    text = runner.invoke(app, ["status", str(project)])
     assert text.exit_code == 0, text.stdout
     assert "Writer:" not in text.stdout
     assert {
@@ -240,7 +233,7 @@ def test_review_medical_requires_the_typed_confirmation(tmp_path) -> None:
 
     result = CliRunner().invoke(
         app,
-        ["review", "medical", str(project_dir), "--reviewer", "BS An"],
+        ["review", "approve", "--gate", "medical", str(project_dir), "--reviewer", "BS An"],
         input="ok\n",
     )
 
@@ -249,14 +242,13 @@ def test_review_medical_requires_the_typed_confirmation(tmp_path) -> None:
     assert list((project_dir / "revisions" / "001" / "reviews").glob("*.yaml")) == []
 
 
-def test_review_medical_approves_after_the_typed_confirmation(tmp_path) -> None:
+def test_review_medical_approves_with_authenticated_pin(tmp_path, authenticated_pin) -> None:
     project_dir = create_v2_project_fixture(tmp_path, state="awaiting_medical_review")
 
     result = CliRunner().invoke(
         app,
         [
-            "review",
-            "medical",
+            "review", "approve", "--gate", "medical",
             str(project_dir),
             "--reviewer",
             "BS An",
@@ -273,7 +265,7 @@ def test_review_medical_approves_after_the_typed_confirmation(tmp_path) -> None:
     assert read_yaml(records[0])["reviewer"] == "BS An"
 
 
-def test_review_video_with_yes_skips_the_confirmation(tmp_path) -> None:
+def test_review_video_requires_authenticated_pin(tmp_path, authenticated_pin) -> None:
     from datetime import UTC, datetime
 
     from tests.helpers import advance_v2_project_to_video_review
@@ -282,7 +274,7 @@ def test_review_video_with_yes_skips_the_confirmation(tmp_path) -> None:
     advance_v2_project_to_video_review(project_dir, now=datetime(2026, 10, 22, tzinfo=UTC))
 
     result = CliRunner().invoke(
-        app, ["review", "video", str(project_dir), "--reviewer", "BS An", "--yes"]
+        app, ["review", "approve", "--gate", "video", str(project_dir), "--reviewer", "BS An"]
     )
 
     assert result.exit_code == 0
@@ -290,11 +282,11 @@ def test_review_video_with_yes_skips_the_confirmation(tmp_path) -> None:
     assert len(list((project_dir / "revisions" / "001" / "reviews").glob("video-*.yaml"))) == 1
 
 
-def test_review_medical_reports_the_state_gate(tmp_path) -> None:
+def test_review_medical_reports_the_state_gate(tmp_path, authenticated_pin) -> None:
     project_dir = create_v2_project_fixture(tmp_path)
 
     result = CliRunner().invoke(
-        app, ["review", "medical", str(project_dir), "--reviewer", "BS An", "--yes"]
+        app, ["review", "approve", "--gate", "medical", str(project_dir), "--reviewer", "BS An"]
     )
 
     assert result.exit_code == 1
@@ -308,7 +300,7 @@ def test_revision_create_switches_the_active_revision(tmp_path: Path) -> None:
 
     result = CliRunner().invoke(
         app,
-        ["revision", "create", str(project_dir), "--reason", "Sửa luận điểm"],
+        ["step", "revision-create", str(project_dir), "--reason", "Sửa luận điểm"],
     )
 
     assert result.exit_code == 0
@@ -317,11 +309,11 @@ def test_revision_create_switches_the_active_revision(tmp_path: Path) -> None:
     assert (project_dir / "revisions" / "002" / "workflow.yaml").is_file()
 
 
-def test_status_reports_state_and_a_stale_approval(tmp_path) -> None:
+def test_status_reports_operator_action_after_script_change(tmp_path, authenticated_pin) -> None:
     project_dir = create_v2_project_fixture(tmp_path, state="awaiting_medical_review")
     runner = CliRunner()
     runner.invoke(
-        app, ["review", "medical", str(project_dir), "--reviewer", "BS An", "--yes"]
+        app, ["review", "approve", "--gate", "medical", str(project_dir), "--reviewer", "BS An"]
     )
 
     approved = runner.invoke(app, ["status", str(project_dir)])
@@ -332,15 +324,13 @@ def test_status_reports_state_and_a_stale_approval(tmp_path) -> None:
     stale = runner.invoke(app, ["status", str(project_dir)])
 
     assert approved.exit_code == 0
-    assert "state=medically_approved" in approved.stdout
-    assert "approval_stale=false" in approved.stdout
-    assert "BS An" in approved.stdout
+    assert "Next action: produce" in approved.stdout
     assert stale.exit_code == 0
-    assert "approval_stale=true" in stale.stdout
+    assert "Next action: produce" in stale.stdout
 
 
-def test_review_approve_medical_requires_gate_flag_and_confirmation(
-    tmp_path: Path,
+def test_review_approve_medical_requires_gate_and_pin(
+    tmp_path: Path, authenticated_pin,
 ) -> None:
     project_dir = create_v2_project_fixture(
         tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW
@@ -356,7 +346,6 @@ def test_review_approve_medical_requires_gate_flag_and_confirmation(
             "medical",
             "--reviewer",
             "BS Nguyễn Văn An",
-            "--yes",
         ],
     )
 
@@ -391,8 +380,7 @@ def test_review_reject_then_resume_round_trip(tmp_path: Path) -> None:
     resume_result = runner.invoke(
         app,
         [
-            "review",
-            "resume",
+            "step", "resume",
             str(project_dir),
             "--gate",
             "medical",
@@ -416,18 +404,16 @@ def test_review_open_prints_html_without_writing_project(tmp_path: Path) -> None
     assert "<html" in result.stdout.lower()
 
 
-def test_review_alias_commands_use_v2_gates(tmp_path: Path) -> None:
+def test_review_approve_preserves_existing_record(tmp_path: Path, authenticated_pin) -> None:
     project_dir = create_v2_project_fixture(tmp_path, state="awaiting_medical_review")
 
     result = runner.invoke(
         app,
         [
-            "review",
-            "medical",
+            "review", "approve", "--gate", "medical",
             str(project_dir),
             "--reviewer",
             "BS Nguyễn Văn An",
-            "--yes",
         ],
     )
     assert result.exit_code == 0
@@ -435,95 +421,11 @@ def test_review_alias_commands_use_v2_gates(tmp_path: Path) -> None:
     approval = project_dir / "revisions/001/reviews/medical-approval.yaml"
     original = approval.read_bytes()
     duplicate = runner.invoke(
-        app, ["review", "medical", str(project_dir), "--reviewer", "BS An", "--yes"]
+        app, ["review", "approve", "--gate", "medical", str(project_dir), "--reviewer", "BS An"]
     )
     assert duplicate.exit_code == 1
     assert "already approved" in duplicate.stdout
     assert approval.read_bytes() == original
-
-
-def test_cli_topic_create_list_and_reject(tmp_path: Path) -> None:
-    inbox = tmp_path / "topics"
-    create_res = runner.invoke(
-        app,
-        [
-            "topic",
-            "create",
-            "--title",
-            "Ăn mặn và huyết áp",
-            "--question",
-            "Ăn mặn có làm tăng huyết áp không?",
-            "--slug",
-            "an-man-va-huyet-ap",
-            "--inbox",
-            str(inbox),
-        ],
-    )
-    assert create_res.exit_code == 0
-    assert "an-man-va-huyet-ap" in create_res.stdout
-
-    list_res = runner.invoke(app, ["topic", "list", "--inbox", str(inbox)])
-    assert list_res.exit_code == 0
-    assert "an-man-va-huyet-ap" in list_res.stdout
-
-    card_file = inbox / "an-man-va-huyet-ap.yaml"
-    reject_res = runner.invoke(
-        app,
-        ["topic", "reject", str(card_file), "--reason", "Không phù hợp thời điểm này"],
-    )
-    assert reject_res.exit_code == 0
-    assert "Đã từ chối" in reject_res.stdout
-
-
-def test_cli_topic_select_advances_project_state(tmp_path: Path) -> None:
-    project_dir = tmp_path / "project-v2"
-    project_dir.mkdir(parents=True)
-    (project_dir / "revisions" / "001" / "topic").mkdir(parents=True)
-
-    initial_manifest = ProjectManifestV2(
-        schema_version="2.0",
-        slug="an-man-va-huyet-ap",
-        state=WorkflowState.IDEA,
-        active_revision="001",
-    )
-    write_yaml_atomic(
-        project_dir / "project.yaml", initial_manifest.model_dump(mode="json")
-    )
-
-    inbox = tmp_path / "topics"
-    runner.invoke(
-        app,
-        [
-            "topic",
-            "create",
-            "--title",
-            "Ăn mặn và huyết áp",
-            "--question",
-            "Ăn mặn có làm tăng huyết áp không?",
-            "--slug",
-            "an-man-va-huyet-ap",
-            "--inbox",
-            str(inbox),
-        ],
-    )
-
-    select_res = runner.invoke(
-        app,
-        [
-            "topic",
-            "select",
-            str(project_dir),
-            "--slug",
-            "an-man-va-huyet-ap",
-            "--inbox",
-            str(inbox),
-        ],
-    )
-    assert select_res.exit_code == 0
-    assert "Đã chọn chủ đề" in select_res.stdout
-
-    manifest = ProjectManifestV2.model_validate(read_yaml(project_dir / "project.yaml"))
-    assert manifest.state == WorkflowState.TOPIC_SELECTED
 
 
 def test_cli_evidence_search_and_build_ledger(
@@ -563,7 +465,7 @@ def test_cli_evidence_search_and_build_ledger(
 
     search_res = runner.invoke(
         app,
-        ["evidence", "search", str(project_dir), "--query", "sodium reduction"],
+        ["step", "evidence-search", str(project_dir), "--query", "sodium reduction"],
     )
     assert search_res.exit_code == 0
     assert "Tìm thấy" in search_res.stdout
@@ -598,7 +500,7 @@ def test_cli_evidence_search_and_build_ledger(
 
     write_explainer_fixture(rev_dir, "C01")
 
-    build_res = runner.invoke(app, ["evidence", "build-ledger", str(project_dir)])
+    build_res = runner.invoke(app, ["step", "build-ledger", str(project_dir)])
     assert build_res.exit_code == 0
     assert "Đã tổng hợp ledger" in build_res.stdout
 
@@ -627,7 +529,7 @@ def test_cli_evidence_search_repeatable_queries_and_existing_question(tmp_path, 
 
     monkeypatch.setattr("healthvideo.cli.get_default_clients", lambda: [Client()])
     result = runner.invoke(app, [
-        "evidence", "search", str(project), "--query", "sodium", "--query", "blood pressure",
+        "step", "evidence-search", str(project), "--query", "sodium", "--query", "blood pressure",
         "--limit", "3",
     ])
     assert result.exit_code == 0, result.stdout
@@ -660,8 +562,7 @@ def test_cli_evidence_ingest(tmp_path: Path) -> None:
     ingest_res = runner.invoke(
         app,
         [
-            "evidence",
-            "ingest",
+            "step", "evidence-ingest",
             str(project_dir),
             "--source-id",
             "PMID:12345",
@@ -720,7 +621,7 @@ def test_cli_evidence_search_surfaces_provider_failures(
     )
     write_yaml_atomic(project / "project.yaml", manifest.model_dump(mode="json"))
 
-    result = runner.invoke(app, ["evidence", "search", str(project), "--query", "synthetic"])
+    result = runner.invoke(app, ["step", "evidence-search", str(project), "--query", "synthetic"])
 
     assert result.exit_code == (1 if all_failed else 0)
     lines = result.stdout.splitlines()
@@ -743,3 +644,263 @@ def test_review_reopen_cli(tmp_path: Path, changed: str, exit_code: int) -> None
     ])
     assert result.exit_code == exit_code, result.stdout
     assert ("\u0110\u00e3 m\u1edf l\u1ea1i c\u1ed5ng medical" if exit_code == 0 else "medical re-review") in result.stdout
+
+
+def test_public_command_surface():
+    from typer.main import get_command
+
+    root = get_command(app)
+    expected = {
+        (): {"topic", "run", "status", "review", "preview", "produce", "package", "doctor"},
+        ("topic",): {"discover", "add", "list"},
+        ("review",): {"open", "approve", "reject", "reopen", "set-pin"},
+    }
+    for path, names in expected.items():
+        command = root
+        for part in path:
+            command = command.commands[part]
+        assert {name for name, child in command.commands.items() if not child.hidden} == names
+        result = runner.invoke(app, [*path, "--help"])
+        assert result.exit_code == 0
+        for name in names:
+            assert name in result.stdout
+    assert root.commands["step"].hidden
+
+
+@pytest.fixture
+def authenticated_pin(tmp_path, monkeypatch):
+    from healthvideo.approver_pin import set_pin
+    path = tmp_path / "approver-pin.json"
+    set_pin("123456", path=path)
+    monkeypatch.setattr("healthvideo.cli.pin_path", lambda: path)
+    # CliRunner replaces stdin while invoking; patch that stream's class.
+    from typer.testing import _NamedTextIOWrapper
+    monkeypatch.setattr(_NamedTextIOWrapper, "isatty", lambda self: True)
+    monkeypatch.setattr("healthvideo.cli.getpass.getpass", lambda prompt: "123456")
+    return path
+
+
+def test_approve_refuses_without_tty(tmp_path):
+    project = create_v2_project_fixture(tmp_path, state="awaiting_medical_review")
+    before = {p: p.read_bytes() for p in project.rglob("*") if p.is_file()}
+    result = runner.invoke(app, ["review", "approve", str(project), "--gate", "medical", "--reviewer", "Test"])
+    assert result.exit_code != 0
+    assert "TTY" in result.stdout
+    assert before == {p: p.read_bytes() for p in project.rglob("*") if p.is_file()}
+
+
+def test_approve_refuses_when_no_pin_set(tmp_path, authenticated_pin):
+    authenticated_pin.unlink()
+    project = create_v2_project_fixture(tmp_path, state="awaiting_medical_review")
+    result = runner.invoke(app, ["review", "approve", str(project), "--gate", "medical", "--reviewer", "Test"])
+    assert result.exit_code != 0
+    assert "Chưa đặt PIN" in result.stdout
+    assert not list((project / "revisions/001/reviews").glob("*approval*"))
+
+
+def test_approve_refuses_wrong_pin(tmp_path, authenticated_pin, monkeypatch):
+    monkeypatch.setattr("healthvideo.cli.getpass.getpass", lambda prompt: "wrong-pin")
+    project = create_v2_project_fixture(tmp_path, state="awaiting_medical_review")
+    before = {p: p.read_bytes() for p in project.rglob("*") if p.is_file()}
+    result = runner.invoke(app, ["review", "approve", str(project), "--gate", "medical", "--reviewer", "Test"])
+    assert result.exit_code != 0
+    assert "PIN không đúng" in result.stdout
+    assert before == {p: p.read_bytes() for p in project.rglob("*") if p.is_file()}
+
+
+def test_approve_with_correct_pin_writes_record(tmp_path, authenticated_pin):
+    project = create_v2_project_fixture(tmp_path, state="awaiting_medical_review")
+    result = runner.invoke(app, ["review", "approve", str(project), "--gate", "medical", "--reviewer", "Doctor", "--note", "Checked"])
+    assert result.exit_code == 0, result.output
+    record = read_yaml(project / "revisions/001/reviews/medical-approval.yaml")
+    assert record["reviewer"] == "Doctor"
+    assert record["note"] == "Checked"
+
+
+def test_no_cli_path_approves_without_pin(tmp_path, monkeypatch):
+    from typer.core import TyperGroup
+    from typer.main import get_command
+
+    from healthvideo import cli
+    from healthvideo.workflows import gate_review, review
+
+    calls = []
+    def forbidden(*args, **kwargs):
+        calls.append((args, kwargs))
+        raise AssertionError("approval called without PIN")
+    monkeypatch.setattr(cli, "approve_gate", forbidden)
+    monkeypatch.setattr(gate_review, "approve_gate", forbidden)
+    monkeypatch.setattr(review, "approve_medical", forbidden)
+    monkeypatch.setattr(review, "approve_video", forbidden)
+    from typer.testing import _NamedTextIOWrapper
+    monkeypatch.setattr(_NamedTextIOWrapper, "isatty", lambda self: False)
+    project = create_v2_project_fixture(tmp_path, state="awaiting_medical_review")
+    before = {p: p.read_bytes() for p in project.rglob("*") if p.is_file()}
+    paths = []
+    def walk(command, path=()):
+        if isinstance(command, TyperGroup):
+            for name, child in command.commands.items():
+                walk(child, (*path, name))
+        else:
+            paths.append((path, command))
+    walk(get_command(app))
+    # Exercise every registered leaf, including hidden commands, with all required
+    # parameters supplied. Missing-argument parsing must not hide an approval alias.
+    import inspect
+
+    def can_approve(callback, seen=None):
+        callback = inspect.unwrap(callback)
+        if not inspect.isfunction(callback):
+            return False
+        seen = set() if seen is None else seen
+        if callback in seen:
+            return False
+        seen.add(callback)
+        # Globals have already been replaced with the spy, so reaching the spy
+        # is evidence of a possible approval call, regardless of command name.
+        if callback is forbidden:
+            return True
+        if not callback.__module__.startswith("healthvideo"):
+            return False
+        for name in callback.__code__.co_names:
+            value = callback.__globals__.get(name)
+            if inspect.isfunction(value) and can_approve(value, seen):
+                return True
+            if inspect.ismodule(value) and value.__name__.startswith("healthvideo"):
+                for attr in callback.__code__.co_names:
+                    if can_approve(getattr(value, attr, None), seen):
+                        return True
+        return False
+
+    approvals = []
+    for path, command in paths:
+        if can_approve(command.callback):
+            approvals.append(path)
+            for gate in ("medical", "video"):
+                result = runner.invoke(app, [*path, str(project), "--gate", gate, "--reviewer", "Test"])
+                assert result.exit_code != 0
+                assert "TTY" in result.output
+    assert approvals == [("review", "approve")]
+    assert calls == []
+    assert before == {p: p.read_bytes() for p in project.rglob("*") if p.is_file()}
+
+
+def test_set_pin_requires_tty(tmp_path, monkeypatch):
+    path = tmp_path / "pin.json"
+    monkeypatch.setattr("healthvideo.cli.pin_path", lambda: path)
+    result = runner.invoke(app, ["review", "set-pin"])
+    assert result.exit_code != 0
+    assert not path.exists()
+
+
+def test_set_pin_confirmation_and_reset(tmp_path, authenticated_pin, monkeypatch):
+    from healthvideo.approver_pin import verify_pin
+    answers = iter(["123456", "654321", "different"])
+    monkeypatch.setattr("healthvideo.cli.getpass.getpass", lambda prompt: next(answers))
+    assert runner.invoke(app, ["review", "set-pin"]).exit_code != 0
+    assert verify_pin("123456", path=authenticated_pin)
+    answers = iter(["wrong", "654321", "654321"])
+    assert runner.invoke(app, ["review", "set-pin"]).exit_code != 0
+    assert verify_pin("123456", path=authenticated_pin)
+    answers = iter(["123456", "654321", "654321"])
+    assert runner.invoke(app, ["review", "set-pin"]).exit_code == 0
+    assert verify_pin("654321", path=authenticated_pin)
+
+
+def test_topic_queue_and_status(tmp_path):
+    from healthvideo.storage.queue import load_queue
+    added = runner.invoke(app, ["topic", "add", "--slug", "salt-test", "--title", "Salt", "--question", "Salt?", "--note", "Doctor note", "--root", str(tmp_path)])
+    assert added.exit_code == 0, added.output
+    assert load_queue(tmp_path)[0].doctor_note == "Doctor note"
+    duplicate = runner.invoke(app, ["topic", "add", "--slug", "salt-test", "--title", "Salt", "--question", "Salt?", "--root", str(tmp_path)])
+    assert duplicate.exit_code == 1
+    for command in (["topic", "list"], ["status"]):
+        result = runner.invoke(app, [*command, "--root", str(tmp_path)])
+        assert result.exit_code == 0
+        assert "salt-test | Salt | chưa bắt đầu" in result.output
+    result = runner.invoke(app, ["status", "--root", str(tmp_path)])
+    assert "create" in result.output
+
+
+def test_run_is_explicit_stub():
+    result = runner.invoke(app, ["run"])
+    assert result.exit_code == 2
+    assert "chưa có: đang được xây (Task 3.5)" in result.output
+
+
+@pytest.mark.parametrize("pubmed_fails", [False, True])
+def test_topic_discover_offline(tmp_path, monkeypatch, pubmed_fails):
+    from datetime import UTC, datetime
+
+    from healthvideo.discovery.models import MissingApiKey, Signal, SourceError
+    calls = []
+    monkeypatch.setenv("YOUTUBE_API_KEY", "test-key")
+    def youtube(query, *, api_key):
+        calls.append((query, api_key))
+        raise MissingApiKey("missing test key")
+    def reddit(query):
+        raise SourceError("reddit", "test failure")
+    monkeypatch.setattr("healthvideo.cli.youtube.fetch_signals", youtube)
+    monkeypatch.setattr("healthvideo.cli.reddit.fetch_signals", reddit)
+    monkeypatch.setattr("healthvideo.cli.trends.fetch_signals", lambda: [Signal(source="trends", url="https://example.test", text="salt", fetched=datetime.now(UTC)), Signal(source="trends", url="https://unrelated.test", text="football scores", metric=999999, fetched=datetime.now(UTC))])
+    class Client:
+        def count(self, query):
+            assert query == "salt"
+            if pubmed_fails:
+                raise ValueError("bad response")
+            return 12000
+    monkeypatch.setattr("healthvideo.cli.PubMedClient", Client)
+    result = runner.invoke(app, ["topic", "discover", "--query", "salt", "--title", "Salt title", "--question", "Salt?", "--layers", "anatomy, physiology", "--root", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    assert calls == [("salt", "test-key")]
+    from datetime import date
+    payload = read_yaml(tmp_path / "topics/discovered" / f"{date.today().isoformat()}.yaml")  # noqa: DTZ011
+    assert payload["cards"][0]["pubmed_count"] == (None if pubmed_fails else 12000)
+    assert [item["text"] for item in payload["cards"][0]["misconceptions"]] == ["salt"]
+    assert payload["cards"][0]["heat"] is None
+    assert payload["cards"][0]["layers"] == ["anatomy", "physiology"]
+    assert payload["cards"][0]["title"] == "Salt title"
+    assert {item["source"] for item in payload["failures"]} == ({"youtube", "reddit", "pubmed"} if pubmed_fails else {"youtube", "reddit"})
+    assert "hot" not in result.output.lower()
+    assert "reddit: test failure" in result.output
+
+
+def test_set_pin_first_time(authenticated_pin, monkeypatch):
+    from healthvideo.approver_pin import verify_pin
+    authenticated_pin.unlink()
+    answers = iter(["new-pin", "new-pin"])
+    monkeypatch.setattr("healthvideo.cli.getpass.getpass", lambda prompt: next(answers))
+    result = runner.invoke(app, ["review", "set-pin"])
+    assert result.exit_code == 0, result.output
+    assert verify_pin("new-pin", path=authenticated_pin)
+
+
+@pytest.mark.parametrize("state,expected", [
+    ("topic_selected", "research"),
+    ("awaiting_medical_review", "chờ cổng awaiting_medical_review"),
+    ("awaiting_video_review", "chờ cổng awaiting_video_review"),
+])
+def test_queue_status_shows_existing_project_and_next_step(tmp_path, state, expected):
+    result = runner.invoke(app, ["topic", "add", "--slug", "salt-test", "--title", "Salt", "--question", "Salt?", "--root", str(tmp_path)])
+    assert result.exit_code == 0
+    project = tmp_path / "projects/salt-test"
+    write_yaml_atomic(project / "project.yaml", ProjectManifestV2(slug="salt-test", state=state, active_revision="001").model_dump(mode="json"))
+    result = runner.invoke(app, ["status", "--root", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    assert f"salt-test | Salt | {state} | {expected}" in result.output
+
+
+def test_topic_add_rejects_existing_project_and_uses_current_directory(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "projects/salt-test").mkdir(parents=True)
+    result = runner.invoke(app, ["topic", "add", "--slug", "salt-test", "--title", "Salt", "--question", "Salt?"])
+    assert result.exit_code == 1
+    assert "Project already exists" in result.output
+    assert not (tmp_path / "topics/queue.yaml").exists()
+
+
+def test_approve_has_no_yes_option(authenticated_pin, tmp_path):
+    project = create_v2_project_fixture(tmp_path, state="awaiting_medical_review")
+    result = runner.invoke(app, ["review", "approve", str(project), "--gate", "medical", "--reviewer", "Test", "--yes"])
+    assert result.exit_code == 2
+    assert not (project / "revisions/001/reviews/medical-approval.yaml").exists()

@@ -113,7 +113,7 @@ def test_operator_and_cli_remind_to_create_missing_explainer(tmp_path: Path, sta
 
     project = _project(tmp_path, "explain_first_v1", state)
     assert "explainer" in get_next_action(project).message
-    result = CliRunner().invoke(app, ["operator", "status", str(project)])
+    result = CliRunner().invoke(app, ["status", str(project)])
     assert result.exit_code == 0, result.stdout
     assert "explainer" in result.stdout
 

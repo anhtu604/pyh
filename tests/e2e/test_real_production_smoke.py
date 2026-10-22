@@ -24,7 +24,7 @@ def test_real_production_and_package(tmp_path: Path) -> None:
     project = _evidence_ready(tmp_path)
     runner = CliRunner()
     assert runner.invoke(app, _draft_args(project)).exit_code == 0
-    assert runner.invoke(app, ["operator", "submit-medical", str(project)]).exit_code == 0
+    assert runner.invoke(app, ["step", "submit-medical", str(project)]).exit_code == 0
     approve_gate(project, GateKind.MEDICAL, reviewer="Fixture reviewer", now=datetime.now(UTC))
 
     produced = runner.invoke(app, ["produce", str(project), "--tts", "silent"])

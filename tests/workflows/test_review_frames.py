@@ -158,8 +158,7 @@ def test_cli_dense_sampling_and_invalid_clip(tmp_path, monkeypatch):
     result = CliRunner().invoke(
         app,
         [
-            "review",
-            "frames",
+            "step", "review-frames",
             str(project),
             "--from",
             "1",
@@ -175,7 +174,7 @@ def test_cli_dense_sampling_and_invalid_clip(tmp_path, monkeypatch):
         e["frame"] for e in json.loads((output / "index.json").read_text())["frames"]
     ] == [30, 45, 60]
     bad = CliRunner().invoke(
-        app, ["review", "frames", str(project), "--clip", "../bad"]
+        app, ["step", "review-frames", str(project), "--clip", "../bad"]
     )
     assert bad.exit_code == 1
 

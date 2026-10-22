@@ -19,6 +19,7 @@ from healthvideo.domain.gate_review import GateKind
 from healthvideo.domain.hook_outro import OUTRO_TEXT
 from healthvideo.domain.project_v2 import WorkflowState
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
+from healthvideo.workflows.gate_review import approve_gate
 from healthvideo.workflows.package import _ensure_v2_gate_approval
 from healthvideo.workflows.visual_assets import (
     bind_chart_asset,
@@ -42,13 +43,16 @@ def test_golden_v2_crosses_process_boundaries_to_a_package(
     project = _prepare_v2_awaiting_medical(tmp_path, budget_enabled=budget_enabled)
     revision = project / "revisions/001"
 
-    for arguments in (
-        ("review", "approve", project, "--gate", "medical", "--reviewer", "doctor", "--yes"),
-        ("produce", project),
-        ("review", "approve", project, "--gate", "video", "--reviewer", "doctor", "--yes"),
-        ("package", project),
-    ):
-        _assert_cli_ok(*arguments)
+    for gate, following in ((GateKind.MEDICAL, "produce"), (GateKind.VIDEO, "package")):
+        # Subprocess pipes are not a doctor's terminal; both gates must refuse.
+        refused = _cli("review", "approve", project, "--gate", gate.value, "--reviewer", "doctor")
+        assert refused.returncode != 0
+        assert "TTY" in refused.stdout
+        assert not (revision / "reviews" / f"{gate.value}-approval.yaml").exists()
+        # Seed the synthetic doctor's domain approval; successful interactive CLI
+        # PIN verification is covered by test_cli, without any production bypass.
+        approve_gate(project, gate, reviewer="doctor", now=ENTERED_AT)
+        _assert_cli_ok(following, project)
 
     scenes = json.loads((revision / "renders/render-input.json").read_text(encoding="utf-8"))[
         "scenes"
@@ -136,6 +140,7 @@ def _prepare_v2_awaiting_medical(
 def _cli(*arguments: object) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, str(WORKER), "cli", *map(str, arguments)],
+        input="",
         capture_output=True,
         text=True,
         encoding="utf-8",

@@ -1,26 +1,31 @@
+import getpass
 import json
+import os
 import re
 import subprocess
 import sys
-from collections.abc import Callable
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Annotated, Any
 
 import typer
 
 from healthvideo import __version__
-from healthvideo.commands.operator import app as operator_app
+from healthvideo.approver_pin import PinError, pin_path, set_pin, verify_pin
+from healthvideo.commands import operator
+from healthvideo.discovery import reddit, trends, youtube
+from healthvideo.discovery.cards import build_card, collect, write_discovered
+from healthvideo.discovery.models import SourceFailure
 from healthvideo.domain.evidence import (
     EvidenceClaim,
     EvidenceQuestion,
     SourceRecord,
     SourceSelection,
 )
-from healthvideo.domain.gate_review import GateApprovalRecord, GateKind
+from healthvideo.domain.gate_review import GateKind
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
+from healthvideo.domain.queue import QueueEntry, QueueError
 from healthvideo.domain.state_graph import SIDE_EXIT_RULES
-from healthvideo.domain.topic import TopicCard
 from healthvideo.evidence.clients import EuropePMCClient, PubMedClient
 from healthvideo.process import prepare_subprocess_argv, resolve_pnpm_argv
 from healthvideo.qa.script import lint_project_script
@@ -31,6 +36,7 @@ from healthvideo.render.run import (
 )
 from healthvideo.storage.files import read_yaml
 from healthvideo.storage.project_layout import resolve_project_layout
+from healthvideo.storage.queue import add_to_queue, load_queue
 from healthvideo.storage.revisions import create_revision
 from healthvideo.tts.base import TTSProvider
 from healthvideo.tts.command import CommandTTS
@@ -56,21 +62,10 @@ from healthvideo.workflows.gate_review import (
 from healthvideo.workflows.hook_outro import author_hook_outro
 from healthvideo.workflows.package import package_project
 from healthvideo.workflows.produce import produce_project
-from healthvideo.workflows.review import (
-    approval_is_stale,
-    approve_medical,
-    approve_video,
-    latest_approval,
-)
 from healthvideo.workflows.review_frames import review_frames as create_review_frames
 from healthvideo.workflows.review_html import render_medical_packet, render_video_packet
+from healthvideo.workflows.runner import next_step
 from healthvideo.workflows.screening import screen_candidates
-from healthvideo.workflows.topic import (
-    create_topic,
-    list_topics,
-    reject_topic,
-    select_topic,
-)
 
 CONFIRMATION = "APPROVE"
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -102,25 +97,22 @@ for _stream in (sys.stdout, sys.stderr):
 
 app = typer.Typer(no_args_is_help=True)
 review_app = typer.Typer(no_args_is_help=True)
-revision_app = typer.Typer(no_args_is_help=True)
 topic_app = typer.Typer(no_args_is_help=True)
-evidence_app = typer.Typer(no_args_is_help=True)
-outro_app = typer.Typer(no_args_is_help=True)
-script_app = typer.Typer(no_args_is_help=True)
+step_app = typer.Typer(no_args_is_help=True)
 app.add_typer(review_app, name="review")
-app.add_typer(revision_app, name="revision")
 app.add_typer(topic_app, name="topic")
-app.add_typer(evidence_app, name="evidence")
-app.add_typer(operator_app, name="operator")
-app.add_typer(outro_app, name="outro")
-app.add_typer(script_app, name="script")
+app.add_typer(step_app, name="step", hidden=True)
+step_app.command("new")(operator.new)
+step_app.command("select")(operator.select)
+step_app.command("draft")(operator.draft)
+step_app.command("submit-medical")(operator.submit_medical)
 
 
 def _echo_error(error: BaseException) -> None:
     typer.echo("\n".join([str(error), *getattr(error, "__notes__", [])]))
 
 
-@script_app.command("lint")
+@step_app.command("lint")
 def script_lint(project_dir: Annotated[Path, typer.Argument(help="Thư mục dự án")]) -> None:
     """Lint the active script; warnings do not cause a failing exit status."""
     try:
@@ -134,7 +126,7 @@ def script_lint(project_dir: Annotated[Path, typer.Argument(help="Thư mục d�
         raise typer.Exit(code=1)
 
 
-@outro_app.command("author")
+@step_app.command("outro-author")
 def outro_author(
     project_dir: Annotated[Path, typer.Argument(help="Thư mục dự án v2")],
     duration_frames: Annotated[int, typer.Option("--duration-frames", help="Số frame của câu kết")],
@@ -200,7 +192,7 @@ def main() -> None:
                 reconfigure(encoding="utf-8")
 
 
-@app.command()
+@step_app.command()
 def version() -> None:
     """In phiên bản healthvideo."""
     typer.echo(__version__)
@@ -341,42 +333,15 @@ def package(
     typer.echo(f"Packaged: {output}")
 
 
-@review_app.command("medical")
-def review_medical(
-    project_dir: ProjectDir,
-    reviewer: Reviewer,
-    note: Note = "",
-    yes: SkipConfirmation = False,
-) -> None:
-    """Duyệt bằng chứng và kịch bản trước khi sản xuất."""
-    _record_approval(approve_medical, "y khoa", project_dir, reviewer, note, yes=yes)
-
-
-@review_app.command("video")
-def review_video(
-    project_dir: ProjectDir,
-    reviewer: Reviewer,
-    note: Note = "",
-    yes: SkipConfirmation = False,
-) -> None:
-    """Duyệt video đã render trước khi đóng gói."""
-    _record_approval(approve_video, "video", project_dir, reviewer, note, yes=yes)
-
-
 @review_app.command("approve")
 def review_approve(
     project_dir: ProjectDir,
     gate: Gate,
     reviewer: Reviewer,
     note: Note = "",
-    yes: SkipConfirmation = False,
 ) -> None:
-    """Duyệt cổng y khoa hoặc video cho project schema 2.0."""
-    if not yes:
-        typed = typer.prompt(f"Gõ {CONFIRMATION} để duyệt {gate.value}")
-        if typed.strip() != CONFIRMATION:
-            typer.echo(f"Đã hủy: cần gõ {CONFIRMATION} để xác nhận.")
-            raise typer.Exit(code=1)
+    """Duyệt cổng bằng PIN do bác sĩ gõ trực tiếp trong terminal."""
+    _require_approval_pin()
     try:
         record = approve_gate(
             project_dir,
@@ -452,7 +417,7 @@ def review_reopen(
     )
 
 
-@review_app.command("frames")
+@step_app.command("review-frames")
 def review_frames(
     project_dir: ProjectDir,
     clip: Annotated[str | None, typer.Option(help="Clip ID, e.g. CL01; default: long video")] = None,
@@ -486,7 +451,7 @@ def review_open(project_dir: ProjectDir, gate: Gate) -> None:
     typer.echo(html)
 
 
-@review_app.command("resume")
+@step_app.command("resume")
 def review_resume(
     project_dir: ProjectDir,
     gate: Gate,
@@ -510,32 +475,51 @@ def review_resume(
 
 
 @app.command()
-def status(project_dir: ProjectDir) -> None:
-    """In trạng thái dự án và hiệu lực của hai cổng duyệt."""
+def run() -> None:
+    """Chạy xưởng tới cổng duyệt tiếp theo (đang xây)."""
+    typer.echo("chưa có: đang được xây (Task 3.5)")
+    raise typer.Exit(code=2)
+
+
+Root = Annotated[Path, typer.Option("--root", help="Thư mục gốc xưởng")]
+
+
+def _queue_table(root: Path, *, include_next: bool) -> None:
     try:
-        project = ProjectManifestV2.model_validate(
-            read_yaml(project_dir / "project.yaml")
-        )
-    except (FileNotFoundError, TypeError, ValueError) as error:
-        typer.echo(str(error))
+        rows = []
+        for entry in load_queue(root):
+            manifest_path = root / "projects" / entry.slug / "project.yaml"
+            project = ProjectManifestV2.model_validate(read_yaml(manifest_path)) if manifest_path.exists() else None
+            state = project.state if project else None
+            label = state.value if state is not None else "chưa bắt đầu"
+            following = next_step(state)
+            if state in {WorkflowState.AWAITING_MEDICAL_REVIEW, WorkflowState.AWAITING_VIDEO_REVIEW}:
+                following = f"chờ cổng {state.value}"
+            rows.append([entry.slug, entry.title, label, following or "—"])
+    except (OSError, TypeError, ValueError) as error:
+        _echo_error(error)
         raise typer.Exit(code=1) from error
-
-    stale = False
-    typer.echo(f"state={project.state.value}")
-    for kind in GateKind:
-        record = latest_approval(project_dir, kind)
-        if record is None:
-            typer.echo(f"{kind.value}_approval=none")
-            continue
-        stale = stale or approval_is_stale(project_dir, project, kind)
-        typer.echo(
-            f"{kind.value}_approval={record.reviewer} "
-            f"({record.reviewed_at.isoformat()})"
-        )
-    typer.echo(f"approval_stale={'true' if stale else 'false'}")
+    columns = ["slug", "title", "state", "next_step"] if include_next else ["slug", "title", "state"]
+    # Plain tabular output stays readable in terminals and captured logs.
+    typer.echo(" | ".join(columns))
+    for row in rows:
+        typer.echo(" | ".join(row[:len(columns)]))
 
 
-@revision_app.command("create")
+@app.command()
+def status(
+    project_dir: Annotated[Path | None, typer.Argument(help="Thư mục project")] = None,
+    json_output: Annotated[bool, typer.Option("--json")] = False,
+    root: Root = Path("."),
+) -> None:
+    """Xem hàng đợi hoặc bước kế tiếp của một project."""
+    if project_dir is not None:
+        operator.status(project_dir, json_output=json_output)
+    else:
+        _queue_table(root, include_next=True)
+
+
+@step_app.command("revision-create")
 def revision_create(
     project_dir: ProjectDir,
     reason: Annotated[str, typer.Option("--reason", help="Lý do tạo revision mới")],
@@ -549,26 +533,41 @@ def revision_create(
     typer.echo(f"Created revision: {revision}")
 
 
-def _record_approval(
-    approve: Callable[..., GateApprovalRecord],
-    label: str,
-    project_dir: Path,
-    reviewer: str,
-    note: str,
-    *,
-    yes: bool,
-) -> None:
-    if not yes:
-        typed = typer.prompt(f"Gõ {CONFIRMATION} để duyệt {label}")
-        if typed.strip() != CONFIRMATION:
-            typer.echo(f"Đã hủy: cần gõ {CONFIRMATION} để xác nhận.")
-            raise typer.Exit(code=1)
+def _require_tty() -> None:
+    if not sys.stdin.isatty():
+        typer.echo("Cần terminal TTY của bác sĩ để nhập PIN.")
+        raise typer.Exit(code=1)
+
+
+def _require_approval_pin() -> None:
+    _require_tty()
     try:
-        record = approve(project_dir, reviewer=reviewer, note=note)
-    except (OSError, TypeError, ValueError) as error:
-        typer.echo(str(error))
+        path = pin_path()
+        if not path.is_file():
+            raise PinError("Chưa đặt PIN; chạy healthvideo review set-pin trong terminal.")
+        if not verify_pin(getpass.getpass("PIN duyệt: "), path=path):
+            raise PinError("PIN không đúng.")
+    except (OSError, EOFError, PinError) as error:
+        _echo_error(error)
         raise typer.Exit(code=1) from error
-    typer.echo(f"Đã duyệt {label}: {record.reviewed_at.isoformat()}")
+
+
+@review_app.command("set-pin")
+def review_set_pin() -> None:
+    """Đặt hoặc đổi PIN duyệt trong terminal của bác sĩ."""
+    _require_tty()
+    try:
+        path = pin_path()
+        old = getpass.getpass("PIN cũ: ") if path.exists() else None
+        new = getpass.getpass("PIN mới: ")
+        confirmation = getpass.getpass("Nhập lại PIN mới: ")
+        if new != confirmation:
+            raise PinError("Hai PIN mới không khớp.")
+        set_pin(new, old_pin=old, path=path)
+    except (OSError, EOFError, PinError) as error:
+        _echo_error(error)
+        raise typer.Exit(code=1) from error
+    typer.echo("Đã đặt PIN.")
 
 
 def get_default_clients() -> list[Any]:
@@ -576,96 +575,61 @@ def get_default_clients() -> list[Any]:
 
 
 @topic_app.command("list")
-def topic_list(
-    inbox: Annotated[
-        Path, typer.Option("--inbox", help="Thư mục hộp thư chủ đề")
-    ] = Path("topics"),
-    status_filter: Annotated[
-        str | None, typer.Option("--status", help="Lọc theo trạng thái")
-    ] = None,
+def topic_list(root: Root = Path(".")) -> None:
+    """Liệt kê các thẻ trong hàng đợi."""
+    _queue_table(root, include_next=False)
+
+
+@topic_app.command("add")
+def topic_add(
+    slug: Annotated[str, typer.Option("--slug")],
+    title: Annotated[str, typer.Option("--title")],
+    question: Annotated[str, typer.Option("--question")],
+    note: Annotated[str | None, typer.Option("--note")] = None,
+    root: Root = Path("."),
 ) -> None:
-    """Liệt kê các chủ đề trong inbox theo thứ tự ưu tiên triage."""
-    cards = list_topics(inbox, status=status_filter)
-    if not cards:
-        typer.echo("Không có chủ đề nào.")
-        return
-    for card in cards:
-        typer.echo(f"{card.slug} [{card.status}]: {card.title}")
-
-
-@topic_app.command("create")
-def topic_create(
-    title: Annotated[str, typer.Option("--title", help="Tiêu đề chủ đề")],
-    question: Annotated[str, typer.Option("--question", help="Câu hỏi trọng tâm")],
-    slug: Annotated[str, typer.Option("--slug", help="Slug định danh")] = "",
-    inbox: Annotated[
-        Path, typer.Option("--inbox", help="Thư mục hộp thư chủ đề")
-    ] = Path("topics"),
-    audience: Annotated[
-        str, typer.Option("--audience", help="Đối tượng khán giả")
-    ] = "",
-) -> None:
-    """Tạo một thẻ chủ đề mới trong inbox."""
-    effective_slug = slug or re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
-    card = create_topic(
-        inbox_dir=inbox,
-        title=title,
-        question=question,
-        slug=effective_slug,
-        target_audience=audience,
-    )
-    typer.echo(f"Đã tạo chủ đề: {card.slug} ({card.title})")
-
-
-@topic_app.command("reject")
-def topic_reject(
-    topic_path: Annotated[Path, typer.Argument(help="Đường dẫn file card chủ đề")],
-    reason: Annotated[str, typer.Option("--reason", help="Lý do từ chối")],
-) -> None:
-    """Từ chối một chủ đề và ghi nhận lý do."""
+    """Thêm chủ đề vào hàng đợi; không ghi đè project đã có."""
     try:
-        card = reject_topic(topic_path, reason=reason)
-    except (FileNotFoundError, TypeError, ValueError) as error:
-        typer.echo(str(error))
+        add_to_queue(root, QueueEntry(slug=slug, title=title, question=question, doctor_note=note, added=date.today()))  # noqa: DTZ011 — queue uses the local calendar date.
+    except (OSError, QueueError, ValueError) as error:
+        _echo_error(error)
         raise typer.Exit(code=1) from error
-    typer.echo(f"Đã từ chối chủ đề: {card.slug} - Lý do: {card.rejection_reason}")
+    typer.echo(f"Đã thêm: {slug}")
 
 
-@topic_app.command("select")
-def topic_select(
-    project_dir: ProjectDir,
-    slug: Annotated[str, typer.Option("--slug", help="Slug chủ đề trong inbox")] = "",
-    file: Annotated[
-        Path | None, typer.Option("--file", help="Đường dẫn file card chủ đề")
-    ] = None,
-    inbox: Annotated[
-        Path, typer.Option("--inbox", help="Thư mục hộp thư chủ đề")
-    ] = Path("topics"),
+@topic_app.command("discover")
+def topic_discover(
+    query: Annotated[str, typer.Option("--query")],
+    title: Annotated[str | None, typer.Option("--title")] = None,
+    question: Annotated[str | None, typer.Option("--question")] = None,
+    layers: Annotated[str, typer.Option("--layers")] = "",
+    root: Root = Path("."),
 ) -> None:
-    """Chọn chủ đề cho dự án v2 và chuyển trạng thái sang topic_selected."""
-    if file is not None:
-        card_path = file
-    elif slug:
-        card_path = inbox / f"{slug}.yaml"
-    else:
-        typer.echo("Cần cung cấp --slug hoặc --file.")
-        raise typer.Exit(code=1)
-
-    if not card_path.is_file():
-        typer.echo(f"Không tìm thấy thẻ chủ đề tại: {card_path}")
-        raise typer.Exit(code=1)
-
+    """Tìm tín hiệu thật và lưu thẻ gợi ý để bác sĩ chọn."""
+    signals, failures = collect(query, fetchers={
+        "youtube": lambda q: youtube.fetch_signals(q, api_key=os.environ.get("YOUTUBE_API_KEY")),
+        "trends": lambda q: [signal for signal in trends.fetch_signals() if q.casefold() in signal.text.casefold()],
+        "reddit": reddit.fetch_signals,
+    })
     try:
-        data = read_yaml(card_path)
-        card = TopicCard.model_validate(data)
-        select_topic(project_dir, card)
-    except (FileNotFoundError, TypeError, ValueError) as error:
-        typer.echo(str(error))
+        pubmed_count = PubMedClient().count(query)
+    except (OSError, RuntimeError, TypeError, ValueError, KeyError) as error:
+        pubmed_count = None
+        failures.append(SourceFailure(source="pubmed", reason=str(error)))
+    try:
+        card = build_card(title or query, question or query, signals,
+                          layers=[layer.strip() for layer in layers.split(",") if layer.strip()],
+                          pubmed_count=pubmed_count)
+        output = write_discovered(root, [card], failures, today=date.today())  # noqa: DTZ011 — discovery files use the local date.
+    except (OSError, TypeError, ValueError) as error:
+        _echo_error(error)
         raise typer.Exit(code=1) from error
-    typer.echo(f"Đã chọn chủ đề: {card.slug} cho dự án {project_dir.name}")
+    typer.echo(str(output))
+    for failure in failures:
+        typer.echo(f"{failure.source}: {failure.reason}")
 
 
-@evidence_app.command("search")
+@step_app.command("evidence-search")
 def evidence_search(
     project_dir: ProjectDir,
     query: Annotated[list[str] | None, typer.Option("--query", help="English search query; repeatable")] = None,
@@ -698,7 +662,7 @@ def evidence_search(
         raise typer.Exit(code=1)
 
 
-@evidence_app.command("screen")
+@step_app.command("evidence-screen")
 def evidence_screen(
     project_dir: ProjectDir,
     criteria: Annotated[Path, typer.Option("--criteria", help="Screening criteria YAML")],
@@ -713,7 +677,7 @@ def evidence_screen(
     typer.echo(f"Advisory screening for human review: {output}")
 
 
-@evidence_app.command("ingest")
+@step_app.command("evidence-ingest")
 def evidence_ingest(
     project_dir: ProjectDir,
     file: Annotated[
@@ -759,7 +723,7 @@ def evidence_ingest(
     )
 
 
-@evidence_app.command("build-ledger")
+@step_app.command("build-ledger")
 def evidence_build_ledger(project_dir: ProjectDir) -> None:
     """Tổng hợp evidence ledger từ nguồn tài liệu và claims đã kiểm chứng."""
     try:

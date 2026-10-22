@@ -99,7 +99,7 @@ def get_next_action(project_dir: Path) -> OperatorAction:
                 layout.project_dir,
                 layout.artifact_root,
                 OperatorActionKind.RESEARCH,
-                f'Run `healthvideo evidence search "{layout.project_dir}" '
+                f'Run `healthvideo step evidence-search "{layout.project_dir}" '
                 "--query <English-query>` and validate the evidence ledger."
                 + explainer_reminder,
                 "evidence/ledger.yaml",
