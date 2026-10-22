@@ -147,6 +147,7 @@ applicability, per-claim doctor notes — hoãn sang M3).
 
 | Task | Deliverable | Status | Tests | Commit |
 | --- | --- | --- | --- | --- |
+| Xưởng P3 Task 3.1+3.2 (module) | `approver_pin` (scrypt + salt, ghi nguyên tử, đổi PIN cần PIN cũ, file hỏng → không xác minh); hàng đợi `topics/queue.yaml` (`QueueEntry`, chặn slug trùng hàng đợi/project) — chưa nối CLI | complete (module) | 19 passed; Ruff | `feat: add approver PIN and topic queue modules` |
 | Xưởng P3 Task 3.3+3.4 | `runner.next_step` (trạng thái → bước kế, hai cổng → None); `agents.py` gọi Codex/agy, log UTF-8, lọc biến môi trường chứa PIN, chuyển agent chỉ khi hết quota, `AllAgentsExhausted` | complete | 33 passed (test_agents, test_runner); Ruff | `feat: add runner step map and agent quota failover` |
 | Xưởng video: kế hoạch triển khai | 8 giai đoạn P0–P7, 25 task; theo dõi ở đầu file plan | approved | self-review | `docs: add video factory implementation plan` |
 | Xưởng video: spec tái cấu trúc | Cắt gọt tại chỗ, 4 giai đoạn, hàng đợi `run` Codex/agy, PIN chống tự duyệt, Claude chỉ rà code | approved | builder check; `git diff --check` | `docs: add video factory restructure design` |
