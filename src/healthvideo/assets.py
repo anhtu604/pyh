@@ -60,7 +60,6 @@ def referenced_storyboard_assets(
             AssetKind.MEDICAL_TEXT,
         },
         "chart": {AssetKind.DATA_CHART},
-        "ai_clip": {AssetKind.AI_CLIP},
     }
     resolved_assets: dict[str, Path] = {}
     referenced_roles: dict[str, str] = {}
@@ -92,36 +91,6 @@ def referenced_storyboard_assets(
                 raise ValueError(
                     f"Scene {scene.id}: chart ownership or classification mismatch"
                 )
-            if reference.role == "ai_clip":
-                if scene.visual != "ai_clip" or record.storyboard_role != "ai_clip":
-                    raise ValueError(
-                        f"Scene {scene.id}: ai_clip ownership or visual mismatch"
-                    )
-                if record.semantic and (
-                    not scene.claim_id
-                    or not scene.source_marker
-                    or not scene.source_marker.strip()
-                ):
-                    raise ValueError(
-                        f"Scene {scene.id}: semantic ai_clip requires claim_id "
-                        "and source_marker"
-                    )
-                if not record.semantic and (
-                    scene.claim_id is not None or scene.source_marker is not None
-                ):
-                    raise ValueError(
-                        f"Scene {scene.id}: decorative ai_clip cannot carry "
-                        "claim_id or source_marker"
-                    )
-                provenance = record.ai_provenance
-                if (
-                    provenance is None
-                    or provenance.duration_ms * 30 != scene.duration_frames * 1000
-                ):
-                    raise ValueError(
-                        f"Scene {scene.id}: ai_clip scene duration does not match "
-                        "AI clip provenance"
-                    )
             if scene.visual == "brand_outro" and reference.role == "mascot" and (
                 record.kind is not AssetKind.MASCOT_REACTION
                 or record.semantic
@@ -151,16 +120,6 @@ def referenced_storyboard_assets(
                 raise ValueError(
                     f"Scene {scene.id}: M6.5 chart scene requires exactly one chart asset"
                 )
-        if (
-            storyboard.visual_budget_profile == "m6_5_v1"
-            and scene.visual == "ai_clip"
-        ):
-            clip_refs = [ref for ref in scene.visual_assets if ref.role == "ai_clip"]
-            if len(clip_refs) != 1:
-                raise ValueError(
-                    f"Scene {scene.id}: M6.5 ai_clip scene requires exactly one "
-                    "ai_clip asset"
-                )
     for record in manifest.assets:
         if record.storyboard_role is None:
             continue
@@ -175,11 +134,6 @@ def referenced_storyboard_assets(
         if record.storyboard_role == "chart" and referenced_counts[record.path] != 1:
             raise ValueError(
                 f"chart asset must be referenced by exactly one scene: {record.path}"
-            )
-        if record.storyboard_role == "ai_clip" and referenced_counts[record.path] != 1:
-            raise ValueError(
-                "AI clip asset must be referenced by exactly one scene: "
-                f"{record.path}"
             )
     return resolved_assets
 

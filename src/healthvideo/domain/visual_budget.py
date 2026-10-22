@@ -16,7 +16,6 @@ if TYPE_CHECKING:
 class VisualCategory(StrEnum):
     WHITEBOARD_SVG = "whiteboard_svg"
     CHART_CROP = "chart_crop"
-    AI_CLIP = "ai_clip"
     MECHANISM = "mechanism"
 
 
@@ -51,7 +50,6 @@ class VisualBudgetOverride(BaseModel):
     rationale: str = Field(json_schema_extra={"pattern": r"\S"})
     whiteboard_svg: PercentRange
     chart_crop: PercentRange
-    ai_clip: PercentRange
 
     @field_validator("rationale")
     @classmethod
@@ -62,7 +60,7 @@ class VisualBudgetOverride(BaseModel):
 
     @model_validator(mode="after")
     def validate_feasibility(self) -> VisualBudgetOverride:
-        ranges = (self.whiteboard_svg, self.chart_crop, self.ai_clip)
+        ranges = (self.whiteboard_svg, self.chart_crop)
         if sum(item.min_percent for item in ranges) > 100 or sum(
             item.max_percent for item in ranges
         ) < 100:
@@ -91,14 +89,12 @@ class VisualBudgetReport(BaseModel):
 DEFAULT_VISUAL_BOUNDS: Mapping[VisualCategory, PercentRange] = MappingProxyType({
     VisualCategory.WHITEBOARD_SVG: PercentRange(min_percent=65, max_percent=75),
     VisualCategory.CHART_CROP: PercentRange(min_percent=15, max_percent=25),
-    VisualCategory.AI_CLIP: PercentRange(min_percent=0, max_percent=10),
 })
 
 EXPLAIN_FIRST_VISUAL_BOUNDS: Mapping[VisualCategory, PercentRange] = MappingProxyType({
     VisualCategory.MECHANISM: PercentRange(min_percent=55, max_percent=70),
     VisualCategory.CHART_CROP: PercentRange(min_percent=15, max_percent=25),
     VisualCategory.WHITEBOARD_SVG: PercentRange(min_percent=10, max_percent=15),
-    VisualCategory.AI_CLIP: PercentRange(min_percent=0, max_percent=5),
 })
 
 _VISUAL_CATEGORIES: dict[str, VisualCategory] = {
@@ -106,7 +102,6 @@ _VISUAL_CATEGORIES: dict[str, VisualCategory] = {
     "brand_outro": VisualCategory.WHITEBOARD_SVG,
     "chart": VisualCategory.CHART_CROP,
     "evidence_highlight": VisualCategory.CHART_CROP,
-    "ai_clip": VisualCategory.AI_CLIP,
     "anatomy_animation": VisualCategory.MECHANISM,
     "process_animation": VisualCategory.MECHANISM,
     "comparison": VisualCategory.MECHANISM,
@@ -130,7 +125,6 @@ def _effective_bounds(storyboard: Storyboard) -> dict[VisualCategory, PercentRan
     return {
         VisualCategory.WHITEBOARD_SVG: override.whiteboard_svg,
         VisualCategory.CHART_CROP: override.chart_crop,
-        VisualCategory.AI_CLIP: override.ai_clip,
     }
 
 

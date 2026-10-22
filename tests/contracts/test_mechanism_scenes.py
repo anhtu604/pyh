@@ -96,7 +96,7 @@ def test_anatomy_default_severity_and_free_subject() -> None:
     assert result.scenes[0].anatomy.severity == 0
 
 
-@pytest.mark.parametrize("visual", ["whiteboard", "chart", "brand_outro", "ai_clip"])
+@pytest.mark.parametrize("visual", ["whiteboard", "chart", "brand_outro"])
 def test_old_kinds_forbid_anatomy(visual: str) -> None:
     with pytest.raises(ValidationError, match="anatomy"):
         Scene.model_validate(scene_data(visual))
@@ -148,12 +148,12 @@ def test_exported_schema_enforces_anatomy_contract(
     assert list(validator.iter_errors(payload))
 
 
-def budget_board(mechanism: int, evidence: int, text: int, ai: int) -> Storyboard:
+def budget_board(mechanism: int, evidence: int, text: int) -> Storyboard:
     scenes = []
     start = 0
     for visual, frames in zip(
-        (*KINDS, "chart", "evidence_highlight", "whiteboard", "brand_outro", "ai_clip"),
-        (1, 1, 1, mechanism - 3, evidence - 1, 1, text - 1, 1, ai),
+        (*KINDS, "chart", "evidence_highlight", "whiteboard", "brand_outro"),
+        (1, 1, 1, mechanism - 3, evidence - 1, 1, text - 1, 1),
         strict=True,
     ):
         if not frames:
@@ -183,7 +183,7 @@ def budget_board(mechanism: int, evidence: int, text: int, ai: int) -> Storyboar
 
 
 @pytest.mark.parametrize(
-    "frames", [(550, 250, 150, 50), (700, 150, 150, 0), (650, 250, 100, 0)]
+    "frames", [(600, 250, 150), (700, 150, 150), (650, 250, 100)]
 )
 def test_explain_budget_inclusive_frame_boundaries(frames: tuple) -> None:
     report = validate_visual_budget(budget_board(*frames))
@@ -194,21 +194,19 @@ def test_explain_budget_inclusive_frame_boundaries(frames: tuple) -> None:
         "mechanism": frames[0],
         "chart_crop": frames[1],
         "whiteboard_svg": frames[2],
-        "ai_clip": frames[3],
     }
 
 
 @pytest.mark.parametrize(
     "frames",
     [
-        (549, 251, 150, 50),
-        (701, 150, 149, 0),
-        (600, 251, 149, 0),
-        (651, 149, 150, 50),
-        (650, 201, 99, 50),
-        (600, 249, 151, 0),
-        (600, 249, 100, 51),
-        (64999, 25001, 10000, 0),
+        (549, 301, 150),
+        (701, 150, 149),
+        (600, 251, 149),
+        (701, 149, 150),
+        (650, 251, 99),
+        (600, 249, 151),
+        (64999, 25001, 10000),
     ],
 )
 def test_explain_budget_rejects_one_frame_violations(frames: tuple) -> None:
@@ -223,7 +221,7 @@ def test_explain_budget_requires_nonempty_contiguous_timeline() -> None:
         validate_visual_budget(
             Storyboard(title="Test", visual_budget_profile="explain_first_v1")
         )
-    board = budget_board(600, 250, 150, 0)
+    board = budget_board(600, 250, 150)
     shifted = board.scenes[0].model_copy(update={"start_frame": 1})
     with pytest.raises(ValueError, match="contiguous"):
         validate_visual_budget(

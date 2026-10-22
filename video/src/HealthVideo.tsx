@@ -1,6 +1,5 @@
 import React from 'react';
 import {AbsoluteFill, Audio, Sequence, staticFile} from 'remotion';
-import {AiClipScene} from './scenes/AiClipScene';
 import {EvidenceHighlightScene} from './scenes/EvidenceHighlightScene';
 import {ChartScene} from './scenes/ChartScene';
 import {YouTubeEndCard} from './scenes/YouTubeEndCard';
@@ -40,12 +39,10 @@ export const HealthVideo: React.FC<RenderInput> = (rawInput) => {
             <EvidenceHighlightScene scene={scene} />
           ) : scene.visual === 'chart' && scene.visual_assets.some((asset) => asset.role === 'chart') ? (
             <ChartScene scene={scene} />
-          ) : scene.visual === 'ai_clip' && scene.visual_assets.some((asset) => asset.role === 'ai_clip') ? (
-            <AiClipScene scene={scene} />
           ) : (
             <WhiteboardScene scene={scene} />
           )}
-          {scene.visual_assets.filter((asset) => asset.role !== 'chart' && asset.role !== 'ai_clip' &&
+          {scene.visual_assets.filter((asset) => asset.role !== 'chart' &&
             !(isMechanismVisual(scene.visual) && asset.role === 'mascot')).map((asset) => (
             <VisualAsset asset={asset} outro={scene.visual === 'brand_outro'} key={asset.path} />
           ))}

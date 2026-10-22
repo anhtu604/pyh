@@ -55,7 +55,6 @@ from healthvideo.tts.pronunciation import (
     load_pronunciation_lexicon,
     pronunciation_hash,
 )
-from healthvideo.workflows.ai_clips import recover_ai_clip_generation
 from healthvideo.workflows.gate_review import (
     MEDICAL_APPROVAL_ARTIFACT,
     hash_reviewed_artifacts,
@@ -111,7 +110,6 @@ def _produce_v2(
         )
 
     recover_chart_asset_binding(layout.project_dir)
-    recover_ai_clip_generation(layout.project_dir)
     _ensure_v2_medical_approval_current(layout.artifact_root)
     script = Script.model_validate(
         read_yaml(layout.artifact_root / "script" / "script.yaml")

@@ -376,7 +376,6 @@
             "whiteboard",
             "chart",
             "evidence_highlight",
-            "ai_clip",
             "brand_outro",
             "anatomy_animation",
             "process_animation",
@@ -467,8 +466,7 @@
             "whiteboard",
             "mascot",
             "brand",
-            "chart",
-            "ai_clip"
+            "chart"
           ],
           "title": "Role",
           "type": "string"
@@ -484,9 +482,6 @@
     "VisualBudgetOverride": {
       "additionalProperties": false,
       "properties": {
-        "ai_clip": {
-          "$ref": "#/$defs/PercentRange"
-        },
         "chart_crop": {
           "$ref": "#/$defs/PercentRange"
         },
@@ -502,8 +497,7 @@
       "required": [
         "rationale",
         "whiteboard_svg",
-        "chart_crop",
-        "ai_clip"
+        "chart_crop"
       ],
       "title": "VisualBudgetOverride",
       "type": "object",
@@ -564,8 +558,5 @@
     "title"
   ],
   "title": "Storyboard",
-  "type": "object",
-  "x-invariants": {
-    "m6_6_ai_clip": "m6_5_v1 ai_clip scenes use 120/180/240 frames"
-  }
+  "type": "object"
 }

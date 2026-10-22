@@ -224,35 +224,47 @@ def test_exported_chart_role_and_render_profile_are_additive(tmp_path: Path) -> 
     )
 
 
-def test_exported_ai_clip_contract_is_additive_and_explicit(tmp_path: Path) -> None:
-    output_dir = tmp_path / "schemas"
-    subprocess.run(
-        [sys.executable, "tools/export_schemas.py", "--output-dir", str(output_dir)],
-        check=True,
-        cwd=REPOSITORY_ROOT,
-    )
-    storyboard = json.loads(
-        (output_dir / "storyboard.schema.json").read_text(encoding="utf-8")
-    )
-    asset_manifest = json.loads(
-        (output_dir / "asset-manifest.schema.json").read_text(encoding="utf-8")
-    )
+def test_removed_ai_clip_kinds_rejected() -> None:
+    from pydantic import ValidationError
 
-    assert "ai_clip" in storyboard["$defs"]["VisualAssetRef"]["properties"][
-        "role"
-    ]["enum"]
-    record = asset_manifest["$defs"]["AssetRecord"]["properties"]
-    assert "ai_clip" in asset_manifest["$defs"]["AssetKind"]["enum"]
-    assert "ai_clip" in record["storyboard_role"]["anyOf"][0]["enum"]
-    provenance = asset_manifest["$defs"]["AIClipProvenance"]["properties"]
-    assert provenance["duration_ms"]["enum"] == [4000, 6000, 8000]
-    assert provenance["source_frame_count"]["enum"] == [96, 144, 192]
-    assert provenance["width"]["const"] == 1080
-    assert provenance["height"]["const"] == 1920
-    assert provenance["source_fps"]["const"] == 24
-    assert asset_manifest["$defs"]["AssetRecord"]["x-invariants"][
-        "ai_clip"
-    ].startswith("kind=ai_clip")
-    assert storyboard["x-invariants"]["m6_6_ai_clip"] == (
-        "m6_5_v1 ai_clip scenes use 120/180/240 frames"
-    )
+    from healthvideo.domain.asset_manifest import AssetRecord
+    from healthvideo.domain.storyboard import Storyboard, VisualAssetRef
+
+    with pytest.raises(ValidationError, match="visual"):
+        Storyboard.model_validate({
+            "title": "Removed scene",
+            "scenes": [{"id": "S01", "start_frame": 0, "duration_frames": 120,
+                        "narration": "Illustration", "visual": "ai_clip"}],
+        })
+    with pytest.raises(ValidationError, match="kind"):
+        AssetRecord.model_validate({
+            "path": "assets/removed.mp4", "kind": "ai_clip", "semantic": False,
+            "classification_reason": "Illustration", "sha256": "a" * 64,
+            "source": "synthetic", "license": "own", "creator": "test",
+            "revision": "001", "rights_required": True,
+            "ai_provenance": {
+                "provider": "google_vertex_ai", "model": "veo-3.1-fast-generate-001",
+                "prompt": "Illustration", "request_sha256": "b" * 64,
+                "generated_at": "2026-10-22T00:00:00Z", "duration_ms": 4000,
+                "mime_type": "video/mp4", "container": "mp4",
+                "source_fps": 24, "width": 1080, "height": 1920,
+                "source_frame_count": 96,
+                "output_sha256": "a" * 64,
+            },
+        })
+    with pytest.raises(ValidationError, match="role"):
+        VisualAssetRef(path="assets/removed.mp4", role="ai_clip")
+
+
+@pytest.mark.parametrize("filename", [
+    "storyboard.schema.json", "render-input.schema.json", "asset-manifest.schema.json",
+])
+def test_exported_contracts_exclude_removed_ai_clip_kinds(tmp_path: Path, filename: str) -> None:
+    from tools.export_schemas import export_schemas
+
+    export_schemas(tmp_path)
+    schema = json.loads((tmp_path / filename).read_text(encoding="utf-8"))
+    assert "ai_clip" not in json.dumps(schema)
+    assert "AIClipProvenance" not in schema["$defs"]
+    # Generated artifacts in Git must carry the same current contract.
+    assert schema == json.loads((REPOSITORY_ROOT / "schemas" / filename).read_text(encoding="utf-8"))

@@ -8,7 +8,7 @@ const safeRelativePath = z.string().regex(/^(?!\.?\/?$)(?![A-Za-z]:)(?!\/)(?!.*\
 export const VisualAssetRefSchema = z
   .object({
     path: safeRelativePath,
-    role: z.enum(['whiteboard', 'mascot', 'brand', 'chart', 'ai_clip']),
+    role: z.enum(['whiteboard', 'mascot', 'brand', 'chart']),
     pose: z.enum(['welcome', 'explain', 'caution']).nullable().optional(),
   })
   .superRefine((asset, context) => {
@@ -95,7 +95,7 @@ export const SceneSchema = z
     claim_id: z.string().nullable().optional(),
     chapter_id: z.string().regex(/^CH\d{2}$/).nullable().optional(),
     source_marker: z.string().regex(/\S/).nullable().optional(),
-    visual: z.enum(['whiteboard', 'chart', 'evidence_highlight', 'ai_clip', 'brand_outro', ...MECHANISM_VISUALS]),
+    visual: z.enum(['whiteboard', 'chart', 'evidence_highlight', 'brand_outro', ...MECHANISM_VISUALS]),
     anatomy: AnatomySchema.optional(),
     explainer_layer_id: z.string().optional(),
     evidence_highlight: EvidenceHighlightSchema.nullable().optional(),
@@ -111,14 +111,6 @@ export const SceneSchema = z
         code: 'custom',
         path: ['visual_assets'],
         message: 'scene visual asset paths must be unique',
-      });
-    }
-    const clips = scene.visual_assets.filter((asset) => asset.role === 'ai_clip').length;
-    if ((clips > 0 && scene.visual !== 'ai_clip') || clips > 1) {
-      context.addIssue({
-        code: 'custom',
-        path: ['visual_assets'],
-        message: 'ai_clip asset appears at most once and only in an ai_clip scene',
       });
     }
     if (scene.visual === 'brand_outro') {
@@ -184,17 +176,6 @@ export const RenderInputSchema = z.object({
     return;
   }
   input.scenes.forEach((scene, index) => {
-    if (scene.visual === 'ai_clip') {
-      if (scene.visual_assets.filter((asset) => asset.role === 'ai_clip').length !== 1 ||
-          ![120, 180, 240].includes(scene.duration_frames)) {
-        context.addIssue({
-          code: 'custom',
-          path: ['scenes', index, 'visual_assets'],
-          message: 'M6.5 ai_clip scene requires one ai_clip asset and 120/180/240 frames',
-        });
-      }
-      return;
-    }
     if (scene.visual !== 'chart') {
       return;
     }

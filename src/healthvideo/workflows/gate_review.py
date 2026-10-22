@@ -43,7 +43,6 @@ from healthvideo.storage.files import (
 )
 from healthvideo.storage.immutable import write_yaml_once
 from healthvideo.tts import pronunciation as pronunciation_module
-from healthvideo.workflows.ai_clips import recover_ai_clip_generation
 from healthvideo.workflows.citations import resolve_citations
 from healthvideo.workflows.long_form import (
     CLIP_PLAN_ARTIFACT,
@@ -99,7 +98,6 @@ def medical_reviewed_paths(revision_root: Path) -> dict[str, Path]:
             if (
                 asset.semantic
                 or asset.storyboard_role == "brand"
-                or asset.kind is AssetKind.AI_CLIP
             ):
                 paths[f"asset:{asset.path}"] = revision_root / asset.path
     return paths
@@ -178,7 +176,6 @@ def approve_gate(
 
     if kind is GateKind.MEDICAL:
         recover_chart_asset_binding(project_dir)
-        recover_ai_clip_generation(project_dir)
         if (revision_root / "workflow/pending-hook-outro.yaml").exists():
             raise ValueError("medical gate refuses pending hook/outro authoring")
         manifest = load_asset_manifest(revision_root / "assets" / "asset-manifest.yaml")
@@ -197,12 +194,6 @@ def approve_gate(
         if storyboard.format_profile == "youtube_long":
             load_clip_scenes(revision_root, storyboard)
         referenced_storyboard_assets(revision_root, storyboard, manifest)
-        if any(asset.kind is AssetKind.AI_CLIP for asset in manifest.assets):
-            resolve_citations(
-                script,
-                read_yaml(revision_root / "evidence/ledger.yaml"),
-                storyboard.scenes,
-            )
         if script.format_profile == "hook_outro_v1":
             resolve_citations(
                 script,

@@ -12,7 +12,6 @@ from healthvideo.storage.explainer import write_explainer
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.workflows.review_html import render_medical_packet, render_video_packet
 from tests.helpers import advance_v2_project_to_video_review, create_v2_project_fixture
-from tests.workflows.test_gate_review import _author_ai_clip, _create_ai_project
 
 
 @pytest.mark.parametrize("with_explainer", [False, True])
@@ -95,7 +94,6 @@ def _enable_packet_budget(project_dir: Path, *, override: bool = False) -> None:
             "rationale": "Cần <b>chart</b> cho fixture & review.",
             "whiteboard_svg": {"min_percent": 70, "max_percent": 80},
             "chart_crop": {"min_percent": 20, "max_percent": 30},
-            "ai_clip": {"min_percent": 0, "max_percent": 0},
         }
     write_yaml_atomic(storyboard_path, board)
 
@@ -120,33 +118,6 @@ def test_medical_packet_notes_fields_the_model_does_not_carry_yet(
     project_dir = create_v2_project_fixture(tmp_path)
     html = render_medical_packet(project_dir / "revisions" / "001")
     assert "chưa có trong hệ thống" in html
-
-
-def test_medical_packet_shows_safe_ai_clip_provenance_and_rights(tmp_path: Path) -> None:
-    project_dir = _create_ai_project(tmp_path)
-    _author_ai_clip(project_dir)
-
-    html = render_medical_packet(project_dir / "revisions/001")
-
-    assert "AI clip M6.6" in html
-    assert "google_vertex_ai" in html and "veo-3.1-fast-generate-001" in html
-    assert "4000 ms" in html and "operator-recorded provider terms" in html
-    assert "PRIVATE PROMPT" not in html and "&lt;script&gt;" not in html
-    assert "cloud project" not in html.lower() and "token" not in html.lower()
-
-
-def test_medical_packet_escapes_ai_clip_rights_entry(tmp_path: Path) -> None:
-    project_dir = _create_ai_project(tmp_path)
-    _author_ai_clip(project_dir)
-    ledger_path = project_dir / "revisions/001/assets/license-ledger.yaml"
-    ledger = read_yaml(ledger_path)
-    ledger["entries"][-1]["rights_basis"] = "<img src=x onerror=alert(1)>"
-    write_yaml_atomic(ledger_path, ledger)
-
-    html = render_medical_packet(project_dir / "revisions/001")
-
-    assert "&lt;img src=x onerror=alert(1)&gt;" in html
-    assert "<img" not in html
 
 
 def test_video_packet_references_the_mp4_by_relative_path_not_embedded(
@@ -292,7 +263,7 @@ def test_medical_packet_shows_deterministic_m6_5_visual_budget(
     assert "1200" in html
     assert "whiteboard_svg" in html and "900" in html and "7500 bp" in html
     assert "chart_crop" in html and "300" in html and "2500 bp" in html
-    assert "65–75%" in html and "15–25%" in html and "0–10%" in html
+    assert "65–75%" in html and "15–25%" in html
     assert "Override: không" in html and "Kết quả: đạt" in html
 
 

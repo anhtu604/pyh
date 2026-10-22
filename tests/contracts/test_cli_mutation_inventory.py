@@ -4,7 +4,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 EXPECTED = {
     "src/healthvideo/cli.py": {
-        "ai_clip_generate",
         "outro_author",
         "produce",
         "package",

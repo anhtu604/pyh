@@ -1,13 +1,11 @@
 import json
 import wave
-from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 import healthvideo.tts.pronunciation as pronunciation_module
-import healthvideo.workflows.ai_clips as ai_clips_module
 import healthvideo.workflows.produce as produce_workflow
 from healthvideo.domain.brand import MascotPose
 from healthvideo.domain.gate_review import GateKind
@@ -16,7 +14,6 @@ from healthvideo.domain.script import Script
 from healthvideo.storage.files import read_yaml, sha256_file, write_yaml_atomic
 from healthvideo.tts.base import TTSRequest, TTSResult
 from healthvideo.tts.silent import SilentTTS
-from healthvideo.video_ai.veo import GoogleVeoTransport
 from healthvideo.workflows.gate_review import (
     approve_gate,
     hash_reviewed_artifacts,
@@ -29,7 +26,6 @@ from healthvideo.workflows.visual_assets import (
     create_mascot_reaction_asset,
 )
 from tests.helpers import align_fixture_script, create_v2_project_fixture
-from tests.workflows.test_gate_review import _author_ai_clip, _create_ai_project
 
 V2_REVIEWED_AT = datetime(2026, 9, 12, 8, 0, tzinfo=UTC)
 
@@ -122,9 +118,7 @@ def test_m64_production_retry_reuses_promoted_timing_qa(tmp_path: Path) -> None:
         produce_project(project, SilentTTS(), runner)
 
 
-def _m65_project(
-    tmp_path: Path, *, ai: bool = False
-) -> Path:
+def _m65_project(tmp_path: Path) -> Path:
     project = create_v2_project_fixture(
         tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW
     )
@@ -133,10 +127,7 @@ def _m65_project(
     board = read_yaml(board_path)
     highlight = dict(board["scenes"][0])
     highlight["id"] = "S02"
-    if ai:
-        whiteboard_frames, highlight_frames, ai_frames = 830, 250, 120
-    else:
-        whiteboard_frames, highlight_frames, ai_frames = 750, 250, 0
+    whiteboard_frames, highlight_frames = 750, 250
     board["visual_budget_profile"] = "m6_5_v1"
     board["scenes"] = [
         {
@@ -155,21 +146,10 @@ def _m65_project(
             "duration_frames": highlight_frames,
         },
     ]
-    if ai_frames:
-        board["scenes"].append(
-            {
-                "id": "S03",
-                "start_frame": whiteboard_frames + highlight_frames,
-                "duration_frames": ai_frames,
-                "narration": "AI clip placeholder.",
-                "visual": "ai_clip",
-            }
-        )
     highlight["script_line_id"] = "L02"
     align_fixture_script(revision, board)
     write_yaml_atomic(board_path, board)
-    if not ai:
-        approve_gate(project, GateKind.MEDICAL, reviewer="doctor", now=V2_REVIEWED_AT)
+    approve_gate(project, GateKind.MEDICAL, reviewer="doctor", now=V2_REVIEWED_AT)
     return project
 
 
@@ -232,17 +212,6 @@ def test_m65_production_revalidates_budget_before_tts_or_render(tmp_path: Path) 
     assert read_yaml(project / "project.yaml")["state"] == "medically_approved"
 
 
-def test_m65_ai_clip_without_declared_asset_fails_at_medical_gate(
-    tmp_path: Path,
-) -> None:
-    project = _m65_project(tmp_path, ai=True)
-
-    with pytest.raises(ValueError, match="exactly one ai_clip asset"):
-        approve_gate(project, GateKind.MEDICAL, reviewer="doctor", now=V2_REVIEWED_AT)
-
-    assert read_yaml(project / "project.yaml")["state"] == "awaiting_medical_review"
-
-
 def test_m65_production_records_visual_qa_and_reuses_valid_promoted_cache(
     tmp_path: Path,
 ) -> None:
@@ -268,17 +237,14 @@ def test_m65_production_records_visual_qa_and_reuses_valid_promoted_cache(
         "category_frames": {
             "whiteboard_svg": 750,
             "chart_crop": 250,
-            "ai_clip": 0,
         },
         "category_basis_points": {
             "whiteboard_svg": 7500,
             "chart_crop": 2500,
-            "ai_clip": 0,
         },
         "effective_bounds": {
             "whiteboard_svg": {"min_percent": 65, "max_percent": 75},
             "chart_crop": {"min_percent": 15, "max_percent": 25},
-            "ai_clip": {"min_percent": 0, "max_percent": 10},
         },
         "passed": True,
     }
@@ -385,152 +351,11 @@ def test_m65_recovery_verifies_staged_visual_qa_before_promotion(
     assert read_yaml(project / "project.yaml")["state"] == "awaiting_video_review"
 
 
-AI_CLIP = "assets/ai-clips/S04.mp4"
-
-
-def _m66_approved_ai_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    project = _create_ai_project(tmp_path)
-    _author_ai_clip(project)
-    approve_gate(project, GateKind.MEDICAL, reviewer="doctor", now=V2_REVIEWED_AT)
-
-    def no_provider(*_args: object, **_kwargs: object) -> None:
-        pytest.fail("production called the AI provider")
-
-    monkeypatch.setattr(ai_clips_module, "generate_ai_clip", no_provider)
-    monkeypatch.setattr(ai_clips_module, "probe_ai_clip_media", no_provider)
-    monkeypatch.setattr(GoogleVeoTransport, "generate", no_provider)
-    return project
-
-
-def test_m66_production_stages_one_approved_ai_clip_without_provider(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    project = _m66_approved_ai_project(tmp_path, monkeypatch)
-    revision = project / "revisions/001"
-    clip = revision / AI_CLIP
-    tts = CountingSilent(project)
-    render_inputs: list[dict] = []
-
-    def runner(argv: list[str]) -> int:
-        props = Path(argv[argv.index("--props") + 1])
-        render_inputs.append(json.loads(props.read_text(encoding="utf-8")))
-        assert (props.parent / AI_CLIP).read_bytes() == clip.read_bytes()
-        _write_synthetic_output(argv)
-        return 0
-
-    first = produce_project(project, tts, runner)
-
-    assert [
-        (scene["id"], ref)
-        for scene in render_inputs[0]["scenes"]
-        for ref in scene["visual_assets"]
-        if ref["role"] == "ai_clip"
-    ] == [("S04", {"path": AI_CLIP, "role": "ai_clip", "pose": None})]
-    manifest = json.loads(
-        (revision / "renders/render-manifest.json").read_text(encoding="utf-8")
-    )
-    assert manifest["asset_sha256"][AI_CLIP] == sha256_file(clip)
-    qa = json.loads((revision / "reviews/video-qa.json").read_text(encoding="utf-8"))
-    assert qa["visual_budget"]["category_frames"]["ai_clip"] == 120
-    assert produce_project(
-        project, NoSynthesis(), lambda _: pytest.fail("renderer invoked on retry")
-    ) == first
-    project_data = read_yaml(project / "project.yaml")
-    project_data["state"] = "medically_approved"
-    write_yaml_atomic(project / "project.yaml", project_data)
-    assert produce_project(
-        project, NoSynthesis(), lambda _: pytest.fail("renderer invoked on recovery")
-    ) == first
-    assert tts.calls == 4 and len(render_inputs) == 1
-
-
 def _resign_medical_approval(revision: Path) -> None:
     approval_path = revision / "reviews/medical-approval.yaml"
     approval = read_yaml(approval_path)
     approval["artifact_hashes"] = hash_reviewed_artifacts(medical_reviewed_paths(revision))
     write_yaml_atomic(approval_path, approval)
-
-
-def _edit_yaml(path: Path, edit: Callable[[dict], object]) -> None:
-    data = read_yaml(path)
-    edit(data)
-    write_yaml_atomic(path, data)
-
-
-def _tamper_ai_bytes(revision: Path) -> None:
-    (revision / AI_CLIP).write_bytes(b"tampered-ai-clip")
-
-
-def _delete_ai_bytes(revision: Path) -> None:
-    (revision / AI_CLIP).unlink()
-
-
-def _edit_ai_rights(revision: Path) -> None:
-    _edit_yaml(
-        revision / "assets/license-ledger.yaml",
-        lambda data: data["entries"][-1].update(rights_basis="edited after approval"),
-    )
-
-
-def _edit_ai_provenance(revision: Path) -> None:
-    _edit_yaml(
-        revision / "assets/asset-manifest.yaml",
-        lambda data: data["assets"][-1]["ai_provenance"].update(prompt="edited"),
-    )
-
-
-def _leave_pending_ai_intent(revision: Path) -> None:
-    write_yaml_atomic(revision / ai_clips_module.AI_CLIP_INTENT, {"schema_version": "1.0"})
-
-
-def _wrong_ai_role(revision: Path) -> None:
-    _edit_yaml(
-        revision / "storyboard/storyboard.yaml",
-        lambda data: data["scenes"][2]["visual_assets"][0].update(role="whiteboard"),
-    )
-    _resign_medical_approval(revision)
-
-
-def _mismatched_ai_duration(revision: Path) -> None:
-    def rescale(data: dict) -> None:
-        whiteboard, highlight, clip, outro = data["scenes"]
-        whiteboard["duration_frames"] = 1260
-        highlight["start_frame"], highlight["duration_frames"] = 1260, 360
-        clip["start_frame"], clip["duration_frames"] = 1620, 180
-        outro["start_frame"] = 1800
-
-    _edit_yaml(revision / "storyboard/storyboard.yaml", rescale)
-    _resign_medical_approval(revision)
-
-
-@pytest.mark.parametrize(
-    ("mutate", "match"),
-    [
-        (_tamper_ai_bytes, "current medical approval"),
-        (_delete_ai_bytes, "current medical approval"),
-        (_edit_ai_rights, "current medical approval"),
-        (_edit_ai_provenance, "current medical approval"),
-        (_leave_pending_ai_intent, "cannot recover after medical review"),
-        (_wrong_ai_role, "does not match asset kind"),
-        (_mismatched_ai_duration, "duration does not match AI clip provenance"),
-    ],
-)
-def test_m66_production_rejects_invalid_ai_clip_before_tts_or_render(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    mutate: Callable[[Path], None],
-    match: str,
-) -> None:
-    project = _m66_approved_ai_project(tmp_path, monkeypatch)
-    mutate(project / "revisions/001")
-    tts = CountingSilent()
-    render_calls: list[list[str]] = []
-
-    with pytest.raises((ValueError, FileNotFoundError), match=match):
-        produce_project(project, tts, lambda argv: render_calls.append(argv) or 0)
-
-    assert tts.calls == 0 and render_calls == []
-    assert read_yaml(project / "project.yaml")["state"] == "medically_approved"
 
 
 def test_v2_produce_stages_declared_mascot_asset(tmp_path: Path) -> None:
@@ -742,8 +567,6 @@ def test_v2_invalid_pronunciation_fails_before_tts_and_state_change(
     assert (project_dir / "project.yaml").read_bytes() == before
 
 
-
-
 def test_v2_produce_refuses_before_medical_approval(tmp_path: Path) -> None:
     project_dir = create_v2_project_fixture(
         tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW
@@ -804,18 +627,6 @@ def test_v2_produce_uses_active_revision_and_reuses_its_cache(
     )
 
 
-
-
-
-
-
-
-
-
-
-
-
-
 class ExplodingTTS:
     provider_name = "exploding"
 
@@ -823,27 +634,9 @@ class ExplodingTTS:
         raise RuntimeError("synthetic TTS failure")
 
 
-
-
-
-
-
-
-
-
-
-
 RUN_ARTIFACT_NAMES = frozenset(
     {"audio/narration.wav", "render-input.json", "video.mp4", "manifest.json"}
 )
-
-
-
-
-
-
-
-
 
 
 def _run_artifacts(run_dir: Path) -> dict[str, bytes]:

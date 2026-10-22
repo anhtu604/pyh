@@ -11,7 +11,6 @@ from healthvideo.domain.evidence import CandidateSource
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.tts.silent import SilentTTS
-from healthvideo.workflows.ai_clips import AIClipRights
 from healthvideo.workflows.doctor import CheckResult
 from healthvideo.workflows.produce import produce_project
 from healthvideo.workflows.review import approve_medical
@@ -24,7 +23,7 @@ runner = CliRunner()
 
 
 @pytest.mark.parametrize(
-    "command", [["operator", "orientation"], ["operator", "orientation-search"], ["operator", "orientation-complete"], ["operator", "brief"], ["agent"], ["lease"], ["backup"], ["security-audit"], ["migrate"], ["project", "create"], ["project", "new"], ["project", "migrate"]]
+    "command", [["tts-benchmark"], ["ai-clip"], ["ai-clip", "generate"], ["operator", "orientation"], ["operator", "orientation-search"], ["operator", "orientation-complete"], ["operator", "brief"], ["agent"], ["lease"], ["backup"], ["security-audit"], ["migrate"], ["project", "create"], ["project", "new"], ["project", "migrate"]]
 )
 def test_removed_commands_absent(command):
     result = CliRunner().invoke(app, [*command, "--help"])
@@ -677,90 +676,6 @@ def test_cli_evidence_ingest(tmp_path: Path) -> None:
     assert (rev_dir / "evidence" / "included-sources.yaml").is_file()
 
 
-def test_tts_benchmark_runs_command_provider_and_reports_objective_verdicts(tmp_path) -> None:
-    import json
-
-    fake = tmp_path / "fake_tts.py"
-    fake.write_text(
-        "import sys, wave\n"
-        "text = open(sys.argv[1], encoding='utf-8').read()\n"
-        "words = len(text.split())\n"
-        "with wave.open(sys.argv[2], 'wb') as w:\n"
-        "    w.setnchannels(1); w.setsampwidth(2); w.setframerate(48000)\n"
-        "    w.writeframes(bytes([16, 0]) * (48000 * words // 3))\n",
-        encoding="utf-8",
-    )
-    cases = tmp_path / "cases.yaml"
-    cases.write_text(
-        "cases:\n  - id: so-lieu\n    text: Huyết áp một trăm bốn mươi trên chín mươi\n",
-        encoding="utf-8",
-    )
-    result = runner.invoke(
-        app,
-        [
-            "tts-benchmark", str(cases), "--output", str(tmp_path / "out"),
-            "--command", sys.executable, "--arg", str(fake), "--arg", "{input}",
-            "--arg", "{output}", "--model-id", "fake-model", "--voice-id", "fake-voice",
-        ],
-    )
-    assert result.exit_code == 0, result.stdout
-    report = json.loads((tmp_path / "out" / "benchmark.json").read_text(encoding="utf-8"))
-    assert report["summary"] == {"passed": 1, "total": 1}
-    assert report["verdicts"][0]["passed"] is True
-    assert report["verdicts"][0]["provider_identity"]["model_id"] == "fake-model"
-    assert str(fake) not in json.dumps(report)
-
-
-def test_tts_benchmark_exits_nonzero_when_a_case_fails(tmp_path) -> None:
-    cases = tmp_path / "cases.yaml"
-    cases.write_text("cases:\n  - id: a\n    text: Xin chào\n", encoding="utf-8")
-    result = runner.invoke(
-        app,
-        [
-            "tts-benchmark", str(cases), "--output", str(tmp_path / "out"),
-            "--command", sys.executable, "--arg", "-c", "--arg", "raise SystemExit(3)",
-            "--arg", "{input}", "--arg", "{output}", "--model-id", "m", "--voice-id", "v",
-        ],
-    )
-    assert result.exit_code == 1
-    assert "synthesis_failed:RuntimeError" in result.stdout
-
-
-def test_tts_benchmark_accepts_asr_command_and_reports_wer(tmp_path) -> None:
-    import json
-
-    fake_tts = tmp_path / "fake_tts.py"
-    fake_tts.write_text(
-        "import sys, wave\n"
-        "with wave.open(sys.argv[2], 'wb') as w:\n"
-        "    w.setnchannels(1); w.setsampwidth(2); w.setframerate(48000)\n"
-        "    w.writeframes(bytes([16, 0]) * 96000)\n",
-        encoding="utf-8",
-    )
-    fake_asr = tmp_path / "fake_asr.py"
-    fake_asr.write_text(
-        "import sys, json\n"
-        "json.dump({'text': 'Hãy đo lại sau năm phút.'}, open(sys.argv[2], 'w', encoding='utf-8'))\n",
-        encoding="utf-8",
-    )
-    cases = tmp_path / "cases.yaml"
-    cases.write_text("cases:\n  - id: a\n    text: Hãy đo lại sau năm phút.\n", encoding="utf-8")
-    result = runner.invoke(
-        app,
-        [
-            "tts-benchmark", str(cases), "--output", str(tmp_path / "out"),
-            "--command", sys.executable, "--arg", str(fake_tts), "--arg", "{input}",
-            "--arg", "{output}", "--model-id", "m", "--voice-id", "v",
-            "--asr-command", sys.executable, "--asr-arg", str(fake_asr),
-            "--asr-arg", "{input}", "--asr-arg", "{output}", "--asr-model-id", "fake-asr",
-        ],
-    )
-    assert result.exit_code == 0, result.stdout
-    report = json.loads((tmp_path / "out" / "benchmark.json").read_text(encoding="utf-8"))
-    assert report["records"][0]["wer"] == 0.0
-    assert report["records"][0]["asr_identity"] == {"provider": "command", "model_id": "fake-asr"}
-
-
 def test_produce_vieneu_requires_voice_and_builds_normalized_command_provider(tmp_path) -> None:
     from healthvideo.cli import build_vieneu_tts
 
@@ -779,61 +694,6 @@ def test_produce_vieneu_requires_voice_and_builds_normalized_command_provider(tm
     assert "private" not in str(identity)
     assert provider.inner.arguments[-2:] == ("--precision", "int8")
     assert "--voice" in provider.inner.arguments and "Adam" in provider.inner.arguments
-
-
-def test_ai_clip_cli_requires_explicit_live_opt_in(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    token_calls: list[int] = []
-    monkeypatch.setattr(
-        "healthvideo.cli._gcloud_access_token", lambda: token_calls.append(1)
-    )
-    result = runner.invoke(
-        app,
-        [
-            "ai-clip", "generate", str(tmp_path), "--scene-id", "S04",
-            "--prompt", "Minh họa", "--duration-seconds", "4",
-            "--google-project", "cloud-project", "--location", "us-central1",
-            "--source", "source", "--creator", "creator", "--license", "terms",
-            "--rights-basis", "confirmed",
-        ],
-    )
-    assert result.exit_code == 1
-    assert "--allow-live-generation" in result.stdout
-    assert token_calls == []
-
-
-def test_ai_clip_cli_builds_authoring_request_after_opt_in(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    captured: dict[str, object] = {}
-
-    class StubTransport:
-        def __init__(self, **kwargs: object) -> None:
-            captured["transport"] = kwargs
-
-    def stub_generate(project_dir: Path, **kwargs: object) -> Path:
-        captured["project"] = project_dir
-        captured.update(kwargs)
-        return project_dir / "revisions/001/assets/ai-clips/S04.mp4"
-
-    monkeypatch.setattr("healthvideo.cli.GoogleVeoTransport", StubTransport)
-    monkeypatch.setattr("healthvideo.cli.generate_ai_clip", stub_generate)
-    result = runner.invoke(
-        app,
-        [
-            "ai-clip", "generate", str(tmp_path), "--scene-id", "S04",
-            "--prompt", "Minh họa", "--duration-seconds", "4",
-            "--allow-live-generation", "--google-project", "cloud-project",
-            "--location", "us-central1", "--source", "source",
-            "--creator", "creator", "--license", "terms",
-            "--rights-basis", "confirmed", "--requested-seed", "9",
-        ],
-    )
-    assert result.exit_code == 0, result.stdout
-    assert captured["scene_id"] == "S04"
-    assert captured["requested_seed"] == 9
-    assert isinstance(captured["rights"], AIClipRights)
 
 
 @pytest.mark.parametrize("all_failed", [False, True])

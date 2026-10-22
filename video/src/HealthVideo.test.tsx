@@ -2,7 +2,6 @@ import React from 'react';
 import {describe, expect, it, vi} from 'vitest';
 import {HealthVideo} from './HealthVideo';
 import {VisualAsset} from './components/VisualAsset';
-import {AiClipScene} from './scenes/AiClipScene';
 import {ChartScene} from './scenes/ChartScene';
 import {OutroScene} from './scenes/OutroScene';
 import {WhiteboardScene} from './scenes/WhiteboardScene';
@@ -99,29 +98,4 @@ describe('HealthVideo visual asset layer', () => {
       .toHaveLength(1);
     expect(children.filter((child) => React.isValidElement(child) && child.type === VisualAsset))
       .toHaveLength(0);
-  });
-  it('dispatches a declared AI clip to AiClipScene without whiteboard or image overlay', () => {
-    const props = parseRenderInput({
-      ...input('whiteboard'),
-      visual_budget_profile: 'm6_5_v1',
-      scenes: [{
-        ...input('whiteboard').scenes[0],
-        duration_frames: 120,
-        visual: 'ai_clip',
-        visual_assets: [{path: 'assets/ai-clips/S01.mp4', role: 'ai_clip'}],
-      }],
-    });
-    const root = renderVideo(props);
-    const rootChildren = React.Children.toArray(root.props.children);
-    expect(rootChildren.filter((child) => React.isValidElement(child) && child.type === 'audio'))
-      .toHaveLength(1);
-    const sequence = rootChildren[1] as React.ReactElement<{children: React.ReactNode}>;
-    const children = React.Children.toArray(sequence.props.children);
-    expect(children.filter((child) => React.isValidElement(child) && child.type === AiClipScene))
-      .toHaveLength(1);
-    expect(children.some((child) => React.isValidElement(child) && child.type === WhiteboardScene))
-      .toBe(false);
-    expect(children.filter((child) => React.isValidElement(child) && child.type === VisualAsset))
-      .toHaveLength(0);
-  });
-});
+  });});

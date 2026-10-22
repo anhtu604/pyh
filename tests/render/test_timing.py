@@ -63,14 +63,6 @@ def test_reference_failures(lines, mapping):
         retime_storyboard(board(*lines), mapping)
 
 
-def test_fixed_ai_clip_keeps_duration_and_rejects_overflow():
-    approved = board("L", durations=[120], profile="m6_5_v1", visuals=["ai_clip"])
-    timed, _ = retime_storyboard(approved, {"L": 1000})
-    assert timed.scenes[0].duration_frames == 120
-    with pytest.raises(ValueError, match="S0"):
-        retime_storyboard(approved, {"L": 5000})
-
-
 @pytest.mark.parametrize("field,value", [("start_frame", 8), ("audio_ms", 2000),
                                         ("storyboard_duration_frames", 99)])
 def test_restore_rejects_tampering(field, value):
@@ -122,10 +114,8 @@ def test_restore_refuses_spoofed_speech_end():
         restore_timed_storyboard(approved, record)
 
 
-@pytest.mark.parametrize("fixed_ai", [False, True])
-def test_padded_terminal_silence_is_rejected_for_unvoiced_and_fixed_ai_scenes(tmp_path, fixed_ai):
-    approved = (board("L", durations=[240], profile="m6_5_v1", visuals=["ai_clip"])
-                if fixed_ai else board("L", None, durations=[30, 300]))
+def test_padded_terminal_silence_is_rejected_for_unvoiced_scenes(tmp_path):
+    approved = board("L", None, durations=[30, 300])
     timed, record = retime_storyboard(approved, {"L": 1000})
     source = wav(tmp_path / "line.wav", 24000, rate=24000)
     output = tmp_path / "combined.wav"
@@ -167,22 +157,6 @@ def test_concat_unsigned_8bit_silence_and_global_sample_rounding(tmp_path):
     with wave.open(str(output), "rb") as stream:
         assert stream.getnframes() == 10
         assert stream.readframes(10) == b"\x80" * 3 + b"\x81" + b"\x80" * 6
-
-
-@pytest.mark.parametrize("duration", [120, 180, 240])
-def test_fixed_clip_supports_all_approved_lengths(duration):
-    approved = board("L", durations=[duration], profile="m6_5_v1", visuals=["ai_clip"])
-    runtime, record = retime_storyboard(approved, {"L": 1000})
-    assert runtime.scenes[0].duration_frames == duration
-    assert restore_timed_storyboard(approved, record) == runtime
-
-
-@pytest.mark.parametrize("duration,audio_ms", [(120, 4000), (180, 6000), (240, 8000)])
-def test_fixed_clip_accepts_speech_that_exactly_fits_without_padding(duration, audio_ms):
-    approved = board("L", durations=[duration], profile="m6_5_v1", visuals=["ai_clip"])
-    runtime, record = retime_storyboard(approved, {"L": audio_ms})
-    assert runtime.scenes[0].duration_frames == duration
-    assert restore_timed_storyboard(approved, record) == runtime
 
 
 @pytest.mark.parametrize("mapping,fps,pad", [({"L": -1}, 30, 9),

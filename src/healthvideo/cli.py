@@ -29,22 +29,13 @@ from healthvideo.render.run import (
     PRODUCTION_ARTIFACT,
     RENDER_INPUT_NAME,
 )
-from healthvideo.storage.files import read_yaml, write_text_atomic
+from healthvideo.storage.files import read_yaml
 from healthvideo.storage.project_layout import resolve_project_layout
 from healthvideo.storage.revisions import create_revision
-from healthvideo.tts.asr import CommandASR
 from healthvideo.tts.base import TTSProvider
-from healthvideo.tts.benchmark import (
-    BenchmarkThresholds,
-    evaluate_benchmark,
-    load_benchmark_cases,
-    run_benchmark,
-)
 from healthvideo.tts.command import CommandTTS
 from healthvideo.tts.normalize import NormalizedTTS
 from healthvideo.tts.silent import SilentTTS
-from healthvideo.video_ai.veo import GoogleVeoTransport
-from healthvideo.workflows.ai_clips import AIClipRights, generate_ai_clip
 from healthvideo.workflows.doctor import (
     check_environment,
     has_mandatory_failure,
@@ -115,7 +106,6 @@ revision_app = typer.Typer(no_args_is_help=True)
 topic_app = typer.Typer(no_args_is_help=True)
 evidence_app = typer.Typer(no_args_is_help=True)
 outro_app = typer.Typer(no_args_is_help=True)
-ai_clip_app = typer.Typer(no_args_is_help=True)
 script_app = typer.Typer(no_args_is_help=True)
 app.add_typer(review_app, name="review")
 app.add_typer(revision_app, name="revision")
@@ -123,7 +113,6 @@ app.add_typer(topic_app, name="topic")
 app.add_typer(evidence_app, name="evidence")
 app.add_typer(operator_app, name="operator")
 app.add_typer(outro_app, name="outro")
-app.add_typer(ai_clip_app, name="ai-clip")
 app.add_typer(script_app, name="script")
 
 
@@ -143,68 +132,6 @@ def script_lint(project_dir: Annotated[Path, typer.Argument(help="Thư mục d�
         typer.echo(f"{issue.severity}: {issue.code} [{issue.line_id}] {issue.message}")
     if any(issue.severity == "error" for issue in issues):
         raise typer.Exit(code=1)
-
-
-def _gcloud_access_token() -> str:
-    completed = subprocess.run(
-        ["gcloud", "auth", "print-access-token"],
-        check=True,
-        capture_output=True,
-        text=True,
-        shell=False,
-    )
-    token = completed.stdout.strip()
-    if not token:
-        raise ValueError("Google access token is unavailable")
-    return token
-
-
-@ai_clip_app.command("generate")
-def ai_clip_generate(
-    project_dir: Annotated[Path, typer.Argument(help="Thư mục dự án v2")],
-    scene_id: Annotated[str, typer.Option("--scene-id")],
-    prompt: Annotated[str, typer.Option("--prompt")],
-    duration_seconds: Annotated[int, typer.Option("--duration-seconds")],
-    google_project: Annotated[str, typer.Option("--google-project")],
-    location: Annotated[str, typer.Option("--location")],
-    source: Annotated[str, typer.Option("--source")],
-    creator: Annotated[str, typer.Option("--creator")],
-    license: Annotated[str, typer.Option("--license")],
-    rights_basis: Annotated[str, typer.Option("--rights-basis")],
-    allow_live_generation: Annotated[
-        bool, typer.Option("--allow-live-generation")
-    ] = False,
-    requested_seed: Annotated[int | None, typer.Option("--requested-seed")] = None,
-) -> None:
-    """Tạo một clip Veo đã yêu cầu rõ ràng trước duyệt y khoa."""
-    if not allow_live_generation:
-        typer.echo("Live AI generation requires --allow-live-generation.")
-        raise typer.Exit(code=1)
-    try:
-        transport = GoogleVeoTransport(
-            project_id=google_project,
-            location=location,
-            token_provider=_gcloud_access_token,
-        )
-        output = generate_ai_clip(
-            project_dir,
-            scene_id=scene_id,
-            prompt=prompt,
-            duration_seconds=duration_seconds,
-            requested_seed=requested_seed,
-            rights=AIClipRights(
-                source=source,
-                creator=creator,
-                license=license,
-                rights_basis=rights_basis,
-            ),
-            transport=transport,
-            now=datetime.now().astimezone(),
-        )
-    except (OSError, subprocess.SubprocessError, TypeError, ValueError) as error:
-        typer.echo(str(error))
-        raise typer.Exit(code=1) from error
-    typer.echo(str(output))
 
 
 @outro_app.command("author")
@@ -399,61 +326,6 @@ def produce(
         typer.echo(subprocess.list2cmdline(resolve_pnpm_argv(logical[1:])))
         return
     typer.echo(f"Rendered video: {output}")
-
-
-@app.command("tts-benchmark")
-def tts_benchmark(
-    cases_file: Annotated[Path, typer.Argument(help="YAML `cases: [{id, text}]` tiếng Việt")],
-    output_dir: Annotated[Path, typer.Option("--output", help="Thư mục WAV/báo cáo (nên dưới cache/)")],
-    command: Annotated[str, typer.Option("--command", help="Lệnh TTS cục bộ, không qua shell")],
-    args: Annotated[list[str], typer.Option("--arg", help="Tham số, cần một {input} và một {output}")],
-    model_id: Annotated[str, typer.Option("--model-id", help="Alias công khai của model")],
-    voice_id: Annotated[str, typer.Option("--voice-id", help="Alias công khai của giọng")],
-    runtime_id: Annotated[str, typer.Option("--runtime-id")] = "operator-configured",
-    max_rtf: Annotated[float, typer.Option("--max-rtf", help="Ngưỡng realtime factor")] = 1.0,
-    asr_command: Annotated[
-        str | None, typer.Option("--asr-command", help="Lệnh ASR cục bộ để back-check")
-    ] = None,
-    asr_args: Annotated[
-        list[str] | None, typer.Option("--asr-arg", help="Tham số ASR, một {input} và một {output}")
-    ] = None,
-    asr_model_id: Annotated[str, typer.Option("--asr-model-id")] = "asr",
-    max_wer: Annotated[float, typer.Option("--max-wer", help="Ngưỡng word error rate")] = 0.2,
-) -> None:
-    """Chạy benchmark TTS khách quan (WAV, thời gian, tốc độ đọc, WER); không chấm chất lượng giọng."""
-    import json
-    from dataclasses import asdict
-
-    thresholds = BenchmarkThresholds(max_realtime_factor=max_rtf, max_wer=max_wer)
-    try:
-        cases = load_benchmark_cases(cases_file)
-        provider = CommandTTS(
-            executable=command, arguments=tuple(args), model_id=model_id,
-            voice_id=voice_id, runtime_id=runtime_id,
-        )
-        asr = (
-            CommandASR(
-                executable=asr_command, arguments=tuple(asr_args or ()), model_id=asr_model_id
-            )
-            if asr_command
-            else None
-        )
-    except (KeyError, TypeError, ValueError, OSError) as error:
-        typer.echo(str(error))
-        raise typer.Exit(code=1) from error
-    records = run_benchmark(cases, [provider], output_dir, asr=asr)
-    verdicts = evaluate_benchmark(records, cases, thresholds)
-    report = {
-        "thresholds": asdict(thresholds),
-        "records": [asdict(record) for record in records],
-        "verdicts": [asdict(verdict) for verdict in verdicts],
-        "summary": {"passed": sum(v.passed for v in verdicts), "total": len(verdicts)},
-    }
-    text = json.dumps(report, ensure_ascii=False, indent=2)
-    write_text_atomic(output_dir / "benchmark.json", text)
-    typer.echo(text)
-    if report["summary"]["passed"] != report["summary"]["total"]:
-        raise typer.Exit(code=1)
 
 
 @app.command()

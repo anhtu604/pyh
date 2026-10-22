@@ -38,10 +38,6 @@ class RenderInput(BaseModel):
                 "m6_5_chart_ref": (
                     "m6_5_v1 chart scenes contain exactly one role=chart asset"
                 ),
-                "m6_6_ai_clip_ref": (
-                    "role=ai_clip assets appear only in ai_clip scenes, at most "
-                    "once per scene and exactly once in m6_5_v1 ai_clip scenes"
-                ),
             }
         },
     )
@@ -70,18 +66,6 @@ class RenderInput(BaseModel):
             ) + self.youtube_cta.duration_frames
             if self.format_profile != "vertical_clip" or not 1800 <= final_frame <= 5400:
                 raise ValueError("YouTube CTA clip duration must be between 1800 and 5400 frames")
-        for scene in self.scenes:
-            clips = sum(asset.role == "ai_clip" for asset in scene.visual_assets)
-            if clips and scene.visual != "ai_clip":
-                raise ValueError(f"Scene {scene.id}: ai_clip asset only in an ai_clip scene")
-            if clips > 1 or (
-                clips == 0
-                and scene.visual == "ai_clip"
-                and self.visual_budget_profile == "m6_5_v1"
-            ):
-                raise ValueError(
-                    f"Scene {scene.id}: ai_clip scene requires exactly one ai_clip asset"
-                )
         if self.visual_budget_profile != "m6_5_v1":
             return self
         for scene in self.scenes:

@@ -1,6 +1,6 @@
 """Offline CLI and fake-render worker for process-boundary E2E tests.
 
-Network sockets and the Veo transport fail loudly if reached.
+Network sockets fail loudly if reached.
 """
 
 from __future__ import annotations
@@ -25,9 +25,7 @@ def _render(arguments: list[str]) -> int:
 
 def _cli(arguments: list[str]) -> None:
     from healthvideo import cli
-    from healthvideo.video_ai.veo import GoogleVeoTransport
 
-    GoogleVeoTransport.generate = _forbidden  # type: ignore[method-assign]
     cli.resolve_pnpm_argv = lambda args: [sys.executable, str(WORKER), "render", *args]
     cli.main()
     cli.app(args=arguments, prog_name="healthvideo")

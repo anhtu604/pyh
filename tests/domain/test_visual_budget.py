@@ -48,7 +48,6 @@ def storyboard(
         ("brand_outro", VisualCategory.WHITEBOARD_SVG),
         ("chart", VisualCategory.CHART_CROP),
         ("evidence_highlight", VisualCategory.CHART_CROP),
-        ("ai_clip", VisualCategory.AI_CLIP),
     ],
 )
 def test_classifies_every_current_primary_visual(
@@ -65,8 +64,8 @@ def test_unknown_primary_visual_fails_closed() -> None:
 @pytest.mark.parametrize(
     "durations",
     [
-        (("whiteboard", 780), ("chart", 300), ("ai_clip", 120)),
-        (("brand_outro", 900), ("chart", 180), ("ai_clip", 120)),
+        (("whiteboard", 900), ("chart", 300)),
+        (("brand_outro", 900), ("chart", 300)),
         (("whiteboard", 75), ("chart", 25)),
     ],
 )
@@ -84,9 +83,9 @@ def test_default_inclusive_boundaries_pass(
 @pytest.mark.parametrize(
     "durations",
     [
-        (("whiteboard", 779), ("chart", 301), ("ai_clip", 120)),
-        (("whiteboard", 901), ("chart", 179), ("ai_clip", 120)),
-        (("whiteboard", 1679), ("chart", 480), ("ai_clip", 240)),
+        (("whiteboard", 899), ("chart", 301)),
+        (("whiteboard", 901), ("chart", 299)),
+        (("whiteboard", 1799), ("chart", 601)),
     ],
 )
 def test_one_frame_boundary_violation_fails_without_rounding(
@@ -114,7 +113,6 @@ def test_report_uses_canonical_floor_basis_points_and_ignores_overlays() -> None
             rationale="Ba frame kiểm tra phép chia nguyên.",
             whiteboard_svg=PercentRange(min_percent=60, max_percent=70),
             chart_crop=PercentRange(min_percent=30, max_percent=40),
-            ai_clip=PercentRange(min_percent=0, max_percent=0),
         ),
     )
     first = board.scenes[0].model_copy(
@@ -131,12 +129,10 @@ def test_report_uses_canonical_floor_basis_points_and_ignores_overlays() -> None
     assert report.category_frames == {
         VisualCategory.WHITEBOARD_SVG: 2,
         VisualCategory.CHART_CROP: 1,
-        VisualCategory.AI_CLIP: 0,
     }
     assert report.category_basis_points == {
         VisualCategory.WHITEBOARD_SVG: 6666,
         VisualCategory.CHART_CROP: 3333,
-        VisualCategory.AI_CLIP: 0,
     }
 
 
@@ -145,7 +141,6 @@ def test_valid_override_replaces_all_default_ranges() -> None:
         rationale="Cần nhiều chart cho dữ liệu đã khai báo.",
         whiteboard_svg=PercentRange(min_percent=50, max_percent=60),
         chart_crop=PercentRange(min_percent=40, max_percent=50),
-        ai_clip=PercentRange(min_percent=0, max_percent=0),
     )
     report = validate_visual_budget(
         storyboard((("whiteboard", 55), ("chart", 45)), override=override)
@@ -173,31 +168,26 @@ def test_enabled_timeline_must_be_complete_and_contiguous() -> None:
             "rationale": " ",
             "whiteboard_svg": {"min_percent": 65, "max_percent": 75},
             "chart_crop": {"min_percent": 15, "max_percent": 25},
-            "ai_clip": {"min_percent": 0, "max_percent": 10},
         },
         {
             "rationale": "Sai thứ tự.",
             "whiteboard_svg": {"min_percent": 76, "max_percent": 75},
             "chart_crop": {"min_percent": 15, "max_percent": 25},
-            "ai_clip": {"min_percent": 0, "max_percent": 10},
         },
         {
             "rationale": "Ngoài khoảng phần trăm.",
             "whiteboard_svg": {"min_percent": -1, "max_percent": 75},
-            "chart_crop": {"min_percent": 15, "max_percent": 25},
-            "ai_clip": {"min_percent": 0, "max_percent": 101},
+            "chart_crop": {"min_percent": 15, "max_percent": 101},
         },
         {
             "rationale": "Không khả thi.",
             "whiteboard_svg": {"min_percent": 80, "max_percent": 90},
             "chart_crop": {"min_percent": 30, "max_percent": 40},
-            "ai_clip": {"min_percent": 0, "max_percent": 10},
         },
         {
             "rationale": "Tổng maximum không đủ.",
             "whiteboard_svg": {"min_percent": 20, "max_percent": 30},
             "chart_crop": {"min_percent": 20, "max_percent": 30},
-            "ai_clip": {"min_percent": 0, "max_percent": 10},
         },
     ],
 )

@@ -87,10 +87,6 @@ def retime_storyboard(
         for scene, duration, speech_duration in zip(
             group, durations, speech_durations, strict=True,
         ):
-            if board.visual_budget_profile == "m6_5_v1" and scene.visual == "ai_clip":
-                if speech_duration > scene.duration_frames:
-                    raise ValueError(f"Scene {scene.id}: speech cannot fit fixed ai_clip")
-                duration = scene.duration_frames
             scenes.append(scene.model_copy(update={
                 "start_frame": start, "duration_frames": duration,
             }))

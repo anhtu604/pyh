@@ -17,7 +17,6 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from healthvideo.domain.ai_clip import AIClipProvenance
 from healthvideo.storage.files import read_yaml, sha256_file
 
 _SHA256_HEX_PATTERN = r"^[0-9a-f]{64}$"
@@ -35,7 +34,6 @@ class AssetKind(StrEnum):
     TRANSITION = "transition"
     MASCOT_REACTION = "mascot_reaction"
     MASCOT_MEDICAL_ANNOTATION = "mascot_medical_annotation"
-    AI_CLIP = "ai_clip"
 
 
 # §7: an evidence highlight, any chart that plots data or backs a claim, a
@@ -77,19 +75,7 @@ class AssetRecord(BaseModel):
     which has the revision root to check it against.
     """
 
-    model_config = ConfigDict(
-        extra="forbid",
-        frozen=True,
-        json_schema_extra={
-            "x-invariants": {
-                "ai_clip": (
-                    "kind=ai_clip requires matching ai_provenance, "
-                    "rights_required=true, and a decorative rationale when "
-                    "semantic=false; other kinds forbid ai_provenance"
-                )
-            }
-        },
-    )
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
     path: str = Field(pattern=r"\S")
     kind: AssetKind
@@ -102,9 +88,8 @@ class AssetRecord(BaseModel):
     revision: str = Field(pattern=_REVISION_ID_PATTERN)
     rights_required: bool = False
     storyboard_role: Literal[
-        "whiteboard", "mascot", "brand", "chart", "ai_clip"
+        "whiteboard", "mascot", "brand", "chart"
     ] | None = None
-    ai_provenance: AIClipProvenance | None = None
 
     @model_validator(mode="after")
     def _validate_path_shape(self) -> AssetRecord:
@@ -113,22 +98,6 @@ class AssetRecord(BaseModel):
 
     @model_validator(mode="after")
     def _enforce_semantic_policy(self) -> AssetRecord:
-        if self.kind is AssetKind.AI_CLIP:
-            if self.ai_provenance is None:
-                raise ValueError("asset kind 'ai_clip' requires ai_provenance")
-            if not self.rights_required:
-                raise ValueError("asset kind 'ai_clip' requires rights_required=true")
-            if self.ai_provenance.output_sha256 != self.sha256:
-                raise ValueError("AI clip output sha256 must match asset sha256")
-            if not self.semantic and (
-                not self.classification_reason
-                or not self.classification_reason.strip()
-            ):
-                raise ValueError(
-                    "decorative AI clip requires a classification_reason"
-                )
-        elif self.ai_provenance is not None:
-            raise ValueError("ai_provenance is only valid for asset kind 'ai_clip'")
         if self.kind is AssetKind.MASCOT_REACTION and self.semantic:
             raise ValueError("asset kind 'mascot_reaction' must be semantic=false")
         if self.kind in SEMANTIC_REQUIRED_KINDS and not self.semantic:

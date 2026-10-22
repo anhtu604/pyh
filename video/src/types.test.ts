@@ -128,27 +128,20 @@ describe('RenderInputSchema chart contract', () => {
     }]}).success).toBe(false);
   });
 
-  it('requires exactly one ai_clip ref owned by an enabled ai_clip scene of reviewed duration', () => {
-    const clipRef = {path: 'assets/ai-clips/S01.mp4', role: 'ai_clip'};
-    const aiInput = {...chartInput, scenes: [{id: 'S01', start_frame: 0, duration_frames: 120,
-      narration: 'AI', visual: 'ai_clip', visual_assets: [clipRef]}]};
-    const withScene = (scene: object) => ({...aiInput, scenes: [{...aiInput.scenes[0], ...scene}]});
-    expect(RenderInputSchema.safeParse(aiInput).success).toBe(true);
-    expect(RenderInputSchema.safeParse(withScene({duration_frames: 240})).success).toBe(true);
-    expect(RenderInputSchema.safeParse(withScene({visual_assets: []})).success).toBe(false);
-    expect(RenderInputSchema.safeParse(withScene({visual_assets: [
-      clipRef, {path: 'assets/ai-clips/other.mp4', role: 'ai_clip'},
-    ]})).success).toBe(false);
-    expect(RenderInputSchema.safeParse(withScene({duration_frames: 150})).success).toBe(false);
-    expect(RenderInputSchema.safeParse(withScene({visual: 'whiteboard'})).success).toBe(false);
-    expect(RenderInputSchema.safeParse(withScene({visual_assets: [{...clipRef, pose: 'welcome'}]}))
-      .success).toBe(false);
-  });
-
   it('defaults unmarked chart input to explain-first', () => {
     const explainFirst = {...chartInput, visual_budget_profile: undefined, scenes: [{
       ...chartInput.scenes[0], visual_assets: [],
     }]};
     expect(RenderInputSchema.safeParse(explainFirst).success).toBe(true);
   });
+});
+
+
+it('rejects removed AI clip scene and asset kinds', () => {
+  const scene = {id: 'removed', start_frame: 0, duration_frames: 120,
+    narration: 'Illustration', visual: 'ai_clip'};
+  expect(SceneSchema.safeParse(scene).success).toBe(false);
+  expect(SceneSchema.safeParse({...scene, visual: 'whiteboard', visual_assets: [
+    {path: 'assets/removed.mp4', role: 'ai_clip'},
+  ]}).success).toBe(false);
 });
