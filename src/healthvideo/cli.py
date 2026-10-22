@@ -34,14 +34,7 @@ from healthvideo.render.run import (
     RENDER_INPUT_NAME,
     production_run_dir,
 )
-from healthvideo.security import audit_project
 from healthvideo.storage.files import read_yaml, write_text_atomic
-from healthvideo.storage.lease import (
-    LeaseBusyError,
-    LeaseRecoveryError,
-    read_write_lease,
-    recover_stale_lease,
-)
 from healthvideo.storage.project_layout import resolve_project_layout
 from healthvideo.storage.revisions import create_revision
 from healthvideo.tts.asr import CommandASR
@@ -61,11 +54,9 @@ from healthvideo.workflows.agent_review import (
     request_second_model_review,
 )
 from healthvideo.workflows.ai_clips import AIClipRights, generate_ai_clip
-from healthvideo.workflows.backup import create_backup, restore_backup
 from healthvideo.workflows.create_project import create_project
 from healthvideo.workflows.doctor import (
     check_environment,
-    check_project_filesystem,
     has_mandatory_failure,
     run_command,
 )
@@ -86,12 +77,6 @@ from healthvideo.workflows.migrate import (
     MigrationPlan,
     migrate_project,
     plan_migration,
-)
-from healthvideo.workflows.operations import (
-    current_lease_owner,
-    current_time,
-    process_start_fingerprint,
-    project_mutation,
 )
 from healthvideo.workflows.package import package_project
 from healthvideo.workflows.produce import produce_project
@@ -148,8 +133,6 @@ evidence_app = typer.Typer(no_args_is_help=True)
 agent_app = typer.Typer(no_args_is_help=True)
 outro_app = typer.Typer(no_args_is_help=True)
 ai_clip_app = typer.Typer(no_args_is_help=True)
-lease_app = typer.Typer(no_args_is_help=True)
-backup_app = typer.Typer(no_args_is_help=True)
 script_app = typer.Typer(no_args_is_help=True)
 app.add_typer(project_app, name="project")
 app.add_typer(review_app, name="review")
@@ -160,8 +143,6 @@ app.add_typer(operator_app, name="operator")
 app.add_typer(agent_app, name="agent")
 app.add_typer(outro_app, name="outro")
 app.add_typer(ai_clip_app, name="ai-clip")
-app.add_typer(lease_app, name="lease")
-app.add_typer(backup_app, name="backup")
 app.add_typer(script_app, name="script")
 
 
@@ -183,90 +164,6 @@ def script_lint(project_dir: Annotated[Path, typer.Argument(help="Thư mục d�
         raise typer.Exit(code=1)
 
 
-@backup_app.command("create")
-def backup_create(
-    project_dir: Annotated[Path, typer.Argument(help="Thư mục dự án")],
-    backup_root: Annotated[Path, typer.Argument(help="Thư mục chứa các snapshot")],
-    backup_id: Annotated[
-        str, typer.Option("--id", help="Tên snapshot mới; không bao giờ ghi đè")
-    ],
-) -> None:
-    """Snapshot authoritative project bytes under the write lease; never overwrite."""
-    try:
-        snapshot = create_backup(
-            project_dir, backup_root, backup_id=backup_id, now=current_time()
-        )
-    except LeaseBusyError as error:
-        typer.echo("Project busy: another writer owns the project; no backup created.")
-        raise typer.Exit(code=1) from error
-    except (OSError, TypeError, ValueError) as error:
-        _echo_error(error)
-        raise typer.Exit(code=1) from error
-    typer.echo(f"Backup created: {snapshot}")
-
-
-@backup_app.command("restore")
-def backup_restore(
-    snapshot_dir: Annotated[Path, typer.Argument(help="Thư mục snapshot")],
-    destination_dir: Annotated[
-        Path, typer.Argument(help="Thư mục dự án mới; phải chưa tồn tại")
-    ],
-) -> None:
-    """Verify a snapshot and restore it into a new project directory."""
-    try:
-        restored = restore_backup(snapshot_dir, destination_dir)
-    except (OSError, TypeError, ValueError) as error:
-        _echo_error(error)
-        raise typer.Exit(code=1) from error
-    typer.echo(f"Project restored: {restored}")
-
-
-@lease_app.command("inspect")
-def lease_inspect(
-    project_dir: Annotated[Path, typer.Argument(help="Thư mục dự án")],
-) -> None:
-    """Show sanitized project writer identity without changing the project."""
-    try:
-        lease = read_write_lease(project_dir)
-    except (OSError, TypeError, ValueError) as error:
-        typer.echo(str(error))
-        raise typer.Exit(code=1) from error
-    if lease is None:
-        typer.echo("Writer: idle")
-        return
-    typer.echo("Writer: busy")
-    typer.echo(f"Host: {lease.host_id}")
-    typer.echo(f"PID: {lease.pid}")
-    typer.echo(f"Operation: {lease.operation}")
-    typer.echo(f"Heartbeat: {lease.heartbeat_at.isoformat()}")
-
-
-@lease_app.command("recover")
-def lease_recover(
-    project_dir: Annotated[Path, typer.Argument(help="Thư mục dự án")],
-    allow_foreign_host: Annotated[
-        bool,
-        typer.Option(
-            "--allow-foreign-host",
-            help="Acknowledge explicit recovery of an expired foreign-host lease.",
-        ),
-    ] = False,
-) -> None:
-    """Preserve and remove one proven-stale lease; never recover by TTL alone."""
-    try:
-        recover_stale_lease(
-            project_dir,
-            requester=current_lease_owner(),
-            process_probe=process_start_fingerprint,
-            now=current_time(),
-            allow_foreign_host=allow_foreign_host,
-        )
-    except (OSError, TypeError, ValueError, LeaseRecoveryError) as error:
-        typer.echo(str(error))
-        raise typer.Exit(code=1) from error
-    typer.echo("Stale lease preserved; project writer is now idle.")
-
-
 def _gcloud_access_token() -> str:
     completed = subprocess.run(
         ["gcloud", "auth", "print-access-token"],
@@ -282,7 +179,6 @@ def _gcloud_access_token() -> str:
 
 
 @ai_clip_app.command("generate")
-@project_mutation("ai_clip_generate")
 def ai_clip_generate(
     project_dir: Annotated[Path, typer.Argument(help="Thư mục dự án v2")],
     scene_id: Annotated[str, typer.Option("--scene-id")],
@@ -331,7 +227,6 @@ def ai_clip_generate(
 
 
 @outro_app.command("author")
-@project_mutation("outro_author")
 def outro_author(
     project_dir: Annotated[Path, typer.Argument(help="Thư mục dự án v2")],
     duration_frames: Annotated[int, typer.Option("--duration-frames", help="Số frame của câu kết")],
@@ -346,7 +241,6 @@ def outro_author(
 
 
 @agent_app.command("review-request")
-@project_mutation("agent_review_request")
 def agent_review_request(
     project_dir: Annotated[Path, typer.Argument(help="Thư mục dự án")],
     reason: Annotated[str, typer.Option("--reason", help="Lý do yêu cầu phản biện")],
@@ -363,7 +257,6 @@ def agent_review_request(
 
 
 @agent_app.command("review-complete")
-@project_mutation("agent_review_complete")
 def agent_review_complete(
     project_dir: Annotated[Path, typer.Argument(help="Thư mục dự án")],
     file: Annotated[Path, typer.Option("--file", help="Response YAML đã nhận")],
@@ -437,27 +330,10 @@ def version() -> None:
     typer.echo(__version__)
 
 
-@app.command("security-audit")
-def security_audit(project_dir: Annotated[Path, typer.Argument(help="Thư mục dự án")]) -> None:
-    """Audit project bytes offline without printing sensitive values."""
-    findings = audit_project(project_dir)
-    for finding in findings:
-        typer.echo(f"{finding.rule_id}: {finding.relative_path}: {finding.reason}. {finding.remediation}")
-    if findings:
-        raise typer.Exit(code=1)
-    typer.echo("Security audit: no findings")
-
-
 @app.command()
-def doctor(
-    project: Annotated[
-        Path | None, typer.Option("--project", help="Kiểm tra filesystem chứa project")
-    ] = None,
-) -> None:
-    """Kiểm tra dependency và, nếu yêu cầu, khả năng ghi an toàn của filesystem."""
+def doctor() -> None:
+    """Kiểm tra dependency của toolchain local."""
     results = check_environment(run_command)
-    if project is not None:
-        results.extend(check_project_filesystem(project))
     for result in results:
         status = (
             "OK" if result.ok else "WARN" if result.required == "optional" else "FAIL"
@@ -531,7 +407,6 @@ def preview(
 
 
 @app.command()
-@project_mutation("produce", skip_when=lambda values: bool(values.get("dry_run")))
 def produce(
     project_dir: Annotated[
         Path, typer.Argument(help="Thư mục dự án đã duyệt kịch bản")
@@ -637,7 +512,6 @@ def tts_benchmark(
 
 
 @app.command()
-@project_mutation("package")
 def package(
     project_dir: Annotated[Path, typer.Argument(help="Thư mục dự án đã duyệt video")],
 ) -> None:
@@ -669,9 +543,6 @@ def new_project(
 
 
 @project_app.command("migrate")
-@project_mutation(
-    "project_migrate", skip_when=lambda values: bool(values.get("dry_run"))
-)
 def migrate_project_command(
     project_dir: ProjectDir,
     dry_run: Annotated[
@@ -723,7 +594,6 @@ def default_project_root() -> Path:
 
 
 @review_app.command("medical")
-@project_mutation("review_medical")
 def review_medical(
     project_dir: ProjectDir,
     reviewer: Reviewer,
@@ -735,7 +605,6 @@ def review_medical(
 
 
 @review_app.command("video")
-@project_mutation("review_video")
 def review_video(
     project_dir: ProjectDir,
     reviewer: Reviewer,
@@ -747,7 +616,6 @@ def review_video(
 
 
 @review_app.command("approve")
-@project_mutation("review_approve")
 def review_approve(
     project_dir: ProjectDir,
     gate: Gate,
@@ -776,7 +644,6 @@ def review_approve(
 
 
 @review_app.command("reject")
-@project_mutation("review_reject")
 def review_reject(
     project_dir: ProjectDir,
     gate: Gate,
@@ -808,7 +675,6 @@ def review_reject(
 
 
 @review_app.command("reopen")
-@project_mutation("review_reopen")
 def review_reopen(
     project_dir: ProjectDir,
     gate: Gate,
@@ -873,7 +739,6 @@ def review_open(project_dir: ProjectDir, gate: Gate) -> None:
 
 
 @review_app.command("resume")
-@project_mutation("review_resume")
 def review_resume(
     project_dir: ProjectDir,
     gate: Gate,
@@ -923,7 +788,6 @@ def status(project_dir: ProjectDir) -> None:
 
 
 @revision_app.command("create")
-@project_mutation("revision_create")
 def revision_create(
     project_dir: ProjectDir,
     reason: Annotated[str, typer.Option("--reason", help="Lý do tạo revision mới")],
@@ -1020,7 +884,6 @@ def topic_reject(
 
 
 @topic_app.command("select")
-@project_mutation("topic_select")
 def topic_select(
     project_dir: ProjectDir,
     slug: Annotated[str, typer.Option("--slug", help="Slug chủ đề trong inbox")] = "",
@@ -1055,7 +918,6 @@ def topic_select(
 
 
 @evidence_app.command("search")
-@project_mutation("evidence_search")
 def evidence_search(
     project_dir: ProjectDir,
     query: Annotated[str, typer.Option("--query", help="Từ khóa tìm kiếm")] = "",
@@ -1104,7 +966,6 @@ def evidence_search(
 
 
 @evidence_app.command("screen")
-@project_mutation("evidence_screen")
 def evidence_screen(
     project_dir: ProjectDir,
     criteria: Annotated[Path, typer.Option("--criteria", help="Screening criteria YAML")],
@@ -1120,7 +981,6 @@ def evidence_screen(
 
 
 @evidence_app.command("ingest")
-@project_mutation("evidence_ingest")
 def evidence_ingest(
     project_dir: ProjectDir,
     file: Annotated[
@@ -1167,7 +1027,6 @@ def evidence_ingest(
 
 
 @evidence_app.command("build-ledger")
-@project_mutation("evidence_build_ledger")
 def evidence_build_ledger(project_dir: ProjectDir) -> None:
     """Tổng hợp evidence ledger từ nguồn tài liệu và claims đã kiểm chứng."""
     try:

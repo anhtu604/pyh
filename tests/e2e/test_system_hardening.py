@@ -1,4 +1,4 @@
-"""M7 process-boundary E2E: real CLI subprocesses, pipe barriers, no sleeps.
+"""Offline process-boundary E2E with real CLI subprocesses.
 
 Every run is offline under `tmp_path`: TTS is silent, Remotion is the worker's
 fake renderer, the only AI clip is fake bytes authored before the medical gate,
@@ -19,17 +19,13 @@ import pytest
 from healthvideo.domain.brand import LogoVariant
 from healthvideo.domain.gate_review import GateKind
 from healthvideo.domain.hook_outro import OUTRO_TEXT
-from healthvideo.domain.lease import LeaseOwner
 from healthvideo.domain.project import ProjectManifest, ProjectState
 from healthvideo.domain.project_v2 import WorkflowState
 from healthvideo.domain.review import ReviewKind
 from healthvideo.render.input import MAX_DURATION_FRAMES, MIN_DURATION_FRAMES
-from healthvideo.storage.backup import tree_files
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
-from healthvideo.storage.lease import acquire_write_lease
 from healthvideo.video_ai.base import VeoRequest, VeoResult, VideoProbeResult
 from healthvideo.workflows.ai_clips import AIClipRights, generate_ai_clip
-from healthvideo.workflows.backup import is_backup_excluded, validate_project_tree
 from healthvideo.workflows.hook_outro import author_hook_outro
 from healthvideo.workflows.package import _ensure_v2_gate_approval
 from healthvideo.workflows.review import approval_is_stale
@@ -47,12 +43,11 @@ from tests.helpers import (
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 WORKER = Path(__file__).with_name("subprocess_worker.py")
 FIXTURES = REPOSITORY_ROOT / "tests" / "fixtures"
-LEASE = Path(".healthvideo/write-lease.yaml")
 ENTERED_AT = datetime(2026, 9, 10, 7, 30, tzinfo=UTC)
 
 
 @pytest.mark.parametrize("ai", [False, True])
-def test_golden_v2_crosses_process_boundaries_to_a_restorable_package(
+def test_golden_v2_crosses_process_boundaries_to_a_package(
     tmp_path: Path, ai: bool
 ) -> None:
     project, provider_requests = _prepare_v2_awaiting_medical(tmp_path, ai=ai)
@@ -85,116 +80,12 @@ def test_golden_v2_crosses_process_boundaries_to_a_restorable_package(
     assert (revision / "publish/ai-disclosure.json").is_file() is ai
     assert read_yaml(project / "project.yaml")["state"] == "packaged"
 
-    backups, restored = tmp_path / "backups", tmp_path / "restored"
-    _assert_cli_ok("backup", "create", project, backups, "--id", "golden")
-    _assert_cli_ok("backup", "restore", backups / "golden", restored)
-
-    assert _tree(restored) == _tree(project)
-    assert read_yaml(restored / "project.yaml")["state"] == "packaged"
-    validate_project_tree(restored)
     for kind in GateKind:
-        _ensure_v2_gate_approval(restored / "revisions/001", kind)
+        _ensure_v2_gate_approval(project / "revisions/001", kind)
     assert len(provider_requests) == (1 if ai else 0)
 
 
-def test_racing_writers_admit_one_and_backup_waits_for_the_writer(tmp_path: Path) -> None:
-    project = create_v2_project_fixture(tmp_path / "source")
-    backups = tmp_path / "backups"
-    before = _tree(project)
-    racers = [_spawn("race", project), _spawn("race", project)]
-    try:
-        assert [_event(racer) for racer in racers] == ["armed", "armed"]
-        for racer in racers:
-            _send(racer, "go")
-        outcomes = [_event(racer) for racer in racers]
-        assert sorted(outcomes) == ["acquired", "busy"]
-        winner = racers[outcomes.index("acquired")]
-
-        write = _cli("agent", "review-request", project, "--reason", "conflicting_evidence")
-        backup = _cli("backup", "create", project, backups, "--id", "contended")
-        assert (write.returncode, backup.returncode) == (1, 1)
-        assert "Project busy" in write.stdout and "Project busy" in backup.stdout
-        assert not (backups / "contended").exists()
-        assert _tree(project) == before
-
-        _send(winner, "release")
-        assert _event(winner) == "released"
-    finally:
-        _finish(*racers)
-
-    _assert_cli_ok("backup", "create", project, backups, "--id", "after-release")
-    assert not (project / LEASE).exists()
-
-
-def test_restore_from_a_snapshot_leaves_a_busy_source_untouched(tmp_path: Path) -> None:
-    project = create_v2_project_fixture(tmp_path / "source")
-    backups, restored = tmp_path / "backups", tmp_path / "restored"
-    _assert_cli_ok("backup", "create", project, backups, "--id", "base")
-    before = _tree(project)
-    holder = _spawn("hold", project)
-    try:
-        assert _event(holder) == "ready"
-        _assert_cli_ok("backup", "restore", backups / "base", restored)
-        assert _tree(restored) == before
-        assert _tree(project) == before
-        _send(holder, "release")
-        assert _event(holder) == "released"
-    finally:
-        _finish(holder)
-
-
-def test_killed_holder_blocks_writes_until_same_host_recovery(tmp_path: Path) -> None:
-    project = create_v2_project_fixture(tmp_path / "source")
-    holder = _spawn("hold", project, "--expired")
-    try:
-        assert _event(holder) == "ready"
-        alive = _cli("lease", "recover", project)
-        assert alive.returncode == 1 and "still active" in alive.stdout
-    finally:
-        holder.kill()
-        _finish(holder)
-    # Windows keeps a dead process identifiable while any handle is open.
-    del holder
-
-    before = (project / "project.yaml").read_bytes()
-    blocked = _cli("agent", "review-request", project, "--reason", "conflicting_evidence")
-    assert blocked.returncode == 1 and "Project busy" in blocked.stdout
-    assert (project / "project.yaml").read_bytes() == before
-
-    _assert_cli_ok("lease", "recover", project)
-    assert list((project / ".healthvideo/stale-leases").glob("*.yaml"))
-    _assert_cli_ok("agent", "review-request", project, "--reason", "conflicting_evidence")
-    assert not (project / LEASE).exists()
-
-
-def test_expired_foreign_host_lease_needs_explicit_recovery(tmp_path: Path) -> None:
-    project = create_v2_project_fixture(tmp_path / "source")
-    acquire_write_lease(
-        project,
-        operation="other_machine",
-        active_revision="001",
-        owner=LeaseOwner(
-            host_id="foreign-host", pid=4242, process_start_fingerprint="foreign-start"
-        ),
-        now=datetime(2026, 9, 15, 8, 0, tzinfo=UTC),
-        ttl_seconds=60,
-    )
-    lease = read_yaml(project / LEASE)
-    before = (project / "project.yaml").read_bytes()
-
-    refused = _cli("lease", "recover", project)
-    blocked = _cli("agent", "review-request", project, "--reason", "conflicting_evidence")
-    assert refused.returncode == 1 and "foreign-host" in refused.stdout
-    assert blocked.returncode == 1 and "Project busy" in blocked.stdout
-    assert (project / "project.yaml").read_bytes() == before
-
-    _assert_cli_ok("lease", "recover", project, "--allow-foreign-host")
-    [stale] = (project / ".healthvideo/stale-leases").glob("*.yaml")
-    assert read_yaml(stale) == lease
-    assert not (project / LEASE).exists()
-
-
-def test_v1_golden_packages_and_restores_without_migration(tmp_path: Path) -> None:
+def test_v1_golden_packages_without_migration(tmp_path: Path) -> None:
     project = tmp_path / "golden-project"
     shutil.copytree(FIXTURES / "golden-project", project)
     synthesize_fixture_audio(project)
@@ -213,17 +104,12 @@ def test_v1_golden_packages_and_restores_without_migration(tmp_path: Path) -> No
     last = json.loads((run / "render-input.json").read_text(encoding="utf-8"))["scenes"][-1]
     assert MIN_DURATION_FRAMES <= last["start_frame"] + last["duration_frames"] <= MAX_DURATION_FRAMES
 
-    backups, restored = tmp_path / "backups", tmp_path / "restored"
-    _assert_cli_ok("backup", "create", project, backups, "--id", "v1")
-    _assert_cli_ok("backup", "restore", backups / "v1", restored)
-
-    assert _tree(restored) == _tree(project)
-    assert not (restored / "revisions").exists()
-    restored_manifest = ProjectManifest.model_validate(read_yaml(restored / "project.yaml"))
-    assert restored_manifest.schema_version == "1.0"
-    assert restored_manifest.state is ProjectState.APPROVED_TO_PUBLISH
+    assert not (project / "revisions").exists()
+    project_manifest = ProjectManifest.model_validate(read_yaml(project / "project.yaml"))
+    assert project_manifest.schema_version == "1.0"
+    assert project_manifest.state is ProjectState.APPROVED_TO_PUBLISH
     for kind in ReviewKind:
-        assert not approval_is_stale(restored, restored_manifest, kind)
+        assert not approval_is_stale(project, project_manifest, kind)
 
 
 def _prepare_v2_awaiting_medical(
@@ -305,13 +191,6 @@ def _prepare_v2_awaiting_medical(
     return project, requests
 
 
-def _tree(root: Path) -> dict[str, bytes]:
-    return {
-        relative: (root / relative).read_bytes()
-        for relative in tree_files(root, skip=is_backup_excluded)
-    }
-
-
 def _cli(*arguments: object) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, str(WORKER), "cli", *map(str, arguments)],
@@ -327,37 +206,3 @@ def _cli(*arguments: object) -> subprocess.CompletedProcess[str]:
 def _assert_cli_ok(*arguments: object) -> None:
     result = _cli(*arguments)
     assert result.returncode == 0, f"{arguments[:2]}: {result.stdout}{result.stderr}"
-
-
-def _spawn(*arguments: object) -> subprocess.Popen[str]:
-    return subprocess.Popen(
-        [sys.executable, str(WORKER), *map(str, arguments)],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        encoding="utf-8",
-        cwd=REPOSITORY_ROOT,
-    )
-
-
-def _event(process: subprocess.Popen[str]) -> str:
-    assert process.stdout is not None
-    line = process.stdout.readline()
-    assert line, f"worker exited early: {process.communicate(timeout=30)[1]}"
-    return json.loads(line)["event"]
-
-
-def _send(process: subprocess.Popen[str], command: str) -> None:
-    assert process.stdin is not None
-    process.stdin.write(f"{command}\n")
-    process.stdin.flush()
-
-
-def _finish(*processes: subprocess.Popen[str]) -> None:
-    for process in processes:
-        try:
-            process.communicate(timeout=30)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.communicate()

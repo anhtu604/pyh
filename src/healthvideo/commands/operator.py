@@ -15,11 +15,9 @@ from healthvideo.domain.author import AuthorBrief
 from healthvideo.domain.orientation import CompletedOrientation, OrientationScope
 from healthvideo.domain.topic import TopicCard
 from healthvideo.storage.files import read_yaml
-from healthvideo.storage.lease import read_write_lease
 from healthvideo.workflows.author import save_author_brief
 from healthvideo.workflows.create_project_v2 import create_project_v2
 from healthvideo.workflows.draft import submit_draft, submit_medical_review
-from healthvideo.workflows.operations import project_mutation
 from healthvideo.workflows.operator import get_next_action, render_status
 from healthvideo.workflows.orientation import (
     begin_orientation,
@@ -56,13 +54,6 @@ def status(
         if json_output:
             action = get_next_action(project_dir)
             payload = asdict(action)
-            lease = read_write_lease(project_dir)
-            payload["busy"] = lease is not None
-            payload["writer"] = (
-                {"host_id": lease.host_id, "pid": lease.pid, "operation": lease.operation}
-                if lease is not None
-                else None
-            )
             typer.echo(json.dumps(payload, ensure_ascii=False, default=str))
         else:
             typer.echo(render_status(project_dir))
@@ -72,7 +63,6 @@ def status(
 
 
 @app.command("select")
-@project_mutation("operator_select")
 def select(
     project_dir: Annotated[Path, typer.Argument(help="Thư mục project")],
     file: Annotated[Path, typer.Option("--file", help="Topic card YAML")],
@@ -88,7 +78,6 @@ def select(
 
 
 @app.command("orientation")
-@project_mutation("operator_orientation")
 def orientation(
     project_dir: Annotated[Path, typer.Argument(help="Thư mục project")],
     scope: Annotated[Path, typer.Option("--scope", help="Orientation scope YAML")],
@@ -105,7 +94,6 @@ def orientation(
 
 
 @app.command("orientation-search")
-@project_mutation("operator_orientation_search")
 def orientation_search(
     project_dir: Annotated[Path, typer.Argument(help="Thư mục project")],
     query: Annotated[
@@ -134,7 +122,6 @@ def orientation_search(
 
 
 @app.command("orientation-complete")
-@project_mutation("operator_orientation_complete")
 def orientation_complete(
     project_dir: Annotated[Path, typer.Argument(help="Thư mục project")],
     file: Annotated[Path, typer.Option("--file", help="Completed orientation YAML")],
@@ -152,7 +139,6 @@ def orientation_complete(
 
 
 @app.command("brief")
-@project_mutation("operator_brief")
 def brief(
     project_dir: Annotated[Path, typer.Argument(help="Thư mục project")],
     title: Annotated[str, typer.Option("--title")],
@@ -181,7 +167,6 @@ def brief(
 
 
 @app.command("draft")
-@project_mutation("operator_draft")
 def draft(
     project_dir: Annotated[Path, typer.Argument(help="Thư mục project")],
     script: Annotated[Path, typer.Option("--script", help="Script YAML đã soạn")],
@@ -198,7 +183,6 @@ def draft(
 
 
 @app.command("submit-medical")
-@project_mutation("operator_submit_medical")
 def submit_medical(
     project_dir: Annotated[Path, typer.Argument(help="Thư mục project")],
 ) -> None:

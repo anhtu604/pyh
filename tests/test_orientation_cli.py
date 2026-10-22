@@ -136,7 +136,7 @@ def test_orientation_status_guides_begin_search_complete(tmp_path, monkeypatch):
         assert result.exit_code == 0, result.stdout
         payload = json.loads(result.stdout)
         assert set(payload) == {
-            "kind", "project_dir", "message", "artifact", "suggested_command", "busy", "writer"
+            "kind", "project_dir", "message", "artifact", "suggested_command"
         }
         assert payload["suggested_command"] == "/pyh tìm hiểu chủ đề"
         return payload["message"]

@@ -39,9 +39,6 @@ def test_preview_active_run_argv_and_url_are_read_only(
     run.mkdir(parents=True)
     props = run / "render-input.json"
     props.write_text(json.dumps({"format_profile": profile}), encoding="utf-8")
-    # An existing lease must not prevent viewing or be changed by preview.
-    (project / ".healthvideo").mkdir(exist_ok=True)
-    (project / ".healthvideo" / "write-lease.yaml").write_bytes(b"busy")
     before = snapshot(project)
     monkeypatch.setattr(
         "healthvideo.cli.resolve_pnpm_argv", lambda args: ["pnpm", *args]

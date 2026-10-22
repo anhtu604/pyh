@@ -1,16 +1,13 @@
 import csv
 import json
-from datetime import UTC, datetime
 
 import pytest
 from typer.testing import CliRunner
 
 from healthvideo.cli import app
-from healthvideo.domain.lease import LeaseOwner
 from healthvideo.domain.project_v2 import WorkflowState
 from healthvideo.evidence.screening import DualLLMScreener
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
-from healthvideo.storage.lease import acquire_write_lease
 from healthvideo.workflows.screening import screen_candidates
 from tests.evidence.test_screening import FakeJudge, candidate
 from tests.helpers import create_v2_project_fixture
@@ -171,38 +168,3 @@ def test_cli_screens_without_command_config_or_ledger_mutation(tmp_path, monkeyp
         rows = list(csv.DictReader(stream))
     assert all(row["decision"] == "unsure" for row in rows)
     assert ledger.read_bytes() == before
-    assert not (project / ".healthvideo" / "write-lease.yaml").exists()
-
-
-def test_cli_cannot_screen_while_another_writer_owns_lease(tmp_path):
-    project, input_path, criteria_path = setup_screening(tmp_path)
-    handle = acquire_write_lease(
-        project,
-        operation="test",
-        active_revision="002",
-        owner=LeaseOwner(
-            host_id="test-host", pid=123, process_start_fingerprint="test"
-        ),
-        now=datetime.now(UTC),
-        ttl_seconds=300,
-    )
-    try:
-        result = CliRunner().invoke(
-            app,
-            [
-                "evidence",
-                "screen",
-                str(project),
-                "--criteria",
-                str(criteria_path),
-                "--input",
-                str(input_path),
-            ],
-        )
-        assert result.exit_code == 1
-        assert "Project busy" in result.output
-        assert not (
-            project / "revisions" / "002" / "research" / "screening.csv"
-        ).exists()
-    finally:
-        handle.release()

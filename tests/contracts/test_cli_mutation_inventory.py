@@ -36,19 +36,14 @@ EXPECTED = {
 }
 READ_ONLY = {
     "src/healthvideo/cli.py": {
-        "status", "lease_inspect", "review_open", "security_audit", "script_lint", "preview",
+        "status", "review_open", "script_lint", "preview",
         "review_frames",  # Project state is read-only; only disposable render QA is written.
     },
     "src/healthvideo/commands/operator.py": {"status"},
 }
-LEASE_CONTROL = {
-    # backup_create holds the write lease inside create_backup, not via the decorator.
-    "src/healthvideo/cli.py": {"lease_recover", "backup_create"},
-    "src/healthvideo/commands/operator.py": set(),
-}
 
 
-def test_every_project_cli_command_is_classified_and_mutations_are_guarded() -> None:
+def test_every_project_cli_command_is_classified_and_reads_do_not_write() -> None:
     for relative, expected_mutations in EXPECTED.items():
         tree = ast.parse((ROOT / relative).read_text(encoding="utf-8"))
         commands = {
@@ -59,11 +54,8 @@ def test_every_project_cli_command_is_classified_and_mutations_are_guarded() -> 
             and any(arg.arg == "project_dir" for arg in node.args.args)
         }
         assert set(commands) == (
-            expected_mutations | READ_ONLY[relative] | LEASE_CONTROL[relative]
+            expected_mutations | READ_ONLY[relative]
         )
-        for name in expected_mutations:
-            decorators = {ast.unparse(item) for item in commands[name].decorator_list}
-            assert any(item.startswith("project_mutation(") for item in decorators), name
         for name in READ_ONLY[relative]:
             calls = {
                 ast.unparse(node.func)
