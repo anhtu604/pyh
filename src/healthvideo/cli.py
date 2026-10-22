@@ -26,6 +26,7 @@ from healthvideo.domain.gate_review import GateKind
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.queue import QueueEntry, QueueError
 from healthvideo.domain.state_graph import SIDE_EXIT_RULES
+from healthvideo.env import load_dotenv
 from healthvideo.evidence.clients import EuropePMCClient, PubMedClient
 from healthvideo.process import prepare_subprocess_argv, resolve_pnpm_argv
 from healthvideo.qa.script import lint_project_script
@@ -53,6 +54,7 @@ from healthvideo.workflows.evidence import (
     record_source_selections,
     search_literature,
 )
+from healthvideo.workflows.factory_deps import default_run_deps
 from healthvideo.workflows.gate_review import (
     approve_gate,
     reject_gate,
@@ -64,7 +66,7 @@ from healthvideo.workflows.package import package_project
 from healthvideo.workflows.produce import produce_project
 from healthvideo.workflows.review_frames import review_frames as create_review_frames
 from healthvideo.workflows.review_html import render_medical_packet, render_video_packet
-from healthvideo.workflows.runner import next_step
+from healthvideo.workflows.runner import next_step, run_queue
 from healthvideo.workflows.screening import screen_candidates
 
 CONFIRMATION = "APPROVE"
@@ -190,6 +192,9 @@ def main() -> None:
             reconfigure = getattr(stream, "reconfigure", None)
             if reconfigure is not None:
                 reconfigure(encoding="utf-8")
+    dotenv_path = Path.cwd() / ".env"
+    if dotenv_path.is_file():
+        load_dotenv(dotenv_path)
 
 
 @step_app.command()
@@ -474,14 +479,64 @@ def review_resume(
     typer.echo(f"Trạng thái mới: {new_state.value}")
 
 
-@app.command()
-def run() -> None:
-    """Chạy xưởng tới cổng duyệt tiếp theo (đang xây)."""
-    typer.echo("chưa có: đang được xây (Task 3.5)")
-    raise typer.Exit(code=2)
-
-
 Root = Annotated[Path, typer.Option("--root", help="Thư mục gốc xưởng")]
+
+
+def _gate_for_project(project_dir: Path) -> str:
+    manifest_path = project_dir / "project.yaml"
+    if manifest_path.is_file():
+        try:
+            manifest = ProjectManifestV2.model_validate(read_yaml(manifest_path))
+            if manifest.state == WorkflowState.AWAITING_VIDEO_REVIEW:
+                return "video"
+        except (OSError, TypeError, ValueError):
+            pass
+    return "medical"
+
+
+@app.command()
+def run(
+    root: Root = Path("."),
+    once: Annotated[
+        bool, typer.Option("--once", help="Chỉ chạy tối đa một bước rồi dừng")
+    ] = False,
+) -> None:
+    """Chạy hàng đợi chủ đề tự động tới cổng duyệt tiếp theo."""
+    try:
+        report = run_queue(root, default_run_deps(root), once=once)
+    except (OSError, QueueError, TypeError, ValueError) as error:
+        _echo_error(error)
+        raise typer.Exit(code=1) from error
+
+    advanced_text = ", ".join(report.advanced) if report.advanced else "không có"
+    typer.echo(f"Chủ đề đã tiến: {advanced_text}")
+
+    if report.at_gate:
+        for slug in report.at_gate:
+            project_dir = root / "projects" / slug
+            gate = _gate_for_project(project_dir)
+            typer.echo(
+                f"Chủ đề đang chờ cổng: {slug} — "
+                f"healthvideo review open {project_dir} --gate {gate}"
+            )
+    else:
+        typer.echo("Chủ đề đang chờ cổng: không có")
+
+    if report.blocked:
+        for slug in report.blocked:
+            blocked_path = (root / "topics" / "logs" / slug / "blocked.txt").as_posix()
+            typer.echo(f"Chủ đề bị chặn: {slug} ({blocked_path})")
+    else:
+        typer.echo("Chủ đề bị chặn: không có")
+
+    if report.code_changes:
+        changed_list = ", ".join(path.as_posix() for path in report.code_changes)
+        review_file = (root / "topics" / "code-review.yaml").as_posix()
+        typer.echo(f"File code cần rà ({review_file}): {changed_list}")
+
+    if report.exhausted:
+        typer.echo("Cả Codex và agy đều hết quota — chạy lại sau.")
+        raise typer.Exit(code=3)
 
 
 def _queue_table(root: Path, *, include_next: bool) -> None:

@@ -822,10 +822,10 @@ def test_topic_queue_and_status(tmp_path):
     assert "create" in result.output
 
 
-def test_run_is_explicit_stub():
-    result = runner.invoke(app, ["run"])
-    assert result.exit_code == 2
-    assert "chưa có: đang được xây (Task 3.5)" in result.output
+def test_run_empty_queue_exits_zero(tmp_path):
+    result = runner.invoke(app, ["run", "--root", str(tmp_path)])
+    assert result.exit_code == 0
+    assert "Chủ đề đã tiến: không có" in result.output
 
 
 @pytest.mark.parametrize("pubmed_fails", [False, True])
