@@ -40,6 +40,8 @@ def project(tmp_path: Path) -> Path:
     board = read_yaml(board_path)
     board["visual_budget_profile"] = "m6_5_v1"
     scene = board["scenes"][3]
+    scene.pop("anatomy", None)
+    scene.pop("explainer_layer_id", None)
     scene["visual"] = "ai_clip"
     scene["duration_frames"] = 120
     write_yaml_atomic(board_path, board)

@@ -14,7 +14,7 @@ from healthvideo.render.timing import (
 from healthvideo.tts.audio_checks import inspect_wav
 
 
-def board(*lines: str | None, durations=None, profile="legacy", visuals=None):
+def board(*lines: str | None, durations=None, profile="explain_first_v1", visuals=None):
     durations = durations or [60] * len(lines)
     return Storyboard(title="Timing", visual_budget_profile=profile, scenes=tuple(
         Scene(id=f"S{i}", start_frame=i * 60, duration_frames=duration,

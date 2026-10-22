@@ -11,14 +11,12 @@ from healthvideo.render.input import audio_timing_qa, build_render_input
 
 
 @pytest.mark.parametrize("frames", [600, 5401])
-def test_v2_duration_tracks_content_while_v1_keeps_legacy_range(frames: int) -> None:
+def test_duration_tracks_content(frames: int) -> None:
     board = Storyboard(title="variable", scenes=(Scene(
         id="S01", start_frame=0, duration_frames=frames,
         narration="content", visual="whiteboard",
     ),))
-    assert build_render_input(board, "audio/narration.wav", duration_policy="v2").scenes[0].duration_frames == frames
-    with pytest.raises(ValueError, match="total duration"):
-        build_render_input(board, "audio/narration.wav")
+    assert build_render_input(board, "audio/narration.wav").scenes[0].duration_frames == frames
 
 
 def test_audio_timing_guard_uses_integer_frame_boundary() -> None:
@@ -297,22 +295,6 @@ def test_render_input_carries_m6_5_profile_and_requires_one_chart_ref() -> None:
         build_render_input(missing, "audio/a.wav")
 
 
-def test_render_input_keeps_unmarked_legacy_chart_compatible() -> None:
-    board = Storyboard(
-        title="Legacy",
-        scenes=(
-            Scene(
-                id="S01",
-                start_frame=0,
-                duration_frames=1350,
-                narration="Legacy chart fallback.",
-                visual="chart",
-            ),
-        ),
-    )
-    assert build_render_input(board, "audio/a.wav").visual_budget_profile == "legacy"
-
-
 def test_render_input_carries_exactly_one_ai_clip_ref_in_its_scene() -> None:
     clip_ref = VisualAssetRef(path="assets/ai-clips/S02.mp4", role="ai_clip")
     whiteboard = Scene(
@@ -327,7 +309,7 @@ def test_render_input_carries_exactly_one_ai_clip_ref_in_its_scene() -> None:
         title="PYH", visual_budget_profile="m6_5_v1", scenes=(whiteboard, clip)
     )
 
-    result = build_render_input(board, "audio/a.wav", duration_policy="v2")
+    result = build_render_input(board, "audio/a.wav")
     assert result.scenes[1].visual_assets == (clip_ref,)
 
     extra = VisualAssetRef(path="assets/ai-clips/other.mp4", role="ai_clip")
@@ -336,12 +318,12 @@ def test_render_input_carries_exactly_one_ai_clip_ref_in_its_scene() -> None:
             whiteboard, clip.model_copy(update={"visual_assets": refs}),
         )})
         with pytest.raises(ValidationError, match="exactly one ai_clip"):
-            build_render_input(broken, "audio/a.wav", duration_policy="v2")
+            build_render_input(broken, "audio/a.wav")
     misplaced = board.model_copy(update={"scenes": (
         whiteboard.model_copy(update={"visual_assets": (extra,)}), clip,
     )})
     with pytest.raises(ValidationError, match="ai_clip asset only in an ai_clip scene"):
-        build_render_input(misplaced, "audio/a.wav", duration_policy="v2")
+        build_render_input(misplaced, "audio/a.wav")
 
 @pytest.mark.parametrize(
     "audio_file", ["audio\\narration.wav", "/audio/narration.wav", ".", "./"]
@@ -376,16 +358,6 @@ def test_build_render_input_rejects_dot_highlight_image_with_scene_id(
     )
 
     with pytest.raises(ValueError, match="Scene S01"):
-        build_render_input(board, audio_file="audio/narration.wav")
-
-
-@pytest.mark.parametrize("duration_frames", [1349, 5401])
-def test_build_render_input_enforces_video_duration_range(duration_frames: int) -> None:
-    board = Storyboard(
-        title="Muối", scenes=[valid_highlight_scene(duration_frames=duration_frames)]
-    )
-
-    with pytest.raises(ValueError, match="S01"):
         build_render_input(board, audio_file="audio/narration.wav")
 
 

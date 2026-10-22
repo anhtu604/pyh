@@ -44,3 +44,6 @@ def test_project_manifest_v2_requires_a_side_state_for_side_workflow_state() -> 
         ProjectManifestV2(
             slug="muoi-va-huyet-ap", state=WorkflowState.BLOCKED
         )
+def test_legacy_profile_rejected() -> None:
+    with pytest.raises(ValidationError):
+        ProjectManifestV2.model_validate({"slug": "old-project", "content_profile": "legacy"})

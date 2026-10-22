@@ -534,9 +534,8 @@
       "type": "string"
     },
     "visual_budget_profile": {
-      "default": "legacy",
+      "default": "explain_first_v1",
       "enum": [
-        "legacy",
         "m6_5_v1",
         "explain_first_v1"
       ],

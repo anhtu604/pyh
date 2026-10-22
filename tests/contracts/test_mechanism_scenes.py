@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from healthvideo.domain.asset_manifest import AssetManifest
 from healthvideo.domain.explainer import Explainer
 from healthvideo.domain.gate_review import GateKind
+from healthvideo.domain.hook_outro import OUTRO_TEXT
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.script import Script
 from healthvideo.domain.storyboard import Scene, Storyboard
@@ -230,7 +231,7 @@ def test_explain_budget_requires_nonempty_contiguous_timeline() -> None:
         )
 
 
-@pytest.mark.parametrize("profile", ["legacy", "explain_first_v1"])
+@pytest.mark.parametrize("profile", ["explain_first_v1"])
 @pytest.mark.parametrize(
     "layer,visual,error",
     [
@@ -267,8 +268,8 @@ def test_draft_checks_scene_layer_only_for_explain_projects(
     if visual == "whiteboard":
         data.pop("anatomy")
     board = Storyboard(title="Test", scenes=(Scene.model_validate(data),))
-    # Later hook/outro validation is a real sentinel: reaching it proves layer checks passed.
-    expected = error if profile == "explain_first_v1" and error else "M6.4"
+    # Later visual-budget validation is a real sentinel: reaching it proves layer checks passed.
+    expected = error or "visual budget failed"
     with pytest.raises(ValueError, match=expected):
         _validate(
             revision,
@@ -322,13 +323,23 @@ def test_produce_mechanism_needs_no_generated_asset_and_rejects_unknown_subject(
             },
         ]
     )
-    # One spoken line spans this consecutive six-scene visual explanation.
-    line = read_yaml(revision / "script/script.yaml")["lines"][0]
-    for scene in board["scenes"]:
-        scene["script_line_id"] = line["id"]
-        scene["narration"] = line["text"]
+    # Explain-first requires one script line per scene, including the pinned outro.
+    script_data = read_yaml(revision / "script/script.yaml")
+    lines = []
+    for index, scene in enumerate(board["scenes"]):
+        text = " ".join(["Illustration."] * (50 if index < 4 else 70))
+        lines.append({"id": scene["id"], "text": text,
+                      "delivery": {"intent": "explain"}})
+        scene["script_line_id"] = scene["id"]
+        scene["narration"] = text
+    lines[-1].update(text=OUTRO_TEXT, purpose="outro")
+    board["scenes"][-1].update(
+        visual="brand_outro", narration=OUTRO_TEXT,
+        visual_assets=[{"path": "assets/test-logo.svg", "role": "brand"}],
+    )
+    script_data["lines"] = lines
+    write_yaml_atomic(revision / "script/script.yaml", script_data)
     write_yaml_atomic(revision / "storyboard/storyboard.yaml", board)
-    write_yaml_atomic(revision / "assets/asset-manifest.yaml", {"assets": []})
     approve_gate(project, GateKind.MEDICAL, reviewer="test", now=V2_REVIEWED_AT)
 
     def runner(argv: list[str]) -> int:
@@ -351,7 +362,7 @@ def test_produce_mechanism_needs_no_generated_asset_and_rejects_unknown_subject(
         assert all(
             scene["anatomy"]["subject"] == subject for scene in payload["scenes"][:4]
         )
-        assert all(scene["visual_assets"] == [] for scene in payload["scenes"])
+        assert all(scene["visual_assets"] == [] for scene in payload["scenes"][:4])
         qa = json.loads(
             (revision / "reviews/video-qa.json").read_text(encoding="utf-8")
         )

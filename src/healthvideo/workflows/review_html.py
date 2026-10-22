@@ -34,8 +34,6 @@ _NOT_YET_MODELED = (
 
 def _render_visual_budget_section(storyboard: Storyboard) -> str:
     report = calculate_visual_budget(storyboard)
-    if storyboard.visual_budget_profile == "legacy" and not report.mascot_frames:
-        return ""
     rows = []
     for category in report.effective_bounds:
         frames = report.category_frames[category]

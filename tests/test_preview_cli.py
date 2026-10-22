@@ -7,7 +7,7 @@ from typer.testing import CliRunner
 
 from healthvideo.cli import REPO_ROOT, app
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
-from tests.helpers import create_project_fixture, create_v2_project_fixture
+from tests.helpers import create_v2_project_fixture
 
 
 def snapshot(root: Path) -> dict[str, bytes]:
@@ -19,23 +19,19 @@ def snapshot(root: Path) -> dict[str, bytes]:
 @pytest.mark.parametrize(
     "version,profile,composition",
     [
-        ("1.0", "vertical_clip", "VerticalClip"),
+        ("2.0", "vertical_clip", "VerticalClip"),
         ("2.0", "youtube_long", "LongForm"),
     ],
 )
 def test_preview_active_run_argv_and_url_are_read_only(
     tmp_path, monkeypatch, version, profile, composition
 ):
-    project = (
-        create_project_fixture(tmp_path, state="idea")
-        if version == "1.0"
-        else create_v2_project_fixture(tmp_path)
-    )
+    project = create_v2_project_fixture(tmp_path)
     manifest = read_yaml(project / "project.yaml")
     manifest["artifact_hashes"]["production"] = "active-run"
     write_yaml_atomic(project / "project.yaml", manifest)
-    root = project if version == "1.0" else project / "revisions" / "001"
-    run = root / "renders" / "active-run" if version == "1.0" else root / "renders"
+    root = project / "revisions" / "001"
+    run = root / "renders"
     run.mkdir(parents=True)
     props = run / "render-input.json"
     props.write_text(json.dumps({"format_profile": profile}), encoding="utf-8")
@@ -86,7 +82,13 @@ def test_preview_active_run_argv_and_url_are_read_only(
     "outcome,code", [(7, 7), (KeyboardInterrupt(), 0), (OSError("missing"), 1)]
 )
 def test_preview_default_port_and_foreground_exit(tmp_path, monkeypatch, outcome, code):
-    project = create_project_fixture(tmp_path, state="rendered")
+    project = create_v2_project_fixture(tmp_path)
+    manifest = read_yaml(project / "project.yaml")
+    manifest["artifact_hashes"]["production"] = "preview-run"
+    write_yaml_atomic(project / "project.yaml", manifest)
+    renders = project / "revisions" / "001" / "renders"
+    renders.mkdir()
+    (renders / "render-input.json").write_text("{}", encoding="utf-8")
     before = snapshot(project)
     calls = []
 
@@ -106,14 +108,14 @@ def test_preview_default_port_and_foreground_exit(tmp_path, monkeypatch, outcome
 
 @pytest.mark.parametrize("active", [False, True])
 def test_preview_missing_active_render_is_read_only(tmp_path, active):
-    project = create_project_fixture(tmp_path, state="idea")
+    project = create_v2_project_fixture(tmp_path, state="idea")
     if active:
         manifest = read_yaml(project / "project.yaml")
         manifest["artifact_hashes"]["production"] = "missing-run"
         write_yaml_atomic(project / "project.yaml", manifest)
     # Never fall back to an old run.
-    old = project / "renders" / "old-run"
-    old.mkdir()
+    old = project / "revisions" / "001" / "renders" / "old-run"
+    old.mkdir(parents=True)
     (old / "render-input.json").write_text("{}")
     before = snapshot(project)
     result = CliRunner().invoke(app, ["preview", str(project), "--print-only"])

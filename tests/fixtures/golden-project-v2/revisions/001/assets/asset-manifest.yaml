@@ -1,11 +1,21 @@
-schema_version: "2.0"
+schema_version: '2.0'
 assets:
-  - path: assets/evidence-r01.svg
-    kind: evidence_highlight
-    semantic: true
-    classification_reason: Evidence highlight changes the medical meaning.
-    sha256: 5a748bc7cc428d9def90205c88b271b82d703927dbe5ae5da8b34b6ababeddc2
-    source: synthetic_test_fixture
-    license: synthetic_test_only
-    creator: repository_fixture
-    revision: "001"
+- path: assets/evidence-r01.svg
+  kind: evidence_highlight
+  semantic: true
+  classification_reason: Evidence highlight changes the medical meaning.
+  sha256: 5a748bc7cc428d9def90205c88b271b82d703927dbe5ae5da8b34b6ababeddc2
+  source: synthetic_test_fixture
+  license: synthetic_test_only
+  creator: repository_fixture
+  revision: '001'
+- path: assets/test-logo.svg
+  kind: flourish
+  semantic: false
+  classification_reason: Decorative synthetic logo
+  sha256: 900fbe934249ad120004bd24adf66aad8817d89586273c0cc50e187bddebb601
+  source: synthetic_test_fixture
+  license: synthetic_test_only
+  creator: test
+  revision: '001'
+  storyboard_role: brand

@@ -43,7 +43,7 @@ def create_revision(project_dir: Path, reason: str, *, now: datetime) -> str:
     if schema_version != "2.0":
         raise ValueError(
             f"Project schema {schema_version!r} cannot create a revision; "
-            "run `healthvideo project migrate` first."
+            "Only project schema 2.0 is supported."
         )
     manifest = ProjectManifestV2.model_validate(manifest_data)
 

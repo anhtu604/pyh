@@ -16,28 +16,20 @@ from pathlib import Path
 
 import pytest
 
-from healthvideo.domain.brand import LogoVariant
 from healthvideo.domain.gate_review import GateKind
 from healthvideo.domain.hook_outro import OUTRO_TEXT
-from healthvideo.domain.project import ProjectManifest, ProjectState
 from healthvideo.domain.project_v2 import WorkflowState
-from healthvideo.domain.review import ReviewKind
-from healthvideo.render.input import MAX_DURATION_FRAMES, MIN_DURATION_FRAMES
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.video_ai.base import VeoRequest, VeoResult, VideoProbeResult
 from healthvideo.workflows.ai_clips import AIClipRights, generate_ai_clip
-from healthvideo.workflows.hook_outro import author_hook_outro
 from healthvideo.workflows.package import _ensure_v2_gate_approval
-from healthvideo.workflows.review import approval_is_stale
 from healthvideo.workflows.visual_assets import (
     bind_chart_asset,
-    create_brand_logo_asset,
     create_evidence_chart,
 )
 from tests.helpers import (
     _advance_v2_state,
     create_v2_project_fixture,
-    synthesize_fixture_audio,
 )
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -67,7 +59,7 @@ def test_golden_v2_crosses_process_boundaries_to_a_package(
     assert scenes[0]["start_frame"] == 0
     assert not any("intro" in f"{scene['id']} {scene['visual']}".lower() for scene in scenes)
     assert (scenes[-1]["visual"], scenes[-1]["narration"]) == ("brand_outro", OUTRO_TEXT)
-    assert "pyh-logo.svg" in json.dumps(scenes[-1])
+    assert "test-logo.svg" in json.dumps(scenes[-1])
     qa = json.loads((revision / "reviews/video-qa.json").read_text(encoding="utf-8"))
     assert qa["composition_duration_ms"] == round(
         sum(scene["duration_frames"] for scene in scenes) * 1000 / 30
@@ -85,33 +77,6 @@ def test_golden_v2_crosses_process_boundaries_to_a_package(
     assert len(provider_requests) == (1 if ai else 0)
 
 
-def test_v1_golden_packages_without_migration(tmp_path: Path) -> None:
-    project = tmp_path / "golden-project"
-    shutil.copytree(FIXTURES / "golden-project", project)
-    synthesize_fixture_audio(project)
-    manifest = read_yaml(project / "project.yaml")
-    manifest["state"] = ProjectState.AWAITING_MEDICAL_REVIEW.value
-    write_yaml_atomic(project / "project.yaml", manifest)
-
-    for arguments in (
-        ("review", "medical", project, "--reviewer", "BS An", "--yes"),
-        ("produce", project),
-        ("review", "video", project, "--reviewer", "BS An", "--yes"),
-        ("package", project),
-    ):
-        _assert_cli_ok(*arguments)
-    run = project / "renders" / read_yaml(project / "project.yaml")["artifact_hashes"]["production"]
-    last = json.loads((run / "render-input.json").read_text(encoding="utf-8"))["scenes"][-1]
-    assert MIN_DURATION_FRAMES <= last["start_frame"] + last["duration_frames"] <= MAX_DURATION_FRAMES
-
-    assert not (project / "revisions").exists()
-    project_manifest = ProjectManifest.model_validate(read_yaml(project / "project.yaml"))
-    assert project_manifest.schema_version == "1.0"
-    assert project_manifest.state is ProjectState.APPROVED_TO_PUBLISH
-    for kind in ReviewKind:
-        assert not approval_is_stale(project, project_manifest, kind)
-
-
 def _prepare_v2_awaiting_medical(
     tmp_path: Path, *, ai: bool
 ) -> tuple[Path, list[VeoRequest]]:
@@ -122,12 +87,6 @@ def _prepare_v2_awaiting_medical(
         )
         board_path = project / "revisions/001/storyboard/storyboard.yaml"
         board = read_yaml(board_path)
-        board["scenes"][0]["duration_frames"] = 1350
-        write_yaml_atomic(board_path, board)
-        author_hook_outro(project, duration_frames=90)
-        create_brand_logo_asset(
-            project, scene_id="OUTRO", asset_name="pyh-logo", variant=LogoVariant.MONOGRAM
-        )
         return project, []
 
     project = tmp_path / "golden-project-v2"
@@ -142,26 +101,32 @@ def _prepare_v2_awaiting_medical(
     write_yaml_atomic(revision / "evidence/ledger.yaml", ledger)
     board = read_yaml(revision / "storyboard/storyboard.yaml")
     board["visual_budget_profile"] = "m6_5_v1"
-    board["scenes"][1]["visual"] = "ai_clip"
-    durations = {"ai_clip": 180, "chart": 225, "evidence_highlight": 225, "whiteboard": 390}
-    script_path = revision / "script/script.yaml"
-    script = read_yaml(script_path)
-    # Synthetic narration must actually sustain these visual proportions with
-    # the subprocess worker's real SilentTTS; planned durations are no longer runtime.
-    words_per_scene = {"ai_clip": 15, "chart": 19, "evidence_highlight": 19, "whiteboard": 34}
-    start = 0
-    for scene, line in zip(board["scenes"], script["lines"], strict=True):
-        scene["start_frame"], scene["duration_frames"] = start, durations[scene["visual"]]
-        count = words_per_scene[scene["visual"]]
-        text = " ".join((line["text"].split() * count)[:count])
-        scene["narration"] = line["text"] = text
-        start += scene["duration_frames"]
-    write_yaml_atomic(script_path, script)
+    # A dedicated synthetic M6.5 scenario still exercises chart + Veo rights.
+    from copy import deepcopy
+
+    whiteboard = deepcopy(board["scenes"][-2])
+    whiteboard.update(id="S03", script_line_id="L03", visual="whiteboard")
+    highlight = deepcopy(board["scenes"][0])
+    highlight.update(id="S01", script_line_id="L01")
+    chart = deepcopy(highlight)
+    chart.update(id="S04", script_line_id="L04", visual="chart")
+    chart.pop("evidence_highlight")
+    clip = deepcopy(highlight)
+    clip.update(id="S02", script_line_id="L02", visual="ai_clip")
+    clip.pop("evidence_highlight")
+    board["scenes"] = [whiteboard, highlight, chart, clip, board["scenes"][-1]]
+    durations = (1200, 165, 165, 180, 90)
+    words = (95, 15, 15, 15)
+    frame = 0
+    for index, (scene, frames) in enumerate(zip(board["scenes"], durations, strict=True)):
+        scene.update(start_frame=frame, duration_frames=frames)
+        if index < 4:
+            scene["narration"] = " ".join(["Synthetic."] * words[index])
+        frame += frames
+    from tests.helpers import align_fixture_script
+
+    align_fixture_script(revision, board)
     write_yaml_atomic(revision / "storyboard/storyboard.yaml", board)
-    author_hook_outro(project, duration_frames=90)
-    create_brand_logo_asset(
-        project, scene_id="OUTRO", asset_name="pyh-logo", variant=LogoVariant.MONOGRAM
-    )
     create_evidence_chart(
         project, claim_id="C01", datum_id="bp-count", asset_name="chart-count",
         license="synthetic_test_only", rights_basis="fixture nội bộ", creator="repository_fixture",

@@ -1,50 +1,114 @@
 schema_version: '1.0'
 title: Ăn mặn và tăng huyết áp
 scenes:
-  - id: S01
-    start_frame: 0
-    duration_frames: 225
-    narration: Ăn mặn có thể làm huyết áp tăng.
-    claim_id: C01
-    source_marker: '[1]'
-    visual: whiteboard
-  - id: S02
-    start_frame: 225
-    duration_frames: 225
-    narration: Bạn không cần bỏ hết gia vị.
-    claim_id: C01
-    source_marker: '[1]'
-    visual: whiteboard
-  - id: S03
-    start_frame: 450
-    duration_frames: 225
-    narration: Giảm muối giúp hạ huyết áp ở nhiều người.
-    claim_id: C01
-    source_marker: '[1]'
-    visual: evidence_highlight
-    evidence_highlight:
-      image: assets/evidence-r01.svg
-      quote: Giảm natri ăn vào liên quan tới mức giảm huyết áp tâm thu.
-      x: 0.08
-      y: 0.32
-      width: 0.84
-      height: 0.18
-  - id: S04
-    start_frame: 675
-    duration_frames: 225
-    narration: Hiệu quả có thể khác nhau giữa mỗi người.
-    claim_id: C01
-    source_marker: '[1]'
-    visual: chart
-  - id: S05
-    start_frame: 900
-    duration_frames: 225
-    narration: Tôi khuyên bạn giảm dần để dễ duy trì.
-    claim_id: C02
-    visual: whiteboard
-  - id: S06
-    start_frame: 1125
-    duration_frames: 225
-    narration: Hãy trao đổi với bác sĩ khi đang điều trị huyết áp.
-    claim_id: C02
-    visual: whiteboard
+- id: S01
+  start_frame: 0
+  duration_frames: 240
+  narration: Synthetic evidence. Synthetic evidence. Synthetic evidence. Synthetic
+    evidence. Synthetic evidence. Synthetic evidence. Synthetic evidence. Synthetic
+    evidence. Synthetic evidence. Synthetic evidence. Synthetic evidence. Synthetic
+    evidence. Synthetic evidence. Synthetic evidence. Synthetic evidence. Synthetic
+    evidence. Synthetic evidence. Synthetic evidence. Synthetic evidence. Synthetic
+    evidence. Synthetic evidence. Synthetic evidence. Synthetic evidence. Synthetic
+    evidence. Synthetic evidence. Synthetic evidence. Synthetic evidence. Synthetic
+    evidence. Synthetic evidence. Synthetic evidence.
+  claim_id: C01
+  source_marker: '[1]'
+  visual: evidence_highlight
+  script_line_id: L01
+  evidence_highlight:
+    image: assets/evidence-r01.svg
+    quote: Giảm natri ăn vào liên quan tới mức giảm huyết áp tâm thu.
+    x: 0.08
+    y: 0.32
+    width: 0.84
+    height: 0.18
+- id: S02
+  start_frame: 240
+  duration_frames: 195
+  narration: Synthetic mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic
+    mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic
+    mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic
+    mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic
+    mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic
+    mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic
+    mechanism.
+  claim_id: C01
+  source_marker: '[1]'
+  visual: comparison
+  script_line_id: L02
+  anatomy:
+    subject: artery_cross_section
+    state: normal
+    motion: Illustrative test motion
+- id: S03
+  start_frame: 435
+  duration_frames: 195
+  narration: Synthetic mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic
+    mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic
+    mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic
+    mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic
+    mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic
+    mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic
+    mechanism.
+  claim_id: C01
+  source_marker: '[1]'
+  visual: comparison
+  script_line_id: L03
+  anatomy:
+    subject: artery_cross_section
+    state: normal
+    motion: Illustrative test motion
+- id: S04
+  start_frame: 630
+  duration_frames: 195
+  narration: Synthetic mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic
+    mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic
+    mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic
+    mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic
+    mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic
+    mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic
+    mechanism.
+  claim_id: C01
+  source_marker: '[1]'
+  visual: comparison
+  script_line_id: L04
+  anatomy:
+    subject: artery_cross_section
+    state: normal
+    motion: Illustrative test motion
+- id: S05
+  start_frame: 825
+  duration_frames: 195
+  narration: Synthetic mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic
+    mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic
+    mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic
+    mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic
+    mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic
+    mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic mechanism. Synthetic
+    mechanism.
+  claim_id: C02
+  visual: comparison
+  script_line_id: L05
+  anatomy:
+    subject: artery_cross_section
+    state: normal
+    motion: Illustrative test motion
+- id: S06
+  start_frame: 1020
+  duration_frames: 90
+  narration: Synthetic illustration.
+  claim_id: C02
+  visual: whiteboard
+  script_line_id: L06
+- id: OUTRO
+  start_frame: 1110
+  duration_frames: 90
+  script_line_id: OUTRO
+  narration: Nếu mình có gì sai sót, hoặc bạn có bất kỳ câu hỏi nào, hãy để lại phản
+    hồi dưới phần bình luận nhé. Cảm ơn bạn đã xem video.
+  visual: brand_outro
+  visual_assets:
+  - path: assets/test-logo.svg
+    role: brand
+visual_budget_profile: explain_first_v1

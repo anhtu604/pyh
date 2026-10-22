@@ -22,6 +22,7 @@ from healthvideo.workflows.evidence import (
     reject_topic_for_lack_of_evidence,
     search_literature,
 )
+from tests.helpers import write_explainer_fixture
 
 
 def _setup_project_at(tmp_path: Path, state: WorkflowState) -> Path:
@@ -160,6 +161,7 @@ def test_build_evidence_ledger_validates_retraction_and_advances_state(tmp_path:
     )
 
     now = datetime(2026, 9, 12, 10, 0, tzinfo=UTC)
+    write_explainer_fixture(project_dir / "revisions/001", claim.id)
     ledger_path, manifest = build_evidence_ledger(project_dir, [claim], [clean_source], now=now)
 
     assert ledger_path.is_file()
@@ -210,6 +212,7 @@ def test_mechanism_requires_a_clean_referenced_source(tmp_path: Path, status: st
         id="R-TEST-02", title="Nguồn thử khác", retraction_status="clean",
         synthetic_test_record=True,
     )
+    write_explainer_fixture(project / "revisions/001", claim.id)
     if status == "clean":
         path, manifest = build_evidence_ledger(project, [claim], [source, unrelated])
         assert path.is_file()
@@ -231,6 +234,7 @@ def test_mechanism_accepts_one_clean_source_among_multiple(tmp_path: Path) -> No
         id=source_id, title="Nguồn minh họa", retraction_status=status,
         synthetic_test_record=True,
     ) for source_id, status in [("R-TEST-01", "unverified"), ("R-TEST-02", "clean")]]
+    write_explainer_fixture(project / "revisions/001", claim.id)
     assert build_evidence_ledger(project, [claim], sources)[0].is_file()
 
 

@@ -53,7 +53,6 @@ def test_pyh_golden_stops_at_both_human_gates(tmp_path: Path) -> None:
     )
     revision = project / "revisions" / "001"
     manifest = read_yaml(project / "project.yaml")
-    manifest["content_profile"] = "legacy"
     write_yaml_atomic(project / "project.yaml", manifest)
     card = TopicCard.model_validate(read_yaml(SOURCE / "topic" / "card.yaml"))
     select_topic(project, card, now=FROZEN)
@@ -78,7 +77,7 @@ def test_pyh_golden_stops_at_both_human_gates(tmp_path: Path) -> None:
         [SourceRecord.model_validate(item) for item in frozen_ledger["records"]],
         now=FROZEN,
     )
-    shutil.copy2(SOURCE / "assets" / "evidence-r01.svg", revision / "assets")
+    shutil.copytree(SOURCE / "assets", revision / "assets", dirs_exist_ok=True)
     board = read_yaml(SOURCE / "storyboard/storyboard.yaml")
     lines = read_yaml(SOURCE / "script/script.yaml")["lines"]
     for scene, line in zip(board["scenes"], lines, strict=True):
@@ -207,27 +206,3 @@ def test_orientation_never_reaches_approval_or_publication(tmp_path: Path) -> No
     assert not (revision / "publish" / "receipt.yaml").exists()
     manifest = ProjectManifestV2.model_validate(read_yaml(project / "project.yaml"))
     assert manifest.state is WorkflowState.AWAITING_EDITORIAL_DIRECTION
-
-
-def test_v1_golden_fixture_stays_byte_identical(tmp_path: Path) -> None:
-    """Orientation is a v2-only path; the tracked v1 fixture must not move a byte."""
-    v1_source = Path("tests/fixtures/golden-project")
-    before = {
-        path.relative_to(v1_source): path.read_bytes()
-        for path in v1_source.rglob("*")
-        if path.is_file()
-    }
-
-    project = create_project_v2(tmp_path, "muoi-va-huyet-ap", "Ăn mặn", now=FROZEN)
-    select_topic(
-        project,
-        TopicCard.model_validate(read_yaml(SOURCE / "topic" / "card.yaml")),
-        now=FROZEN,
-    )
-    complete_orientation_fixture(project, now=FROZEN)
-
-    assert {
-        path.relative_to(v1_source): path.read_bytes()
-        for path in v1_source.rglob("*")
-        if path.is_file()
-    } == before

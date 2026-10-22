@@ -109,11 +109,8 @@
       "type": "object"
     },
     "content_profile": {
-      "default": "legacy",
-      "enum": [
-        "legacy",
-        "explain_first_v1"
-      ],
+      "const": "explain_first_v1",
+      "default": "explain_first_v1",
       "title": "Content Profile",
       "type": "string"
     },

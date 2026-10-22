@@ -1,6 +1,8 @@
 from healthvideo.domain.evidence import EvidenceClaim
+from healthvideo.domain.explainer import Explainer
 from healthvideo.domain.script import Delivery, Script, ScriptLine
 from healthvideo.qa.script import review_script
+from tests.domain.test_explainer import explainer_data
 
 
 def test_qa_rejects_unmapped_claim_and_machine_phrase() -> None:
@@ -28,6 +30,7 @@ def test_qa_rejects_unmapped_claim_and_machine_phrase() -> None:
             )
         ],
         ["hãy cùng tìm hiểu"],
+        explainer=Explainer.model_validate(explainer_data()),
     )
 
     assert {issue.code for issue in issues} == {"forbidden_phrase", "unknown_claim"}
@@ -61,6 +64,7 @@ def test_qa_does_not_flag_two_20_word_sentences_in_one_line() -> None:
             )
         ],
         [],
+        explainer=Explainer.model_validate(explainer_data()),
     )
 
     assert issues == []
@@ -94,6 +98,7 @@ def test_qa_ignores_empty_segments_between_sentence_terminators() -> None:
             )
         ],
         [],
+        explainer=Explainer.model_validate(explainer_data()),
     )
 
     assert issues == []
@@ -125,6 +130,7 @@ def test_qa_flags_one_unpunctuated_33_word_sentence() -> None:
             )
         ],
         [],
+        explainer=Explainer.model_validate(explainer_data()),
     )
 
     assert [(issue.code, issue.line_id) for issue in issues] == [

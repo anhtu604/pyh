@@ -38,7 +38,7 @@ def test_clips_reuse_line_wavs_and_match_measured_scene_boundaries(tmp_path: Pat
     approve_gate(project, GateKind.MEDICAL, reviewer=REVIEWER, now=REVIEWED_AT)
     tts = CountingSilent()
     produce_project(project, tts, _runner([]))
-    assert tts.calls == 6  # one per script line, no extra clip TTS
+    assert tts.calls == 7  # one per script line, no extra clip TTS
     run = project / "revisions/001/renders"
     clip = json.loads((run / "clips/CL01.render-input.json").read_text(encoding="utf-8"))
     content_frames = sum(scene["duration_frames"] for scene in clip["scenes"])
@@ -199,18 +199,24 @@ def test_clip_cta_registers_reverse_logo_and_selected_mascot(tmp_path, artwork_b
     project = create_long_form_project_fixture(tmp_path / "fixture")
     board = Storyboard.model_validate(read_yaml(project / "revisions/001/storyboard/storyboard.yaml"))
     stage = tmp_path / "stage"
+    from healthvideo.render.timing import retime_storyboard
     from healthvideo.tts.base import TTSRequest
-    line_wavs = {}
+
+    line_wavs, line_ms = {}, {}
     for scene in board.scenes[:2]:
         path = tmp_path / f"{scene.script_line_id}.wav"
-        SilentTTS().synthesize(TTSRequest(text=scene.narration, language="vi"), path)
+        audio = SilentTTS().synthesize(TTSRequest(text=scene.narration, language="vi"), path)
         line_wavs[scene.script_line_id] = path
+        line_ms[scene.script_line_id] = audio.duration_ms
+    board, _ = retime_storyboard(
+        board.model_copy(update={"scenes": board.scenes[:2]}), line_ms
+    )
     def run(argv):
         output = Path(argv[argv.index("--output") + 1])
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(b"synthetic")
         return 0
-    # Existing fixture scenes each last 900 frames; two give a 60s clip plus CTA.
+    # Use measured timing so the declared source frames fit the synthetic speech.
     render_clips({"CL01": board.scenes[:2]}, board, stage, line_wavs=line_wavs,
                  runner=run, brand=brand)
     result = json.loads((stage / "clips/CL01.render-input.json").read_text(encoding="utf-8"))

@@ -48,37 +48,34 @@ def _validate(
     if not script.lines or not storyboard.scenes:
         raise ValueError("draft requires nonempty script lines and storyboard scenes")
     claims = [EvidenceClaim.model_validate(item) for item in ledger.get("claims", [])]
-    explainer = None
-    if project.content_profile == "explain_first_v1":
-        if script.format_profile != "explain_first_v1":
+    if script.format_profile != "explain_first_v1":
+        raise ValueError(
+            "explain_first_v1 project requires script format_profile explain_first_v1"
+        )
+    if not (revision / "explainer/explainer.yaml").is_file():
+        raise ValueError("explain_first_v1 requires explainer/explainer.yaml")
+    explainer = read_explainer(revision)
+    layers = {layer.id: layer for layer in explainer.layers}
+    for scene in storyboard.scenes:
+        if scene.explainer_layer_id is None:
+            continue
+        layer = layers.get(scene.explainer_layer_id)
+        if layer is None:
             raise ValueError(
-                "explain_first_v1 project requires script format_profile explain_first_v1"
+                f"Scene {scene.id}: unknown explainer layer {scene.explainer_layer_id}"
             )
-        if not (revision / "explainer/explainer.yaml").is_file():
-            raise ValueError("explain_first_v1 requires explainer/explainer.yaml")
-        explainer = read_explainer(revision)
-        layers = {layer.id: layer for layer in explainer.layers}
-        for scene in storyboard.scenes:
-            if scene.explainer_layer_id is None:
-                continue
-            layer = layers.get(scene.explainer_layer_id)
-            if layer is None:
-                raise ValueError(
-                    f"Scene {scene.id}: unknown explainer layer {scene.explainer_layer_id}"
-                )
-            if scene.visual != layer.visual.kind:
-                raise ValueError(
-                    f"Scene {scene.id}: visual must match explainer layer "
-                    f"{layer.id}: {layer.visual.kind}"
-                )
+        if scene.visual != layer.visual.kind:
+            raise ValueError(
+                f"Scene {scene.id}: visual must match explainer layer "
+                f"{layer.id}: {layer.visual.kind}"
+            )
     issues = review_script(script, claims, [], explainer=explainer)
     blocking = [issue for issue in issues if issue.code == "unknown_claim"]
     if blocking:
         raise ValueError("script references unknown claim: " + blocking[0].message)
-    if project.content_profile == "explain_first_v1":
-        errors = [issue for issue in issues if issue.severity == "error"]
-        if errors:
-            raise ValueError(f"script review error ({errors[0].code}): {errors[0].message}")
+    errors = [issue for issue in issues if issue.severity == "error"]
+    if errors:
+        raise ValueError(f"script review error ({errors[0].code}): {errors[0].message}")
     validate_visual_budget(storyboard)
     validate_anatomy_subjects(storyboard)
     validate_hook_outro(script, storyboard, require_brand=True, allow_line_references=True)

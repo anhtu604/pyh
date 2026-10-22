@@ -77,7 +77,7 @@ def clip_render_input(
         format_profile="vertical_clip",
     )
     brand = brand or load_brand_profile(BRAND_PROFILE_PATH)
-    result = build_render_input(board, audio_file, duration_policy="v2")
+    result = build_render_input(board, audio_file)
     return RenderInput.model_validate(
         {
             **result.model_dump(),

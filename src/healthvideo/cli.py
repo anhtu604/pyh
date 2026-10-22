@@ -6,7 +6,6 @@ from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any
-from uuid import uuid4
 
 import typer
 
@@ -19,10 +18,8 @@ from healthvideo.domain.evidence import (
     SourceRecord,
     SourceSelection,
 )
-from healthvideo.domain.gate_review import GateKind
-from healthvideo.domain.project import ProjectManifest
+from healthvideo.domain.gate_review import GateApprovalRecord, GateKind
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
-from healthvideo.domain.review import ReviewKind, ReviewRecord
 from healthvideo.domain.state_graph import SIDE_EXIT_RULES
 from healthvideo.domain.topic import TopicCard
 from healthvideo.evidence.clients import EuropePMCClient, PubMedClient
@@ -32,7 +29,6 @@ from healthvideo.render.remotion import build_render_argv
 from healthvideo.render.run import (
     PRODUCTION_ARTIFACT,
     RENDER_INPUT_NAME,
-    production_run_dir,
 )
 from healthvideo.storage.files import read_yaml, write_text_atomic
 from healthvideo.storage.project_layout import resolve_project_layout
@@ -54,7 +50,6 @@ from healthvideo.workflows.agent_review import (
     request_second_model_review,
 )
 from healthvideo.workflows.ai_clips import AIClipRights, generate_ai_clip
-from healthvideo.workflows.create_project import create_project
 from healthvideo.workflows.doctor import (
     check_environment,
     has_mandatory_failure,
@@ -73,11 +68,6 @@ from healthvideo.workflows.gate_review import (
     resume_gate,
 )
 from healthvideo.workflows.hook_outro import author_hook_outro
-from healthvideo.workflows.migrate import (
-    MigrationPlan,
-    migrate_project,
-    plan_migration,
-)
 from healthvideo.workflows.package import package_project
 from healthvideo.workflows.produce import produce_project
 from healthvideo.workflows.review import (
@@ -125,7 +115,6 @@ for _stream in (sys.stdout, sys.stderr):
         _stream.reconfigure(encoding="utf-8")
 
 app = typer.Typer(no_args_is_help=True)
-project_app = typer.Typer(no_args_is_help=True)
 review_app = typer.Typer(no_args_is_help=True)
 revision_app = typer.Typer(no_args_is_help=True)
 topic_app = typer.Typer(no_args_is_help=True)
@@ -134,7 +123,6 @@ agent_app = typer.Typer(no_args_is_help=True)
 outro_app = typer.Typer(no_args_is_help=True)
 ai_clip_app = typer.Typer(no_args_is_help=True)
 script_app = typer.Typer(no_args_is_help=True)
-app.add_typer(project_app, name="project")
 app.add_typer(review_app, name="review")
 app.add_typer(revision_app, name="revision")
 app.add_typer(topic_app, name="topic")
@@ -367,11 +355,7 @@ def preview(
     try:
         layout = resolve_project_layout(project_dir.resolve())
         input_hash = layout.manifest.artifact_hashes.get(PRODUCTION_ARTIFACT)
-        run_dir = (
-            production_run_dir(layout.artifact_root, input_hash)
-            if input_hash and layout.schema_version == "1.0"
-            else layout.artifact_root / "renders"
-        ).resolve()
+        run_dir = (layout.artifact_root / "renders").resolve()
         if not run_dir.is_relative_to(layout.artifact_root.resolve()):
             raise ValueError("Production run phải nằm trong thư mục dự án")
         props = run_dir / RENDER_INPUT_NAME
@@ -522,75 +506,6 @@ def package(
         typer.echo(str(error))
         raise typer.Exit(code=1) from error
     typer.echo(f"Packaged: {output}")
-
-
-@project_app.command("new")
-def new_project(
-    slug: Annotated[str, typer.Argument(help="Slug dự án, ví dụ: muoi-va-huyet-ap")],
-    title: Annotated[str, typer.Option("--title", help="Tiêu đề làm việc của video")],
-    root: Annotated[
-        Path | None, typer.Option("--root", help="Thư mục chứa dự án")
-    ] = None,
-) -> None:
-    """Tạo scaffold dự án và author brief ban đầu."""
-    project_root = root or default_project_root()
-    try:
-        project_dir = create_project(project_root, slug, title)
-    except FileExistsError as error:
-        typer.echo(str(error))
-        raise typer.Exit(code=1) from error
-    typer.echo(f"Created project: {project_dir}")
-
-
-@project_app.command("migrate")
-def migrate_project_command(
-    project_dir: ProjectDir,
-    dry_run: Annotated[
-        bool, typer.Option("--dry-run", help="In migration plan, không ghi dữ liệu")
-    ] = False,
-) -> None:
-    """Migrate project v1 sang một sibling v2 mới, không sửa nguồn."""
-    try:
-        plan = plan_migration(project_dir)
-        if dry_run:
-            typer.echo(_format_migration_plan(plan))
-            return
-        destination = migrate_project(
-            project_dir,
-            now=datetime.now().astimezone(),
-            migration_id=uuid4(),
-        )
-    except (
-        FileNotFoundError,
-        FileExistsError,
-        OSError,
-        TypeError,
-        ValueError,
-    ) as error:
-        typer.echo(str(error))
-        raise typer.Exit(code=1) from error
-    typer.echo(f"Migrated project: {destination}")
-
-
-def _format_migration_plan(plan: MigrationPlan) -> str:
-    lines = [
-        f"Source: {plan.source}",
-        f"Destination: {plan.destination}",
-        f"State: {plan.source_state.value} -> {plan.proposed_state.value}",
-        f"Approval: {plan.approval_disposition.value}",
-        f"Destination conflict: {'yes' if plan.destination_conflict else 'no'}",
-        "Files:",
-    ]
-    for item in plan.files:
-        source = item.source.as_posix() if item.source is not None else "<derived>"
-        destination = item.destination.as_posix()
-        lines.append(f"  {source} -> {destination} [{plan.hashes[destination]}]")
-    return "\n".join(lines)
-
-
-def default_project_root() -> Path:
-    local_now = datetime.now().astimezone()
-    return Path("projects") / local_now.strftime("%Y") / local_now.strftime("%m")
 
 
 @review_app.command("medical")
@@ -765,7 +680,7 @@ def review_resume(
 def status(project_dir: ProjectDir) -> None:
     """In trạng thái dự án và hiệu lực của hai cổng duyệt."""
     try:
-        project = ProjectManifest.model_validate(
+        project = ProjectManifestV2.model_validate(
             read_yaml(project_dir / "project.yaml")
         )
     except (FileNotFoundError, TypeError, ValueError) as error:
@@ -774,7 +689,7 @@ def status(project_dir: ProjectDir) -> None:
 
     stale = False
     typer.echo(f"state={project.state.value}")
-    for kind in ReviewKind:
+    for kind in GateKind:
         record = latest_approval(project_dir, kind)
         if record is None:
             typer.echo(f"{kind.value}_approval=none")
@@ -802,7 +717,7 @@ def revision_create(
 
 
 def _record_approval(
-    approve: Callable[..., ReviewRecord],
+    approve: Callable[..., GateApprovalRecord],
     label: str,
     project_dir: Path,
     reviewer: str,
@@ -817,10 +732,10 @@ def _record_approval(
             raise typer.Exit(code=1)
     try:
         record = approve(project_dir, reviewer=reviewer, note=note)
-    except (FileNotFoundError, TypeError, ValueError) as error:
+    except (OSError, TypeError, ValueError) as error:
         typer.echo(str(error))
         raise typer.Exit(code=1) from error
-    typer.echo(f"Đã duyệt {label}: {record.id}")
+    typer.echo(f"Đã duyệt {label}: {record.reviewed_at.isoformat()}")
 
 
 def get_default_clients() -> list[Any]:

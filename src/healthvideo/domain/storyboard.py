@@ -186,7 +186,7 @@ class Storyboard(BaseModel):
     schema_version: str = "1.0"
     title: str
     scenes: tuple[Scene, ...] = Field(default_factory=tuple)
-    visual_budget_profile: VisualBudgetProfile = "legacy"
+    visual_budget_profile: VisualBudgetProfile = "explain_first_v1"
     visual_budget_override: VisualBudgetOverride | None = None
     format_profile: FormatProfile = "vertical_clip"
 

@@ -97,7 +97,7 @@ class ProjectManifestV2(BaseModel):
     schema_version: Literal["2.0"] = "2.0"
     slug: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
     language: str = "vi"
-    content_profile: Literal["legacy", "explain_first_v1"] = "legacy"
+    content_profile: Literal["explain_first_v1"] = "explain_first_v1"
     state: WorkflowState = WorkflowState.IDEA
     active_revision: str = Field(default="001", pattern=r"^[0-9]{3}$")
     side_state: SideStateRecord | None = None

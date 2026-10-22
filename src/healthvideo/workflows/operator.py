@@ -6,8 +6,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
-from healthvideo.domain.project import ProjectManifest
-from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
+from healthvideo.domain.project_v2 import WorkflowState
 from healthvideo.storage.files import read_yaml
 from healthvideo.storage.project_layout import ProjectLayout, resolve_project_layout
 from healthvideo.workflows.orientation import read_authoritative_orientation
@@ -16,7 +15,6 @@ from healthvideo.workflows.orientation import read_authoritative_orientation
 class OperatorActionKind(StrEnum):
     """The next human or system action presented by the thin `/pyh` router."""
 
-    MIGRATE_LEGACY = "migrate_legacy"
     CHOOSE_TOPIC = "choose_topic"
     ORIENTATION_RESEARCH = "orientation_research"
     AWAIT_EDITORIAL_DIRECTION = "await_editorial_direction"
@@ -86,17 +84,6 @@ def get_next_action(project_dir: Path) -> OperatorAction:
     """Return the next action from existing validated state without writing anything."""
     layout = _validated_layout(project_dir)
     manifest = layout.manifest
-    if isinstance(manifest, ProjectManifest):
-        return OperatorAction(
-            kind=OperatorActionKind.MIGRATE_LEGACY,
-            project_dir=layout.project_dir,
-            message="This legacy v1 project must be migrated before using `/pyh`.",
-            artifact=layout.project_dir / "project.yaml",
-            suggested_command=f"healthvideo project migrate {layout.project_dir}",
-        )
-    if not isinstance(manifest, ProjectManifestV2):
-        raise TypeError(f"Unsupported validated project manifest at {project_dir / 'project.yaml'}")
-
     reason_code = manifest.side_state.reason_code if manifest.side_state is not None else None
     explainer_reminder = ""
     if (

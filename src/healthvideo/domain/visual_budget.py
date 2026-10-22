@@ -70,7 +70,7 @@ class VisualBudgetOverride(BaseModel):
         return self
 
 
-VisualBudgetProfile = Literal["legacy", "m6_5_v1", "explain_first_v1"]
+VisualBudgetProfile = Literal["m6_5_v1", "explain_first_v1"]
 
 
 class VisualBudgetReport(BaseModel):
@@ -135,21 +135,20 @@ def _effective_bounds(storyboard: Storyboard) -> dict[VisualCategory, PercentRan
 
 
 def calculate_visual_budget(storyboard: Storyboard) -> VisualBudgetReport:
-    enabled = storyboard.visual_budget_profile != "legacy"
     bounds = _effective_bounds(storyboard)
     category_frames = {category: 0 for category in bounds}
     expected_start = 0
     for scene in storyboard.scenes:
-        if enabled and scene.start_frame != expected_start:
+        if scene.start_frame != expected_start:
             raise ValueError("M6.5 storyboard timeline must be contiguous from frame 0")
         category = classify_scene_visual(scene.visual)
         category_frames[category] = category_frames.get(category, 0) + scene.duration_frames
         expected_start = scene.start_frame + scene.duration_frames
 
     total_frames = expected_start if storyboard.scenes else 0
-    if enabled and total_frames <= 0:
+    if total_frames <= 0:
         raise ValueError("M6.5 storyboard timeline must contain at least one frame")
-    if enabled and sum(category_frames.values()) != total_frames:
+    if sum(category_frames.values()) != total_frames:
         raise ValueError("M6.5 storyboard timeline must be contiguous from frame 0")
 
     basis_points = {
@@ -181,13 +180,13 @@ def calculate_visual_budget(storyboard: Storyboard) -> VisualBudgetReport:
         category_frames=category_frames,
         category_basis_points=basis_points,
         effective_bounds=bounds,
-        passed=True if not enabled else within_bounds,
+        passed=within_bounds,
     )
 
 
 def validate_visual_budget(storyboard: Storyboard) -> VisualBudgetReport:
     report = calculate_visual_budget(storyboard)
-    if storyboard.visual_budget_profile != "legacy" and not report.passed:
+    if not report.passed:
         failures = []
         for category, bound in report.effective_bounds.items():
             frames = report.category_frames[category]

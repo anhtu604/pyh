@@ -4,15 +4,15 @@ from pydantic import ValidationError
 from healthvideo.domain.storyboard import Storyboard, VisualAssetRef
 
 
-def test_storyboard_defaults_to_legacy_visual_budget() -> None:
+def test_storyboard_defaults_to_explain_first_visual_budget() -> None:
     board = Storyboard.model_validate({"title": "Legacy", "scenes": []})
 
-    assert board.visual_budget_profile == "legacy"
+    assert board.visual_budget_profile == "explain_first_v1"
     assert board.visual_budget_override is None
     assert board.model_dump(exclude_defaults=True) == {"title": "Legacy"}
 
 
-def test_storyboard_rejects_override_with_legacy_profile() -> None:
+def test_storyboard_rejects_override_with_explain_first_profile() -> None:
     with pytest.raises(ValidationError, match="m6_5_v1"):
         Storyboard.model_validate(
             {
@@ -51,7 +51,7 @@ def test_m65_ai_clip_accepts_exact_composition_durations(
     assert board.scenes[0].duration_frames == duration_frames
 
 
-def test_m65_ai_clip_rejects_non_provider_duration_but_legacy_keeps_it() -> None:
+def test_m65_ai_clip_rejects_non_provider_duration_but_explain_first_keeps_it() -> None:
     scene = {
         "id": "S01",
         "start_frame": 0,
@@ -68,8 +68,8 @@ def test_m65_ai_clip_rejects_non_provider_duration_but_legacy_keeps_it() -> None
             }
         )
 
-    legacy = Storyboard.model_validate({"title": "Legacy", "scenes": [scene]})
-    assert legacy.scenes[0].duration_frames == 121
+    explain_first = Storyboard.model_validate({"title": "Legacy", "scenes": [scene]})
+    assert explain_first.scenes[0].duration_frames == 121
 
 
 def test_ai_clip_visual_asset_role_cannot_have_mascot_pose() -> None:

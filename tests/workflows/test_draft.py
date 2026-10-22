@@ -26,7 +26,6 @@ NOW = datetime(2026, 9, 17, tzinfo=UTC)
 def _evidence_ready(tmp_path: Path) -> Path:
     project = create_project_v2(tmp_path, "draft-test", "Draft test", now=NOW)
     manifest = read_yaml(project / "project.yaml")
-    manifest["content_profile"] = "legacy"
     write_yaml_atomic(project / "project.yaml", manifest)
     select_topic(project, TopicCard.model_validate(read_yaml(SOURCE / "topic/card.yaml")))
     complete_orientation_fixture(project, now=NOW)
@@ -53,7 +52,9 @@ def _evidence_ready(tmp_path: Path) -> Path:
         [SourceRecord.model_validate(item) for item in ledger["records"]],
     )
     asset_dir = project / "revisions/001/assets"
-    shutil.copy2(SOURCE / "assets/evidence-r01.svg", asset_dir)
+    for asset in (SOURCE / "assets").iterdir():
+        if asset.is_file():
+            shutil.copy2(asset, asset_dir)
     return project
 
 
@@ -116,13 +117,13 @@ def test_submit_draft_at_draft_ready_replaces_storyboard(tmp_path: Path) -> None
     project = _evidence_ready(tmp_path)
     assert CliRunner().invoke(app, _draft_args(project)).exit_code == 0
     board = read_yaml(SOURCE / "storyboard/storyboard.yaml")
-    board["scenes"][0]["narration"] += " Revised draft."
+    board["scenes"][1]["anatomy"]["motion"] += " Revised draft."
     board_file = tmp_path / "revised.yaml"
     write_yaml_atomic(board_file, board)
     submit_draft(project, SOURCE / "script/script.yaml", board_file,
                  SOURCE / "assets/asset-manifest.yaml")
     assert _state(project) is WorkflowState.DRAFT_READY
-    assert read_yaml(project / "revisions/001/storyboard/storyboard.yaml")["scenes"][0]["narration"] == board["scenes"][0]["narration"]
+    assert read_yaml(project / "revisions/001/storyboard/storyboard.yaml")["scenes"][1]["anatomy"]["motion"] == board["scenes"][1]["anatomy"]["motion"]
 
 
 @pytest.mark.parametrize("medical", [False, True])
@@ -133,8 +134,8 @@ def test_unsupported_anatomy_subject_refused_before_submission(tmp_path: Path, m
     if medical:
         assert CliRunner().invoke(app, _draft_args(project)).exit_code == 0
     board = read_yaml(SOURCE / "storyboard/storyboard.yaml")
-    board["scenes"][0]["visual"] = "anatomy_animation"
-    board["scenes"][0]["anatomy"] = {"subject": "kidney", "state": "normal", "motion": "pulse"}
+    board["scenes"][1]["visual"] = "anatomy_animation"
+    board["scenes"][1]["anatomy"] = {"subject": "kidney", "state": "normal", "motion": "pulse"}
     board_file = (project / "revisions/001/storyboard/storyboard.yaml" if medical
                   else tmp_path / "unsupported.yaml")
     write_yaml_atomic(board_file, board)

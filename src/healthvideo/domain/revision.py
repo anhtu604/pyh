@@ -15,7 +15,7 @@ class RevisionRecord(BaseModel):
 
     Written once as ``workflow.yaml`` at the root of a newly promoted
     revision. The root revision ``001`` of a project has no ``RevisionRecord``:
-    it is created directly (by ``project new`` or ``project migrate``), not by
+    it is created directly (by ``operator new``), not by
     the revision service this record belongs to.
     """
 

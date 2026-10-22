@@ -3,7 +3,6 @@ import shutil
 import wave
 from datetime import UTC, datetime
 from pathlib import Path
-from uuid import UUID
 
 import pytest
 
@@ -14,7 +13,6 @@ from healthvideo.domain.asset_manifest import (
     load_asset_manifest,
     validate_asset_manifest,
 )
-from healthvideo.domain.brand import LogoVariant
 from healthvideo.domain.gate_review import GateKind
 from healthvideo.domain.hook_outro import OUTRO_TEXT
 from healthvideo.domain.invalidation import (
@@ -22,10 +20,8 @@ from healthvideo.domain.invalidation import (
     InvalidationLevel,
     evaluate_invalidation,
 )
-from healthvideo.domain.project import ProjectState, transition
 from healthvideo.domain.project_v2 import WorkflowState
 from healthvideo.domain.stage import StageManifest, StageStatus
-from healthvideo.domain.state_graph import TransitionContext, transition_v2
 from healthvideo.domain.storyboard import Storyboard
 from healthvideo.domain.visual_budget import calculate_visual_budget
 from healthvideo.render.timing import retime_storyboard
@@ -39,24 +35,21 @@ from healthvideo.video_ai.base import VeoRequest, VeoResult, VideoProbeResult
 from healthvideo.video_ai.veo import GoogleVeoTransport
 from healthvideo.workflows.ai_clips import AIClipRights, generate_ai_clip
 from healthvideo.workflows.gate_review import approve_gate
-from healthvideo.workflows.hook_outro import author_hook_outro
-from healthvideo.workflows.migrate import migrate_project, plan_migration
 from healthvideo.workflows.package import package_project
 from healthvideo.workflows.produce import produce_project
 from healthvideo.workflows.review_html import render_medical_packet, render_video_packet
 from healthvideo.workflows.visual_assets import (
     bind_chart_asset,
-    create_brand_logo_asset,
     create_evidence_chart,
 )
 from tests.helpers import (
     _advance_v2_state,
+    align_fixture_script,
     create_long_form_project_fixture,
     create_v2_project_fixture,
 )
 
 GOLDEN_PROJECTS = [
-    Path("tests/fixtures/golden-project"),
     Path("tests/fixtures/golden-project-v2"),
 ]
 
@@ -101,7 +94,7 @@ def test_video_review_recomputes_measured_runtime_budget_without_changing_medica
     write_yaml_atomic(board_path, raw)
     approved = Storyboard.model_validate(raw)
     medical = render_medical_packet(revision)
-    runtime, record = retime_storyboard(approved, {"L01": 1000})
+    runtime, record = retime_storyboard(approved, {scene.script_line_id: 1000 for scene in approved.scenes})
     (revision / "renders").mkdir(exist_ok=True)
     (revision / "renders/scene-timing.json").write_text(json.dumps(record), encoding="utf-8")
     (revision / "reviews").mkdir(exist_ok=True)
@@ -112,7 +105,7 @@ def test_video_review_recomputes_measured_runtime_budget_without_changing_medica
     packet = render_video_packet(revision)
 
     assert "QA production: khớp report tái tính" in packet
-    assert "Tổng timeline: 39 frame" in packet
+    assert "Tổng timeline: 234 frame" in packet
     assert render_medical_packet(revision) == medical
 
 
@@ -120,7 +113,7 @@ def test_video_review_clip_source_spans_follow_measured_runtime(tmp_path: Path) 
     project = create_long_form_project_fixture(tmp_path)
     revision = project / "revisions/001"
     board = Storyboard.model_validate(read_yaml(revision / "storyboard/storyboard.yaml"))
-    _, record = retime_storyboard(board, {f"L{i:02}": 30000 for i in range(1, 7)})
+    _, record = retime_storyboard(board, {scene.script_line_id: 30000 for scene in board.scenes})
     (revision / "renders").mkdir(exist_ok=True)
     (revision / "renders/scene-timing.json").write_text(json.dumps(record), encoding="utf-8")
     (revision / "renders/render-manifest.json").write_text(json.dumps({
@@ -139,12 +132,14 @@ def test_m64_hook_outro_through_both_manual_gates_and_package(tmp_path: Path) ->
     revision = project / "revisions/001"
     board_path = revision / "storyboard/storyboard.yaml"
     board = read_yaml(board_path)
-    board["scenes"][0]["duration_frames"] = 1350
     write_yaml_atomic(board_path, board)
-    author_hook_outro(project, duration_frames=90)
-    create_brand_logo_asset(project, scene_id="OUTRO", asset_name="pyh-logo", variant=LogoVariant.MONOGRAM)
+    script_path = revision / "script/script.yaml"
+    script = read_yaml(script_path)
+    script["format_profile"] = "hook_outro_v1"
+    write_yaml_atomic(script_path, script)
     packet = render_medical_packet(revision)
-    assert "Hook:" in packet and "Outro:" in packet and "pyh-logo.svg" in packet
+    assert "test-logo.svg" in packet
+    assert read_yaml(revision / "script/script.yaml")["lines"][-1]["text"] == OUTRO_TEXT
     logo = next(asset for asset in read_yaml(revision / "assets/asset-manifest.yaml")["assets"]
                 if asset.get("storyboard_role") == "brand")
     assert logo["sha256"] in packet and logo["license"] in packet
@@ -169,9 +164,9 @@ def test_m64_hook_outro_through_both_manual_gates_and_package(tmp_path: Path) ->
 
 
 def test_m65_zero_ai_budget_through_chart_outro_gates_and_package(tmp_path: Path) -> None:
-    before = _snapshot_tree(GOLDEN_PROJECTS[1])
+    before = _snapshot_tree(GOLDEN_PROJECTS[0])
     project = tmp_path / "golden-project-v2"
-    shutil.copytree(GOLDEN_PROJECTS[1], project)
+    shutil.copytree(GOLDEN_PROJECTS[0], project)
     _advance_v2_state(project, WorkflowState.AWAITING_MEDICAL_REVIEW)
     revision = project / "revisions/001"
     ledger_path = revision / "evidence/ledger.yaml"
@@ -182,16 +177,8 @@ def test_m65_zero_ai_budget_through_chart_outro_gates_and_package(tmp_path: Path
     ]
     write_yaml_atomic(ledger_path, ledger)
     board_path = revision / "storyboard/storyboard.yaml"
-    board = read_yaml(board_path)
-    board["visual_budget_profile"] = "m6_5_v1"
-    start = 0
-    for scene in board["scenes"]:
-        chart_crop = scene["visual"] in {"chart", "evidence_highlight"}
-        scene["start_frame"], scene["duration_frames"] = start, 225 if chart_crop else 315
-        start += scene["duration_frames"]
+    board = _m65_golden_board(revision)
     write_yaml_atomic(board_path, board)
-    author_hook_outro(project, duration_frames=90)
-    create_brand_logo_asset(project, scene_id="OUTRO", asset_name="pyh-logo", variant=LogoVariant.MONOGRAM)
     chart = create_evidence_chart(
         project, claim_id="C01", datum_id="bp-count", asset_name="chart-count",
         license="synthetic_test_only", rights_basis="fixture nội bộ", creator="repository_fixture",
@@ -243,15 +230,15 @@ def test_m65_zero_ai_budget_through_chart_outro_gates_and_package(tmp_path: Path
     assert script["lines"][0]["text"] in caption and OUTRO_TEXT not in caption
     assert not (package / "ai-disclosure.json").exists()
     assert read_yaml(project / "project.yaml")["state"] == "packaged"
-    assert _snapshot_tree(GOLDEN_PROJECTS[1]) == before
+    assert _snapshot_tree(GOLDEN_PROJECTS[0]) == before
 
 
 def test_m66_ai_clip_through_both_manual_gates_and_disclosed_package(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    before = _snapshot_tree(GOLDEN_PROJECTS[1])
+    before = _snapshot_tree(GOLDEN_PROJECTS[0])
     project = tmp_path / "golden-project-v2"
-    shutil.copytree(GOLDEN_PROJECTS[1], project)
+    shutil.copytree(GOLDEN_PROJECTS[0], project)
     _advance_v2_state(project, WorkflowState.AWAITING_MEDICAL_REVIEW)
     revision = project / "revisions/001"
     ledger_path = revision / "evidence/ledger.yaml"
@@ -262,17 +249,8 @@ def test_m66_ai_clip_through_both_manual_gates_and_disclosed_package(
     ]
     write_yaml_atomic(ledger_path, ledger)
     board_path = revision / "storyboard/storyboard.yaml"
-    board = read_yaml(board_path)
-    board["visual_budget_profile"] = "m6_5_v1"
-    board["scenes"][1]["visual"] = "ai_clip"
-    durations = {"ai_clip": 180, "chart": 225, "evidence_highlight": 225, "whiteboard": 390}
-    start = 0
-    for scene in board["scenes"]:
-        scene["start_frame"], scene["duration_frames"] = start, durations[scene["visual"]]
-        start += scene["duration_frames"]
+    board = _m65_golden_board(revision, ai=True)
     write_yaml_atomic(board_path, board)
-    author_hook_outro(project, duration_frames=90)
-    create_brand_logo_asset(project, scene_id="OUTRO", asset_name="pyh-logo", variant=LogoVariant.MONOGRAM)
     create_evidence_chart(
         project, claim_id="C01", datum_id="bp-count", asset_name="chart-count",
         license="synthetic_test_only", rights_basis="fixture nội bộ", creator="repository_fixture",
@@ -364,76 +342,19 @@ def test_m66_ai_clip_through_both_manual_gates_and_disclosed_package(
     ]
     assert read_yaml(project / "project.yaml")["state"] == "packaged"
     assert len(provider_requests) == 1
-    assert _snapshot_tree(GOLDEN_PROJECTS[1]) == before
+    assert _snapshot_tree(GOLDEN_PROJECTS[0]) == before
 
 
-def test_v1_and_v2_golden_are_available_from_first_m1_task() -> None:
-    layouts = [resolve_project_layout(path) for path in GOLDEN_PROJECTS]
-
-    assert [layout.schema_version for layout in layouts] == ["1.0", "2.0"]
-    for layout in layouts:
-        assert (layout.artifact_root / "evidence" / "ledger.yaml").is_file()
-        assert (layout.artifact_root / "script" / "script.yaml").is_file()
-        assert (layout.artifact_root / "storyboard" / "storyboard.yaml").is_file()
 
 
-def test_dual_golden_keeps_v1_linear_and_advances_v2_with_its_topic_card() -> None:
-    v1_layout, v2_layout = [resolve_project_layout(path) for path in GOLDEN_PROJECTS]
-    v1_project = v1_layout.manifest
-    v2_project = v2_layout.manifest
-    context = TransitionContext(
-        active_revision="001",
-        current_input_hash="0" * 64,
-        validated_artifacts=frozenset({"topic/card.yaml"}),
-    )
-
-    assert transition(v1_project, ProjectState.PRODUCING).state is (
-        ProjectState.PRODUCING
-    )
-    assert transition_v2(v2_project, WorkflowState.TOPIC_SELECTED, context).state is (
-        WorkflowState.TOPIC_SELECTED
-    )
 
 
-def test_dual_golden_keeps_v1_side_state_free_while_v2_pauses_and_resumes() -> None:
-    v1_layout, v2_layout = [resolve_project_layout(path) for path in GOLDEN_PROJECTS]
-    v1_project = v1_layout.manifest
-    v2_project = v2_layout.manifest
-    context = TransitionContext(
-        active_revision="001",
-        current_input_hash="0" * 64,
-        validated_artifacts=frozenset({"topic/card.yaml"}),
-    )
-
-    assert not hasattr(v1_project, "side_state")
-    assert v2_project.side_state is None
-
-    paused = transition_v2(
-        v2_project,
-        WorkflowState.AWAITING_BROWSER_LOGIN,
-        context,
-        reason_code="browser_session_expired",
-        resume_state=WorkflowState.IDEA,
-        entered_at=GOLDEN_ENTERED_AT,
-    )
-    assert paused.state is WorkflowState.AWAITING_BROWSER_LOGIN
-    assert paused.side_state is not None
-    assert paused.side_state.resume_state is WorkflowState.IDEA
-    assert paused.side_state.entered_at == GOLDEN_ENTERED_AT
-
-    resumed = transition_v2(paused, WorkflowState.IDEA, context)
-    assert resumed.state is WorkflowState.IDEA
-    assert resumed.side_state is None
-
-    assert transition(v1_project, ProjectState.PRODUCING).state is (
-        ProjectState.PRODUCING
-    )
 
 
 def test_dual_golden_appends_a_stage_manifest_without_touching_the_tracked_fixture(
     tmp_path: Path,
 ) -> None:
-    v2_source = GOLDEN_PROJECTS[1]
+    v2_source = GOLDEN_PROJECTS[0]
     before = {
         path: path.read_bytes() for path in v2_source.rglob("*") if path.is_file()
     }
@@ -469,7 +390,7 @@ def test_dual_golden_appends_a_stage_manifest_without_touching_the_tracked_fixtu
 
 
 def test_dual_golden_asset_manifest_loads_and_validates_without_rewrite() -> None:
-    v2_source = GOLDEN_PROJECTS[1]
+    v2_source = GOLDEN_PROJECTS[0]
     manifest_path = v2_source / "revisions" / "001" / "assets" / "asset-manifest.yaml"
     before = {
         path: path.read_bytes() for path in v2_source.rglob("*") if path.is_file()
@@ -488,7 +409,7 @@ def test_dual_golden_asset_manifest_loads_and_validates_without_rewrite() -> Non
 def test_dual_golden_creates_a_revision_without_touching_the_tracked_fixture(
     tmp_path: Path,
 ) -> None:
-    v2_source = GOLDEN_PROJECTS[1]
+    v2_source = GOLDEN_PROJECTS[0]
     before = {
         path: path.read_bytes() for path in v2_source.rglob("*") if path.is_file()
     }
@@ -540,7 +461,7 @@ def test_dual_golden_invalidation_engine_only_evaluates_v2_assets() -> None:
         if path.is_file()
     }
 
-    v2_source = GOLDEN_PROJECTS[1]
+    v2_source = GOLDEN_PROJECTS[0]
     manifest_path = v2_source / "revisions" / "001" / "assets" / "asset-manifest.yaml"
     asset_manifest = AssetManifest.model_validate(read_yaml(manifest_path))
 
@@ -572,63 +493,8 @@ def test_dual_golden_invalidation_engine_only_evaluates_v2_assets() -> None:
     assert after == before
 
 
-def test_dual_golden_migration_plan_matches_the_v2_fixture_without_writing() -> None:
-    before = {
-        path: path.read_bytes()
-        for source in GOLDEN_PROJECTS
-        for path in source.rglob("*")
-        if path.is_file()
-    }
-
-    plan = plan_migration(GOLDEN_PROJECTS[0])
-
-    expected_destinations = {
-        "project.yaml",
-        "revisions/001/author/brief.yaml",
-        "revisions/001/evidence/ledger.yaml",
-        "revisions/001/script/script.yaml",
-        "revisions/001/storyboard/storyboard.yaml",
-        "revisions/001/assets/evidence-r01.svg",
-        "revisions/001/topic/card.yaml",
-        "revisions/001/assets/asset-manifest.yaml",
-    }
-    assert {item.destination.as_posix() for item in plan.files} == expected_destinations
-    assert plan.destination == GOLDEN_PROJECTS[1]
-    assert plan.destination_conflict is True
-
-    after = {
-        path: path.read_bytes()
-        for source in GOLDEN_PROJECTS
-        for path in source.rglob("*")
-        if path.is_file()
-    }
-    assert after == before
 
 
-def test_dual_golden_accepts_a_newly_migrated_v1_copy(tmp_path: Path) -> None:
-    source = tmp_path / "golden-project"
-    shutil.copytree(GOLDEN_PROJECTS[0], source)
-    source_before = {
-        path.relative_to(source): path.read_bytes()
-        for path in source.rglob("*")
-        if path.is_file()
-    }
-
-    migrated = migrate_project(
-        source,
-        now=GOLDEN_ENTERED_AT,
-        migration_id=UUID("22222222-2222-2222-2222-222222222222"),
-    )
-
-    v1_layout = resolve_project_layout(source)
-    v2_layout = resolve_project_layout(migrated)
-    assert v1_layout.schema_version == "1.0"
-    assert v2_layout.schema_version == "2.0"
-    assert {
-        path.relative_to(source): path.read_bytes()
-        for path in source.rglob("*")
-        if path.is_file()
-    } == source_before
 
 
 def _snapshot_tree(root: Path) -> dict[Path, bytes]:
@@ -642,7 +508,7 @@ def _snapshot_tree(root: Path) -> dict[Path, bytes]:
 def test_dual_golden_medical_gate_approves_on_a_copy_without_touching_the_tracked_fixture(
     tmp_path: Path,
 ) -> None:
-    v2_source = GOLDEN_PROJECTS[1]
+    v2_source = GOLDEN_PROJECTS[0]
     before = _snapshot_tree(v2_source)
     copy_dir = tmp_path / "copy"
     shutil.copytree(v2_source, copy_dir)
@@ -664,7 +530,7 @@ def test_v2_golden_copy_produces_and_packages_without_touching_either_fixture(
         for source in GOLDEN_PROJECTS
     }
     project_dir = tmp_path / "golden-project-v2"
-    shutil.copytree(GOLDEN_PROJECTS[1], project_dir)
+    shutil.copytree(GOLDEN_PROJECTS[0], project_dir)
     revision = project_dir / "revisions/001"
     board_path = revision / "storyboard/storyboard.yaml"
     board = read_yaml(board_path)
@@ -704,3 +570,30 @@ def _write_golden_video(argv: list[str]) -> int:
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_bytes(b"golden-v2-mp4")
     return 0
+
+
+def _m65_golden_board(revision: Path, *, ai: bool = False) -> dict:
+    board = read_yaml(revision / "storyboard/storyboard.yaml")
+    highlight = board["scenes"][0]["evidence_highlight"]
+    board["visual_budget_profile"] = "m6_5_v1"
+    for scene in board["scenes"]:
+        scene.pop("anatomy", None)
+        scene.pop("evidence_highlight", None)
+        scene["visual"] = "whiteboard"
+        if scene["id"] == "S03":
+            scene.update(visual="evidence_highlight", evidence_highlight=highlight,
+                         claim_id="C01", source_marker="[1]")
+        elif scene["id"] == "S04":
+            scene["visual"] = "chart"
+        elif scene["id"] == "S02" and ai:
+            scene["visual"] = "ai_clip"
+        elif scene["id"] == "OUTRO":
+            scene["visual"] = "brand_outro"
+        if scene["id"] != "OUTRO":
+            scene["narration"] = f"{scene['id']}. {scene['narration']}"
+        durations = {"chart": 225, "evidence_highlight": 225,
+                     "ai_clip": 180, "whiteboard": 390 if ai else 315,
+                     "brand_outro": 390 if ai else 90}
+        scene["duration_frames"] = durations[scene["visual"]]
+    align_fixture_script(revision, board)
+    return board

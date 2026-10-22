@@ -12,7 +12,6 @@ from healthvideo.storage.files import read_yaml
 from healthvideo.storage.revisions import create_revision
 
 GOLDEN_V2 = Path("tests/fixtures/golden-project-v2")
-GOLDEN_V1 = Path("tests/fixtures/golden-project")
 FROZEN_NOW = datetime(2026, 9, 10, 8, 0, tzinfo=UTC)
 
 
@@ -73,14 +72,6 @@ def test_create_revision_writes_an_immutable_workflow_record(tmp_path: Path) -> 
     assert record.parent_revision == "001"
     assert record.reason == "Sửa luận điểm"
     assert record.created_at == FROZEN_NOW
-
-
-def test_create_revision_rejects_a_v1_project(tmp_path: Path) -> None:
-    project = tmp_path / "golden-project"
-    shutil.copytree(GOLDEN_V1, project)
-
-    with pytest.raises(ValueError, match="migrate"):
-        create_revision(project, "Sửa luận điểm", now=FROZEN_NOW)
 
 
 def test_create_revision_cleans_up_staging_when_copy_fails(

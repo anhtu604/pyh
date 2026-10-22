@@ -13,7 +13,7 @@ from healthvideo.tts.silent import SilentTTS
 from healthvideo.workflows.gate_review import approve_gate
 from healthvideo.workflows.package import package_project
 from healthvideo.workflows.produce import produce_project
-from tests.helpers import create_project_fixture, create_v2_project_fixture
+from tests.helpers import create_v2_project_fixture
 from tests.workflows.test_gate_review import _author_ai_clip, _create_ai_project
 from tests.workflows.test_produce import CountingSilent
 
@@ -122,15 +122,6 @@ ZERO_AI_PAYLOAD = {
 }
 
 
-def test_v1_package_keeps_exact_legacy_payload_without_disclosure(tmp_path: Path) -> None:
-    output = package_project(
-        create_project_fixture(tmp_path, state="approved_to_publish")
-    )
-
-    assert {path.name for path in output.iterdir()} == ZERO_AI_PAYLOAD
-    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
-    assert set(manifest["payload_sha256"]) == ZERO_AI_PAYLOAD - {"manifest.json"}
-    assert not (output / "ai-disclosure.json").exists()
 
 
 def test_v2_zero_ai_package_keeps_exact_payload_without_disclosure(tmp_path: Path) -> None:
@@ -147,17 +138,6 @@ def test_v2_ai_package_adds_hashed_manual_disclosure_without_prompt(
 ) -> None:
     project_dir = _create_ai_project(tmp_path)
     _author_ai_clip(project_dir, decorative=decorative)
-    revision = project_dir / "revisions/001"
-    board_path = revision / "storyboard/storyboard.yaml"
-    board = read_yaml(board_path)
-    for scene in board["scenes"][:2]:
-        scene["script_line_id"] = "L01"
-    board["scenes"][-1]["script_line_id"] = "L04"
-    write_yaml_atomic(board_path, board)
-    script_path = revision / "script/script.yaml"
-    script = read_yaml(script_path)
-    script["lines"] = [script["lines"][0], script["lines"][3]]
-    write_yaml_atomic(script_path, script)
     approve_gate(project_dir, GateKind.MEDICAL, reviewer="BS Nguyễn Văn An", now=NOW)
     produce_project(project_dir, CountingSilent(project_dir), _fake_renderer)
     approve_gate(project_dir, GateKind.VIDEO, reviewer="BS Nguyễn Văn An", now=NOW)
@@ -194,7 +174,6 @@ def _v2_awaiting_video_review_project(tmp_path: Path) -> Path:
     )
     storyboard_path = _revision_root(project_dir) / "storyboard" / "storyboard.yaml"
     storyboard = read_yaml(storyboard_path)
-    storyboard["scenes"][0]["duration_frames"] = 1350
     write_yaml_atomic(storyboard_path, storyboard)
     approve_gate(
         project_dir,

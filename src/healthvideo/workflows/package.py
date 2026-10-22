@@ -18,9 +18,7 @@ from pydantic import BaseModel
 from healthvideo.domain.asset_manifest import AssetKind, AssetManifest
 from healthvideo.domain.evidence import EvidenceClaim, SourceRecord
 from healthvideo.domain.gate_review import GateApprovalRecord, GateKind
-from healthvideo.domain.project import ProjectManifest, ProjectState
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
-from healthvideo.domain.review import ReviewKind, ReviewRecord
 from healthvideo.domain.script import Script
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
 from healthvideo.domain.storyboard import Storyboard
@@ -29,7 +27,6 @@ from healthvideo.render.run import (
     OUTPUT_NAME,
     PRODUCTION_ARTIFACT,
     RENDER_INPUT_NAME,
-    production_run_dir,
 )
 from healthvideo.storage.files import (
     canonical_json_hash,
@@ -48,7 +45,6 @@ from healthvideo.workflows.gate_review import (
     medical_reviewed_paths,
     video_reviewed_paths,
 )
-from healthvideo.workflows.review import ensure_approval_current
 
 LedgerEntry = TypeVar("LedgerEntry", bound=BaseModel)
 
@@ -79,82 +75,7 @@ def package_project(project_dir: Path) -> Path:
     leaves the machine without an auditable doctor approval behind it.
     """
     layout = resolve_project_layout(project_dir)
-    if layout.schema_version == "2.0":
-        return _package_v2(layout)
-    return _package_v1(layout)
-
-
-def _package_v1(layout: ProjectLayout) -> Path:
-    project_dir = layout.project_dir
-    project = layout.manifest
-    assert isinstance(project, ProjectManifest)
-    if project.state is not ProjectState.APPROVED_TO_PUBLISH:
-        raise ValueError(
-            "Packaging requires project state "
-            f"{ProjectState.APPROVED_TO_PUBLISH.value}, not {project.state.value}"
-        )
-    try:
-        medical_approval = ensure_approval_current(
-            project_dir, project, ReviewKind.MEDICAL
-        )
-    except FileNotFoundError as error:
-        raise FileNotFoundError(
-            "Packaging requires a medical approval record; "
-            "run 'healthvideo review medical'"
-        ) from error
-    try:
-        video_approval = ensure_approval_current(
-            project_dir, project, ReviewKind.VIDEO
-        )
-    except FileNotFoundError as error:
-        raise FileNotFoundError(
-            "Packaging requires a video approval record; "
-            "run 'healthvideo review video'"
-        ) from error
-
-    ledger, script, _storyboard = _approved_medical_snapshots(
-        project_dir, medical_approval
-    )
-
-    run_dir = _active_run_dir(project_dir, project)
-    video = run_dir / OUTPUT_NAME
-    if not video.is_file():
-        raise FileNotFoundError(f"Approved video is missing: {video}")
-
-    render_input_path = run_dir / RENDER_INPUT_NAME
-    render_input_data = json.loads(render_input_path.read_text(encoding="utf-8"))
-    _require_approved_hash(
-        video_approval,
-        "render_input",
-        canonical_json_hash(render_input_data),
-    )
-    render_input = RenderInput.model_validate(render_input_data)
-    citations = _citations(script, ledger, render_input)
-
-    publish_dir = project_dir / PUBLISH_DIRECTORY
-    staging_dir = Path(mkdtemp(prefix=f".{project.slug}.package-", dir=project_dir))
-    try:
-        shutil.copy2(video, staging_dir / OUTPUT_NAME)
-        shutil.copy2(render_input_path, staging_dir / RENDER_INPUT_NAME)
-        _validate_staged_video_artifacts(staging_dir, video_approval)
-        write_text_atomic(staging_dir / CAPTION_NAME, _caption(script, citations))
-        write_text_atomic(staging_dir / SOURCES_NAME, _sources(script, citations))
-        write_text_atomic(
-            staging_dir / PACKAGE_MANIFEST_NAME,
-            _manifest_json(
-                project=project,
-                script=script,
-                medical_approval=medical_approval,
-                video_approval=video_approval,
-                staging_dir=staging_dir,
-                citations=citations,
-            ),
-        )
-        replace_directory_atomic(staging_dir, publish_dir)
-    except Exception:
-        shutil.rmtree(staging_dir, ignore_errors=True)
-        raise
-    return publish_dir
+    return _package_v2(layout)
 
 
 def _package_v2(layout: ProjectLayout) -> Path:
@@ -368,45 +289,8 @@ def _validate_staged_v2_video_artifacts(
         )
 
 
-def _approved_medical_snapshots(
-    project_dir: Path, approval: ReviewRecord
-) -> tuple[dict[str, Any], Script, Storyboard]:
-    """Capture medical inputs once and prove each snapshot is doctor-approved."""
-    ledger = read_yaml(project_dir / "evidence" / "ledger.yaml")
-    script_data = read_yaml(project_dir / "script" / "script.yaml")
-    storyboard_data = read_yaml(project_dir / "storyboard" / "storyboard.yaml")
-    for name, data in (
-        ("evidence", ledger),
-        ("script", script_data),
-        ("storyboard", storyboard_data),
-    ):
-        _require_approved_hash(approval, name, canonical_json_hash(data))
-    return (
-        ledger,
-        Script.model_validate(script_data),
-        Storyboard.model_validate(storyboard_data),
-    )
-
-
-def _validate_staged_video_artifacts(
-    staging_dir: Path, approval: ReviewRecord
-) -> None:
-    """Reject package bytes that no longer match the captured video approval."""
-    staged_video = staging_dir / OUTPUT_NAME
-    _require_approved_hash(approval, "video", sha256_file(staged_video), staged=True)
-    staged_render_input = json.loads(
-        (staging_dir / RENDER_INPUT_NAME).read_text(encoding="utf-8")
-    )
-    _require_approved_hash(
-        approval,
-        "render_input",
-        canonical_json_hash(staged_render_input),
-        staged=True,
-    )
-
-
 def _require_approved_hash(
-    approval: ReviewRecord | GateApprovalRecord,
+    approval: GateApprovalRecord,
     name: str,
     actual_hash: str,
     *,
@@ -418,16 +302,6 @@ def _require_approved_hash(
         raise ValueError(
             f"{prefix}{name} does not match the approved {approval.kind.value} artifact"
         )
-
-
-def _active_run_dir(project_dir: Path, project: ProjectManifest) -> Path:
-    input_hash = project.artifact_hashes.get(PRODUCTION_ARTIFACT)
-    if input_hash is None:
-        raise FileNotFoundError(
-            "Packaging needs an active production run in "
-            f"project.yaml.artifact_hashes.{PRODUCTION_ARTIFACT}"
-        )
-    return production_run_dir(project_dir, input_hash)
 
 
 def _citations(
@@ -572,10 +446,10 @@ def _source_fields(record: SourceRecord) -> list[str]:
 
 def _manifest_json(
     *,
-    project: ProjectManifest | ProjectManifestV2,
+    project: ProjectManifestV2,
     script: Script,
-    medical_approval: ReviewRecord | GateApprovalRecord,
-    video_approval: ReviewRecord | GateApprovalRecord,
+    medical_approval: GateApprovalRecord,
+    video_approval: GateApprovalRecord,
     staging_dir: Path,
     citations: Mapping[str, list[SourceRecord]],
 ) -> str:
@@ -615,7 +489,7 @@ def _manifest_json(
 
 
 def _approval_binding(
-    approval: ReviewRecord | GateApprovalRecord,
+    approval: GateApprovalRecord,
 ) -> dict[str, Any]:
     """Make approval identity distinct from hashes of package payload bytes."""
     binding = {
@@ -624,6 +498,4 @@ def _approval_binding(
         "reviewed_at": approval.reviewed_at.isoformat(),
         "artifact_hashes": approval.artifact_hashes,
     }
-    if isinstance(approval, ReviewRecord):
-        binding["id"] = str(approval.id)
     return binding

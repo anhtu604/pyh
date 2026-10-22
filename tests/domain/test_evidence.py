@@ -144,20 +144,7 @@ def test_search_log_and_candidate_models() -> None:
     assert selection.decision == "included"
 
 
-def test_existing_golden_ledgers_validate_backward_compatibility() -> None:
-    # v1 golden ledger
-    v1_path = Path("tests/fixtures/golden-project/evidence/ledger.yaml")
-    assert v1_path.is_file()
-    v1_data = read_yaml(v1_path)
-    for record in v1_data["records"]:
-        parsed_record = SourceRecord.model_validate(record)
-        assert parsed_record.id.startswith("R")
-        assert parsed_record.retraction_status == "unverified"
-    for claim in v1_data["claims"]:
-        parsed_claim = EvidenceClaim.model_validate(claim)
-        assert parsed_claim.id.startswith("C")
-        assert parsed_claim.certainty == "unrated"
-
+def test_existing_v2_golden_ledger_validates() -> None:
     # v2 golden ledger
     v2_path = Path("tests/fixtures/golden-project-v2/revisions/001/evidence/ledger.yaml")
     assert v2_path.is_file()

@@ -1,9 +1,4 @@
-"""v2 medical/video gate: hash the artifacts a gate covers, approve, reject, resume.
-
-Mirrors `workflows/review.py` (v1) but reads the v2 layout (`revisions/<id>/...`),
-enforces the semantic asset manifest before a medical approval, and adds a
-reject/resume path v1 never had. v1 stays untouched; this module never imports it.
-"""
+"""Medical/video gates for revisioned v2 projects, with immutable review records."""
 
 from __future__ import annotations
 
@@ -156,7 +151,7 @@ def _load_project(project_dir: Path) -> ProjectManifestV2:
     manifest_data = read_yaml(manifest_path)
     if manifest_data.get("schema_version") != "2.0":
         raise ValueError(
-            "gate review requires project schema 2.0; run 'healthvideo project migrate' first"
+            "gate review requires project schema 2.0"
         )
     return ProjectManifestV2.model_validate(manifest_data)
 

@@ -12,7 +12,7 @@ def _input(*chapters: tuple[str, int, str]):
                             narration=text, visual="whiteboard", chapter_id=chapter))
         start += frames
     board = Storyboard(title="PYH", scenes=tuple(scenes), format_profile="youtube_long")
-    return build_render_input(board, "audio/narration.wav", duration_policy="v2")
+    return build_render_input(board, "audio/narration.wav")
 
 
 def test_spans_merge_contiguous_scenes() -> None:
@@ -104,6 +104,6 @@ def test_referenced_asset_without_hash_raises() -> None:
                   visual="whiteboard", chapter_id="CH01",
                   visual_assets=({"path": "assets/missing.png", "role": "whiteboard"},))
     board = Storyboard(title="PYH", scenes=(scene,), format_profile="youtube_long")
-    ri = build_render_input(board, "audio/narration.wav", duration_policy="v2")
+    ri = build_render_input(board, "audio/narration.wav")
     with pytest.raises(ValueError, match="assets/missing.png"):
         chapter_cache_key(ri, chapter_spans(ri)[0], {}, RENDERER)

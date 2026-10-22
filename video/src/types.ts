@@ -160,7 +160,7 @@ export const RenderInputSchema = z.object({
     duration_frames: z.literal(90).default(90),
   }).nullable().optional(),
   scenes: z.array(SceneSchema).default([]),
-  visual_budget_profile: z.enum(['legacy', 'm6_5_v1', 'explain_first_v1']).default('legacy'),
+  visual_budget_profile: z.enum(['m6_5_v1', 'explain_first_v1']).default('explain_first_v1'),
   format_profile: z.enum(['vertical_clip', 'youtube_long']).default('vertical_clip'),
   width: z.union([z.literal(1080), z.literal(1920)]).default(1080),
   height: z.union([z.literal(1920), z.literal(1080)]).default(1920),

@@ -104,7 +104,7 @@ def test_next_action_explains_each_v2_side_state(
     assert "needs_attention" in action.message
 
 
-def test_v1_project_is_directed_to_safe_migration(tmp_path: Path) -> None:
+def test_v1_project_is_rejected(tmp_path: Path) -> None:
     """A legacy manifest must not be routed through a v2 workflow action."""
     project_dir = tmp_path / "legacy"
     project_dir.mkdir()
@@ -113,10 +113,8 @@ def test_v1_project_is_directed_to_safe_migration(tmp_path: Path) -> None:
         {"schema_version": "1.0", "slug": "legacy", "state": "idea"},
     )
 
-    action = get_next_action(project_dir)
-
-    assert action.kind.value == "migrate_legacy"
-    assert action.artifact == project_dir / "project.yaml"
+    with pytest.raises(ValueError, match="Unsupported project schema"):
+        get_next_action(project_dir)
 
 
 def test_invalid_manifest_fails_closed_with_manifest_path(tmp_path: Path) -> None:

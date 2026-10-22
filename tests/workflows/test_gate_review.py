@@ -28,7 +28,7 @@ from healthvideo.workflows.gate_review import (
 )
 from tests.helpers import (
     advance_v2_project_to_video_review,
-    create_project_fixture,
+    align_fixture_script,
     create_v2_project_fixture,
 )
 
@@ -53,18 +53,20 @@ def _author_ai_clip(project_dir: Path, *, decorative: bool = False) -> Path:
     board_path = project_dir / "revisions/001/storyboard/storyboard.yaml"
     board = read_yaml(board_path)
     board["visual_budget_profile"] = "m6_5_v1"
-    whiteboard = board["scenes"][0]
-    highlight = board["scenes"][2]
+    whiteboard = deepcopy(board["scenes"][-2])
+    highlight = deepcopy(board["scenes"][0])
     clip = board["scenes"][3]
     whiteboard["start_frame"], whiteboard["duration_frames"] = 0, 780
     highlight["start_frame"], highlight["duration_frames"] = 780, 300
     clip["start_frame"], clip["duration_frames"] = 1080, 120
     clip["visual"] = "ai_clip"
+    clip.pop("anatomy", None)
     clip.pop("evidence_highlight", None)
     board["scenes"] = [whiteboard, highlight, clip]
     if decorative:
         clip["claim_id"] = None
         clip["source_marker"] = None
+    align_fixture_script(project_dir / "revisions/001", board)
     write_yaml_atomic(board_path, board)
     output = generate_ai_clip(
         project_dir,
@@ -149,6 +151,7 @@ def _enable_visual_budget(
     ]
     if override is not None:
         board["visual_budget_override"] = override
+    align_fixture_script(project_dir / "revisions/001", board)
     write_yaml_atomic(storyboard_path, board)
     return storyboard_path
 
@@ -186,6 +189,7 @@ def test_medical_reviewed_paths_includes_ledger_script_storyboard_manifest_and_s
         "assets/asset-manifest.yaml",
         "profiles/pronunciation.vi.yaml",
         "asset:assets/evidence-r01.svg",
+        "asset:assets/test-logo.svg",
     }
 
 
@@ -464,7 +468,7 @@ def test_m6_5_storyboard_policy_changes_make_medical_hash_stale(
     if mutation == "timing":
         board["scenes"][0]["duration_frames"] += 1
     elif mutation == "profile":
-        board["visual_budget_profile"] = "legacy"
+        board["visual_budget_profile"] = "explain_first_v1"
         del board["visual_budget_override"]
     elif mutation == "bounds":
         board["visual_budget_override"]["chart_crop"]["max_percent"] += 1
@@ -477,19 +481,6 @@ def test_m6_5_storyboard_policy_changes_make_medical_hash_stale(
     assert current != record.artifact_hashes
 
 
-def test_legacy_v2_and_v1_medical_gates_remain_compatible(tmp_path: Path) -> None:
-    legacy_v2 = create_v2_project_fixture(
-        tmp_path / "v2", state=WorkflowState.AWAITING_MEDICAL_REVIEW
-    )
-    approve_gate(legacy_v2, GateKind.MEDICAL, reviewer=REVIEWER, now=NOW)
-
-    legacy_v1 = create_project_fixture(tmp_path / "v1", "awaiting_medical_review")
-    from healthvideo.workflows.review import approve_medical
-
-    approve_medical(legacy_v1, reviewer=REVIEWER)
-
-    assert read_yaml(legacy_v2 / "project.yaml")["state"] == "medically_approved"
-    assert read_yaml(legacy_v1 / "project.yaml")["state"] == "script_approved"
 
 
 def test_reject_medical_enters_side_state_and_can_repeat_before_approval(tmp_path: Path) -> None:
@@ -689,7 +680,7 @@ def test_reopen_resume_resubmit_and_approve(tmp_path: Path) -> None:
                          resume_state=WorkflowState.DRAFT_READY, now=NOW)
     resume_gate(project, GateKind.MEDICAL, target=WorkflowState.DRAFT_READY, now=NOW)
     board = read_yaml(revision / "storyboard/storyboard.yaml")
-    board["scenes"][0]["narration"] += " Revised draft."
+    board["scenes"][1]["anatomy"]["motion"] += " Revised draft."
     board_file = tmp_path / "new-board.yaml"
     write_yaml_atomic(board_file, board)
     submit_draft(project, revision / "script/script.yaml", board_file,

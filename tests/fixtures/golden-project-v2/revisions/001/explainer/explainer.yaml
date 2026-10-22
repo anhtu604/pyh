@@ -1,0 +1,69 @@
+schema_version: '1.0'
+topic_question: How does the illustrative test system change?
+organ_system: test_system
+layers:
+- id: L1
+  layer: anatomy
+  concept: Illustrative concept, not a medical claim
+  plain_explanation: An illustrative test explanation
+  analogy:
+    text: Test model
+    limits: Illustration only
+  terms_introduced:
+  - test term 1
+  visual:
+    kind: anatomy_animation
+    subject: test_shape
+    motion: Illustrative motion
+    reuse_of: null
+  claim_ids:
+  - C01
+- id: L2
+  layer: physiology
+  concept: Illustrative concept, not a medical claim
+  plain_explanation: An illustrative test explanation
+  analogy:
+    text: Test model
+    limits: Illustration only
+  terms_introduced:
+  - test term 2
+  visual:
+    kind: process_animation
+    subject: test_shape
+    motion: Illustrative motion
+    reuse_of: L1
+  claim_ids:
+  - C01
+- id: L3
+  layer: pathophysiology
+  concept: Illustrative concept, not a medical claim
+  plain_explanation: An illustrative test explanation
+  analogy:
+    text: Test model
+    limits: Illustration only
+  terms_introduced:
+  - test term 3
+  visual:
+    kind: comparison
+    subject: test_shape
+    motion: Illustrative motion
+    reuse_of: L1
+  claim_ids:
+  - C01
+- id: L4
+  layer: pathology
+  concept: Illustrative concept, not a medical claim
+  plain_explanation: An illustrative test explanation
+  analogy:
+    text: Test model
+    limits: Illustration only
+  terms_introduced:
+  - test term 4
+  visual:
+    kind: timelapse
+    subject: test_shape
+    motion: Illustrative motion
+    reuse_of: L1
+  claim_ids:
+  - C01
+skipped_layers: []

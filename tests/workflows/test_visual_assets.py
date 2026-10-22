@@ -60,6 +60,11 @@ def project(tmp_path: Path) -> Path:
 
 
 def make_chart(project: Path, **changes: str) -> Path:
+    board_path = project / "revisions/001/storyboard/storyboard.yaml"
+    board = read_yaml(board_path)
+    board["scenes"][0]["visual"] = "chart"
+    board["scenes"][0].pop("evidence_highlight", None)
+    write_yaml_atomic(board_path, board)
     args = {
         "claim_id": "C01",
         "datum_id": "bp-count",
@@ -309,15 +314,15 @@ def test_bind_existing_chart_to_chart_scene_and_identical_retry(project: Path) -
     chart = make_chart(project)
     revision = project / "revisions/001"
 
-    bind_chart_asset(project, scene_id="S04", asset_path="assets/chart-count.svg")
+    bind_chart_asset(project, scene_id="S01", asset_path="assets/chart-count.svg")
     first_storyboard = (revision / "storyboard/storyboard.yaml").read_bytes()
     first_manifest = (revision / "assets/asset-manifest.yaml").read_bytes()
-    bind_chart_asset(project, scene_id="S04", asset_path="assets/chart-count.svg")
+    bind_chart_asset(project, scene_id="S01", asset_path="assets/chart-count.svg")
 
     board = Storyboard.model_validate(
         read_yaml(revision / "storyboard/storyboard.yaml")
     )
-    scene = next(item for item in board.scenes if item.id == "S04")
+    scene = next(item for item in board.scenes if item.id == "S01")
     assert scene.visual_assets == (
         visual_assets.VisualAssetRef(path="assets/chart-count.svg", role="chart"),
     )
@@ -345,7 +350,7 @@ def test_chart_binding_recovers_manifest_first_interruption(
     monkeypatch.setattr(visual_assets, "_write_chart_storyboard", interrupt)
     with pytest.raises(OSError, match="interruption"):
         bind_chart_asset(
-            project, scene_id="S04", asset_path="assets/chart-count.svg"
+            project, scene_id="S01", asset_path="assets/chart-count.svg"
         )
     record = next(
         item
@@ -368,7 +373,7 @@ def test_chart_binding_recovers_manifest_first_interruption(
     board = Storyboard.model_validate(
         read_yaml(revision / "storyboard/storyboard.yaml")
     )
-    assert next(item for item in board.scenes if item.id == "S04").visual_assets[0].role == (
+    assert next(item for item in board.scenes if item.id == "S01").visual_assets[0].role == (
         "chart"
     )
     assert not (revision / "workflow/pending-chart-binding.yaml").exists()
@@ -386,7 +391,7 @@ def test_chart_binding_pending_intent_refuses_unrelated_edit(
     monkeypatch.setattr(visual_assets, "_write_chart_storyboard", interrupt)
     with pytest.raises(OSError):
         bind_chart_asset(
-            project, scene_id="S04", asset_path="assets/chart-count.svg"
+            project, scene_id="S01", asset_path="assets/chart-count.svg"
         )
     board_path = revision / "storyboard/storyboard.yaml"
     data = read_yaml(board_path)
@@ -410,7 +415,7 @@ def test_medical_gate_recovers_pending_chart_binding_before_validation(
     monkeypatch.setattr(visual_assets, "_write_chart_storyboard", interrupt)
     with pytest.raises(OSError):
         bind_chart_asset(
-            project, scene_id="S04", asset_path="assets/chart-count.svg"
+            project, scene_id="S01", asset_path="assets/chart-count.svg"
         )
     monkeypatch.setattr(visual_assets, "_write_chart_storyboard", original)
     state = read_yaml(project / "project.yaml")
@@ -432,9 +437,9 @@ def test_chart_binding_refuses_changed_target_path_state_kind_and_rights(
     make_chart(project)
     revision = project / "revisions/001"
     with pytest.raises(ValueError, match="chart scene"):
-        bind_chart_asset(project, scene_id="S01", asset_path="assets/chart-count.svg")
+        bind_chart_asset(project, scene_id="S06", asset_path="assets/chart-count.svg")
     with pytest.raises(ValueError, match="relative POSIX"):
-        bind_chart_asset(project, scene_id="S04", asset_path="../chart-count.svg")
+        bind_chart_asset(project, scene_id="S01", asset_path="../chart-count.svg")
 
     manifest_path = revision / "assets/asset-manifest.yaml"
     original_manifest = read_yaml(manifest_path)
@@ -445,7 +450,7 @@ def test_chart_binding_refuses_changed_target_path_state_kind_and_rights(
     chart_record["kind"] = "medical_text"
     write_yaml_atomic(manifest_path, wrong_kind)
     with pytest.raises(ValueError, match="DATA_CHART"):
-        bind_chart_asset(project, scene_id="S04", asset_path="assets/chart-count.svg")
+        bind_chart_asset(project, scene_id="S01", asset_path="assets/chart-count.svg")
     write_yaml_atomic(manifest_path, original_manifest)
 
     rights_path = revision / "assets/license-ledger.yaml"
@@ -453,18 +458,19 @@ def test_chart_binding_refuses_changed_target_path_state_kind_and_rights(
     rights["entries"][0]["rights_basis"] = ""
     write_yaml_atomic(rights_path, rights)
     with pytest.raises(ValueError, match="rights|source"):
-        bind_chart_asset(project, scene_id="S04", asset_path="assets/chart-count.svg")
+        bind_chart_asset(project, scene_id="S01", asset_path="assets/chart-count.svg")
 
 
 def test_chart_binding_refuses_post_approval_and_different_scene_retry(
     project: Path,
 ) -> None:
     make_chart(project)
-    bind_chart_asset(project, scene_id="S04", asset_path="assets/chart-count.svg")
+    bind_chart_asset(project, scene_id="S01", asset_path="assets/chart-count.svg")
     revision = project / "revisions/001"
     board_path = revision / "storyboard/storyboard.yaml"
     board = read_yaml(board_path)
     board["scenes"][2]["visual"] = "chart"
+    board["scenes"][2].pop("anatomy", None)
     write_yaml_atomic(board_path, board)
     with pytest.raises(ValueError, match="owned|referenced|different"):
         bind_chart_asset(project, scene_id="S03", asset_path="assets/chart-count.svg")
@@ -473,7 +479,7 @@ def test_chart_binding_refuses_post_approval_and_different_scene_retry(
     state["state"] = "medically_approved"
     write_yaml_atomic(project / "project.yaml", state)
     with pytest.raises(ValueError, match="pre-medical"):
-        bind_chart_asset(project, scene_id="S04", asset_path="assets/chart-count.svg")
+        bind_chart_asset(project, scene_id="S01", asset_path="assets/chart-count.svg")
 
 
 def test_chart_binding_allows_distinct_owned_charts_in_distinct_scenes(
@@ -484,9 +490,10 @@ def test_chart_binding_allows_distinct_owned_charts_in_distinct_scenes(
     board_path = project / "revisions/001/storyboard/storyboard.yaml"
     board = read_yaml(board_path)
     board["scenes"][2]["visual"] = "chart"
+    board["scenes"][2].pop("anatomy", None)
     write_yaml_atomic(board_path, board)
 
-    bind_chart_asset(project, scene_id="S04", asset_path="assets/chart-count.svg")
+    bind_chart_asset(project, scene_id="S01", asset_path="assets/chart-count.svg")
     bind_chart_asset(project, scene_id="S03", asset_path="assets/chart-two.svg")
 
     parsed = Storyboard.model_validate(read_yaml(board_path))
@@ -497,7 +504,7 @@ def test_chart_binding_allows_distinct_owned_charts_in_distinct_scenes(
         if ref.role == "chart"
     } == {
         ("S03", "assets/chart-two.svg"),
-        ("S04", "assets/chart-count.svg"),
+        ("S01", "assets/chart-count.svg"),
     }
 
 
@@ -527,16 +534,6 @@ def test_rejects_unbound_source_and_unsafe_name(project: Path) -> None:
     with pytest.raises(ValueError, match="name"):
         make_chart(project, asset_name="../../escape")
     assert not (project / "revisions/001/assets/chart-count.svg").exists()
-
-
-def test_v1_project_is_untouched(tmp_path: Path) -> None:
-    root = tmp_path / "v1"
-    shutil.copytree(Path("tests/fixtures/golden-project"), root)
-    before = (root / "project.yaml").read_bytes()
-    with pytest.raises(ValueError):
-        make_chart(root)
-    assert (root / "project.yaml").read_bytes() == before
-    assert not (root / "assets/chart-count.svg").exists()
 
 
 def test_refuses_post_approval_mutation(project: Path) -> None:
@@ -603,7 +600,7 @@ def test_register_cropped_highlight_with_source_page_rights(
     revision = project / "revisions/001"
     storyboard_path = revision / "storyboard/storyboard.yaml"
     storyboard = read_yaml(storyboard_path)
-    highlight = storyboard["scenes"][2]["evidence_highlight"]
+    highlight = storyboard["scenes"][0]["evidence_highlight"]
     highlight.update(
         {
             "image": "assets/paper-excerpt.png",
@@ -621,7 +618,7 @@ def test_register_cropped_highlight_with_source_page_rights(
     before = (project / "project.yaml").read_bytes()
     output = create_evidence_highlight_asset(
         project,
-        scene_id="S03",
+        scene_id="S01",
         page_image=source,
         asset_name="paper-excerpt",
         license="synthetic_test_only",
@@ -650,7 +647,7 @@ def test_highlight_rejects_oversized_excerpt(project: Path, tmp_path: Path) -> N
     revision = project / "revisions/001"
     storyboard_path = revision / "storyboard/storyboard.yaml"
     storyboard = read_yaml(storyboard_path)
-    highlight = storyboard["scenes"][2]["evidence_highlight"]
+    highlight = storyboard["scenes"][0]["evidence_highlight"]
     highlight.update(
         {"image": "assets/paper-excerpt.png", "source_id": "R01", "page": 2}
     )
@@ -660,7 +657,7 @@ def test_highlight_rejects_oversized_excerpt(project: Path, tmp_path: Path) -> N
     with pytest.raises(ValueError, match="crop|excerpt"):
         create_evidence_highlight_asset(
             project,
-            scene_id="S03",
+            scene_id="S01",
             page_image=source,
             asset_name="paper-excerpt",
             license="synthetic_test_only",
@@ -676,7 +673,7 @@ def test_highlight_source_marker_and_rights_are_required(
     revision = project / "revisions/001"
     storyboard_path = revision / "storyboard/storyboard.yaml"
     storyboard = read_yaml(storyboard_path)
-    highlight = storyboard["scenes"][2]["evidence_highlight"]
+    highlight = storyboard["scenes"][0]["evidence_highlight"]
     highlight.update(
         {
             "image": "assets/paper-excerpt.png",
@@ -691,18 +688,18 @@ def test_highlight_source_marker_and_rights_are_required(
     source = tmp_path / "full-page.png"
     Image.new("RGB", (100, 100), "white").save(source)
     args = {
-        "scene_id": "S03",
+        "scene_id": "S01",
         "page_image": source,
         "asset_name": "paper-excerpt",
         "license": "synthetic_test_only",
         "rights_basis": "fixture nội bộ",
         "creator": "repository_fixture",
     }
-    storyboard["scenes"][2]["source_marker"] = "[2]"
+    storyboard["scenes"][0]["source_marker"] = "[2]"
     write_yaml_atomic(storyboard_path, storyboard)
     with pytest.raises(ValueError, match="marker"):
         create_evidence_highlight_asset(project, **args)
-    storyboard["scenes"][2]["source_marker"] = "[1]"
+    storyboard["scenes"][0]["source_marker"] = "[1]"
     highlight["source_id"] = "unknown"
     write_yaml_atomic(storyboard_path, storyboard)
     with pytest.raises(ValueError, match="source"):
@@ -720,7 +717,7 @@ def test_registered_highlight_requires_rights_at_medical_gate(
     revision = project / "revisions/001"
     storyboard_path = revision / "storyboard/storyboard.yaml"
     storyboard = read_yaml(storyboard_path)
-    storyboard["scenes"][2]["evidence_highlight"].update(
+    storyboard["scenes"][0]["evidence_highlight"].update(
         {
             "image": "assets/paper-excerpt.png",
             "source_id": "R01",
@@ -736,14 +733,14 @@ def test_registered_highlight_requires_rights_at_medical_gate(
     Image.new("RGB", (100, 100), "white").save(source)
     output = create_evidence_highlight_asset(
         project,
-        scene_id="S03",
+        scene_id="S01",
         page_image=source,
         asset_name="paper-excerpt",
         license="synthetic_test_only",
         rights_basis="fixture nội bộ",
         creator="repository_fixture",
     )
-    updated = read_yaml(storyboard_path)["scenes"][2]["evidence_highlight"]
+    updated = read_yaml(storyboard_path)["scenes"][0]["evidence_highlight"]
     assert updated["crop_x"] < updated["x"]
     assert updated["crop_width"] < 0.5
     with Image.open(output) as cropped:
@@ -771,7 +768,7 @@ def test_highlight_retry_repairs_storyboard_after_asset_promotion(
     revision = project / "revisions/001"
     storyboard_path = revision / "storyboard/storyboard.yaml"
     storyboard = read_yaml(storyboard_path)
-    storyboard["scenes"][2]["evidence_highlight"].update(
+    storyboard["scenes"][0]["evidence_highlight"].update(
         {
             "image": "assets/paper-excerpt.png",
             "source_id": "R01",
@@ -786,7 +783,7 @@ def test_highlight_retry_repairs_storyboard_after_asset_promotion(
     source = tmp_path / "full-page.png"
     Image.new("RGB", (100, 100), "white").save(source)
     args = {
-        "scene_id": "S03",
+        "scene_id": "S01",
         "page_image": source,
         "asset_name": "paper-excerpt",
         "license": "synthetic_test_only",
@@ -807,7 +804,7 @@ def test_highlight_retry_repairs_storyboard_after_asset_promotion(
         )
     assert create_evidence_highlight_asset(project, **args) == output
     assert sha256_file(output) == crop_hash
-    assert read_yaml(storyboard_path)["scenes"][2]["evidence_highlight"]["crop_x"] < 0.4
+    assert read_yaml(storyboard_path)["scenes"][0]["evidence_highlight"]["crop_x"] < 0.4
 
 
 def test_highlight_retry_after_promotion_failure_is_gate_safe(
@@ -816,7 +813,7 @@ def test_highlight_retry_after_promotion_failure_is_gate_safe(
     revision = project / "revisions/001"
     storyboard_path = revision / "storyboard/storyboard.yaml"
     storyboard = read_yaml(storyboard_path)
-    storyboard["scenes"][2]["evidence_highlight"].update(
+    storyboard["scenes"][0]["evidence_highlight"].update(
         {
             "image": "assets/paper-excerpt.png",
             "source_id": "R01",
@@ -831,7 +828,7 @@ def test_highlight_retry_after_promotion_failure_is_gate_safe(
     source = tmp_path / "full-page.png"
     Image.new("RGB", (100, 100), "white").save(source)
     args = {
-        "scene_id": "S03",
+        "scene_id": "S01",
         "page_image": source,
         "asset_name": "paper-excerpt",
         "license": "synthetic_test_only",
@@ -846,7 +843,7 @@ def test_highlight_retry_after_promotion_failure_is_gate_safe(
     monkeypatch.setattr(visual_assets, "replace_directory_atomic", fail_once)
     with pytest.raises(OSError, match="simulated"):
         create_evidence_highlight_asset(project, **args)
-    assert read_yaml(storyboard_path)["scenes"][2]["evidence_highlight"]["crop_x"] < 0.4
+    assert read_yaml(storyboard_path)["scenes"][0]["evidence_highlight"]["crop_x"] < 0.4
     assert not (revision / "assets/paper-excerpt.png").exists()
     state = read_yaml(project / "project.yaml")
     state["state"] = "awaiting_medical_review"
@@ -862,7 +859,6 @@ def test_highlight_retry_after_promotion_failure_is_gate_safe(
         read_yaml(revision / "assets/license-ledger.yaml")
     )
     assert len([e for e in rights.entries if e.path == "assets/paper-excerpt.png"]) == 1
-
 
 
 def test_artwork_registration_and_annotation_guard(project, artwork_brand, monkeypatch) -> None:

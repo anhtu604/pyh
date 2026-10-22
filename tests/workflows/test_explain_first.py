@@ -29,6 +29,7 @@ GOLDEN = Path("tests/fixtures/golden-project-v2")
 def _project(tmp_path: Path, profile: str, state: str = "research_in_progress") -> Path:
     project = tmp_path / "project"
     shutil.copytree(GOLDEN, project)
+    (project / "revisions/001/explainer/explainer.yaml").unlink()
     data = read_yaml(project / "project.yaml")
     data.update(content_profile=profile, state=state)
     write_yaml_atomic(project / "project.yaml", data)
@@ -55,18 +56,18 @@ def test_new_projects_default_to_explain_first(tmp_path: Path) -> None:
     assert manifest.content_profile == "explain_first_v1"
 
 
-@pytest.mark.parametrize("fixture", ["golden-project", "golden-project-v2"])
+@pytest.mark.parametrize("fixture", ["golden-project-v2"])
 def test_old_fixtures_read_without_changing_any_bytes(fixture: str) -> None:
     project = Path("tests/fixtures") / fixture
     before = {path: path.read_bytes() for path in project.rglob("*") if path.is_file()}
     manifest = resolve_project_layout(project).manifest
     if isinstance(manifest, ProjectManifestV2):
-        assert manifest.content_profile == "legacy"
+        assert manifest.content_profile == "explain_first_v1"
     get_next_action(project)
     assert {path: path.read_bytes() for path in before} == before
 
 
-@pytest.mark.parametrize("profile", ["legacy", "explain_first_v1"])
+@pytest.mark.parametrize("profile", ["explain_first_v1"])
 def test_state_graph_requires_explainer_only_for_explain_first(profile: str) -> None:
     project = ProjectManifestV2.model_validate({
         "slug": "test-project", "state": "research_in_progress", "content_profile": profile,
@@ -95,7 +96,7 @@ def test_evidence_rejects_bad_explainer_without_changing_state(tmp_path: Path, p
     assert (project / "project.yaml").read_bytes() == before
 
 
-@pytest.mark.parametrize("profile", ["legacy", "explain_first_v1"])
+@pytest.mark.parametrize("profile", ["explain_first_v1"])
 def test_evidence_advances_with_profile_requirements(tmp_path: Path, profile: str) -> None:
     project = _project(tmp_path, profile)
     if profile == "explain_first_v1":
@@ -117,7 +118,7 @@ def test_operator_and_cli_remind_to_create_missing_explainer(tmp_path: Path, sta
     assert "explainer" in result.stdout
 
 
-@pytest.mark.parametrize("profile", ["legacy", "explain_first_v1"])
+@pytest.mark.parametrize("profile", ["explain_first_v1"])
 @pytest.mark.parametrize("problem", ["missing", "long_sentence", "order", "layer", "term", "warning"])
 def test_draft_blocks_errors_only_for_explain_first(
     tmp_path: Path, profile: str, problem: str,
@@ -149,6 +150,7 @@ def test_draft_blocks_errors_only_for_explain_first(
         logo = revision / "assets/test-logo.svg"
         logo.write_text('<svg xmlns="http://www.w3.org/2000/svg"/>', encoding="utf-8")
         assets = read_yaml(revision / "assets/asset-manifest.yaml")
+        assets["assets"] = [item for item in assets["assets"] if item["path"] != "assets/test-logo.svg"]
         assets["assets"].append({
             "path": "assets/test-logo.svg", "kind": "flourish", "semantic": False,
             "classification_reason": "Decorative test logo", "sha256": sha256_file(logo),
@@ -202,7 +204,7 @@ def test_explain_first_rejects_legacy_script_without_changes(
 
     with pytest.raises(
         ValueError,
-        match="^explain_first_v1 project requires script format_profile explain_first_v1$",
+        match="format_profile|explain_first",
     ):
         if submission == "draft":
             submit_draft(project, revision / "script/script.yaml",

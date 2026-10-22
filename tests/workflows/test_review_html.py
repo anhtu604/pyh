@@ -1,7 +1,6 @@
 import json
 from copy import deepcopy
 from datetime import UTC, datetime
-from hashlib import sha256
 from pathlib import Path
 
 import pytest
@@ -14,13 +13,6 @@ from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.workflows.review_html import render_medical_packet, render_video_packet
 from tests.helpers import advance_v2_project_to_video_review, create_v2_project_fixture
 from tests.workflows.test_gate_review import _author_ai_clip, _create_ai_project
-
-
-def test_legacy_medical_packet_stays_byte_identical() -> None:
-    html = render_medical_packet(Path("tests/fixtures/golden-project-v2/revisions/001"))
-    assert sha256(html.encode()).hexdigest() == (
-        "d26de1d3477d0141a35f4396c320e2daa4a94535f8165cefb6ee5900e904dfdc"
-    )
 
 
 @pytest.mark.parametrize("with_explainer", [False, True])
@@ -189,7 +181,7 @@ def test_video_packet_warns_from_recorded_mascot_not_current_storyboard(
     revision = project / "revisions/001"
     renders = revision / "renders"
     board = Storyboard.model_validate(read_yaml(revision / "storyboard/storyboard.yaml"))
-    data = build_render_input(board, "audio/narration.wav", duration_policy="v2").model_dump(
+    data = build_render_input(board, "audio/narration.wav").model_dump(
         mode="json"
     )
     # Other SVGs, including an unused placeholder, must not trigger the warning.
@@ -315,14 +307,6 @@ def test_medical_packet_escapes_override_rationale(tmp_path: Path) -> None:
     assert "<b>chart</b>" not in html
 
 
-def test_legacy_medical_packet_has_no_m6_5_section(tmp_path: Path) -> None:
-    project_dir = create_v2_project_fixture(tmp_path)
-
-    html = render_medical_packet(project_dir / "revisions/001")
-
-    assert "Ngân sách visual M6.5" not in html
-
-
 @pytest.mark.parametrize(
     ("qa_budget", "status"),
     [
@@ -352,15 +336,3 @@ def test_video_packet_shows_recomputed_m6_5_budget_against_recorded_qa(
     assert "Ngân sách visual M6.5" in html
     assert "7500 bp" in html and "2500 bp" in html and "Kết quả: đạt" in html
     assert status in html
-
-
-def test_legacy_video_packet_has_no_m6_5_section(tmp_path: Path) -> None:
-    project_dir = create_v2_project_fixture(tmp_path)
-    advance_v2_project_to_video_review(
-        project_dir, now=datetime(2026, 9, 11, 9, 0, tzinfo=UTC)
-    )
-
-    html = render_video_packet(project_dir / "revisions/001")
-
-    assert "Ngân sách visual M6.5" not in html and "QA production" not in html
-    assert "mascot đang dùng hình tạm" not in html

@@ -41,16 +41,6 @@ def test_medical_gate_requires_exactly_one_brand_reference():
         validate_hook_outro(script, board.model_copy(update={"scenes": (*board.scenes[:-1], two)}), require_brand=True)
 
 
-def test_legacy_profile_defaults_and_rejects_new_outro():
-    script, board = _pair()
-    legacy = Script(title="Cũ", lines=script.lines[:1])
-    assert legacy.format_profile == "legacy"
-    first = board.scenes[0].model_copy(update={"script_line_id": None})
-    validate_hook_outro(legacy, board.model_copy(update={"scenes": (first,)}))
-    with pytest.raises(ValueError, match="legacy"):
-        validate_hook_outro(legacy, board)
-
-
 def test_brand_reference_cannot_have_pose():
     with pytest.raises(ValidationError, match="pose"):
         VisualAssetRef(path="assets/logo.svg", role="brand", pose="wave")

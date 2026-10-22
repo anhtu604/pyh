@@ -15,9 +15,7 @@ from healthvideo.domain.asset_manifest import load_asset_manifest
 from healthvideo.domain.brand import load_brand_profile
 from healthvideo.domain.gate_review import GateApprovalRecord, GateKind
 from healthvideo.domain.hook_outro import validate_hook_outro
-from healthvideo.domain.project import ProjectManifest, ProjectState, transition
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
-from healthvideo.domain.review import ReviewKind
 from healthvideo.domain.script import Script
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
 from healthvideo.domain.storyboard import (
@@ -30,11 +28,9 @@ from healthvideo.render.chapters import render_long_form
 from healthvideo.render.input import audio_timing_qa, build_render_input
 from healthvideo.render.remotion import build_render_argv, renderer_identity
 from healthvideo.render.run import (
-    MANIFEST_NAME,
     OUTPUT_NAME,
     PRODUCTION_ARTIFACT,
     RENDER_INPUT_NAME,
-    renders_directory,
 )
 from healthvideo.render.timing import (
     PAD_FRAMES,
@@ -70,7 +66,6 @@ from healthvideo.workflows.long_form import (
     load_clip_scenes,
     render_clips,
 )
-from healthvideo.workflows.review import ensure_approval_current
 from healthvideo.workflows.visual_assets import (
     BRAND_PROFILE_PATH,
     recover_chart_asset_binding,
@@ -94,123 +89,7 @@ def produce_project(
 ) -> Path:
     """Render an approved project, reusing an output with a matching input hash."""
     layout = resolve_project_layout(project_dir)
-    if layout.schema_version == "2.0":
-        return _produce_v2(layout, tts, runner, dry_run=dry_run)
-    return _produce_v1(layout, tts, runner, dry_run=dry_run)
-
-
-def _produce_v1(
-    layout: ProjectLayout,
-    tts: TTSProvider,
-    runner: Runner,
-    *,
-    dry_run: bool,
-) -> Path:
-    project_dir = layout.project_dir
-    manifest_path = project_dir / "project.yaml"
-    project = layout.manifest
-    assert isinstance(project, ProjectManifest)
-    if project.state not in {
-        ProjectState.SCRIPT_APPROVED,
-        ProjectState.AWAITING_VIDEO_REVIEW,
-    }:
-        raise ValueError("Production requires project state script_approved")
-    ensure_approval_current(project_dir, project, ReviewKind.MEDICAL)
-    script = Script.model_validate(read_yaml(project_dir / "script" / "script.yaml"))
-    storyboard = Storyboard.model_validate(
-        read_yaml(project_dir / "storyboard" / "storyboard.yaml")
-    )
-    validate_anatomy_subjects(storyboard)
-    author_profile = read_yaml(AUTHOR_PROFILE_PATH)
-    provider_name = _provider_name(tts)
-    asset_hashes = evidence_asset_hashes(project_dir, storyboard)
-    renderer_identity_data = renderer_identity()
-    input_hash = _input_hash(
-        script,
-        storyboard,
-        author_profile,
-        provider_name,
-        asset_hashes,
-        renderer_identity_data,
-    )
-    renders_dir = renders_directory(project_dir)
-    run_dir = renders_dir / input_hash
-    output = run_dir / OUTPUT_NAME
-    render_input = build_render_input(storyboard, audio_file="audio/narration.wav")
-    cache_valid = _run_is_valid(
-        run_dir,
-        input_hash,
-        provider_name,
-        asset_hashes,
-        renderer_identity_data,
-    )
-
-    if project.state is ProjectState.AWAITING_VIDEO_REVIEW:
-        if not _is_active_cache(project, input_hash, cache_valid):
-            raise ValueError("Production requires project state script_approved")
-        return output
-    if dry_run:
-        return output
-    if cache_valid:
-        write_yaml_atomic(
-            manifest_path,
-            _completed_project(project, input_hash).model_dump(mode="json"),
-        )
-        return output
-
-    staging_dir = _create_staging_directory(renders_dir, project.slug)
-    try:
-        _copy_project_assets(project_dir, staging_dir, storyboard, asset_hashes)
-        staged_audio = staging_dir / "audio" / "narration.wav"
-        tts.synthesize(
-            TTSRequest(
-                text=" ".join(line.text for line in script.lines),
-                language=script.language,
-                delivery_beats=tuple(
-                    line.delivery.model_dump(mode="json") for line in script.lines
-                ),
-            ),
-            staged_audio,
-        )
-        staged_render_input = staging_dir / RENDER_INPUT_NAME
-        _write_json_atomic(staged_render_input, render_input.model_dump(mode="json"))
-        staged_output = staging_dir / OUTPUT_NAME
-        argv = build_render_argv(staged_render_input, staged_output, staging_dir)
-        exit_code = runner(argv)
-        if exit_code != 0:
-            raise RuntimeError(f"Remotion render failed with exit code {exit_code}")
-        if not staged_output.is_file():
-            raise FileNotFoundError(
-                f"Remotion render did not create output: {staged_output}"
-            )
-        _write_json_atomic(
-            staging_dir / MANIFEST_NAME,
-            {
-                "input_hash": input_hash,
-                "output": OUTPUT_NAME,
-                "provider": provider_name,
-                "asset_sha256": dict(asset_hashes),
-                "renderer_identity": renderer_identity_data,
-            },
-        )
-        _validate_staged_run(
-            staging_dir,
-            input_hash,
-            provider_name,
-            asset_hashes,
-            renderer_identity_data,
-        )
-        _promote_run(staging_dir, run_dir)
-        write_yaml_atomic(
-            manifest_path,
-            _completed_project(project, input_hash).model_dump(mode="json"),
-        )
-    except Exception:
-        shutil.rmtree(staging_dir, ignore_errors=True)
-        raise
-    else:
-        shutil.rmtree(staging_dir, ignore_errors=True)
-    return output
+    return _produce_v2(layout, tts, runner, dry_run=dry_run)
 
 
 def _produce_v2(
@@ -242,11 +121,7 @@ def _produce_v2(
     )
     validate_anatomy_subjects(storyboard)
     visual_budget_report = validate_visual_budget(storyboard)
-    visual_budget_qa = (
-        visual_budget_report.model_dump(mode="json")
-        if storyboard.visual_budget_profile != "legacy" or visual_budget_report.mascot_frames
-        else None
-    )
+    visual_budget_qa = visual_budget_report.model_dump(mode="json")
     validate_hook_outro(
         script, storyboard, require_brand=script.format_profile == "hook_outro_v1",
         allow_line_references=True,
@@ -314,14 +189,10 @@ def _produce_v2(
                 raise ValueError("Cached scene timing uses another timing policy")
             storyboard = restore_timed_storyboard(approved_storyboard, timing_record)
             visual_budget_report = validate_visual_budget(storyboard)
-            visual_budget_qa = (
-                visual_budget_report.model_dump(mode="json")
-                if storyboard.visual_budget_profile != "legacy" or visual_budget_report.mascot_frames
-                else None
-            )
+            visual_budget_qa = visual_budget_report.model_dump(mode="json")
             final_frame = storyboard.scenes[-1].start_frame + storyboard.scenes[-1].duration_frames
             expected_input = build_render_input(
-                storyboard, audio_file="audio/narration.wav", duration_policy="v2"
+                storyboard, audio_file="audio/narration.wav"
             ).model_dump(mode="json")
             cached_input = json.loads((renders_dir / RENDER_INPUT_NAME).read_text(encoding="utf-8"))
             cache_valid = canonical_json_hash(expected_input) == canonical_json_hash(cached_input)
@@ -407,13 +278,9 @@ def _produce_v2(
         timing_record["audio_alignment"] = concat_scene_audio(storyboard, line_wavs, staged_audio)
         _write_json_atomic(staging_dir / "scene-timing.json", timing_record)
         visual_budget_report = validate_visual_budget(storyboard)
-        visual_budget_qa = (
-            visual_budget_report.model_dump(mode="json")
-            if storyboard.visual_budget_profile != "legacy" or visual_budget_report.mascot_frames
-            else None
-        )
+        visual_budget_qa = visual_budget_report.model_dump(mode="json")
         render_input = build_render_input(
-            storyboard, audio_file="audio/narration.wav", duration_policy="v2"
+            storyboard, audio_file="audio/narration.wav"
         )
         final_frame = storyboard.scenes[-1].start_frame + storyboard.scenes[-1].duration_frames
         audio_report = inspect_wav(staged_audio)
@@ -857,78 +724,9 @@ def _input_hash(
     return canonical_json_hash(payload)
 
 
-def _run_is_valid(
-    run_dir: Path,
-    input_hash: str,
-    provider_name: str,
-    asset_hashes: Mapping[str, str],
-    renderer: Mapping[str, str],
-) -> bool:
-    required_paths = (
-        run_dir / "audio" / "narration.wav",
-        run_dir / RENDER_INPUT_NAME,
-        run_dir / OUTPUT_NAME,
-        run_dir / MANIFEST_NAME,
-    )
-    if not all(path.is_file() for path in required_paths):
-        return False
-    try:
-        manifest = json.loads((run_dir / MANIFEST_NAME).read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return False
-    if not (
-        manifest.get("input_hash") == input_hash
-        and manifest.get("output") == OUTPUT_NAME
-        and manifest.get("provider") == provider_name
-        and manifest.get("asset_sha256") == dict(asset_hashes)
-        and manifest.get("renderer_identity") == dict(renderer)
-    ):
-        return False
-    return all(
-        (run_dir / relative).is_file()
-        and sha256_file(run_dir / relative) == expected
-        for relative, expected in asset_hashes.items()
-    )
-
-
-def _is_active_cache(
-    project: ProjectManifest, input_hash: str, cache_valid: bool
-) -> bool:
-    return (
-        project.artifact_hashes.get(PRODUCTION_ARTIFACT) == input_hash and cache_valid
-    )
-
-
-def _completed_project(project: ProjectManifest, input_hash: str) -> ProjectManifest:
-    producing = transition(project, ProjectState.PRODUCING)
-    rendered = transition(producing, ProjectState.RENDERED)
-    complete = transition(rendered, ProjectState.AWAITING_VIDEO_REVIEW)
-    hashes = dict(complete.artifact_hashes)
-    hashes[PRODUCTION_ARTIFACT] = input_hash
-    return complete.model_copy(update={"artifact_hashes": hashes})
-
-
 def _create_staging_directory(renders_dir: Path, slug: str) -> Path:
     renders_dir.mkdir(parents=True, exist_ok=True)
     return Path(mkdtemp(prefix=f".{slug}.produce-", dir=renders_dir))
-
-
-def _copy_project_assets(
-    project_dir: Path,
-    staging_dir: Path,
-    storyboard: Storyboard,
-    expected_hashes: Mapping[str, str],
-) -> None:
-    for relative, source in referenced_evidence_assets(
-        project_dir, storyboard
-    ).items():
-        destination = staging_dir.joinpath(*Path(relative).parts)
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, destination)
-        if sha256_file(destination) != expected_hashes[relative]:
-            raise ValueError(
-                f"Evidence asset changed while staging production: {relative}"
-            )
 
 
 def _copy_v2_assets(
@@ -951,19 +749,6 @@ def _copy_v2_assets(
         shutil.copy2(source, destination)
         if sha256_file(destination) != expected_hashes[relative]:
             raise ValueError(f"Visual asset changed while staging: {relative}")
-
-
-def _validate_staged_run(
-    staging_dir: Path,
-    input_hash: str,
-    provider_name: str,
-    asset_hashes: Mapping[str, str],
-    renderer: Mapping[str, str],
-) -> None:
-    if not _run_is_valid(
-        staging_dir, input_hash, provider_name, asset_hashes, renderer
-    ):
-        raise ValueError("Staged production run is incomplete")
 
 
 def _promote_run(staging_dir: Path, run_dir: Path) -> None:

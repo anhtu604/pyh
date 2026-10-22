@@ -11,14 +11,6 @@ def validate_hook_outro(
     script: Script, storyboard: Storyboard, *, require_brand: bool = False,
     allow_line_references: bool = False,
 ) -> None:
-    if script.format_profile == "legacy":
-        if any(line.purpose == "outro" for line in script.lines) or any(
-            scene.visual == "brand_outro"
-            or (scene.script_line_id is not None and not allow_line_references)
-            for scene in storyboard.scenes
-        ):
-            raise ValueError("legacy script cannot contain M6.4 fields")
-        return
     if len(script.lines) < 2 or len(script.lines) != len(storyboard.scenes):
         raise ValueError("M6.4 script and storyboard must align with one outro")
     if [line.purpose for line in script.lines].count("outro") != 1:

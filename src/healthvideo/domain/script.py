@@ -28,6 +28,6 @@ class ScriptLine(BaseModel):
 class Script(BaseModel):
     schema_version: str = "1.0"
     title: str
-    format_profile: Literal["legacy", "hook_outro_v1", "explain_first_v1"] = "legacy"
+    format_profile: Literal["hook_outro_v1", "explain_first_v1"] = "explain_first_v1"
     language: str = "vi"
     lines: list[ScriptLine] = Field(default_factory=list)

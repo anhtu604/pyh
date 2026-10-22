@@ -16,7 +16,6 @@ from healthvideo.workflows.doctor import CheckResult
 from healthvideo.workflows.produce import produce_project
 from healthvideo.workflows.review import approve_medical
 from tests.helpers import (
-    create_project_fixture,
     create_v2_project_fixture,
     synthesize_fixture_audio,
 )
@@ -24,7 +23,9 @@ from tests.helpers import (
 runner = CliRunner()
 
 
-@pytest.mark.parametrize("command", [["lease"], ["backup"], ["security-audit"]])
+@pytest.mark.parametrize(
+    "command", [["lease"], ["backup"], ["security-audit"], ["migrate"], ["project", "create"], ["project", "new"], ["project", "migrate"]]
+)
 def test_removed_commands_absent(command):
     result = CliRunner().invoke(app, [*command, "--help"])
     assert result.exit_code != 0
@@ -109,7 +110,7 @@ def test_operator_orientation_command_researches_without_confirming(tmp_path) ->
 def test_operator_help_preserves_existing_cli_commands() -> None:
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
-    for name in ("operator", "project", "review", "topic", "evidence", "produce", "package"):
+    for name in ("operator", "review", "topic", "evidence", "produce", "package"):
         assert name in result.stdout
 
 
@@ -243,39 +244,11 @@ def test_doctor_exits_nonzero_for_a_missing_required_dependency(monkeypatch) -> 
     assert "Install FFmpeg 8 or newer." in result.stdout
 
 
-def test_project_new_creates_project_and_reports_duplicate_without_overwrite(
-    tmp_path,
-) -> None:
-    runner = CliRunner()
-    command = [
-        "project",
-        "new",
-        "muoi-va-huyet-ap",
-        "--title",
-        "Ăn mặn và tăng huyết áp",
-        "--root",
-        str(tmp_path),
-    ]
-
-    created = runner.invoke(app, command)
-    duplicate = runner.invoke(app, command)
-
-    assert created.exit_code == 0
-    assert (tmp_path / "muoi-va-huyet-ap" / "project.yaml").is_file()
-    assert duplicate.exit_code != 0
-    assert "Project already exists" in duplicate.stdout
-    assert read_yaml(tmp_path / "muoi-va-huyet-ap" / "author-brief.yaml")["title"] == (
-        "Ăn mặn và tăng huyết áp"
-    )
-
-
 def test_produce_dry_run_prints_remotion_command_without_changing_state(
     tmp_path,
 ) -> None:
-    fixture = Path(__file__).parent / "fixtures" / "golden-project"
-    project_dir = tmp_path / "golden-project"
-    shutil.copytree(fixture, project_dir)
-    synthesize_fixture_audio(project_dir)
+    project_dir = create_v2_project_fixture(tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW)
+    synthesize_fixture_audio(project_dir / "revisions" / "001")
     project = read_yaml(project_dir / "project.yaml")
     project["state"] = "awaiting_medical_review"
     write_yaml_atomic(project_dir / "project.yaml", project)
@@ -289,16 +262,14 @@ def test_produce_dry_run_prints_remotion_command_without_changing_state(
     assert result.exit_code == 0
     assert "--dir" in result.stdout
     assert "video" in result.stdout
-    assert not (project_dir / "renders" / "video.mp4").exists()
-    assert not list((project_dir / "renders").rglob("*.woff2"))
+    assert not (project_dir / "revisions" / "001" / "renders" / "video.mp4").exists()
+    assert not list((project_dir / "revisions" / "001" / "renders").rglob("*.woff2"))
     assert (project_dir / "project.yaml").read_bytes() == original_manifest
 
 
 def test_produce_dry_run_prints_remotion_command_for_a_cache_hit(tmp_path) -> None:
-    fixture = Path(__file__).parent / "fixtures" / "golden-project"
-    project_dir = tmp_path / "golden-project"
-    shutil.copytree(fixture, project_dir)
-    synthesize_fixture_audio(project_dir)
+    project_dir = create_v2_project_fixture(tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW)
+    synthesize_fixture_audio(project_dir / "revisions" / "001")
     project = read_yaml(project_dir / "project.yaml")
     project["state"] = "awaiting_medical_review"
     write_yaml_atomic(project_dir / "project.yaml", project)
@@ -326,8 +297,8 @@ def test_produce_dry_run_prints_remotion_command_for_a_cache_hit(tmp_path) -> No
 def test_produce_dry_run_rejects_invalid_state_before_printing_command(
     tmp_path,
 ) -> None:
-    fixture = Path(__file__).parent / "fixtures" / "golden-project"
-    project_dir = tmp_path / "golden-project"
+    fixture = Path(__file__).parent / "fixtures" / "golden-project-v2"
+    project_dir = tmp_path / "golden-project-v2"
     shutil.copytree(fixture, project_dir)
     project = read_yaml(project_dir / "project.yaml")
     project["state"] = "idea"
@@ -342,7 +313,7 @@ def test_produce_dry_run_rejects_invalid_state_before_printing_command(
 
 
 def test_review_medical_requires_the_typed_confirmation(tmp_path) -> None:
-    project_dir = create_project_fixture(tmp_path, state="awaiting_medical_review")
+    project_dir = create_v2_project_fixture(tmp_path, state="awaiting_medical_review")
 
     result = CliRunner().invoke(
         app,
@@ -352,11 +323,11 @@ def test_review_medical_requires_the_typed_confirmation(tmp_path) -> None:
 
     assert result.exit_code == 1
     assert read_yaml(project_dir / "project.yaml")["state"] == "awaiting_medical_review"
-    assert list((project_dir / "reviews").glob("*.yaml")) == []
+    assert list((project_dir / "revisions" / "001" / "reviews").glob("*.yaml")) == []
 
 
 def test_review_medical_approves_after_the_typed_confirmation(tmp_path) -> None:
-    project_dir = create_project_fixture(tmp_path, state="awaiting_medical_review")
+    project_dir = create_v2_project_fixture(tmp_path, state="awaiting_medical_review")
 
     result = CliRunner().invoke(
         app,
@@ -373,26 +344,31 @@ def test_review_medical_approves_after_the_typed_confirmation(tmp_path) -> None:
     )
 
     assert result.exit_code == 0
-    assert read_yaml(project_dir / "project.yaml")["state"] == "script_approved"
-    records = list((project_dir / "reviews").glob("medical-*.yaml"))
+    assert read_yaml(project_dir / "project.yaml")["state"] == "medically_approved"
+    records = list((project_dir / "revisions" / "001" / "reviews").glob("medical-*.yaml"))
     assert len(records) == 1
     assert read_yaml(records[0])["reviewer"] == "BS An"
 
 
 def test_review_video_with_yes_skips_the_confirmation(tmp_path) -> None:
-    project_dir = create_project_fixture(tmp_path, state="awaiting_video_review")
+    from datetime import UTC, datetime
+
+    from tests.helpers import advance_v2_project_to_video_review
+
+    project_dir = create_v2_project_fixture(tmp_path)
+    advance_v2_project_to_video_review(project_dir, now=datetime(2026, 10, 22, tzinfo=UTC))
 
     result = CliRunner().invoke(
         app, ["review", "video", str(project_dir), "--reviewer", "BS An", "--yes"]
     )
 
     assert result.exit_code == 0
-    assert read_yaml(project_dir / "project.yaml")["state"] == "approved_to_publish"
-    assert len(list((project_dir / "reviews").glob("video-*.yaml"))) == 1
+    assert read_yaml(project_dir / "project.yaml")["state"] == "video_approved"
+    assert len(list((project_dir / "revisions" / "001" / "reviews").glob("video-*.yaml"))) == 1
 
 
 def test_review_medical_reports_the_state_gate(tmp_path) -> None:
-    project_dir = create_project_fixture(tmp_path, state="script_approved")
+    project_dir = create_v2_project_fixture(tmp_path)
 
     result = CliRunner().invoke(
         app, ["review", "medical", str(project_dir), "--reviewer", "BS An", "--yes"]
@@ -400,19 +376,6 @@ def test_review_medical_reports_the_state_gate(tmp_path) -> None:
 
     assert result.exit_code == 1
     assert "awaiting_medical_review" in result.stdout
-
-
-def test_revision_create_rejects_v1_project(tmp_path: Path) -> None:
-    fixture = Path(__file__).parent / "fixtures" / "golden-project"
-    project_dir = tmp_path / "golden-project"
-    shutil.copytree(fixture, project_dir)
-
-    result = CliRunner().invoke(
-        app, ["revision", "create", str(project_dir), "--reason", "Sửa"]
-    )
-
-    assert result.exit_code == 1
-    assert "migrate" in result.stdout
 
 
 def test_revision_create_switches_the_active_revision(tmp_path: Path) -> None:
@@ -431,79 +394,22 @@ def test_revision_create_switches_the_active_revision(tmp_path: Path) -> None:
     assert (project_dir / "revisions" / "002" / "workflow.yaml").is_file()
 
 
-def test_project_migrate_dry_run_is_read_only(tmp_path: Path) -> None:
-    fixture = Path(__file__).parent / "fixtures" / "golden-project"
-    source = tmp_path / "golden-project"
-    shutil.copytree(fixture, source)
-    before = {
-        path.relative_to(source): path.read_bytes()
-        for path in source.rglob("*")
-        if path.is_file()
-    }
-
-    result = CliRunner().invoke(app, ["project", "migrate", str(source), "--dry-run"])
-
-    assert result.exit_code == 0
-    assert "revisions/001" in result.stdout
-    assert "script_approved -> medically_approved" in result.stdout
-    assert {
-        path.relative_to(source): path.read_bytes()
-        for path in source.rglob("*")
-        if path.is_file()
-    } == before
-    assert not source.with_name("golden-project-v2").exists()
-
-
-def test_project_migrate_creates_sibling_and_keeps_source(tmp_path: Path) -> None:
-    fixture = Path(__file__).parent / "fixtures" / "golden-project"
-    source = tmp_path / "golden-project"
-    shutil.copytree(fixture, source)
-    before = {
-        path.relative_to(source): path.read_bytes()
-        for path in source.rglob("*")
-        if path.is_file()
-    }
-
-    result = CliRunner().invoke(app, ["project", "migrate", str(source)])
-
-    assert result.exit_code == 0
-    assert "Migrated project:" in result.stdout
-    assert source.with_name("golden-project-v2").is_dir()
-    assert {
-        path.relative_to(source): path.read_bytes()
-        for path in source.rglob("*")
-        if path.is_file()
-    } == before
-
-
-def test_project_migrate_reports_existing_destination(tmp_path: Path) -> None:
-    fixture = Path(__file__).parent / "fixtures" / "golden-project"
-    source = tmp_path / "golden-project"
-    shutil.copytree(fixture, source)
-    source.with_name("golden-project-v2").mkdir()
-
-    result = CliRunner().invoke(app, ["project", "migrate", str(source)])
-
-    assert result.exit_code == 1
-    assert "existing destination" in result.stdout
-
-
 def test_status_reports_state_and_a_stale_approval(tmp_path) -> None:
-    project_dir = create_project_fixture(tmp_path, state="awaiting_medical_review")
+    project_dir = create_v2_project_fixture(tmp_path, state="awaiting_medical_review")
     runner = CliRunner()
     runner.invoke(
         app, ["review", "medical", str(project_dir), "--reviewer", "BS An", "--yes"]
     )
 
     approved = runner.invoke(app, ["status", str(project_dir)])
-    script_path = project_dir / "script" / "script.yaml"
+    script_path = project_dir / "revisions" / "001" / "script" / "script.yaml"
     script = read_yaml(script_path)
     script["title"] = "Ăn mặn và tăng huyết áp — bản sửa"
     write_yaml_atomic(script_path, script)
     stale = runner.invoke(app, ["status", str(project_dir)])
 
     assert approved.exit_code == 0
-    assert "state=script_approved" in approved.stdout
+    assert "state=medically_approved" in approved.stdout
     assert "approval_stale=false" in approved.stdout
     assert "BS An" in approved.stdout
     assert stale.exit_code == 0
@@ -587,8 +493,8 @@ def test_review_open_prints_html_without_writing_project(tmp_path: Path) -> None
     assert "<html" in result.stdout.lower()
 
 
-def test_review_v1_commands_are_unaffected(tmp_path: Path) -> None:
-    project_dir = create_project_fixture(tmp_path, state="awaiting_medical_review")
+def test_review_alias_commands_use_v2_gates(tmp_path: Path) -> None:
+    project_dir = create_v2_project_fixture(tmp_path, state="awaiting_medical_review")
 
     result = runner.invoke(
         app,
@@ -602,6 +508,15 @@ def test_review_v1_commands_are_unaffected(tmp_path: Path) -> None:
         ],
     )
     assert result.exit_code == 0
+
+    approval = project_dir / "revisions/001/reviews/medical-approval.yaml"
+    original = approval.read_bytes()
+    duplicate = runner.invoke(
+        app, ["review", "medical", str(project_dir), "--reviewer", "BS An", "--yes"]
+    )
+    assert duplicate.exit_code == 1
+    assert "already approved" in duplicate.stdout
+    assert approval.read_bytes() == original
 
 
 def test_cli_topic_create_list_and_reject(tmp_path: Path) -> None:
@@ -767,6 +682,10 @@ def test_cli_evidence_search_and_build_ledger(
         ],
     }
     write_yaml_atomic(rev_dir / "evidence" / "ledger.yaml", ledger_content)
+
+    from tests.helpers import write_explainer_fixture
+
+    write_explainer_fixture(rev_dir, "C01")
 
     build_res = runner.invoke(app, ["evidence", "build-ledger", str(project_dir)])
     assert build_res.exit_code == 0

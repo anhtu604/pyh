@@ -109,7 +109,6 @@ def test_mascot_share_is_frame_weighted_warning(frames, warns):
     report = calculate_visual_budget(board(1000, frames))
     assert report.mascot_frames == frames
     assert bool(report.warnings) is warns
-    assert report.passed  # Legacy visual budget remains nonblocking.
 
 
 def test_clip_uses_custom_brand_invitation(brand_profile_path):

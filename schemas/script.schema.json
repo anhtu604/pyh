@@ -135,9 +135,8 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
     "format_profile": {
-      "default": "legacy",
+      "default": "explain_first_v1",
       "enum": [
-        "legacy",
         "hook_outro_v1",
         "explain_first_v1"
       ],

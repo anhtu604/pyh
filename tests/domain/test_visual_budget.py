@@ -140,15 +140,6 @@ def test_report_uses_canonical_floor_basis_points_and_ignores_overlays() -> None
     }
 
 
-def test_legacy_storyboard_bypasses_budget_enforcement() -> None:
-    board = storyboard((("whiteboard", 100),), profile="legacy")
-
-    report = validate_visual_budget(board)
-
-    assert report.profile == "legacy"
-    assert report.passed is True
-
-
 def test_valid_override_replaces_all_default_ranges() -> None:
     override = VisualBudgetOverride(
         rationale="Cần nhiều chart cho dữ liệu đã khai báo.",

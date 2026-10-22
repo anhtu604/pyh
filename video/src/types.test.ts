@@ -145,10 +145,10 @@ describe('RenderInputSchema chart contract', () => {
       .success).toBe(false);
   });
 
-  it('keeps an unmarked legacy chart input compatible', () => {
-    const legacy = {...chartInput, visual_budget_profile: undefined, scenes: [{
+  it('defaults unmarked chart input to explain-first', () => {
+    const explainFirst = {...chartInput, visual_budget_profile: undefined, scenes: [{
       ...chartInput.scenes[0], visual_assets: [],
     }]};
-    expect(RenderInputSchema.safeParse(legacy).success).toBe(true);
+    expect(RenderInputSchema.safeParse(explainFirst).success).toBe(true);
   });
 });

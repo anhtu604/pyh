@@ -21,7 +21,7 @@ const defaultProps: RenderInput = {
       visual_assets: [],
     },
   ],
-  visual_budget_profile: 'legacy',
+  visual_budget_profile: 'explain_first_v1',
   format_profile: 'vertical_clip',
   width: 1080,
   height: 1920,

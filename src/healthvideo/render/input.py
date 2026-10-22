@@ -51,7 +51,7 @@ class RenderInput(BaseModel):
     youtube_cta: YouTubeCTA | None = None
     audio_file: str
     scenes: tuple[Scene, ...] = Field(default_factory=tuple)
-    visual_budget_profile: VisualBudgetProfile = "legacy"
+    visual_budget_profile: VisualBudgetProfile = "explain_first_v1"
     format_profile: FormatProfile = "vertical_clip"
     width: Literal[1080, 1920] = 1080
     height: Literal[1920, 1080] = 1920
@@ -97,8 +97,6 @@ class RenderInput(BaseModel):
 def build_render_input(
     storyboard: Storyboard,
     audio_file: str,
-    *,
-    duration_policy: Literal["v1", "v2"] = "v1",
 ) -> RenderInput:
     _validate_relative_posix_path(audio_file, "audio")
 
@@ -117,8 +115,10 @@ def build_render_input(
     if not storyboard.scenes:
         raise ValueError("Scene <none>: storyboard must contain at least one scene")
     spec = FORMAT_SPECS[storyboard.format_profile]
-    bounded = storyboard.format_profile == "youtube_long" or duration_policy == "v1"
-    if bounded and not spec.min_frames <= expected_start <= spec.max_frames:
+    if (
+        storyboard.format_profile == "youtube_long"
+        and not spec.min_frames <= expected_start <= spec.max_frames
+    ):
         raise ValueError(
             f"Scene {storyboard.scenes[-1].id}: total duration must be between "
             f"{spec.min_frames} and {spec.max_frames} frames"

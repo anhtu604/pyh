@@ -10,7 +10,6 @@ EXPECTED = {
         "agent_review_complete",
         "produce",
         "package",
-        "migrate_project_command",
         "review_medical",
         "review_video",
         "review_approve",

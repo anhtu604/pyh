@@ -64,7 +64,7 @@ def test_explain_first_requires_explainer() -> None:
     assert any(i.code == "missing_explainer" and i.severity == "error" for i in issues)
 
 
-@pytest.mark.parametrize("profile", ["legacy", "hook_outro_v1"])
+@pytest.mark.parametrize("profile", ["hook_outro_v1"])
 def test_old_profiles_do_not_run_new_lint(profile: str) -> None:
     old = script([line(6, "TEST TERM 1", "missing"), line(2)], profile)
     assert review_script(old, [], []) == []
@@ -110,14 +110,13 @@ def test_ratio_outliers_are_warnings_and_skipped_beats_do_not_warn() -> None:
     assert review([line(None), line(2, "")]) == []
 
 
-@pytest.mark.parametrize("profile", ["legacy", "hook_outro_v1", "explain_first_v1"])
-@pytest.mark.parametrize("revisioned", [False, True])
-def test_cli_lint_loads_explainer_only_for_explain_first(tmp_path: Path, profile, revisioned) -> None:
+@pytest.mark.parametrize("profile", ["hook_outro_v1", "explain_first_v1"])
+def test_cli_lint_loads_explainer_only_for_explain_first(tmp_path: Path, profile) -> None:
     root = tmp_path
     write_yaml_atomic(root / "project.yaml", {
-        "schema_version": "2.0" if revisioned else "1.0", "slug": "test-only",
+        "schema_version": "2.0", "slug": "test-only",
     })
-    revision = root / "revisions" / "001" if revisioned else root
+    revision = root / "revisions" / "001"
     write_yaml_atomic(revision / "script/script.yaml", script([line(2)], profile).model_dump())
     write_yaml_atomic(revision / "evidence/ledger.yaml", {"claims": []})
     if profile != "explain_first_v1":

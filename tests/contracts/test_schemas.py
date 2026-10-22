@@ -177,9 +177,8 @@ def test_storyboard_schema_adds_optional_visual_budget_contract(tmp_path: Path) 
         (output_dir / "storyboard.schema.json").read_text(encoding="utf-8")
     )
 
-    assert schema["properties"]["visual_budget_profile"]["default"] == "legacy"
+    assert schema["properties"]["visual_budget_profile"]["default"] == "explain_first_v1"
     assert schema["properties"]["visual_budget_profile"]["enum"] == [
-        "legacy",
         "m6_5_v1",
         "explain_first_v1",
     ]
@@ -221,7 +220,7 @@ def test_exported_chart_role_and_render_profile_are_additive(tmp_path: Path) -> 
     assert "chart" in asset_manifest["$defs"]["AssetRecord"]["properties"][
         "storyboard_role"
     ]["anyOf"][0]["enum"]
-    assert render_input["properties"]["visual_budget_profile"]["default"] == "legacy"
+    assert render_input["properties"]["visual_budget_profile"]["default"] == "explain_first_v1"
     assert render_input["x-invariants"]["m6_5_chart_ref"] == (
         "m6_5_v1 chart scenes contain exactly one role=chart asset"
     )

@@ -1,169 +1,48 @@
-import json
+from datetime import datetime
 from pathlib import Path
 
-from healthvideo.assets import referenced_evidence_assets
-from healthvideo.domain.project import ProjectManifest, ProjectState, transition
-from healthvideo.domain.review import ReviewKind, ReviewRecord
-from healthvideo.domain.storyboard import Storyboard
-from healthvideo.render.run import (
-    OUTPUT_NAME,
-    PRODUCTION_ARTIFACT,
-    RENDER_INPUT_NAME,
-    production_run_dir,
-)
-from healthvideo.storage.files import (
-    canonical_json_hash,
-    read_yaml,
-    sha256_file,
-    write_yaml_atomic,
+from healthvideo.domain.gate_review import GateApprovalRecord, GateKind
+from healthvideo.domain.project_v2 import ProjectManifestV2
+from healthvideo.storage.files import read_yaml
+from healthvideo.storage.project_layout import resolve_project_layout
+from healthvideo.workflows.gate_review import (
+    approve_gate,
+    hash_reviewed_artifacts,
+    medical_reviewed_paths,
+    video_reviewed_paths,
 )
 
-REVIEWS_DIRECTORY = "reviews"
-PROJECT_MANIFEST_NAME = "project.yaml"
-GATES: dict[ReviewKind, tuple[ProjectState, ProjectState]] = {
-    ReviewKind.MEDICAL: (
-        ProjectState.AWAITING_MEDICAL_REVIEW,
-        ProjectState.SCRIPT_APPROVED,
-    ),
-    ReviewKind.VIDEO: (
-        ProjectState.AWAITING_VIDEO_REVIEW,
-        ProjectState.APPROVED_TO_PUBLISH,
-    ),
-}
+
+def approve_medical(project_dir: Path, *, reviewer: str, note: str = "") -> GateApprovalRecord:
+    """Approve the active revision through the v2 medical gate."""
+    return approve_gate(
+        project_dir, GateKind.MEDICAL, reviewer=reviewer, note=note,
+        now=datetime.now().astimezone(),
+    )
 
 
-def approve_medical(
-    project_dir: Path, *, reviewer: str, note: str = ""
-) -> ReviewRecord:
-    """Record the medical gate over the evidence, script and storyboard."""
-    return _approve(project_dir, ReviewKind.MEDICAL, reviewer=reviewer, note=note)
+def approve_video(project_dir: Path, *, reviewer: str, note: str = "") -> GateApprovalRecord:
+    """Approve the active revision through the v2 video gate."""
+    return approve_gate(
+        project_dir, GateKind.VIDEO, reviewer=reviewer, note=note,
+        now=datetime.now().astimezone(),
+    )
 
 
-def approve_video(project_dir: Path, *, reviewer: str, note: str = "") -> ReviewRecord:
-    """Record the video gate over the rendered MP4 and its render input."""
-    return _approve(project_dir, ReviewKind.VIDEO, reviewer=reviewer, note=note)
-
-
-def latest_approval(project_dir: Path, kind: ReviewKind) -> ReviewRecord | None:
-    """Return the most recent approval of `kind`, or None when the gate is open."""
-    directory = project_dir / REVIEWS_DIRECTORY
-    if not directory.is_dir():
-        return None
-    records = [
-        ReviewRecord.model_validate(read_yaml(path))
-        for path in sorted(directory.glob(f"{kind.value}-*.yaml"))
-    ]
-    if not records:
-        return None
-    return max(records, key=lambda record: (record.reviewed_at, str(record.id)))
+def latest_approval(project_dir: Path, kind: GateKind) -> GateApprovalRecord | None:
+    """Read the immutable approval bound to the active revision."""
+    revision = resolve_project_layout(project_dir).artifact_root
+    path = revision / "reviews" / f"{kind.value}-approval.yaml"
+    return GateApprovalRecord.model_validate(read_yaml(path)) if path.is_file() else None
 
 
 def approval_is_stale(
-    project_dir: Path, project: ProjectManifest, kind: ReviewKind
+    project_dir: Path, project: ProjectManifestV2, kind: GateKind,
 ) -> bool:
-    """Report whether reviewed artifacts changed after the latest approval."""
+    """Report whether the active revision's reviewed artifacts changed."""
     record = latest_approval(project_dir, kind)
     if record is None:
         return False
-    current = _current_artifact_hashes(project_dir, project, kind)
-    return current != record.artifact_hashes
-
-
-def ensure_approval_current(
-    project_dir: Path, project: ProjectManifest, kind: ReviewKind
-) -> ReviewRecord:
-    """Refuse to move a project forward on an approval its artifacts outgrew."""
-    record = latest_approval(project_dir, kind)
-    if record is None:
-        raise FileNotFoundError(
-            f"{kind.value} approval record is missing; "
-            f"run 'healthvideo review {kind.value}'"
-        )
-    if _current_artifact_hashes(project_dir, project, kind) != record.artifact_hashes:
-        raise ValueError(
-            f"{kind.value} approval is stale: artifacts changed after review; "
-            f"run 'healthvideo review {kind.value}' again"
-        )
-    return record
-
-
-def _reviewed_paths(
-    project_dir: Path, project: ProjectManifest, kind: ReviewKind
-) -> dict[str, Path]:
-    """Name the artifacts a gate covers; empty when there is nothing to review."""
-    if kind is ReviewKind.MEDICAL:
-        paths = {
-            "evidence": project_dir / "evidence" / "ledger.yaml",
-            "script": project_dir / "script" / "script.yaml",
-            "storyboard": project_dir / "storyboard" / "storyboard.yaml",
-        }
-        storyboard_path = paths["storyboard"]
-        if storyboard_path.is_file():
-            storyboard = Storyboard.model_validate(read_yaml(storyboard_path))
-            paths.update(
-                {
-                    f"asset:{relative}": path
-                    for relative, path in referenced_evidence_assets(
-                        project_dir, storyboard
-                    ).items()
-                }
-            )
-        return paths
-    input_hash = project.artifact_hashes.get(PRODUCTION_ARTIFACT)
-    if input_hash is None:
-        return {}
-    run_dir = production_run_dir(project_dir, input_hash)
-    return {
-        "render_input": run_dir / RENDER_INPUT_NAME,
-        "video": run_dir / OUTPUT_NAME,
-    }
-
-
-def _current_artifact_hashes(
-    project_dir: Path, project: ProjectManifest, kind: ReviewKind
-) -> dict[str, str]:
-    """Hash the artifacts a gate covers, omitting the ones that are missing."""
-    return {
-        name: _hash_artifact(path)
-        for name, path in _reviewed_paths(project_dir, project, kind).items()
-        if path.is_file()
-    }
-
-
-def _hash_artifact(path: Path) -> str:
-    """Hash documents by meaning and rendered media by bytes."""
-    if path.suffix == ".yaml":
-        return canonical_json_hash(read_yaml(path))
-    if path.suffix == ".json":
-        return canonical_json_hash(json.loads(path.read_text(encoding="utf-8")))
-    return sha256_file(path)
-
-
-def _approve(
-    project_dir: Path, kind: ReviewKind, *, reviewer: str, note: str
-) -> ReviewRecord:
-    manifest_path = project_dir / PROJECT_MANIFEST_NAME
-    project = ProjectManifest.model_validate(read_yaml(manifest_path))
-    gate, approved_state = GATES[kind]
-    if project.state is not gate:
-        raise ValueError(f"{kind.value} review requires project state {gate.value}")
-
-    paths = _reviewed_paths(project_dir, project, kind)
-    missing = [name for name, path in paths.items() if not path.is_file()]
-    if not paths or missing:
-        raise FileNotFoundError(
-            f"{kind.value} review needs artifacts: {', '.join(missing) or 'none found'}"
-        )
-    artifact_hashes = _current_artifact_hashes(project_dir, project, kind)
-
-    record = ReviewRecord(
-        kind=kind, reviewer=reviewer, note=note, artifact_hashes=artifact_hashes
-    )
-    write_yaml_atomic(
-        project_dir / REVIEWS_DIRECTORY / f"{kind.value}-{record.id}.yaml",
-        record.model_dump(mode="json"),
-    )
-    write_yaml_atomic(
-        manifest_path, transition(project, approved_state).model_dump(mode="json")
-    )
-    return record
+    revision = project_dir / "revisions" / project.active_revision
+    paths = medical_reviewed_paths(revision) if kind is GateKind.MEDICAL else video_reviewed_paths(revision)
+    return hash_reviewed_artifacts(paths) != record.artifact_hashes

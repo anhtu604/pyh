@@ -21,7 +21,7 @@ def _long(*chapters: tuple[str, int]) -> Storyboard:
     return Storyboard(title="PYH", scenes=tuple(scenes), format_profile="youtube_long")
 
 
-def test_legacy_storyboard_defaults_to_vertical_clip() -> None:
+def test_explain_first_storyboard_defaults_to_vertical_clip() -> None:
     board = Storyboard(title="PYH", scenes=(_scene("S01", 0, 1350, None),))
     result = build_render_input(board, "audio/a.wav")
     assert (result.format_profile, result.width, result.height) == ("vertical_clip", 1080, 1920)
@@ -33,10 +33,9 @@ def test_youtube_long_is_landscape_and_allows_25_minutes() -> None:
 
 
 @pytest.mark.parametrize("frames", [60 * 30 - 1, 25 * 60 * 30 + 1])
-def test_youtube_long_enforces_bounds_under_both_policies(frames: int) -> None:
-    for policy in ("v1", "v2"):
-        with pytest.raises(ValueError, match="total duration"):
-            build_render_input(_long(("CH01", frames)), "audio/a.wav", duration_policy=policy)
+def test_youtube_long_enforces_bounds(frames: int) -> None:
+    with pytest.raises(ValueError, match="total duration"):
+        build_render_input(_long(("CH01", frames)), "audio/a.wav")
 
 
 def test_youtube_long_requires_chapter_on_every_scene() -> None:

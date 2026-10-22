@@ -6,7 +6,6 @@ from pydantic import BaseModel
 
 from healthvideo.domain.evidence import EvidenceClaim
 from healthvideo.domain.explainer import Explainer
-from healthvideo.domain.project import ProjectManifest
 from healthvideo.domain.project_v2 import ProjectManifestV2
 from healthvideo.domain.script import Script
 from healthvideo.storage.explainer import read_explainer
@@ -118,12 +117,8 @@ def _review_explain_first(script: Script, explainer: Explainer | None) -> list[Q
 def lint_project_script(project_dir: Path) -> list[QAIssue]:
     """Read the active script and its references without mutating project artifacts."""
     data = read_yaml(project_dir / "project.yaml")
-    if data.get("schema_version") == "2.0":
-        project = ProjectManifestV2.model_validate(data)
-        revision = project_dir / "revisions" / project.active_revision
-    else:
-        ProjectManifest.model_validate(data)
-        revision = project_dir
+    project = ProjectManifestV2.model_validate(data)
+    revision = project_dir / "revisions" / project.active_revision
     script = Script.model_validate(read_yaml(revision / "script" / "script.yaml"))
     ledger = read_yaml(revision / "evidence" / "ledger.yaml")
     claims = [EvidenceClaim.model_validate(item) for item in ledger.get("claims", [])]
