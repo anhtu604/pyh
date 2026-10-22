@@ -49,6 +49,7 @@ from healthvideo.render.run import (
     PRODUCTION_ARTIFACT,
     RENDER_INPUT_NAME,
 )
+from healthvideo.render.thumbnail import render_optional_thumbnail
 from healthvideo.render.timing import (
     PAD_FRAMES,
     TIMING_POLICY_VERSION,
@@ -321,10 +322,13 @@ def _produce_v2(
             raise ValueError(
                 "Production requires v2 project state medically_approved"
             )
+        if not dry_run:
+            render_optional_thumbnail(layout.artifact_root, runner=runner)
         return output
     if dry_run:
         return output
     if cache_valid:
+        render_optional_thumbnail(layout.artifact_root, runner=runner)
         _promote_v2_video_qa_if_needed(
             layout.artifact_root,
             input_hash,
@@ -511,6 +515,7 @@ def _produce_v2(
             expected_visual_budget=visual_budget_qa,
         )
         _promote_run(staging_dir, renders_dir)
+        render_optional_thumbnail(layout.artifact_root, runner=runner)
         _promote_v2_video_qa_if_needed(
             layout.artifact_root,
             input_hash,

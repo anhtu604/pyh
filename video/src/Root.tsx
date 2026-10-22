@@ -1,6 +1,7 @@
 import React from 'react';
 import {Composition} from 'remotion';
 import {HealthVideo} from './HealthVideo';
+import {Thumbnail} from './Thumbnail';
 import {parseRenderInput} from './types';
 import type {RenderInput, Scene} from './types';
 
@@ -55,6 +56,8 @@ export const verticalClipDefaults: RenderInput = {
 
 export const RemotionRoot: React.FC = () => (
   <>
+    <Composition id="Thumbnail" component={Thumbnail} durationInFrames={1} fps={30}
+      width={1280} height={720} defaultProps={{headline: 'Hiểu để bảo vệ sức khỏe', background: 'thumbnail-background.png', logo: 'logo.svg'}} />
     <Composition
       id="HealthVideo"
       component={HealthVideo}

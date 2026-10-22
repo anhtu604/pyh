@@ -321,8 +321,14 @@ def _render_posts_section(revision_root: Path) -> str:
         f"Reels: {escape(captions.reels)}</li>"
         for clip_id, captions in sorted(posts.clip_captions.items())
     )
+    thumbnail_html = (
+        '<h3>Thumbnail YouTube</h3><img src="../posts/thumbnail.png" '
+        'alt="Thumbnail YouTube" style="max-width:100%;width:640px">'
+        if posts.thumbnail is not None else ""
+    )
     return (
         "<section><h2>Bài đăng</h2>"
+        f"{thumbnail_html}"
         f"<h3>Tiêu đề YouTube</h3><ul>{titles_html}</ul>"
         f"<h3>Mô tả YouTube</h3><pre>{escape(posts.youtube_description)}</pre>"
         f"<p><strong>Tag:</strong> {tags_html}</p>"

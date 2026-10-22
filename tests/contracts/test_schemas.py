@@ -14,6 +14,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
     ("filename", "has_nested_models"),
     [
         ("brand.schema.json", True),
+        ("posts.schema.json", True),
         ("project-v2.schema.json", True),
         ("pronunciation.schema.json", True),
         ("topic-card.schema.json", True),

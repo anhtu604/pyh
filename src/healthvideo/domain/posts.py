@@ -27,6 +27,21 @@ class ClipCaptions(BaseModel):
     reels: str = Field(min_length=1, max_length=2200)
 
 
+class ThumbnailSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    headline: str = Field(min_length=1, max_length=60)
+    background_prompt: str = Field(min_length=1, pattern=r"\S")
+    seed: int = Field(strict=True, ge=0, lt=2**63)
+
+    @field_validator("headline")
+    @classmethod
+    def _visible_headline(cls, value: str) -> str:
+        if not CLAIM_REF.sub("", value).strip():
+            raise ValueError("thumbnail headline must contain visible text")
+        return value
+
+
 class PostSet(BaseModel):
     """Multi-channel post drafts prepared before the video review gate."""
 
@@ -39,6 +54,7 @@ class PostSet(BaseModel):
     clip_captions: dict[str, ClipCaptions] = Field(default_factory=dict)
     facebook_post: str = Field(min_length=1)
     youtube_community: str = Field(min_length=1)
+    thumbnail: ThumbnailSpec | None = None
 
     @field_validator("youtube_tags", mode="after")
     @classmethod
@@ -62,6 +78,8 @@ def iter_texts(posts: PostSet) -> Iterator[tuple[str, str]]:
         yield (f"clip_captions[{clip_id}].reels", captions.reels)
     yield ("facebook_post", posts.facebook_post)
     yield ("youtube_community", posts.youtube_community)
+    if posts.thumbnail is not None:
+        yield ("thumbnail.headline", posts.thumbnail.headline)
 
 
 def _split_sentences(text: str, *, strip_chapter_timestamps: bool) -> list[str]:
@@ -112,7 +130,9 @@ def validate_posts(
             text, strip_chapter_timestamps=is_description
         ):
             without_claims = CLAIM_REF.sub("", sentence)
-            for chapter_title in ordered_chapters:
+            for chapter_title in (
+                ordered_chapters if field_path != "thumbnail.headline" else ()
+            ):
                 without_claims = without_claims.replace(chapter_title, "")
             if _DIGIT_RE.search(without_claims) and not CLAIM_REF.search(sentence):
                 errors.append(

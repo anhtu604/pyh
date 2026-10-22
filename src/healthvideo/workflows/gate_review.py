@@ -198,6 +198,11 @@ def video_reviewed_paths(revision_root: Path) -> dict[str, Path]:
     posts_path = revision_root / POSTS_ARTIFACT
     if posts_path.is_file():
         paths[POSTS_ARTIFACT] = posts_path
+        # Rejection/status must still be able to hash malformed post drafts.
+        # Approval validates the PostSet before requiring these paths.
+        if read_yaml(posts_path).get("thumbnail") is not None:
+            for name in ("thumbnail.png", "thumbnail-background.png", "license-ledger.yaml"):
+                paths[f"posts/{name}"] = revision_root / "posts" / name
     return paths
 
 

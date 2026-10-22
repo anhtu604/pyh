@@ -138,6 +138,13 @@ def _package_v2(layout: ProjectLayout) -> Path:
         shutil.copy2(video, staging_dir / OUTPUT_NAME)
         shutil.copy2(render_input_path, staging_dir / RENDER_INPUT_NAME)
         shutil.copy2(posts_path, staging_dir / POSTS_YAML_NAME)
+        if posts.thumbnail is not None:
+            for name in ("thumbnail.png", "thumbnail-background.png", "license-ledger.yaml"):
+                target = staging_dir / name
+                shutil.copy2(layout.artifact_root / "posts" / name, target)
+                digest = (canonical_json_hash(read_yaml(target))
+                          if target.suffix == ".yaml" else sha256_file(target))
+                _require_approved_hash(video_approval, f"posts/{name}", digest, staged=True)
         _validate_staged_v2_video_artifacts(
             staging_dir, video_approval, approved_render_input_hash
         )
@@ -485,6 +492,11 @@ def _manifest_json(
             "video": _approval_binding(video_approval),
         },
         "payload_sha256": {
+            **{
+                name: sha256_file(staging_dir / name)
+                for name in ("thumbnail.png", "thumbnail-background.png", "license-ledger.yaml")
+                if (staging_dir / name).is_file()
+            },
             **{
                 path.relative_to(staging_dir).as_posix(): sha256_file(path)
                 for path in sorted((staging_dir / "clips").glob("*")) if path.is_file()

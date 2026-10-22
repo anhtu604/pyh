@@ -12,6 +12,7 @@ from healthvideo.domain.evidence import EvidenceClaim
 from healthvideo.domain.explainer import Explainer
 from healthvideo.domain.license_ledger import LicenseLedger
 from healthvideo.domain.outline import Outline
+from healthvideo.domain.posts import PostSet
 from healthvideo.domain.project_v2 import ProjectManifestV2
 from healthvideo.domain.pronunciation import PronunciationLexicon
 from healthvideo.domain.script import Script
@@ -24,6 +25,7 @@ from healthvideo.render.input import RenderInput
 JSON_SCHEMA_DIALECT = "https://json-schema.org/draft/2020-12/schema"
 DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parents[1] / "schemas"
 SCHEMAS: dict[str, type[BaseModel]] = {
+    "posts.schema.json": PostSet,
     "brand.schema.json": BrandProfile,
     "pronunciation.schema.json": PronunciationLexicon,
     "project-v2.schema.json": ProjectManifestV2,

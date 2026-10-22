@@ -13,6 +13,7 @@
 3. Mọi câu có chữ số (trừ mốc giờ đầu dòng chương trong `youtube_description`) bắt buộc phải gắn `[claim:<id>]` trỏ tới `claim_id` đã duyệt y khoa trong `evidence/ledger.yaml`.
 4. Trong `youtube_description`, ghi đầy đủ mốc giờ chương kèm đúng tiêu đề chương từ `outline.yaml` và danh sách nguồn tham khảo dùng đúng nhãn nguồn (`title` của từng bản ghi trong `evidence/ledger.yaml`).
 5. Chạy `healthvideo step posts-check {project}` và sửa `revisions/<rev>/posts/posts.yaml` cho tới khi không còn lỗi.
+6. Thêm khối `thumbnail`: `headline` (1–60 ký tự, tính cả dấu claim), `background_prompt`, `seed` (số nguyên không âm). Headline ngắn, gây tò mò, đúng nội dung đã duyệt; không giật tít sai sự thật, không hứa chữa bệnh. Có chữ số phải gắn `[claim:<id>]` đã duyệt; renderer sẽ bỏ dấu claim khi vẽ chữ. Prompt nền chỉ mô tả minh họa trang trí, không chữ/số/nhãn/logo; chủ thể bên phải, chừa khoảng thoáng bên trái. Chữ và logo do Remotion dựng.
 
 ## Lệnh được dùng
 - `healthvideo step posts-check {project}`

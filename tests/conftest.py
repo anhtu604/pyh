@@ -72,6 +72,7 @@ def synthetic_workflow_illustrations(monkeypatch):
     """Keep production orchestration tests independent of FLUX weights and CUDA."""
     from PIL import Image
 
+    from healthvideo.render import thumbnail
     from healthvideo.workflows import produce
 
     def generate(prompt, *, out, width, height, seed, **kwargs):
@@ -80,3 +81,4 @@ def synthetic_workflow_illustrations(monkeypatch):
         return out
 
     monkeypatch.setattr(produce, "generate_illustration", generate)
+    monkeypatch.setattr(thumbnail, "generate_illustration", generate)

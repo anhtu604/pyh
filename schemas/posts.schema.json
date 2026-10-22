@@ -1,0 +1,137 @@
+{
+  "$defs": {
+    "ClipCaptions": {
+      "additionalProperties": false,
+      "description": "Per-platform captions for one vertical clip.",
+      "properties": {
+        "reels": {
+          "maxLength": 2200,
+          "minLength": 1,
+          "title": "Reels",
+          "type": "string"
+        },
+        "shorts": {
+          "maxLength": 5000,
+          "minLength": 1,
+          "title": "Shorts",
+          "type": "string"
+        },
+        "tiktok": {
+          "maxLength": 2200,
+          "minLength": 1,
+          "title": "Tiktok",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tiktok",
+        "shorts",
+        "reels"
+      ],
+      "title": "ClipCaptions",
+      "type": "object"
+    },
+    "ThumbnailSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "background_prompt": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Background Prompt",
+          "type": "string"
+        },
+        "headline": {
+          "maxLength": 60,
+          "minLength": 1,
+          "title": "Headline",
+          "type": "string"
+        },
+        "seed": {
+          "exclusiveMaximum": 9223372036854775808,
+          "minimum": 0,
+          "title": "Seed",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "headline",
+        "background_prompt",
+        "seed"
+      ],
+      "title": "ThumbnailSpec",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Multi-channel post drafts prepared before the video review gate.",
+  "properties": {
+    "clip_captions": {
+      "additionalProperties": {
+        "$ref": "#/$defs/ClipCaptions"
+      },
+      "title": "Clip Captions",
+      "type": "object"
+    },
+    "facebook_post": {
+      "minLength": 1,
+      "title": "Facebook Post",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "thumbnail": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ThumbnailSpec"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "youtube_community": {
+      "minLength": 1,
+      "title": "Youtube Community",
+      "type": "string"
+    },
+    "youtube_description": {
+      "maxLength": 5000,
+      "minLength": 1,
+      "title": "Youtube Description",
+      "type": "string"
+    },
+    "youtube_tags": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Youtube Tags",
+      "type": "array"
+    },
+    "youtube_titles": {
+      "items": {
+        "maxLength": 100,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 3,
+      "minItems": 2,
+      "title": "Youtube Titles",
+      "type": "array"
+    }
+  },
+  "required": [
+    "youtube_titles",
+    "youtube_description",
+    "facebook_post",
+    "youtube_community"
+  ],
+  "title": "PostSet",
+  "type": "object"
+}

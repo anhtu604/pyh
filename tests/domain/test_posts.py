@@ -256,3 +256,14 @@ def test_vietnamese_text_roundtrip() -> None:
     assert "clip_captions[CL01].tiktok" in paths
     assert "facebook_post" in paths
     assert "youtube_community" in paths
+
+
+def test_thumbnail_headline_number_needs_claim():
+    def errors(headline, chapters=()):
+        posts = _valid_post_set(thumbnail={"headline": headline, "background_prompt": "unlabeled heart", "seed": 7})
+        return validate_posts(posts, approved_claim_ids=APPROVED_CLAIMS,
+                              chapter_titles=chapters, source_labels=())
+    assert any("thumbnail.headline" in e for e in errors("5 điều cần biết"))
+    assert errors("5 điều cần biết [claim:C01]") == []
+    assert any("C99" in e for e in errors("5 điều [claim:C99]"))
+    assert any("thumbnail.headline" in e for e in errors("5 điều cần biết", ("5 điều cần biết",)))
