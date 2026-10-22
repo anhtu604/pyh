@@ -5,9 +5,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from healthvideo.domain.agent_review import AgentReviewResponse
 from healthvideo.domain.asset_manifest import AssetManifest
-from healthvideo.domain.author import AuthorBrief
 from healthvideo.domain.brand import BrandProfile
 from healthvideo.domain.clip_plan import ClipPlan
 from healthvideo.domain.evidence import EvidenceClaim
@@ -32,14 +30,12 @@ SCHEMAS: dict[str, type[BaseModel]] = {
     "topic-card.schema.json": TopicCard,
     "evidence.schema.json": EvidenceClaim,
     "explainer.schema.json": Explainer,
-    "author-brief.schema.json": AuthorBrief,
     "script.schema.json": Script,
     "storyboard.schema.json": Storyboard,
     "render-input.schema.json": RenderInput,
     "stage-manifest.schema.json": StageManifest,
     "asset-manifest.schema.json": AssetManifest,
     "license-ledger.schema.json": LicenseLedger,
-    "agent-review-response.schema.json": AgentReviewResponse,
     "screening-criteria.schema.json": ScreeningCriteria,
     "screening-decision.schema.json": ScreeningDecision,
     "outline.schema.json": Outline,

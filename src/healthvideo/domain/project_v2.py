@@ -8,9 +8,6 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 class WorkflowState(StrEnum):
     IDEA = "idea"
     TOPIC_SELECTED = "topic_selected"
-    ORIENTATION_RESEARCH_IN_PROGRESS = "orientation_research_in_progress"
-    AWAITING_EDITORIAL_DIRECTION = "awaiting_editorial_direction"
-    AUTHOR_BRIEF_READY = "author_brief_ready"
     RESEARCH_IN_PROGRESS = "research_in_progress"
     EVIDENCE_READY = "evidence_ready"
     DRAFT_READY = "draft_ready"
@@ -21,8 +18,6 @@ class WorkflowState(StrEnum):
     VIDEO_APPROVED = "video_approved"
     PACKAGED = "packaged"
     PUBLISHED_MANUAL = "published_manual"
-    AWAITING_BROWSER_LOGIN = "awaiting_browser_login"
-    AWAITING_SECOND_MODEL_REVIEW = "awaiting_second_model_review"
     NEEDS_MEDICAL_REVISION = "needs_medical_revision"
     NEEDS_PRODUCTION_REVISION = "needs_production_revision"
     BLOCKED = "blocked"
@@ -33,9 +28,6 @@ MAIN_STATES = frozenset(
     {
         WorkflowState.IDEA,
         WorkflowState.TOPIC_SELECTED,
-        WorkflowState.ORIENTATION_RESEARCH_IN_PROGRESS,
-        WorkflowState.AWAITING_EDITORIAL_DIRECTION,
-        WorkflowState.AUTHOR_BRIEF_READY,
         WorkflowState.RESEARCH_IN_PROGRESS,
         WorkflowState.EVIDENCE_READY,
         WorkflowState.DRAFT_READY,
@@ -51,8 +43,6 @@ MAIN_STATES = frozenset(
 
 RESUMABLE_SIDE_STATES = frozenset(
     {
-        WorkflowState.AWAITING_BROWSER_LOGIN,
-        WorkflowState.AWAITING_SECOND_MODEL_REVIEW,
         WorkflowState.NEEDS_MEDICAL_REVISION,
         WorkflowState.NEEDS_PRODUCTION_REVISION,
         WorkflowState.BLOCKED,
@@ -66,8 +56,6 @@ class ResumableSideState(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     type: Literal[
-        WorkflowState.AWAITING_BROWSER_LOGIN,
-        WorkflowState.AWAITING_SECOND_MODEL_REVIEW,
         WorkflowState.NEEDS_MEDICAL_REVISION,
         WorkflowState.NEEDS_PRODUCTION_REVISION,
         WorkflowState.BLOCKED,

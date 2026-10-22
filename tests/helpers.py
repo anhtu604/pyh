@@ -3,15 +3,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from healthvideo.domain.evidence import CandidateSource
 from healthvideo.domain.explainer import Explainer
 from healthvideo.domain.gate_review import GateKind
-from healthvideo.domain.orientation import (
-    CompletedOrientation,
-    EditorialOption,
-    OrientationScope,
-    SourceBackedContext,
-)
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
 from healthvideo.storage.explainer import write_explainer
@@ -19,26 +12,9 @@ from healthvideo.storage.files import read_yaml, sha256_file, write_yaml_atomic
 from healthvideo.tts.base import TTSRequest
 from healthvideo.tts.silent import SilentTTS
 from healthvideo.workflows.gate_review import approve_gate
-from healthvideo.workflows.orientation import (
-    begin_orientation,
-    complete_orientation,
-    run_orientation_search,
-)
 
 FIXTURE_PRODUCTION_HASH = "synthetic-production-run"
 FIXTURE_REVIEWER = "BS Nguyễn Văn An"
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 def _write_json(path: Path, data: dict[str, Any]) -> None:
@@ -67,7 +43,7 @@ def create_v2_project_fixture(
     state = WorkflowState(state)
     project_dir = root / "muoi-va-huyet-ap-v2"
     revision_root = project_dir / "revisions" / "001"
-    for name in ("topic", "author", "evidence", "script", "storyboard", "assets"):
+    for name in ("topic", "evidence", "script", "storyboard", "assets"):
         (revision_root / name).mkdir(parents=True, exist_ok=True)
 
     asset_bytes = b"<svg xmlns='http://www.w3.org/2000/svg'><text>synthetic</text></svg>"
@@ -82,18 +58,6 @@ def create_v2_project_fixture(
             "slug": "muoi-va-huyet-ap",
             "title": "Ăn mặn và tăng huyết áp",
             "origin": "test_fixture",
-        },
-    )
-    write_yaml_atomic(
-        revision_root / "author" / "brief.yaml",
-        {
-            "schema_version": "1.0",
-            "title": "Ăn mặn và tăng huyết áp",
-            "personal_position": "Giảm muối là một bước thực tế.",
-            "reasoning": "Huyết áp thường đáp ứng với lượng muối.",
-            "emotion": "bình tĩnh",
-            "audience_concern": "Người trưởng thành quan tâm huyết áp.",
-            "phrases_to_keep": [],
         },
     )
     write_yaml_atomic(
@@ -327,9 +291,6 @@ def create_long_form_project_fixture(root: Path) -> Path:
 _V2_MAIN_SEQUENCE = [
     WorkflowState.IDEA,
     WorkflowState.TOPIC_SELECTED,
-    WorkflowState.ORIENTATION_RESEARCH_IN_PROGRESS,
-    WorkflowState.AWAITING_EDITORIAL_DIRECTION,
-    WorkflowState.AUTHOR_BRIEF_READY,
     WorkflowState.RESEARCH_IN_PROGRESS,
     WorkflowState.EVIDENCE_READY,
     WorkflowState.DRAFT_READY,
@@ -345,9 +306,6 @@ def _advance_v2_state(project_dir: Path, state: WorkflowState) -> None:
         validated_artifacts=frozenset(
             {
                 "topic/card.yaml",
-                "orientation/scope.yaml",
-                "orientation/completed/<run_id>.yaml",
-                "author/brief.yaml",
                 "evidence/ledger.yaml",
                 "explainer/explainer.yaml",
                 "script/script.yaml",
@@ -411,69 +369,6 @@ def advance_v2_project_to_video_review(project_dir: Path, *, now: datetime) -> N
     manifest = transition_v2(manifest, WorkflowState.PRODUCTION_IN_PROGRESS, context)
     manifest = transition_v2(manifest, WorkflowState.AWAITING_VIDEO_REVIEW, context)
     write_yaml_atomic(project_dir / "project.yaml", manifest.model_dump(mode="json"))
-
-
-class _OrientationStubClient:
-    """A local stand-in literature client: fixed candidates, no network access."""
-
-    name = "pubmed"
-
-    def search(self, query: str, limit: int = 10) -> list[CandidateSource]:
-        del query, limit
-        return [
-            CandidateSource(
-                source_id="pubmed-9",
-                database="pubmed",
-                title="Bản ghi tổng hợp cho test: giảm natri và huyết áp",
-                year=2020,
-            )
-        ]
-
-
-ORIENTATION_SCOPE = OrientationScope(
-    topic_question="Muối ảnh hưởng huyết áp như thế nào?",
-    intended_audience="Người trưởng thành",
-    exclusions=("Không tư vấn cá nhân hóa",),
-)
-
-
-def complete_orientation_fixture(project_dir: Path, *, now: datetime) -> None:
-    """Run a real, synthetic orientation so a fixture reaches the editorial boundary."""
-    begin_orientation(project_dir, ORIENTATION_SCOPE)
-    run_orientation_search(project_dir, [_OrientationStubClient()], now=now)
-    scope = read_yaml(project_dir / "revisions" / "001" / "orientation" / "scope.yaml")
-    complete_orientation(
-        project_dir,
-        CompletedOrientation(
-            run_id="run-001",
-            topic_input_hash=scope["topic_input_hash"],
-            included_source_ids=("pubmed-9",),
-            context_points=(
-                SourceBackedContext(
-                    text="Giảm natri liên quan tới hạ huyết áp.",
-                    limitation="Bằng chứng chủ yếu ở người trưởng thành.",
-                    source_ids=("pubmed-9",),
-                ),
-            ),
-            options=(
-                EditorialOption(
-                    id="opt-1",
-                    title="Thói quen nêm nếm",
-                    framing="Khung trung tính về thói quen hằng ngày.",
-                    context_source_ids=("pubmed-9",),
-                    questions_for_doctor=("Bác sĩ muốn nhấn vào điều gì?",),
-                ),
-                EditorialOption(
-                    id="opt-2",
-                    title="Đọc nhãn thực phẩm",
-                    framing="Khung trung tính về đọc nhãn.",
-                    context_source_ids=("pubmed-9",),
-                    questions_for_doctor=("Khán giả nào cần ưu tiên?",),
-                ),
-            ),
-        ),
-        now=now,
-    )
 
 
 def write_explainer_fixture(revision: Path, claim_id: str) -> None:

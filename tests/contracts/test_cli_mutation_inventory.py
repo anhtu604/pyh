@@ -6,8 +6,6 @@ EXPECTED = {
     "src/healthvideo/cli.py": {
         "ai_clip_generate",
         "outro_author",
-        "agent_review_request",
-        "agent_review_complete",
         "produce",
         "package",
         "review_medical",
@@ -25,10 +23,6 @@ EXPECTED = {
     },
     "src/healthvideo/commands/operator.py": {
         "select",
-        "orientation",
-        "orientation_search",
-        "orientation_complete",
-        "brief",
         "draft",
         "submit_medical",
     },

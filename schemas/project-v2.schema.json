@@ -18,8 +18,6 @@
         },
         "type": {
           "enum": [
-            "awaiting_browser_login",
-            "awaiting_second_model_review",
             "needs_medical_revision",
             "needs_production_revision",
             "blocked"
@@ -68,9 +66,6 @@
       "enum": [
         "idea",
         "topic_selected",
-        "orientation_research_in_progress",
-        "awaiting_editorial_direction",
-        "author_brief_ready",
         "research_in_progress",
         "evidence_ready",
         "draft_ready",
@@ -81,8 +76,6 @@
         "video_approved",
         "packaged",
         "published_manual",
-        "awaiting_browser_login",
-        "awaiting_second_model_review",
         "needs_medical_revision",
         "needs_production_revision",
         "blocked",
@@ -130,8 +123,6 @@
         {
           "discriminator": {
             "mapping": {
-              "awaiting_browser_login": "#/$defs/ResumableSideState",
-              "awaiting_second_model_review": "#/$defs/ResumableSideState",
               "blocked": "#/$defs/ResumableSideState",
               "needs_medical_revision": "#/$defs/ResumableSideState",
               "needs_production_revision": "#/$defs/ResumableSideState",

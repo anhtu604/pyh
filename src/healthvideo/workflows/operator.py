@@ -7,18 +7,13 @@ from enum import StrEnum
 from pathlib import Path
 
 from healthvideo.domain.project_v2 import WorkflowState
-from healthvideo.storage.files import read_yaml
 from healthvideo.storage.project_layout import ProjectLayout, resolve_project_layout
-from healthvideo.workflows.orientation import read_authoritative_orientation
 
 
 class OperatorActionKind(StrEnum):
     """The next human or system action presented by the thin `/pyh` router."""
 
     CHOOSE_TOPIC = "choose_topic"
-    ORIENTATION_RESEARCH = "orientation_research"
-    AWAIT_EDITORIAL_DIRECTION = "await_editorial_direction"
-    CONFIRM_BRIEF = "confirm_brief"
     RESEARCH = "research"
     DRAFT = "draft"
     PREPARE_MEDICAL_REVIEW = "prepare_medical_review"
@@ -27,8 +22,6 @@ class OperatorActionKind(StrEnum):
     AWAIT_VIDEO_APPROVAL = "await_video_approval"
     PACKAGE = "package"
     COMPLETE = "complete"
-    AWAIT_BROWSER_LOGIN = "await_browser_login"
-    AWAIT_SECOND_MODEL_REVIEW = "await_second_model_review"
     REVISE_MEDICAL = "revise_medical"
     REVISE_PRODUCTION = "revise_production"
     RESOLVE_BLOCKER = "resolve_blocker"
@@ -101,77 +94,14 @@ def get_next_action(project_dir: Path) -> OperatorAction:
                 "topic/card.yaml",
                 "/pyh chọn chủ đề",
             )
-        case WorkflowState.TOPIC_SELECTED:
-            return _action(
-                layout.project_dir,
-                layout.artifact_root,
-                OperatorActionKind.ORIENTATION_RESEARCH,
-                "Author a scope file from the topic card, then run "
-                f'`healthvideo operator orientation "{layout.project_dir}" '
-                "--scope <scope-input.yaml>`.",
-                "orientation/scope.yaml",
-                "/pyh tìm hiểu chủ đề",
-            )
-        case WorkflowState.ORIENTATION_RESEARCH_IN_PROGRESS:
-            search_log = layout.artifact_root / "orientation/search-log.yaml"
-            outcomes = (
-                read_yaml(search_log).get("provider_outcomes", [])
-                if search_log.is_file() and search_log.read_text(encoding="utf-8").strip()
-                else []
-            )
-            ready_to_complete = (
-                bool(outcomes)
-                and all(item.get("status") in {"completed", "zero_results"} for item in outcomes)
-                and any(item.get("status") == "completed" for item in outcomes)
-                and (layout.artifact_root / "orientation/candidates.jsonl").is_file()
-            )
-            return _action(
-                layout.project_dir,
-                layout.artifact_root,
-                OperatorActionKind.ORIENTATION_RESEARCH,
-                (
-                    "Prepare a completed record using only recorded candidates, then run "
-                    f'`healthvideo operator orientation-complete "{layout.project_dir}" '
-                    '--file <completed.yaml>`.'
-                    if ready_to_complete else
-                    f'Run `healthvideo operator orientation-search "{layout.project_dir}"`; '
-                    "record source failures rather than guessing."
-                ),
-                "orientation/scope.yaml",
-                "/pyh tìm hiểu chủ đề",
-            )
-        case WorkflowState.AWAITING_EDITORIAL_DIRECTION:
-            try:
-                completed = read_authoritative_orientation(layout.project_dir)
-                artifact_path = f"orientation/completed/{completed.run_id}.yaml"
-            except ValueError:
-                artifact_path = "orientation/completed"
-                reason_code = "authoritative_orientation_missing"
-            return _action(
-                layout.project_dir,
-                layout.artifact_root,
-                OperatorActionKind.AWAIT_EDITORIAL_DIRECTION,
-                "Present the orientation findings, limits and options, then ask the "
-                "doctor for their own editorial view before any brief is confirmed.",
-                artifact_path,
-                "/pyh chốt nội dung",
-                reason_code=reason_code,
-            )
-        case WorkflowState.AUTHOR_BRIEF_READY:
+        case WorkflowState.TOPIC_SELECTED | WorkflowState.RESEARCH_IN_PROGRESS:
             return _action(
                 layout.project_dir,
                 layout.artifact_root,
                 OperatorActionKind.RESEARCH,
-                "Research and validate the evidence for the confirmed brief." + explainer_reminder,
-                "evidence/ledger.yaml",
-                "/pyh tiếp tục",
-            )
-        case WorkflowState.RESEARCH_IN_PROGRESS:
-            return _action(
-                layout.project_dir,
-                layout.artifact_root,
-                OperatorActionKind.RESEARCH,
-                "Continue research and validate the evidence ledger." + explainer_reminder,
+                f'Run `healthvideo evidence search "{layout.project_dir}" '
+                "--query <English-query>` and validate the evidence ledger."
+                + explainer_reminder,
                 "evidence/ledger.yaml",
                 "/pyh tiếp tục",
             )
@@ -255,26 +185,6 @@ def get_next_action(project_dir: Path) -> OperatorAction:
                 "The project has been recorded as manually published.",
                 "publish/receipt.yaml",
                 "/pyh trạng thái",
-            )
-        case WorkflowState.AWAITING_BROWSER_LOGIN:
-            return _action(
-                layout.project_dir,
-                layout.artifact_root,
-                OperatorActionKind.AWAIT_BROWSER_LOGIN,
-                "Sign in to the required browser session before resuming.",
-                None,
-                "/pyh tiếp tục",
-                reason_code=reason_code,
-            )
-        case WorkflowState.AWAITING_SECOND_MODEL_REVIEW:
-            return _action(
-                layout.project_dir,
-                layout.artifact_root,
-                OperatorActionKind.AWAIT_SECOND_MODEL_REVIEW,
-                "Await the required second-model review before resuming.",
-                None,
-                "/pyh tiếp tục",
-                reason_code=reason_code,
             )
         case WorkflowState.NEEDS_MEDICAL_REVISION:
             return _action(

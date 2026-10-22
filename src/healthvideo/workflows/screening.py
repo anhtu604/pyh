@@ -1,4 +1,4 @@
-"""Screen orientation candidate records into an advisory revision research CSV."""
+"""Screen evidence candidate records into an advisory revision research CSV."""
 
 import csv
 import io

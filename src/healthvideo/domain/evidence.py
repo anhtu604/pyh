@@ -7,7 +7,53 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from healthvideo.domain.orientation import ProviderOutcome
+
+def _sanitize_error_summary(value: object) -> object:
+    """Keep provider errors single-line, printable, and safe to persist in YAML."""
+    if not isinstance(value, str):
+        return value
+    printable = "".join(character if character.isprintable() else " " for character in value)
+    return " ".join(printable.split())[:500]
+
+
+class ProviderOutcome(BaseModel):
+    """One provider result, preserving failures separately from zero results."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    provider: str = Field(min_length=1, max_length=100)
+    query_id: str = Field(min_length=1, max_length=128)
+    status: Literal["completed", "zero_results", "failed"]
+    result_count: int | None = Field(default=None, ge=0)
+    failure_class: str | None = Field(default=None, max_length=100)
+    error_summary: str | None = Field(default=None, max_length=500)
+
+    @field_validator("error_summary", mode="before")
+    @classmethod
+    def _sanitize_error_summary(cls, value: object) -> object:
+        return _sanitize_error_summary(value)
+
+    @model_validator(mode="after")
+    def _validate_status_details(self) -> ProviderOutcome:
+        if not self.provider.strip() or not self.query_id.strip():
+            raise ValueError("provider and query_id must be nonblank")
+        if self.status == "failed":
+            if not self.failure_class or not self.failure_class.strip():
+                raise ValueError("failed provider outcome requires failure_class")
+            if not self.error_summary or not self.error_summary.strip():
+                raise ValueError("failed provider outcome requires error_summary")
+            if self.result_count is not None:
+                raise ValueError("failed provider outcome cannot report result_count")
+        elif self.failure_class is not None or self.error_summary is not None:
+            raise ValueError("non-failed provider outcome cannot include failure details")
+        elif self.status == "zero_results" and self.result_count != 0:
+            raise ValueError("zero_results provider outcome requires result_count=0")
+        elif self.status == "completed" and (
+            self.result_count is None or self.result_count <= 0
+        ):
+            raise ValueError("completed provider outcome requires positive result_count")
+        return self
+
 
 # ponytail: Substring matching can flag negations and miss paraphrases; medical review is still required.
 MECHANISM_EFFECT_KEYWORDS = ("giảm nguy cơ", "hiệu quả", "nên dùng", "có ích")
@@ -128,6 +174,7 @@ class EvidenceQuestion(BaseModel):
 
 
 class SearchLogRecord(BaseModel):
+    queries: list[dict[str, object]] = Field(default_factory=list)
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     database: str

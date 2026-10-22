@@ -12,17 +12,27 @@ from healthvideo.domain.evidence import (
     CandidateSource,
     EvidenceClaim,
     EvidenceQuestion,
+    ProviderOutcome,
     SearchLogRecord,
     SourceRecord,
     SourceSelection,
 )
 from healthvideo.domain.explainer import validate_claim_refs
-from healthvideo.domain.orientation import ProviderOutcome
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
 from healthvideo.storage.explainer import read_explainer
 from healthvideo.storage.files import canonical_json_hash, read_yaml, write_yaml_atomic
-from healthvideo.workflows.orientation import _provider_name, _search_one
+
+
+def _provider_name(client: Any, index: int) -> str:
+    name = str(getattr(client, "name", "") or type(client).__name__).strip()
+    return name or f"provider-{index}"
+
+
+def _search_one(client: Any, query: str, *, limit: int = 10) -> list[CandidateSource]:
+    if hasattr(client, "fetch_summaries"):
+        return list(client.fetch_summaries(client.search(query, limit=limit)))
+    return list(client.search(query, limit=limit))
 
 
 def record_question(
@@ -30,21 +40,19 @@ def record_question(
     question: EvidenceQuestion,
     now: datetime | None = None,
 ) -> tuple[Path, ProjectManifestV2]:
-    """Record PICO research question and advance state to research_in_progress if at author_brief_ready."""
+    """Record PICO research question and advance state to research_in_progress if at topic_selected."""
     manifest = ProjectManifestV2.model_validate(read_yaml(project_dir / "project.yaml"))
     ev_dir = project_dir / "revisions" / manifest.active_revision / "evidence"
     ev_dir.mkdir(parents=True, exist_ok=True)
     q_path = ev_dir / "question.yaml"
     write_yaml_atomic(q_path, question.model_dump(mode="json"))
 
-    if manifest.state == WorkflowState.AUTHOR_BRIEF_READY:
-        brief_file = project_dir / "revisions" / manifest.active_revision / "author" / "brief.yaml"
-        brief_data = read_yaml(brief_file) if brief_file.is_file() else {}
-        input_hash = canonical_json_hash(brief_data)
+    if manifest.state == WorkflowState.TOPIC_SELECTED:
+        input_hash = canonical_json_hash(question.model_dump(mode="json"))
         context = TransitionContext(
             active_revision=manifest.active_revision,
             current_input_hash=input_hash,
-            validated_artifacts=frozenset({"author/brief.yaml"}),
+            validated_artifacts=frozenset(),
         )
         manifest = transition_v2(manifest, WorkflowState.RESEARCH_IN_PROGRESS, context)
         write_yaml_atomic(project_dir / "project.yaml", manifest.model_dump(mode="json"))
@@ -57,40 +65,54 @@ def search_literature(
     question: EvidenceQuestion,
     clients: Sequence[Any],
     now: datetime | None = None,
+    *,
+    queries: Sequence[str] = (),
+    limit: int = 10,
 ) -> SearchLogRecord:
     """Execute search across configured clients, logging queries and candidates to disk."""
     manifest = ProjectManifestV2.model_validate(read_yaml(project_dir / "project.yaml"))
     ev_dir = project_dir / "revisions" / manifest.active_revision / "evidence"
     ev_dir.mkdir(parents=True, exist_ok=True)
 
-    query = " ".join(question.search_keywords)
+    search_queries = [query.strip() for query in queries] or [" ".join(question.search_keywords)]
+    if queries and any(not query.strip() for query in search_queries):
+        raise ValueError("Search queries must be nonblank")
     candidates: list[CandidateSource] = []
     outcomes: list[ProviderOutcome] = []
-    for index, client in enumerate(clients):
-        provider = _provider_name(client, index)
-        query_id = f"{provider}-{index}"
-        try:
-            found = _search_one(client, query)
-        except (TypeError, ValueError, OSError) as error:
+    query_records: list[dict[str, object]] = []
+    seen_source_ids: set[str] = set()
+    for query in search_queries:
+        query_ids: list[str] = []
+        query_records.append({"query": query, "query_ids": query_ids})
+        for index, client in enumerate(clients):
+            provider = _provider_name(client, index)
+            query_id = f"{provider}-{len(outcomes)}"
+            query_ids.append(query_id)
+            try:
+                found = _search_one(client, query, limit=limit)
+            except (TypeError, ValueError, OSError) as error:
+                outcomes.append(
+                    ProviderOutcome(
+                        provider=provider,
+                        query_id=query_id,
+                        status="failed",
+                        failure_class=type(error).__name__,
+                        error_summary=str(error) or type(error).__name__,
+                    )
+                )
+                continue
+            for candidate in found:
+                if candidate.source_id not in seen_source_ids:
+                    candidates.append(candidate)
+                    seen_source_ids.add(candidate.source_id)
             outcomes.append(
                 ProviderOutcome(
                     provider=provider,
                     query_id=query_id,
-                    status="failed",
-                    failure_class=type(error).__name__,
-                    error_summary=str(error) or type(error).__name__,
+                    status="completed" if found else "zero_results",
+                    result_count=len(found),
                 )
             )
-            continue
-        candidates.extend(found)
-        outcomes.append(
-            ProviderOutcome(
-                provider=provider,
-                query_id=query_id,
-                status="completed" if found else "zero_results",
-                result_count=len(found),
-            )
-        )
 
     candidates_path = ev_dir / "candidates.jsonl"
     with candidates_path.open("a", encoding="utf-8") as f:
@@ -101,7 +123,8 @@ def search_literature(
     timestamp = now or datetime.now().astimezone()
     log = SearchLogRecord(
         database="multi",
-        query=query,
+        query="; ".join(search_queries),
+        queries=query_records,
         searched_at=timestamp,
         total_results=len(candidates),
         retrieved_count=len(candidates),

@@ -10,14 +10,14 @@ def test_claude_adapter_points_to_one_canonical_workflow() -> None:
     assert "không tự động xuất bản" in canonical
 
 
-def test_pyh_topic_entry_paths_stop_at_brief_confirmation() -> None:
+def test_pyh_topic_entry_paths_continue_with_evidence_search() -> None:
     skill = Path(".agents/skills/pyh/SKILL.md").read_text(encoding="utf-8")
     assert "chưa có project" in skill
     assert "healthvideo operator new" in skill
     assert "healthvideo operator select" in skill
     assert "làm video" in skill
-    assert "confirm_brief" in skill
-    assert "không tự chốt brief" in skill
+    assert "healthvideo evidence search" in skill
+    assert "topic_selected" in skill
 
 
 def test_pyh_approval_requires_explicit_doctor_decision_and_identity() -> None:
@@ -30,10 +30,8 @@ def test_pyh_approval_requires_explicit_doctor_decision_and_identity() -> None:
     assert "không suy đoán reviewer" in skill.lower()
 
 
-def test_pyh_second_model_review_waits_for_real_response_and_keeps_doctor_gates() -> None:
+def test_pyh_uses_research_without_retired_manual_steps() -> None:
     skill = Path(".agents/skills/pyh/SKILL.md").read_text(encoding="utf-8")
-    assert "agent review-request" in skill
-    assert "awaiting_second_model_review" in skill
-    assert "agent review-complete" in skill
-    assert "response.yaml" in skill
-    assert "không thay thế hai cổng duyệt" in skill
+    for retired in ("orientation", "confirm_brief", "--confirm", "agent review-", "second-model", "browser login"):
+        assert retired not in skill
+    assert "--query" in skill

@@ -24,7 +24,7 @@ runner = CliRunner()
 
 
 @pytest.mark.parametrize(
-    "command", [["lease"], ["backup"], ["security-audit"], ["migrate"], ["project", "create"], ["project", "new"], ["project", "migrate"]]
+    "command", [["operator", "orientation"], ["operator", "orientation-search"], ["operator", "orientation-complete"], ["operator", "brief"], ["agent"], ["lease"], ["backup"], ["security-audit"], ["migrate"], ["project", "create"], ["project", "new"], ["project", "migrate"]]
 )
 def test_removed_commands_absent(command):
     result = CliRunner().invoke(app, [*command, "--help"])
@@ -44,7 +44,7 @@ def test_version_command() -> None:
     assert result.stdout.strip() == __version__
 
 
-def test_operator_new_status_select_and_confirm_brief(tmp_path) -> None:
+def test_operator_new_status_select_and_research(tmp_path) -> None:
     import json
 
     from healthvideo.domain.topic import TopicCard
@@ -60,51 +60,10 @@ def test_operator_new_status_select_and_confirm_brief(tmp_path) -> None:
     write_yaml_atomic(card_file, TopicCard(slug="muoi-va-huyet-ap", title="Ăn mặn", question="Ăn mặn ảnh hưởng huyết áp?", synthetic_test_record=True).model_dump(mode="json"))
     selected = runner.invoke(app, ["operator", "select", str(project), "--file", str(card_file)])
     assert selected.exit_code == 0, selected.stdout
-    draft = runner.invoke(app, ["operator", "brief", str(project), "--title", "Ăn mặn"])
-    assert draft.exit_code == 0, draft.stdout
-    assert read_yaml(project / "project.yaml")["state"] == "topic_selected"
-    confirmed = runner.invoke(app, ["operator", "brief", str(project), "--title", "Ăn mặn", "--confirm"])
-    assert confirmed.exit_code == 1
-    assert "awaiting_editorial_direction" in confirmed.stdout
-    assert read_yaml(project / "project.yaml")["state"] == "topic_selected"
-
-
-def test_operator_orientation_command_researches_without_confirming(tmp_path) -> None:
-    """The orientation command may research, and must not confirm a brief or a gate."""
-    from healthvideo.domain.topic import TopicCard
-
-    runner.invoke(
-        app,
-        ["operator", "new", str(tmp_path), "--slug", "muoi-va-huyet-ap", "--title", "Ăn mặn"],
-    )
-    project = tmp_path / "muoi-va-huyet-ap"
-    card_file = tmp_path / "card.yaml"
-    write_yaml_atomic(
-        card_file,
-        TopicCard(
-            slug="muoi-va-huyet-ap",
-            title="Ăn mặn",
-            question="Ăn mặn ảnh hưởng huyết áp?",
-            synthetic_test_record=True,
-        ).model_dump(mode="json"),
-    )
-    runner.invoke(app, ["operator", "select", str(project), "--file", str(card_file)])
-    scope_file = tmp_path / "scope.yaml"
-    write_yaml_atomic(
-        scope_file,
-        {
-            "topic_question": "Ăn mặn ảnh hưởng huyết áp?",
-            "intended_audience": "Người trưởng thành",
-        },
-    )
-
-    started = runner.invoke(
-        app, ["operator", "orientation", str(project), "--scope", str(scope_file)]
-    )
-
-    assert started.exit_code == 0, started.stdout
-    assert started.stdout.strip() == "orientation_research_in_progress"
-    assert (project / "revisions/001/orientation/scope.yaml").is_file()
+    status = runner.invoke(app, ["operator", "status", str(project), "--json"])
+    assert status.exit_code == 0
+    assert json.loads(status.stdout)["kind"] == "research"
+    assert "evidence search" in json.loads(status.stdout)["message"]
 
 
 def test_operator_help_preserves_existing_cli_commands() -> None:
@@ -158,41 +117,6 @@ def test_review_packet_open_is_read_only(tmp_path) -> None:
     assert result.exit_code == 0, result.stdout
     assert "<html" in result.stdout.lower()
     assert after == before
-
-
-def test_agent_review_cli_requests_and_completes_without_model_call(tmp_path) -> None:
-    from datetime import UTC, datetime
-
-    from healthvideo.storage.files import canonical_json_hash
-
-    project = create_v2_project_fixture(tmp_path)
-    requested = runner.invoke(app, ["agent", "review-request", str(project), "--reason", "conflicting_evidence"])
-    assert requested.exit_code == 0, requested.stdout
-    request_dir = Path(requested.stdout.strip())
-    request = read_yaml(request_dir / "request.yaml")
-    response_file = tmp_path / "review-response.yaml"
-    write_yaml_atomic(response_file, {
-        "schema_version": "2.0",
-        "request_id": request["request_id"],
-        "revision": request["revision"],
-        "request_hash": canonical_json_hash(request),
-        "reviewer": "Second model",
-        "model": "fixture",
-        "reviewed_at": datetime(2026, 9, 12, tzinfo=UTC).isoformat(),
-        "issues": [],
-        "summary": "No blocking issue",
-    })
-    completed = runner.invoke(app, ["agent", "review-complete", str(project), "--file", str(response_file)])
-    assert completed.exit_code == 0, completed.stdout
-    assert read_yaml(project / "project.yaml")["state"] == "draft_ready"
-
-
-def test_agent_review_cli_fails_closed_for_invalid_state_or_response(tmp_path) -> None:
-    project = create_v2_project_fixture(tmp_path)
-    invalid_file = tmp_path / "invalid.yaml"
-    write_yaml_atomic(invalid_file, {"bad": True})
-    result = runner.invoke(app, ["agent", "review-complete", str(project), "--file", str(invalid_file)])
-    assert result.exit_code != 0
 
 
 def test_cli_configures_windows_stdio_for_vietnamese_output(monkeypatch) -> None:
@@ -624,26 +548,14 @@ def test_cli_evidence_search_and_build_ledger(
     project_dir = tmp_path / "project-v2"
     project_dir.mkdir(parents=True)
     rev_dir = project_dir / "revisions" / "001"
-    for sub in ("topic", "author", "evidence", "script", "storyboard", "assets"):
+    for sub in ("topic", "evidence", "script", "storyboard", "assets"):
         (rev_dir / sub).mkdir(parents=True)
 
-    write_yaml_atomic(
-        rev_dir / "author" / "brief.yaml",
-        {
-            "schema_version": "1.0",
-            "title": "Ăn mặn",
-            "personal_position": "Giảm muối",
-            "reasoning": "Tốt cho tim mạch",
-            "emotion": "bình tĩnh",
-            "audience_concern": "Huyết áp",
-            "phrases_to_keep": [],
-        },
-    )
 
     initial_manifest = ProjectManifestV2(
         schema_version="2.0",
         slug="an-man-va-huyet-ap",
-        state=WorkflowState.AUTHOR_BRIEF_READY,
+        state=WorkflowState.TOPIC_SELECTED,
         active_revision="001",
     )
     write_yaml_atomic(
@@ -693,6 +605,41 @@ def test_cli_evidence_search_and_build_ledger(
 
     updated = ProjectManifestV2.model_validate(read_yaml(project_dir / "project.yaml"))
     assert updated.state == WorkflowState.EVIDENCE_READY
+
+
+def test_cli_evidence_search_repeatable_queries_and_existing_question(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    write_yaml_atomic(project / "project.yaml", ProjectManifestV2(
+        slug="test", state=WorkflowState.TOPIC_SELECTED,
+    ).model_dump(mode="json"))
+    evidence = project / "revisions/001/evidence"
+    write_yaml_atomic(evidence / "question.yaml", {
+        "patient_population": "adults", "intervention": "salt", "outcome": "BP",
+        "search_keywords": ["fallback query"],
+    })
+
+    class Client:
+        name = "pubmed"
+
+        def search(self, query, limit=10):
+            if limit != 3:
+                raise ValueError("wrong limit")
+            return [CandidateSource(source_id=query, database="pubmed", title="Synthetic record")]
+
+    monkeypatch.setattr("healthvideo.cli.get_default_clients", lambda: [Client()])
+    result = runner.invoke(app, [
+        "evidence", "search", str(project), "--query", "sodium", "--query", "blood pressure",
+        "--limit", "3",
+    ])
+    assert result.exit_code == 0, result.stdout
+    log = read_yaml(evidence / "search-log.yaml")["searches"][-1]
+    assert log["retrieved_count"] == 2
+    assert log["queries"] == [
+        {"query": "sodium", "query_ids": ["pubmed-0"]},
+        {"query": "blood pressure", "query_ids": ["pubmed-1"]},
+    ]
+    assert read_yaml(project / "project.yaml")["state"] == "research_in_progress"
+    assert not list((project / "revisions/001/reviews").glob("*"))
 
 
 def test_cli_evidence_ingest(tmp_path: Path) -> None:
@@ -918,7 +865,7 @@ def test_cli_evidence_search_surfaces_provider_failures(
     assert result.exit_code == (1 if all_failed else 0)
     lines = result.stdout.splitlines()
     assert f"Tìm thấy {0 if all_failed else 1} tài liệu ứng viên." in lines
-    assert "pubmed: ProviderResponseError: NCBI IP blocked" in lines
+    assert "pubmed (pubmed-0): ProviderResponseError: NCBI IP blocked" in lines
 
 
 @pytest.mark.parametrize("changed,exit_code", [("storyboard/storyboard.yaml", 0), ("renders/video.mp4", 1)])

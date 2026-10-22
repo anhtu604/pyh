@@ -105,7 +105,7 @@ def test_evidence_advances_with_profile_requirements(tmp_path: Path, profile: st
     assert manifest.state == WorkflowState.EVIDENCE_READY
 
 
-@pytest.mark.parametrize("state", ["author_brief_ready", "research_in_progress"])
+@pytest.mark.parametrize("state", ["topic_selected", "research_in_progress"])
 def test_operator_and_cli_remind_to_create_missing_explainer(tmp_path: Path, state: str) -> None:
     from typer.testing import CliRunner
 

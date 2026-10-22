@@ -110,24 +110,8 @@ _CONTEXT_ONLY = _rule()
 
 
 MAIN_RULES: Mapping[tuple[WorkflowState, WorkflowState], TransitionRule] = {
+    (WorkflowState.TOPIC_SELECTED, WorkflowState.RESEARCH_IN_PROGRESS): _rule(),
     (WorkflowState.IDEA, WorkflowState.TOPIC_SELECTED): _rule("topic/card.yaml"),
-    (
-        WorkflowState.TOPIC_SELECTED,
-        WorkflowState.ORIENTATION_RESEARCH_IN_PROGRESS,
-    ): _rule("orientation/scope.yaml"),
-    (
-        WorkflowState.ORIENTATION_RESEARCH_IN_PROGRESS,
-        WorkflowState.AWAITING_EDITORIAL_DIRECTION,
-    ): _rule("orientation/completed/<run_id>.yaml"),
-    (
-        WorkflowState.AWAITING_EDITORIAL_DIRECTION,
-        WorkflowState.AUTHOR_BRIEF_READY,
-    ): _rule(
-        "orientation/completed/<run_id>.yaml", "author/brief.yaml"
-    ),
-    (WorkflowState.AUTHOR_BRIEF_READY, WorkflowState.RESEARCH_IN_PROGRESS): _rule(
-        "author/brief.yaml"
-    ),
     (WorkflowState.RESEARCH_IN_PROGRESS, WorkflowState.EVIDENCE_READY): _rule(
         "evidence/ledger.yaml"
     ),
@@ -266,21 +250,6 @@ _POST_MEDICAL_GATE_STATES = frozenset(
 
 
 SIDE_EXIT_RULES: Mapping[tuple[WorkflowState, WorkflowState], SideExitRule] = {
-    (WorkflowState.AWAITING_BROWSER_LOGIN, WorkflowState.IDEA): SideExitRule(
-        resumes_recorded_state=True
-    ),
-    (
-        WorkflowState.AWAITING_BROWSER_LOGIN,
-        WorkflowState.RESEARCH_IN_PROGRESS,
-    ): SideExitRule(resumes_recorded_state=True),
-    (
-        WorkflowState.AWAITING_SECOND_MODEL_REVIEW,
-        WorkflowState.EVIDENCE_READY,
-    ): SideExitRule(resumes_recorded_state=True),
-    (
-        WorkflowState.AWAITING_SECOND_MODEL_REVIEW,
-        WorkflowState.DRAFT_READY,
-    ): SideExitRule(resumes_recorded_state=True),
     (
         WorkflowState.NEEDS_MEDICAL_REVISION,
         WorkflowState.RESEARCH_IN_PROGRESS,
@@ -305,19 +274,10 @@ SIDE_EXIT_RULES: Mapping[tuple[WorkflowState, WorkflowState], SideExitRule] = {
 
 
 SIDE_ENTRY_RULES: Mapping[WorkflowState, SideEntryRule] = {
-    WorkflowState.AWAITING_BROWSER_LOGIN: SideEntryRule(
-        frozenset({WorkflowState.IDEA, WorkflowState.RESEARCH_IN_PROGRESS}),
-        ResumePolicy.SOURCE,
-    ),
-    WorkflowState.AWAITING_SECOND_MODEL_REVIEW: SideEntryRule(
-        frozenset({WorkflowState.EVIDENCE_READY, WorkflowState.DRAFT_READY}),
-        ResumePolicy.SOURCE,
-    ),
     WorkflowState.NEEDS_MEDICAL_REVISION: SideEntryRule(
         _POST_MEDICAL_GATE_STATES
         | {
             WorkflowState.AWAITING_MEDICAL_REVIEW,
-            WorkflowState.AWAITING_SECOND_MODEL_REVIEW,
         },
         ResumePolicy.EXIT,
     ),

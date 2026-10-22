@@ -32,20 +32,6 @@ def _setup_project_at(tmp_path: Path, state: WorkflowState) -> Path:
     for sub in ("topic", "author", "evidence", "script", "storyboard", "assets"):
         (rev_dir / sub).mkdir(parents=True, exist_ok=True)
 
-    # author brief
-    write_yaml_atomic(
-        rev_dir / "author" / "brief.yaml",
-        {
-            "schema_version": "1.0",
-            "title": "Ăn mặn và tăng huyết áp",
-            "personal_position": "Giảm muối giúp hạ huyết áp",
-            "reasoning": "Nghiên cứu lâm sàng chứng minh",
-            "emotion": "bình tĩnh",
-            "audience_concern": "Sức khỏe tim mạch",
-            "phrases_to_keep": [],
-        },
-    )
-
     manifest = ProjectManifestV2(
         schema_version="2.0",
         slug="an-man-va-huyet-ap",
@@ -57,7 +43,7 @@ def _setup_project_at(tmp_path: Path, state: WorkflowState) -> Path:
 
 
 def test_record_question_writes_yaml_and_advances_state(tmp_path: Path) -> None:
-    project_dir = _setup_project_at(tmp_path, WorkflowState.AUTHOR_BRIEF_READY)
+    project_dir = _setup_project_at(tmp_path, WorkflowState.TOPIC_SELECTED)
     question = EvidenceQuestion(
         patient_population="Người trưởng thành",
         intervention="Giảm muối",
@@ -295,3 +281,56 @@ def test_search_records_zero_results(tmp_path: Path) -> None:
     outcome, = search_literature(project, question, [EmptyClient()]).provider_outcomes
     assert outcome.status == "zero_results"
     assert outcome.result_count == 0
+
+
+def test_search_multiple_queries_deduplicates_and_logs_each_query(tmp_path):
+    project = _setup_project_at(tmp_path, WorkflowState.RESEARCH_IN_PROGRESS)
+    question = EvidenceQuestion(patient_population="adults", intervention="salt", outcome="BP", search_keywords=["fallback"])
+    class Client:
+        name = "pubmed"
+        def search(self, query, limit=10):
+            return [CandidateSource(source_id="pubmed-9", database="pubmed", title="Synthetic test record")]
+    log = search_literature(project, question, [Client()], queries=["salt intake", "blood pressure"])
+    assert log.retrieved_count == 1
+    searches = read_yaml(project / "revisions/001/evidence/search-log.yaml")["searches"]
+    assert searches[-1]["queries"] == [
+        {"query": "salt intake", "query_ids": ["pubmed-0"]},
+        {"query": "blood pressure", "query_ids": ["pubmed-1"]},
+    ]
+    assert len((project / "revisions/001/evidence/candidates.jsonl").read_text().splitlines()) == 1
+
+
+def test_search_trims_queries_and_keeps_first_metadata_across_providers(tmp_path):
+    project = _setup_project_at(tmp_path, WorkflowState.RESEARCH_IN_PROGRESS)
+    question = EvidenceQuestion(patient_population="adults", intervention="salt", outcome="BP")
+
+    class Client:
+        def __init__(self, name, title):
+            self.name, self.title = name, title
+
+        def search(self, query, limit=10):
+            if query not in {"sodium", "blood pressure"} or limit != 3:
+                raise ValueError("wrong query or limit")
+            return [CandidateSource(source_id="pubmed-9", database="pubmed", title=self.title)]
+
+    log = search_literature(
+        project, question, [Client("X", "First synthetic record"), Client("Y", "Later metadata")],
+        queries=["  sodium  ", "blood pressure"], limit=3,
+    )
+    assert log.retrieved_count == 1
+    assert [outcome.result_count for outcome in log.provider_outcomes] == [1, 1, 1, 1]
+    assert log.queries == [
+        {"query": "sodium", "query_ids": ["X-0", "Y-1"]},
+        {"query": "blood pressure", "query_ids": ["X-2", "Y-3"]},
+    ]
+    candidate = json.loads((project / "revisions/001/evidence/candidates.jsonl").read_text())
+    assert candidate["title"] == "First synthetic record"
+
+
+@pytest.mark.parametrize("queries", [[""], ["  "], ["sodium", "\t"]])
+def test_search_rejects_blank_explicit_queries_before_search(tmp_path, queries):
+    project = _setup_project_at(tmp_path, WorkflowState.RESEARCH_IN_PROGRESS)
+    question = EvidenceQuestion(patient_population="adults", intervention="salt", outcome="BP")
+    with pytest.raises(ValueError, match="blank"):
+        search_literature(project, question, [], queries=queries)
+    assert not (project / "revisions/001/evidence/search-log.yaml").exists()

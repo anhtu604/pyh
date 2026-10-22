@@ -21,20 +21,8 @@ from healthvideo.domain.state_graph import (
 )
 
 MAIN_EDGES = {
+    (WorkflowState.TOPIC_SELECTED, WorkflowState.RESEARCH_IN_PROGRESS),
     (WorkflowState.IDEA, WorkflowState.TOPIC_SELECTED),
-    (
-        WorkflowState.TOPIC_SELECTED,
-        WorkflowState.ORIENTATION_RESEARCH_IN_PROGRESS,
-    ),
-    (
-        WorkflowState.ORIENTATION_RESEARCH_IN_PROGRESS,
-        WorkflowState.AWAITING_EDITORIAL_DIRECTION,
-    ),
-    (
-        WorkflowState.AWAITING_EDITORIAL_DIRECTION,
-        WorkflowState.AUTHOR_BRIEF_READY,
-    ),
-    (WorkflowState.AUTHOR_BRIEF_READY, WorkflowState.RESEARCH_IN_PROGRESS),
     (WorkflowState.RESEARCH_IN_PROGRESS, WorkflowState.EVIDENCE_READY),
     (WorkflowState.EVIDENCE_READY, WorkflowState.DRAFT_READY),
     (WorkflowState.DRAFT_READY, WorkflowState.AWAITING_MEDICAL_REVIEW),
@@ -46,83 +34,6 @@ MAIN_EDGES = {
     (WorkflowState.PACKAGED, WorkflowState.PUBLISHED_MANUAL),
     (WorkflowState.PRODUCTION_IN_PROGRESS, WorkflowState.MEDICALLY_APPROVED),
 }
-
-
-def test_topic_cannot_skip_orientation() -> None:
-    project = ProjectManifestV2(slug="muoi", state=WorkflowState.TOPIC_SELECTED)
-
-    with pytest.raises(TransitionError, match="invalid v2 transition"):
-        transition_v2(project, WorkflowState.AUTHOR_BRIEF_READY, valid_context())
-
-
-@pytest.mark.parametrize(
-    ("state", "required_artifacts"),
-    [
-        (
-            WorkflowState.ORIENTATION_RESEARCH_IN_PROGRESS,
-            frozenset({"orientation/scope.yaml"}),
-        ),
-        (
-            WorkflowState.AWAITING_EDITORIAL_DIRECTION,
-            frozenset({"orientation/completed/<run_id>.yaml"}),
-        ),
-    ],
-)
-def test_orientation_states_can_enter_and_resume_from_blocked(
-    state: WorkflowState, required_artifacts: frozenset[str]
-) -> None:
-    project = ProjectManifestV2(slug="muoi", state=state)
-    context = TransitionContext("001", "0" * 64, required_artifacts)
-
-    blocked = transition_v2(
-        project,
-        WorkflowState.BLOCKED,
-        context,
-        reason_code="operator_pause",
-        resume_state=state,
-        entered_at=FROZEN_NOW,
-    )
-    resumed = transition_v2(blocked, state, context)
-
-    assert blocked.side_state is not None
-    assert blocked.side_state.resume_state is state
-    assert resumed.state is state
-
-
-@pytest.mark.parametrize(
-    ("source", "target", "artifacts"),
-    [
-        (
-            WorkflowState.TOPIC_SELECTED,
-            WorkflowState.ORIENTATION_RESEARCH_IN_PROGRESS,
-            frozenset({"orientation/scope.yaml"}),
-        ),
-        (
-            WorkflowState.ORIENTATION_RESEARCH_IN_PROGRESS,
-            WorkflowState.AWAITING_EDITORIAL_DIRECTION,
-            frozenset({"orientation/completed/<run_id>.yaml"}),
-        ),
-        (
-            WorkflowState.AWAITING_EDITORIAL_DIRECTION,
-            WorkflowState.AUTHOR_BRIEF_READY,
-            frozenset({"orientation/completed/<run_id>.yaml", "author/brief.yaml"}),
-        ),
-    ],
-)
-def test_orientation_edges_require_their_contract_artifacts(
-    source: WorkflowState, target: WorkflowState, artifacts: frozenset[str]
-) -> None:
-    project = ProjectManifestV2(slug="muoi", state=source)
-    context = TransitionContext("001", "0" * 64, artifacts)
-
-    assert transition_v2(project, target, context).state is target
-
-    with pytest.raises(TransitionError, match="missing required artifacts"):
-        transition_v2(
-            project,
-            target,
-            TransitionContext("001", "0" * 64, frozenset()),
-        )
 
 
 def test_main_graph_requires_artifacts_and_active_revision() -> None:
@@ -264,9 +175,6 @@ FROZEN_NOW = datetime(2026, 9, 10, 7, 30, tzinfo=UTC)
 ALL_ARTIFACTS = frozenset(
     {
         "topic/card.yaml",
-        "orientation/scope.yaml",
-        "orientation/completed/<run_id>.yaml",
-        "author/brief.yaml",
         "evidence/ledger.yaml",
         "script/script.yaml",
         "storyboard/storyboard.yaml",
@@ -281,22 +189,6 @@ ALL_ARTIFACTS = frozenset(
 )
 
 SIDE_ENTRY_CASES = [
-    (WorkflowState.IDEA, WorkflowState.AWAITING_BROWSER_LOGIN, WorkflowState.IDEA),
-    (
-        WorkflowState.RESEARCH_IN_PROGRESS,
-        WorkflowState.AWAITING_BROWSER_LOGIN,
-        WorkflowState.RESEARCH_IN_PROGRESS,
-    ),
-    (
-        WorkflowState.EVIDENCE_READY,
-        WorkflowState.AWAITING_SECOND_MODEL_REVIEW,
-        WorkflowState.EVIDENCE_READY,
-    ),
-    (
-        WorkflowState.DRAFT_READY,
-        WorkflowState.AWAITING_SECOND_MODEL_REVIEW,
-        WorkflowState.DRAFT_READY,
-    ),
     (
         WorkflowState.AWAITING_MEDICAL_REVIEW,
         WorkflowState.NEEDS_MEDICAL_REVISION,
@@ -309,11 +201,6 @@ SIDE_ENTRY_CASES = [
     ),
     (
         WorkflowState.PACKAGED,
-        WorkflowState.NEEDS_MEDICAL_REVISION,
-        WorkflowState.DRAFT_READY,
-    ),
-    (
-        WorkflowState.AWAITING_SECOND_MODEL_REVIEW,
         WorkflowState.NEEDS_MEDICAL_REVISION,
         WorkflowState.DRAFT_READY,
     ),
@@ -338,25 +225,11 @@ SIDE_ENTRY_CASES = [
         WorkflowState.PRODUCTION_IN_PROGRESS,
     ),
     (WorkflowState.IDEA, WorkflowState.BLOCKED, WorkflowState.IDEA),
-    (
-        WorkflowState.ORIENTATION_RESEARCH_IN_PROGRESS,
-        WorkflowState.BLOCKED,
-        WorkflowState.ORIENTATION_RESEARCH_IN_PROGRESS,
-    ),
-    (
-        WorkflowState.AWAITING_EDITORIAL_DIRECTION,
-        WorkflowState.BLOCKED,
-        WorkflowState.AWAITING_EDITORIAL_DIRECTION,
-    ),
     (WorkflowState.DRAFT_READY, WorkflowState.BLOCKED, WorkflowState.DRAFT_READY),
     (WorkflowState.PACKAGED, WorkflowState.BLOCKED, WorkflowState.PACKAGED),
 ]
 
 SIDE_EXIT_EDGES = {
-    (WorkflowState.AWAITING_BROWSER_LOGIN, WorkflowState.IDEA),
-    (WorkflowState.AWAITING_BROWSER_LOGIN, WorkflowState.RESEARCH_IN_PROGRESS),
-    (WorkflowState.AWAITING_SECOND_MODEL_REVIEW, WorkflowState.EVIDENCE_READY),
-    (WorkflowState.AWAITING_SECOND_MODEL_REVIEW, WorkflowState.DRAFT_READY),
     (WorkflowState.NEEDS_MEDICAL_REVISION, WorkflowState.RESEARCH_IN_PROGRESS),
     (WorkflowState.NEEDS_MEDICAL_REVISION, WorkflowState.DRAFT_READY),
     (WorkflowState.NEEDS_PRODUCTION_REVISION, WorkflowState.PRODUCTION_IN_PROGRESS),
@@ -460,16 +333,6 @@ def test_topic_rejected_entry_records_no_resume_state(frozen_now: datetime) -> N
     ("source", "side", "resume"),
     [
         (
-            WorkflowState.DRAFT_READY,
-            WorkflowState.AWAITING_BROWSER_LOGIN,
-            WorkflowState.DRAFT_READY,
-        ),
-        (
-            WorkflowState.TOPIC_SELECTED,
-            WorkflowState.AWAITING_SECOND_MODEL_REVIEW,
-            WorkflowState.TOPIC_SELECTED,
-        ),
-        (
             WorkflowState.IDEA,
             WorkflowState.NEEDS_MEDICAL_REVISION,
             WorkflowState.DRAFT_READY,
@@ -504,18 +367,6 @@ def test_side_state_entry_rejects_sources_outside_the_table(
 @pytest.mark.parametrize(
     ("source", "side", "resume", "message"),
     [
-        (
-            WorkflowState.IDEA,
-            WorkflowState.AWAITING_BROWSER_LOGIN,
-            WorkflowState.RESEARCH_IN_PROGRESS,
-            "resume state must match",
-        ),
-        (
-            WorkflowState.EVIDENCE_READY,
-            WorkflowState.AWAITING_SECOND_MODEL_REVIEW,
-            WorkflowState.DRAFT_READY,
-            "resume state must match",
-        ),
         (
             WorkflowState.DRAFT_READY,
             WorkflowState.BLOCKED,
@@ -580,7 +431,7 @@ def test_side_state_entry_requires_a_reason_and_a_timestamp(
     with pytest.raises(TransitionError, match=message):
         transition_v2(
             manifest_at(WorkflowState.IDEA),
-            WorkflowState.AWAITING_BROWSER_LOGIN,
+            WorkflowState.BLOCKED,
             valid_context(),
             reason_code=reason_code,
             resume_state=WorkflowState.IDEA,
@@ -612,27 +463,6 @@ def test_side_state_entry_still_enforces_the_context_preconditions() -> None:
 @pytest.mark.parametrize(
     ("side", "resume", "reason_code", "target", "exit_reason_class"),
     [
-        (
-            WorkflowState.AWAITING_BROWSER_LOGIN,
-            WorkflowState.IDEA,
-            "login_expired",
-            WorkflowState.IDEA,
-            None,
-        ),
-        (
-            WorkflowState.AWAITING_BROWSER_LOGIN,
-            WorkflowState.RESEARCH_IN_PROGRESS,
-            "login_expired",
-            WorkflowState.RESEARCH_IN_PROGRESS,
-            None,
-        ),
-        (
-            WorkflowState.AWAITING_SECOND_MODEL_REVIEW,
-            WorkflowState.EVIDENCE_READY,
-            "review_required",
-            WorkflowState.EVIDENCE_READY,
-            None,
-        ),
         (
             WorkflowState.NEEDS_MEDICAL_REVISION,
             WorkflowState.RESEARCH_IN_PROGRESS,
@@ -756,20 +586,6 @@ def test_production_revision_exit_reads_the_reason_class_at_exit_time() -> None:
             "script_changed",
             WorkflowState.AWAITING_MEDICAL_REVIEW,
             "invalid v2 side exit",
-        ),
-        (
-            WorkflowState.AWAITING_BROWSER_LOGIN,
-            WorkflowState.IDEA,
-            "login_expired",
-            WorkflowState.RESEARCH_IN_PROGRESS,
-            "recorded resume state",
-        ),
-        (
-            WorkflowState.AWAITING_SECOND_MODEL_REVIEW,
-            WorkflowState.EVIDENCE_READY,
-            "review_required",
-            WorkflowState.DRAFT_READY,
-            "recorded resume state",
         ),
         (
             WorkflowState.BLOCKED,
@@ -908,3 +724,15 @@ def test_topic_rejected_reopen_requires_the_topic_card() -> None:
 
     with pytest.raises(TransitionError, match="missing required artifacts"):
         transition_v2(rejected, WorkflowState.TOPIC_SELECTED, context)
+
+
+def test_topic_selected_goes_straight_to_research() -> None:
+    project = ProjectManifestV2(slug="muoi", state=WorkflowState.TOPIC_SELECTED)
+    changed = transition_v2(project, WorkflowState.RESEARCH_IN_PROGRESS, valid_context())
+    assert changed.state is WorkflowState.RESEARCH_IN_PROGRESS
+
+
+def test_removed_workflow_states_absent() -> None:
+    removed = {"orientation_research_in_progress", "awaiting_editorial_direction",
+               "author_brief_ready", "awaiting_browser_login", "awaiting_second_model_review"}
+    assert not removed.intersection(state.value for state in WorkflowState)

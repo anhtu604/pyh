@@ -11,7 +11,6 @@ import typer
 
 from healthvideo import __version__
 from healthvideo.commands.operator import app as operator_app
-from healthvideo.domain.agent_review import AgentReviewResponse
 from healthvideo.domain.evidence import (
     EvidenceClaim,
     EvidenceQuestion,
@@ -45,10 +44,6 @@ from healthvideo.tts.command import CommandTTS
 from healthvideo.tts.normalize import NormalizedTTS
 from healthvideo.tts.silent import SilentTTS
 from healthvideo.video_ai.veo import GoogleVeoTransport
-from healthvideo.workflows.agent_review import (
-    complete_second_model_review,
-    request_second_model_review,
-)
 from healthvideo.workflows.ai_clips import AIClipRights, generate_ai_clip
 from healthvideo.workflows.doctor import (
     check_environment,
@@ -119,7 +114,6 @@ review_app = typer.Typer(no_args_is_help=True)
 revision_app = typer.Typer(no_args_is_help=True)
 topic_app = typer.Typer(no_args_is_help=True)
 evidence_app = typer.Typer(no_args_is_help=True)
-agent_app = typer.Typer(no_args_is_help=True)
 outro_app = typer.Typer(no_args_is_help=True)
 ai_clip_app = typer.Typer(no_args_is_help=True)
 script_app = typer.Typer(no_args_is_help=True)
@@ -128,7 +122,6 @@ app.add_typer(revision_app, name="revision")
 app.add_typer(topic_app, name="topic")
 app.add_typer(evidence_app, name="evidence")
 app.add_typer(operator_app, name="operator")
-app.add_typer(agent_app, name="agent")
 app.add_typer(outro_app, name="outro")
 app.add_typer(ai_clip_app, name="ai-clip")
 app.add_typer(script_app, name="script")
@@ -227,38 +220,6 @@ def outro_author(
         raise typer.Exit(code=1) from error
     typer.echo("Đã chuẩn bị câu kết để duyệt y khoa.")
 
-
-@agent_app.command("review-request")
-def agent_review_request(
-    project_dir: Annotated[Path, typer.Argument(help="Thư mục dự án")],
-    reason: Annotated[str, typer.Option("--reason", help="Lý do yêu cầu phản biện")],
-) -> None:
-    """Tạo gói phản biện mô hình thứ hai để chuyển thủ công."""
-    try:
-        request_dir = request_second_model_review(
-            project_dir, reason_code=reason, now=datetime.now().astimezone()
-        )
-    except (OSError, TypeError, ValueError) as error:
-        typer.echo(str(error))
-        raise typer.Exit(code=1) from error
-    typer.echo(str(request_dir))
-
-
-@agent_app.command("review-complete")
-def agent_review_complete(
-    project_dir: Annotated[Path, typer.Argument(help="Thư mục dự án")],
-    file: Annotated[Path, typer.Option("--file", help="Response YAML đã nhận")],
-) -> None:
-    """Xác minh response và tiếp tục từ side state hiện có."""
-    try:
-        response = AgentReviewResponse.model_validate(read_yaml(file))
-        changed = complete_second_model_review(
-            project_dir, response, now=datetime.now().astimezone()
-        )
-    except (OSError, TypeError, ValueError) as error:
-        typer.echo(str(error))
-        raise typer.Exit(code=1) from error
-    typer.echo(changed.state.value)
 
 ProjectDir = Annotated[Path, typer.Argument(help="Thư mục dự án")]
 Reviewer = Annotated[str, typer.Option("--reviewer", help="Tên bác sĩ duyệt")]
@@ -835,47 +796,32 @@ def topic_select(
 @evidence_app.command("search")
 def evidence_search(
     project_dir: ProjectDir,
-    query: Annotated[str, typer.Option("--query", help="Từ khóa tìm kiếm")] = "",
-    limit: Annotated[int, typer.Option("--limit", help="Số lượng kết quả tối đa")] = 10,
+    query: Annotated[list[str] | None, typer.Option("--query", help="English search query; repeatable")] = None,
+    limit: Annotated[int, typer.Option("--limit", min=1, help="Maximum results per query and provider")] = 10,
 ) -> None:
-    """Tìm kiếm y văn từ các nguồn và ghi nhận candidates."""
+    """Search literature and preserve each query and provider outcome."""
     try:
-        manifest = ProjectManifestV2.model_validate(
-            read_yaml(project_dir / "project.yaml")
-        )
+        manifest = ProjectManifestV2.model_validate(read_yaml(project_dir / "project.yaml"))
         ev_dir = project_dir / "revisions" / manifest.active_revision / "evidence"
         q_file = ev_dir / "question.yaml"
         if q_file.is_file():
-            q_data = read_yaml(q_file)
-            question = EvidenceQuestion.model_validate(q_data)
-            if query:
-                question = question.model_copy(
-                    update={
-                        "search_keywords": [
-                            k.strip() for k in query.split() if k.strip()
-                        ]
-                    }
-                )
+            question = EvidenceQuestion.model_validate(read_yaml(q_file))
         else:
+            card_file = project_dir / "revisions" / manifest.active_revision / "topic/card.yaml"
+            fallback = read_yaml(card_file).get("question", "health") if card_file.is_file() else "health"
             question = EvidenceQuestion(
-                patient_population="general",
-                intervention=query or "general",
-                outcome="health",
-                search_keywords=[k.strip() for k in query.split() if k.strip()]
-                if query
-                else ["health"],
+                patient_population="general", intervention="; ".join(query or [fallback]),
+                outcome="health", search_keywords=query or [fallback],
             )
-            record_question(project_dir, question)
-
-        clients = get_default_clients()
-        log = search_literature(project_dir, question, clients=clients)
-    except (FileNotFoundError, TypeError, ValueError) as error:
+        record_question(project_dir, question)
+        log = search_literature(project_dir, question, clients=get_default_clients(), queries=query or (), limit=limit)
+    except (OSError, TypeError, ValueError) as error:
         typer.echo(str(error))
         raise typer.Exit(code=1) from error
     typer.echo(f"Tìm thấy {log.retrieved_count} tài liệu ứng viên.")
     failed = [outcome for outcome in log.provider_outcomes if outcome.status == "failed"]
     for outcome in failed:
-        typer.echo(f"{outcome.provider}: {outcome.failure_class}: {outcome.error_summary}")
+        typer.echo(f"{outcome.provider} ({outcome.query_id}): {outcome.failure_class}: {outcome.error_summary}")
     if log.provider_outcomes and len(failed) == len(log.provider_outcomes):
         raise typer.Exit(code=1)
 
@@ -884,7 +830,7 @@ def evidence_search(
 def evidence_screen(
     project_dir: ProjectDir,
     criteria: Annotated[Path, typer.Option("--criteria", help="Screening criteria YAML")],
-    input_path: Annotated[Path, typer.Option("--input", help="Orientation candidates JSONL")],
+    input_path: Annotated[Path, typer.Option("--input", help="Evidence candidates JSONL")],
 ) -> None:
     """Write advisory abstract screening for human review; no ledger selection."""
     try:

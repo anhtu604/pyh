@@ -8,16 +8,14 @@ import pytest
 from typer.testing import CliRunner
 
 from healthvideo.cli import app
-from healthvideo.domain.author import AuthorBrief
 from healthvideo.domain.evidence import EvidenceClaim, EvidenceQuestion, SourceRecord
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.topic import TopicCard
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
-from healthvideo.workflows.author import save_author_brief
 from healthvideo.workflows.create_project_v2 import create_project_v2
 from healthvideo.workflows.evidence import build_evidence_ledger, record_question
 from healthvideo.workflows.topic import select_topic
-from tests.helpers import complete_orientation_fixture, write_explainer_fixture
+from tests.helpers import write_explainer_fixture
 
 SOURCE = Path("tests/fixtures/golden-project-v2/revisions/001")
 NOW = datetime(2026, 9, 17, tzinfo=UTC)
@@ -28,13 +26,6 @@ def _evidence_ready(tmp_path: Path) -> Path:
     manifest = read_yaml(project / "project.yaml")
     write_yaml_atomic(project / "project.yaml", manifest)
     select_topic(project, TopicCard.model_validate(read_yaml(SOURCE / "topic/card.yaml")))
-    complete_orientation_fixture(project, now=NOW)
-    save_author_brief(
-        project,
-        AuthorBrief.model_validate(read_yaml(SOURCE / "author/brief.yaml")),
-        confirm=True,
-        now=NOW,
-    )
     record_question(
         project,
         EvidenceQuestion(

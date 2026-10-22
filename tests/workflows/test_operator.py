@@ -37,8 +37,6 @@ def _v2_project(
         )
         manifest["side_state"] = side_state.model_dump(mode="json")
     elif state in {
-        WorkflowState.AWAITING_BROWSER_LOGIN,
-        WorkflowState.AWAITING_SECOND_MODEL_REVIEW,
         WorkflowState.NEEDS_MEDICAL_REVISION,
         WorkflowState.NEEDS_PRODUCTION_REVISION,
         WorkflowState.BLOCKED,
@@ -58,10 +56,7 @@ def _v2_project(
     ("state", "kind"),
     [
         (WorkflowState.IDEA, "choose_topic"),
-        (WorkflowState.TOPIC_SELECTED, "orientation_research"),
-        (WorkflowState.ORIENTATION_RESEARCH_IN_PROGRESS, "orientation_research"),
-        (WorkflowState.AWAITING_EDITORIAL_DIRECTION, "await_editorial_direction"),
-        (WorkflowState.AUTHOR_BRIEF_READY, "research"),
+        (WorkflowState.TOPIC_SELECTED, "research"),
         (WorkflowState.RESEARCH_IN_PROGRESS, "research"),
         (WorkflowState.EVIDENCE_READY, "draft"),
         (WorkflowState.DRAFT_READY, "prepare_medical_review"),
@@ -89,8 +84,6 @@ def test_next_action_is_projection_of_v2_state(
         (WorkflowState.NEEDS_MEDICAL_REVISION, "revise_medical"),
         (WorkflowState.NEEDS_PRODUCTION_REVISION, "revise_production"),
         (WorkflowState.BLOCKED, "resolve_blocker"),
-        (WorkflowState.AWAITING_BROWSER_LOGIN, "await_browser_login"),
-        (WorkflowState.AWAITING_SECOND_MODEL_REVIEW, "await_second_model_review"),
         (WorkflowState.TOPIC_REJECTED, "reopen_topic"),
     ],
 )
@@ -144,40 +137,3 @@ def test_render_status_is_stable_and_does_not_write_project_state(tmp_path: Path
     assert "await_medical_approval" in first
     assert manifest_path.read_bytes() == before
     assert not (project_dir / "STATUS.md").exists()
-
-
-def test_editorial_direction_asks_for_the_doctors_own_words(tmp_path: Path) -> None:
-    """The boundary must invite the doctor's view, never state one on their behalf."""
-    action = get_next_action(
-        _v2_project(tmp_path, WorkflowState.AWAITING_EDITORIAL_DIRECTION)
-    )
-
-    assert "orientation" in action.message.lower()
-    assert action.artifact == tmp_path / WorkflowState.AWAITING_EDITORIAL_DIRECTION.value / "revisions/001/orientation/completed"
-
-    assert "authoritative_orientation_missing" in action.message
-
-
-def test_editorial_direction_points_at_authoritative_completed_record(tmp_path: Path) -> None:
-    from healthvideo.workflows.orientation import (
-        complete_orientation,
-        run_orientation_search,
-    )
-    from tests.workflows.test_orientation import (
-        FROZEN_NOW,
-        StubClient,
-        _candidate,
-        _completed,
-        _researching_project,
-    )
-
-    project = _researching_project(tmp_path)
-    run_orientation_search(project, [StubClient("pubmed", [_candidate()])], now=FROZEN_NOW)
-    completed = _completed(project, run_id="editorial-run")
-    complete_orientation(project, completed, now=FROZEN_NOW)
-
-    action = get_next_action(project)
-
-    assert action.artifact == project / "revisions/001/orientation/completed/editorial-run.yaml"
-    assert action.artifact.is_file()
-    assert "authoritative_orientation_missing" not in action.message

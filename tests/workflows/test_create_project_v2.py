@@ -11,7 +11,7 @@ FROZEN_NOW = datetime(2026, 9, 12, 10, 0, tzinfo=UTC)
 
 
 def test_create_project_v2_starts_at_idea_with_revision_001(tmp_path) -> None:
-    """Creating a v2 project must publish its initial revision and blank brief."""
+    """Creating a v2 project must publish its initial revision without an author brief."""
     project = create_project_v2(
         tmp_path,
         "muoi-va-huyet-ap",
@@ -22,7 +22,7 @@ def test_create_project_v2_starts_at_idea_with_revision_001(tmp_path) -> None:
     manifest = ProjectManifestV2.model_validate(read_yaml(project / "project.yaml"))
     assert manifest.state is WorkflowState.IDEA
     assert manifest.active_revision == "001"
-    assert (project / "revisions/001/author/brief.yaml").is_file()
+    assert not (project / "revisions/001/author/brief.yaml").exists()
 
 
 def test_create_project_v2_leaves_no_partial_destination_on_failure(
