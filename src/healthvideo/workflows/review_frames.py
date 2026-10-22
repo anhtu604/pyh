@@ -3,6 +3,7 @@
 import json
 import math
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -18,6 +19,58 @@ from healthvideo.render.remotion import (
 )
 from healthvideo.storage.files import sha256_file
 from healthvideo.storage.project_layout import resolve_project_layout
+from healthvideo.visuals.anatomy_library import (
+    LIBRARY_PATH,
+    ComponentStatus,
+    library_status,
+)
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+UNAPPROVED_COMPONENTS_HEADING = "Component giải phẫu mới hoặc vừa sửa cần soát kỹ"
+
+
+def _resolve_repo_root(project_dir: Path, repo: Path | None = None) -> Path:
+    if repo is not None:
+        return repo
+    resolved = project_dir.resolve()
+    for candidate in (resolved, *resolved.parents):
+        if (candidate / LIBRARY_PATH).is_file():
+            return candidate
+    return REPOSITORY_ROOT
+
+
+def unapproved_anatomy_components(
+    data: RenderInput,
+    *,
+    repo: Path = REPOSITORY_ROOT,
+) -> dict[str, ComponentStatus]:
+    """Return used anatomy subjects whose library status is 'new' or 'modified'."""
+    used_subjects = list(
+        dict.fromkeys(
+            scene.anatomy.subject
+            for scene in data.scenes
+            if scene.anatomy is not None
+        )
+    )
+    if not used_subjects or not (repo / LIBRARY_PATH).is_file():
+        return {}
+    statuses = library_status(repo)
+    return {
+        subject: status
+        for subject in used_subjects
+        if (status := statuses.get(subject)) in ("new", "modified")
+    }
+
+
+def render_unapproved_components_section(
+    components: Mapping[str, ComponentStatus],
+) -> str:
+    if not components:
+        return ""
+    lines = [f"## {UNAPPROVED_COMPONENTS_HEADING}"]
+    for subject, status in components.items():
+        lines.append(f"- {subject}: {status}")
+    return "\n".join(lines)
 
 
 @dataclass(frozen=True)
@@ -158,6 +211,7 @@ def review_frames(
     start: float | None = None,
     end: float | None = None,
     every: float | None = None,
+    repo: Path | None = None,
 ) -> Path:
     layout = resolve_project_layout(project_dir)
     if layout.schema_version != "2.0":
@@ -172,6 +226,8 @@ def review_frames(
     # Invalidate the old QA index before doing work, including on failed retries.
     (output / "index.json").unlink(missing_ok=True)
     (output / "mechanism/index.json").unlink(missing_ok=True)
+    (output / "unapproved-components.md").unlink(missing_ok=True)
+    (output / "mechanism/unapproved-components.md").unlink(missing_ok=True)
     input_hash = sha256_file(input_path)
     if not video.is_file():
         video = output / "draft.mp4"
@@ -227,10 +283,18 @@ def review_frames(
         )
     if input_hash != sha256_file(input_path) or video_hash != sha256_file(video):
         raise RuntimeError("Render input or video changed during frame review; retry")
+    resolved_repo = _resolve_repo_root(project_dir, repo)
+    unapproved = unapproved_anatomy_components(data, repo=resolved_repo)
+    unapproved_section = render_unapproved_components_section(unapproved)
     metadata = {
         "render_input_sha256": input_hash,
         "video_sha256": video_hash,
         "video": video.relative_to(renders).as_posix(),
+        "unapproved_components_heading": (
+            UNAPPROVED_COMPONENTS_HEADING if unapproved else None
+        ),
+        "unapproved_components": unapproved,
+        "unapproved_components_section": unapproved_section,
     }
     for directory, items in (
         (output, entries),
@@ -241,6 +305,11 @@ def review_frames(
             + "\n",
             encoding="utf-8",
         )
+        if unapproved_section:
+            (directory / "unapproved-components.md").write_text(
+                unapproved_section + "\n",
+                encoding="utf-8",
+            )
     return output
 
 

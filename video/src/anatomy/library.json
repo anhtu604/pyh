@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "components": {
+    "artery_cross_section": {
+      "file": "ArterySection.tsx",
+      "layers": [
+        "adventitia",
+        "media",
+        "intima",
+        "lumen"
+      ]
+    },
+    "heart": {
+      "file": "Heart.tsx",
+      "layers": [
+        "aortic-arch",
+        "aortic-branches",
+        "superior-vena-cava",
+        "atria",
+        "ventricles",
+        "septum",
+        "pulmonary-trunk"
+      ]
+    }
+  }
+}

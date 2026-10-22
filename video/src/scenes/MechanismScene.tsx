@@ -1,8 +1,7 @@
 import React from 'react';
 import {AbsoluteFill, interpolate, useCurrentFrame} from 'remotion';
-import {ArterySection} from '../anatomy/ArterySection';
-import {Heart} from '../anatomy/Heart';
 import {brand} from '../anatomy/palette';
+import {ANATOMY_COMPONENTS} from '../anatomy/registry';
 import {MascotGuide} from '../components/MascotGuide';
 import {useLayout} from '../layout';
 import type {Scene} from '../types';
@@ -14,8 +13,7 @@ export const MechanismScene: React.FC<{scene: Scene; kind: MechanismKind}> = ({s
   if (!scene.anatomy) throw new Error(`${scene.visual} requires anatomy`);
   const light = scene.visual_assets?.some((asset) => asset.role === 'mascot') ?? false;
   const anatomy = scene.anatomy;
-  const Organ = anatomy.subject === 'artery_cross_section' ? ArterySection
-    : anatomy.subject === 'heart' ? Heart : null;
+  const Organ = ANATOMY_COMPONENTS[anatomy.subject];
   if (!Organ) throw new Error(`Unsupported anatomy subject: ${anatomy.subject}`);
   const progress = interpolate(frame, [0, Math.max(1, scene.duration_frames - 1)], [0, 1],
     {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});

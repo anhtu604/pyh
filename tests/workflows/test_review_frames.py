@@ -9,10 +9,20 @@ from healthvideo.cli import app
 from healthvideo.domain.storyboard import Scene
 from healthvideo.render.input import RenderInput
 from healthvideo.storage.files import write_yaml_atomic
+from healthvideo.visuals.anatomy_library import (
+    LIBRARY_PATH,
+    record_approval,
+)
 from healthvideo.workflows import review_frames as frames
 
 
-def scene(number, start, duration=90, visual="anatomy_animation"):
+def scene(
+    number,
+    start,
+    duration=90,
+    visual="anatomy_animation",
+    subject="artery_cross_section",
+):
     return Scene(
         id=f"S-TEST-{number:02}",
         start_frame=start,
@@ -21,7 +31,7 @@ def scene(number, start, duration=90, visual="anatomy_animation"):
         visual=visual,
         anatomy=(
             {
-                "subject": "artery_cross_section",
+                "subject": subject,
                 "state": "normal",
                 "severity": 0,
                 "motion": "Synthetic motion",
@@ -229,3 +239,116 @@ def test_packet_attaches_only_mechanism_sheets_without_changing_gate_hashes(tmp_
     assert hash_reviewed_artifacts(video_reviewed_paths(revision)) == before
     (renders / "video.mp4").write_bytes(b"new video")
     assert "sheet-01.png" not in render_video_packet(revision)
+
+
+def test_review_frames_includes_new_and_modified_components(tmp_path):
+    from healthvideo.workflows.gate_review import (
+        hash_reviewed_artifacts,
+        video_reviewed_paths,
+    )
+
+    anatomy_dir = tmp_path / LIBRARY_PATH.parent
+    anatomy_dir.mkdir(parents=True, exist_ok=True)
+    (anatomy_dir / "ArterySection.tsx").write_text(
+        "export const ArterySection = () => <svg data-layer='lumen' />;\n",
+        encoding="utf-8",
+    )
+    (anatomy_dir / "Heart.tsx").write_text(
+        "export const Heart = () => <svg data-chamber='ventricles' />;\n",
+        encoding="utf-8",
+    )
+    (anatomy_dir / "Nephron.tsx").write_text(
+        "export const Nephron = () => <svg data-layer='glomerulus' />;\n",
+        encoding="utf-8",
+    )
+    (anatomy_dir / "Lung.tsx").write_text(
+        "export const Lung = () => <svg data-layer='alveoli' />;\n",
+        encoding="utf-8",
+    )
+    (tmp_path / LIBRARY_PATH).write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "components": {
+                    "artery_cross_section": {
+                        "file": "ArterySection.tsx",
+                        "layers": ["lumen"],
+                    },
+                    "heart": {
+                        "file": "Heart.tsx",
+                        "layers": ["ventricles"],
+                    },
+                    "nephron": {
+                        "file": "Nephron.tsx",
+                        "layers": ["glomerulus"],
+                    },
+                    "lung": {
+                        "file": "Lung.tsx",
+                        "layers": ["alveoli"],
+                    },
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    record_approval(
+        tmp_path,
+        ["heart", "nephron"],
+        project="previous-project",
+        revision="001",
+    )
+    (anatomy_dir / "Heart.tsx").write_text(
+        "export const Heart = () => <svg data-chamber='ventricles-updated' />;\n",
+        encoding="utf-8",
+    )
+
+    project, renders, data = setup_project(tmp_path, video=True)
+    data = data.model_copy(
+        update={
+            "scenes": (
+                scene(1, 0, subject="artery_cross_section"),
+                scene(2, 90, subject="heart"),
+                scene(3, 180, subject="nephron"),
+                scene(4, 270, visual="whiteboard"),
+            )
+        }
+    )
+    (renders / "render-input.json").write_text(
+        data.model_dump_json(),
+        encoding="utf-8",
+    )
+    revision = renders.parent
+    (renders / "render-manifest.json").write_text("{}", encoding="utf-8")
+    before_project = (project / "project.yaml").read_bytes()
+    before_hashes = hash_reviewed_artifacts(video_reviewed_paths(revision))
+
+    output = frames.review_frames(project, runner=fake_runner([]))
+
+    assert (project / "project.yaml").read_bytes() == before_project
+    assert hash_reviewed_artifacts(video_reviewed_paths(revision)) == before_hashes
+    assert not (revision / "reviews").exists()
+
+    for index_path in (output / "index.json", output / "mechanism/index.json"):
+        meta = json.loads(index_path.read_text(encoding="utf-8"))
+        assert meta["unapproved_components"] == {
+            "artery_cross_section": "new",
+            "heart": "modified",
+        }
+        assert meta["unapproved_components_heading"] == (
+            frames.UNAPPROVED_COMPONENTS_HEADING
+        )
+        section = meta["unapproved_components_section"]
+        assert frames.UNAPPROVED_COMPONENTS_HEADING in section
+        assert "- artery_cross_section: new" in section
+        assert "- heart: modified" in section
+        assert "nephron" not in section
+        assert "lung" not in section
+
+    md_text = (output / "mechanism/unapproved-components.md").read_text(
+        encoding="utf-8"
+    )
+    assert frames.UNAPPROVED_COMPONENTS_HEADING in md_text
+    assert "- artery_cross_section: new" in md_text
+    assert "- heart: modified" in md_text
