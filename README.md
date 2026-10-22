@@ -1,152 +1,104 @@
-# Protect Your Health
+# Protect Your Health — xưởng video y khoa
 
-## Bắt đầu với `/pyh`
+Protect Your Health (PYH) là xưởng sản xuất video y khoa giải thích bản chất bệnh và các tranh cãi thường gặp bằng mô phỏng trực quan theo chiều sâu hàn lâm (giải phẫu → sinh lý → sinh lý bệnh → giải phẫu bệnh). Kênh đi theo cấu trúc giải thích cơ chế trước, đưa bằng chứng có nguồn kiểm chứng sau (`explain-first`), và bắt buộc dẫn chứng y văn khi bảo vệ một quan điểm. Mỗi chủ đề trong hàng đợi xuất ra 1 video dài YouTube 16:9 (10–25 phút), 1–6 clip dọc 9:16 (TikTok, YouTube Shorts, Facebook Reels) cắt từ kịch bản đã duyệt và bộ bài đăng đa kênh soạn sẵn. Quy trình chạy tự động qua agent CLI (`codex` và Antigravity `agy`) nhưng luôn dừng ở **hai cổng duyệt của bác sĩ** (y khoa và video) và **không tự động đăng bài**.
 
-Trên Windows 11 / PowerShell 5.1, cần Python 3.11+, Node.js 22+, FFmpeg 8+
-trên PATH và pnpm 11+ hoặc Corepack. Mở thư mục repo rồi chạy một lệnh:
+## Cài đặt
+
+Trên Windows 11 / PowerShell 5.1 (cần Python ≥3.11, Node.js ≥22, pnpm ≥11 hoặc Corepack, FFmpeg ≥8 trên `PATH`), chạy một lệnh từ thư mục gốc repo:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File install/install.ps1
 ```
 
-Bộ cài dùng lại `.venv`, cài dependency Python/video và mặc định tạo môi trường
-Python 3.11 riêng tại `cache/tts-venv` với `vieneu==3.6.4`. Có thể chạy lại an toàn;
-TTS đã đúng phiên bản sẽ được bỏ qua. Nếu thiếu `uv`, bộ cài cài nó vào `.venv`.
-Model chỉ tải khi tổng hợp giọng lần đầu, nằm ngoài Git. Thêm `-SkipTts` vào lệnh
-trên để bỏ cài TTS; chạy lại không có switch này để bổ sung. Kiểm tra môi trường:
+Bộ cài tạo/dùng lại `.venv`, cài gói Python cùng dependency `video/`, cài môi trường TTS mặc định (thêm `-SkipTts` nếu muốn bỏ qua TTS) rồi chạy `doctor`. Các môi trường ảo mô hình dùng chung đặt trong `cache/` (nằm ngoài Git):
+
+- `cache/tts-venv`: Python 3.11 với `vieneu==3.6.4` (giọng đọc kênh `Thái Sơn`) và `faster-whisper` cho kiểm tra ASR.
+- `cache/music-venv`: ACE-Step 1.5 sinh nhạc nền không lời theo tâm trạng chương (trọng số tại `cache/models/ace-step-1.5`).
+- `cache/flux-venv`: FLUX.2 [klein] 4B (Apache-2.0) sinh ảnh minh họa bối cảnh không nhãn.
+
+Các biến môi trường tùy chọn đặt trong file `.env` ở gốc repo (chỉ khai báo trong máy local, không commit `.env` vào Git; CLI tự nạp và lọc bỏ mọi khóa chứa `PIN`):
+
+- `YOUTUBE_API_KEY`: khóa YouTube Data API cho bước tìm chủ đề.
+- `NCBI_EMAIL`, `NCBI_API_KEY`: email liên hệ và khóa API tùy chọn khi tìm kiếm PubMed/NCBI.
+- `HEALTHVIDEO_TTS_PYTHON`, `HEALTHVIDEO_MUSIC_PYTHON`, `HEALTHVIDEO_FLUX_PYTHON`: đường dẫn `python.exe` ghi đè các venv tương ứng trong `cache/`.
+
+Kiểm tra môi trường bất kỳ lúc nào bằng:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File install/doctor.ps1
+.venv\Scripts\healthvideo.exe doctor
 ```
 
-Không cần sửa PATH hay đặt `PYTHONUTF8`; chạy CLI bằng
-`.venv\Scripts\healthvideo.exe` từ thư mục gốc repo. Nếu dùng PubMed, người dùng
-có thể tự đặt biến môi trường tùy chọn `NCBI_EMAIL` và `NCBI_API_KEY`; không commit
-giá trị hoặc credential. Trong Claude Code, dùng `/pyh status <project>`.
-Với Antigravity IDE hoặc `agy`, mở thư mục repo; skill `pyh` được tự nhận từ
-`.agents/skills/pyh/SKILL.md`, không cần thêm entry file.
+## Bốn giai đoạn
 
-```text
-# Trong Codex, Claude Code hoặc Antigravity:
-# /pyh tìm chủ đề                  # xem/tạo topic card trong inbox cục bộ
-# /pyh chọn chủ đề                 # chọn card; tạo project v2 nếu chưa có
-# /pyh chốt brief                  # xem và xác nhận brief riêng trước nghiên cứu
-# /pyh tiếp tục                    # nghiên cứu, soạn và dừng tại cổng duyệt y khoa
+| Giai đoạn | Làm gì | Công cụ |
+| --- | --- | --- |
+| 1. Chủ đề và kịch bản | Tìm tín hiệu/hiểu lầm tạo thẻ chủ đề để bác sĩ chọn vào hàng đợi; tự động tìm và sàng lọc y văn, tổng hợp ledger, lập bản đồ cơ chế (`explainer.yaml`), viết script, storyboard, dàn ý chương, kế hoạch clip rồi dừng ở cổng `awaiting_medical_review` | YouTube Data API, Google Trends, Reddit, PubMed, Europe PMC, agent CLI (`codex`/`agy`), skill `humanizer` |
+| 2. Hình, giọng, nhạc | Dùng lại hoặc vẽ mới component SVG giải phẫu/cơ chế có chú thích; sinh ảnh minh họa bối cảnh không nhãn; tổng hợp giọng đọc từng dòng kèm căn thời gian có hash; sinh nhạc nền không lời và trộn ducking dưới giọng đọc | Thư viện SVG (`video/src/anatomy/`), FLUX.2 [klein] 4B, VieNeu TTS (`Thái Sơn`) + faster-whisper, ACE-Step 1.5 + FFmpeg |
+| 3. Dựng video | Render video dài 16:9 theo chương (có cache), dựng 1–6 clip dọc 9:16 từ cảnh đã duyệt (không thêm lời mới), phụ đề tiếng Việt, mascot, thẻ cuối; chạy QA tiếng-hình, layer, font và xuất contact sheet rồi dừng ở cổng `awaiting_video_review` | Remotion 4, FFmpeg, bộ kiểm QA Python |
+| 4. Đóng gói đa kênh | Soạn tiêu đề/mô tả/tag/thumbnail YouTube, caption TikTok/Shorts/Reels, bài Facebook và YouTube Community ngay trong `producing` để duyệt chung ở cổng video; sau khi duyệt video chỉ đóng băng vào `publish/` để bác sĩ tự đăng (`published_manual`) | `healthvideo step posts-check`, `healthvideo package` |
+
+## Vận hành hằng ngày
+
+Đặt mã PIN duyệt lần đầu (chỉ chạy trực tiếp trong terminal của bác sĩ; băm scrypt lưu tại `~/.healthvideo/approver-pin.json` ngoài repo):
+
+```powershell
+.venv\Scripts\healthvideo.exe review set-pin
 ```
 
-Yêu cầu `/pyh làm video ... về <chủ đề>` cũng tạo/chọn topic card rồi dừng để bác sĩ xác nhận brief. `healthvideo review open <project> --gate medical` in HTML packet ra stdout mà không ghi vào project; bác sĩ duyệt rõ ràng bằng lệnh `healthvideo review approve` với tên người duyệt. Sau khi `/pyh tiếp tục` dựng video, xem packet `--gate video` và duyệt lần hai. `/pyh tạo gói đăng` tạo `revisions/<active_revision>/publish/` để đăng thủ công. Dùng `/pyh trạng thái` để xem bước tiếp theo. Discovery trực tuyến có giám sát và TTS thật chưa thuộc acceptance offline hiện tại.
+Luồng vận hành chuẩn:
 
-Với chủ đề rủi ro cao cần phản biện bổ sung, `healthvideo agent review-request <project> --reason <code>` tạo gói XML cục bộ để gửi thủ công; `healthvideo agent review-complete <project> --file <response.yaml>` chỉ nhận phản hồi gắn đúng request và revision. Bước này không gọi mô hình, không thay thế hai cổng duyệt của bác sĩ.
+1. `healthvideo topic discover --query "<từ khóa>"` — tìm tín hiệu thật và lưu thẻ gợi ý vào `topics/discovered/<ngày>.yaml`.
+2. `healthvideo topic add --slug <slug> --title "<tiêu đề>" --question "<câu hỏi>" [--note "<ghi chú>"]` — đưa chủ đề vào hàng đợi `topics/queue.yaml`.
+3. `healthvideo run` — chạy tự động hàng đợi qua các bước Python và agent (`codex`/`agy`) cho tới khi chạm cổng duyệt.
+4. `healthvideo status` — xem bảng trạng thái toàn bộ hàng đợi, cổng đang chờ và lệnh mở gói duyệt (hoặc `healthvideo status <project>` cho một dự án).
+5. `healthvideo review open <project> --gate medical|video` — xuất gói HTML duyệt cổng y khoa hoặc cổng video.
+6. Duyệt hoặc từ chối tại cổng:
+   - `healthvideo review approve <project> --gate medical|video --reviewer "<tên bác sĩ>" [--note "<ghi chú>"]` (bác sĩ gõ tay mã PIN trực tiếp trong terminal TTY).
+   - `healthvideo review reject <project> --gate medical|video --reviewer "<tên bác sĩ>" --reason "<lý do>" --resume-to <trạng_thái>` (từ chối để lần `run` tiếp theo tự sửa theo ghi chú).
+7. Chạy lại `healthvideo run` sau khi duyệt cổng y khoa (hoặc sau khi `reject`) để hoàn tất sản xuất và tiến tới cổng duyệt video.
+8. `healthvideo package <project>` — sau khi duyệt cổng video, đóng băng toàn bộ video, clip, nguồn và bài đăng vào `revisions/<rev>/publish/` để bác sĩ tự đăng.
 
-## Mục tiêu
+## Lệnh
 
-Xây dựng luồng có thể kiểm tra để biến hồ sơ và luận điểm đã được bác sĩ duyệt
-thành video y tế dự phòng tiếng Việt dọc 1080 × 1920.
+Bộ lệnh công khai của `healthvideo` (xem chi tiết bằng `--help`):
 
-## Trạng thái hiện tại
+- `healthvideo topic discover` — tìm tín hiệu chủ đề từ YouTube, Google Trends, Reddit và đếm bài PubMed.
+- `healthvideo topic add` — thêm một thẻ chủ đề mới vào hàng đợi `topics/queue.yaml` (chặn trùng slug).
+- `healthvideo topic list` — liệt kê các chủ đề trong hàng đợi cùng trạng thái dự án.
+- `healthvideo run` — chạy hàng đợi tự động tới cổng duyệt tiếp theo (`--once` để chạy tối đa một bước).
+- `healthvideo status [project_dir]` — xem bảng tiến độ toàn hàng đợi hoặc chi tiết bước kế tiếp của một project (`--json`).
+- `healthvideo review open <project_dir> --gate medical|video` — in gói duyệt HTML ra stdout (chỉ đọc).
+- `healthvideo review approve <project_dir> --gate medical|video --reviewer <tên> [--note <ghi_chú>]` — duyệt cổng bằng PIN gõ tay trong TTY.
+- `healthvideo review reject <project_dir> --gate medical|video --reviewer <tên> --reason <lý_do> --resume-to <trạng_thái> [--yes]` — từ chối cổng kèm lý do và trạng thái nối lại.
+- `healthvideo review reopen <project_dir> --gate medical|video --reviewer <tên> --reason <lý_do> --changed <path> --resume-to <trạng_thái> [--yes]` — mở lại cổng khi cần sửa artifact đã duyệt.
+- `healthvideo review set-pin` — đặt hoặc đổi mã PIN duyệt của bác sĩ trong terminal TTY.
+- `healthvideo preview <project_dir> [--port <cổng>] [--print-only]` — mở Remotion Studio xem trước bản render hiện hành.
+- `healthvideo produce <project_dir>` — chạy tay bước tổng hợp giọng, nhạc và render video (giai đoạn 2–3).
+- `healthvideo package <project_dir>` — đóng băng gói đăng bài đa kênh vào `publish/` sau khi qua cổng video (giai đoạn 4).
+- `healthvideo doctor` — kiểm tra cấu hình và dependency của toolchain local.
 
-MVP đã hoàn thành: project scaffold, claim ledger, author-owned script,
-read-aloud QA, Remotion vertical preview, production cache, hai cổng duyệt của
-bác sĩ, gói xuất bản, Windows installer và environment doctor. Thiết kế workflow
-khép kín A–Z đã được duyệt tại `8a2b9a7`. M1 workflow kernel đã hoàn tất trên
-nhánh triển khai: contract/layout v2, state graph, revision và stage bất biến,
-semantic asset manifest, invalidation xác định và migration v1→v2 không phá dữ
-liệu. M2 review gate và M3 topic/evidence đã hoàn tất. MVP v1 vẫn là đường
-chạy tương thích ổn định; `/pyh` vận hành project v2 qua hai cổng duyệt.
-PYH.1–6 đã hoàn tất và được kiểm tra end-to-end offline. M4.1 đã thêm gói
-phản biện mô hình thứ hai để gửi/nhận thủ công, không thay thế duyệt của bác sĩ.
-M5.1–M5.2 đã thêm từ điển phát âm tiếng Việt được ràng buộc với medical gate,
-adapter TTS dạng lệnh cục bộ, kiểm tra WAV trước render và harness benchmark
-offline. M5.2 ở commit `1376663` trên nhánh `codex/m1-workflow-kernel`;
-525 test Python, 12 test video, Ruff và video typecheck đã qua ở M5.2.
+Ngoài ra, nhóm lệnh ẩn `healthvideo step ...` (`hidden=True`) dành riêng cho agent gọi trong các bước tự động (`new`, `select`, `evidence-search`, `evidence-screen`, `evidence-ingest`, `build-ledger`, `draft`, `lint`, `outro-author`, `submit-medical`, `posts-check`, `review-frames`, `resume`, `revision-create`, `version`).
 
-M5.3 đã xác minh môi trường và giấy phép ứng viên (VieNeu-TTS v3 Turbo,
-`vieneu==3.6.4`, model card Apache-2.0 cho phép audio thương mại từ preset voice),
-thêm wrapper cục bộ `tools/tts/vieneu_synth.py`, lệnh `healthvideo tts-benchmark`
-với tiêu chí đo khách quan và đã chạy benchmark thật trên máy này (xem
-`docs/superpowers/plans/2026-09-13-tts-m5-3-vieneu-benchmark.md`). Kết luận đo
-được: 13/13 case tổng hợp thành công, tốc độ đọc 2,7–4,8 từ/s; bài ~50 s đạt RTF
-0,55 (fp32) / 0,46 (int8) trên CPU; câu lẻ trượt RTF ≤ 1,0 vì mỗi lần gọi nạp
-model ~8 s. M5.4 thêm ASR back-check (faster-whisper, MIT) với WER khách quan, chuẩn hóa
-loudness bằng FFmpeg (`NormalizedTTS`) và `produce --tts vieneu --voice <preset>`;
-đã chạy thật: 10/13 case WER ≤ 0,2 và một video golden v2 dựng xong bằng VieNeu
-(82 s, −16,7 LUFS) dừng ở `awaiting_video_review`. M5 hoàn tất phần kỹ thuật
-tại `c4a500c` (548 test Python, 12 test video, Ruff, typecheck). Hai việc M5 còn
-chờ con người: bác sĩ nghe 13 WAV benchmark để chọn preset voice chính thức và bổ
-sung từ điển phát âm cho tên thuốc; ElevenLabs fallback chỉ làm khi có key.
-Không đưa audio/model/cache, credential hoặc bản render tạm vào Git; không vượt
-hai cổng duyệt hoặc tự đăng.
+## Quy tắc an toàn
 
-M6 bắt đầu theo [kế hoạch visual](docs/superpowers/plans/2026-09-13-visuals-m6.md).
-M6.1 chỉ tạo chart SVG tĩnh từ `chart_data` dạng `count_of_total` được ghi rõ
-trong claim của `evidence/ledger.yaml`: số đếm nguyên, mẫu số, đơn vị, nhãn,
-source ID và CI tùy chọn. API Python `create_evidence_chart` chỉ nhận project v2
-chưa duyệt y khoa; nó kiểm nguồn thuộc claim, đăng ký `data_chart` với
-`semantic: true`, hash bytes trong `assets/asset-manifest.yaml` và ghi
-`assets/license-ledger.yaml` từ license/căn cứ quyền do operator nhập tường
-minh. Code không suy đoán giấy phép, không tạo số liệu, không đổi state; medical
-gate hash cả asset và license ledger. Chưa nối chart vào Remotion hoặc CLI.
+- Không bịa nguồn, DOI, PMID, số liệu, kết quả nghiên cứu, hoặc trải nghiệm lâm sàng của bác sĩ.
+- Agent không bao giờ tự duyệt cổng y khoa hoặc cổng video; `review approve` bắt buộc TTY + mã PIN do bác sĩ gõ tay, và tiến trình gọi agent luôn lọc bỏ mọi biến môi trường chứa `PIN`.
+- Không tự động xuất bản lên bất kỳ nền tảng nào; việc đăng bài từ `publish/` luôn do bác sĩ thực hiện thủ công.
+- Ảnh minh họa do AI sinh (FLUX.2 [klein] 4B) tuyệt đối không mang nhãn giải phẫu hay số liệu; mọi hình giải phẫu/cơ chế có chú thích phải là component SVG trong `video/src/anatomy/` có kiểm tra layer và contact sheet.
+- Mọi câu có số liệu trong bài đăng đa kênh (`posts/posts.yaml`) phải gắn `[claim:<id>]` trỏ tới claim đã được duyệt ở cổng y khoa.
 
-M6.2 cung cấp API Python `create_evidence_highlight_asset` cho project v2 trước
-cổng duyệt y khoa. Operator chuẩn bị ảnh trang PNG/JPEG **ngoài project**, ghi
-`source_id`, số trang, câu trích nguyên văn, marker và hình chữ nhật chuẩn hóa
-trong storyboard, rồi khai tường minh license, căn cứ quyền dùng và creator.
-API kiểm source–claim–marker, crop vùng nhỏ quanh hình chữ nhật bằng Pillow
-12.3.0 ([PyPI](https://pypi.org/project/pillow/), MIT-CMU), chỉ lưu PNG crop;
-không đưa trang đầy đủ/PDF/full text hay đường dẫn máy vào project. Metadata
-crop giữ tọa độ trang gốc và kích thước pixel của ảnh cắt; renderer đặt ảnh
-theo `contain` và vẽ overlay trong cùng hộp nên không lệch trên crop vuông hoặc
-ngang. Asset semantic, hash và rights ledger được medical gate ràng buộc;
-retry sau lỗi promotion hội tụ an toàn. Không OCR hoặc xác nhận tự động
-quote có thật trong ảnh. PDF rasterization, mascot, signature, visual budget và
-Veo vẫn ở lát sau. Không đổi hai cổng duyệt hoặc đăng thủ công.
+## Tài liệu
 
-M6.3 hoàn tất theo đặc tả nhận diện PYH đã duyệt. Brand profile khóa
-bảng màu xác định (navy, teal, vàng, trắng ngà, charcoal), ba pose mascot
-`welcome`/`explain`/`caution`, logo hình học PYH không phụ thuộc font và bốn
-template whiteboard hữu hạn. SVG lặp byte, không script/filter/external raster;
-generator chỉ bố trí giá trị operator cung cấp. Mascot tóc ngắn, dáng đầy đặn,
-đeo kính và mặc áo khoác chuyên nghiệp navy–teal; không áo blouse, ống nghe hay
-hành vi khám/chẩn đoán/kê đơn. Intro, outro và chuyển động signature vẫn thuộc
-M6.4.
-
-Checkpoint B thêm `mascot_reaction` chỉ trang trí và
-`mascot_medical_annotation` luôn semantic. Scene v2 có thể khai báo
-`visual_assets`; resolver kiểm đường dẫn, loại asset và SHA-256 cho cả asset
-trang trí trước medical gate và production. Workflow đăng ký ghi intent trước,
-promotion nguyên tử và retry hội tụ; annotation/whiteboard semantic bắt buộc
-claim–source–marker hợp lệ. Remotion chỉ render asset đã khai báo qua
-`staticFile`, stage đúng byte và đưa hash cả asset trang trí vào cache identity.
-Scene cũ không có trường này vẫn giữ fallback hiện tại. M6.4 đã hoàn tất.
-M6.5 complete (acceptance và C2C review DONE): storyboard `m6_5_v1`
-cưỡng chế ngân sách visual theo frame ở medical gate và production, QA ghi report
-tái tính được, chart dùng SVG `DATA_CHART` đã bind. M6.6 complete sau acceptance
-toàn bộ và C2C review DONE cho cả sáu lát: Veo chỉ
-chạy khi operator opt-in trước medical gate; production chỉ stage đúng bytes AI
-clip đã được medical approval bao phủ, không gọi provider; Remotion render clip
-muted; gói đăng thủ công có `ai-disclosure.json` khi có AI. Hai cổng duyệt và
-đăng thủ công giữ nguyên.
-
-## Milestone
-
-MVP complete: vertical slice từ author brief, evidence, kịch bản và storyboard
-đến TTS giả lập, render, hai cổng duyệt, gói xuất bản và kiểm tra Windows.
-
-M1 complete: kernel workflow v2 và migration sibling v1→v2 đã vượt acceptance
-offline; migration không sửa nguồn, không overwrite đích và không tự duyệt gate.
-
-M2 complete: review gate v2 cho cả y khoa và video đã hoàn thành (approve,
-reject audit trail lặp lại được, resume, static HTML review packet, CLI adapter
-và `.gitignore` cho HTML). Không đổi hành vi của v1 (`review medical`/`review video`).
-Toàn bộ 407 tests pass offline trên Windows/PowerShell (11-09-2026). Các commit:
-M2.1 (`38321a6`), M2.2 (`78fe1fb`), M2.3 (`3ffcae8`), M2.4 (`10ba3da`), M2.5 (`feat: expose v2 review gate approve, reject, open and resume`).
-Gói review HTML giữ đúng giới hạn model hiện tại (chưa model hóa population, certainty,
-applicability, per-claim doctor notes — hoãn sang M3).
+- [Spec tái cấu trúc xưởng video (2026-10-22)](docs/superpowers/specs/2026-10-22-video-factory-restructure-design.md)
+- [Kế hoạch triển khai tái cấu trúc xưởng video (2026-10-22)](docs/superpowers/plans/2026-10-22-video-factory-restructure.md)
+- [Spec nội dung explain-first (2026-10-18)](docs/superpowers/specs/2026-10-18-explain-first-content-design.md)
+- [Lưu trữ tài liệu cũ (`docs/archive/`)](docs/archive/) — gồm các spec/plan lịch sử và [`docs/archive/README-2026-10.md`](docs/archive/README-2026-10.md) (ghi chú: `projects/do-huyet-ap-khong-trieu-chung` là bản thử cũ theo profile `legacy`, không chuyển đổi).
 
 ## Tiến độ nhiệm vụ
 
 | Task | Deliverable | Status | Tests | Commit |
 | --- | --- | --- | --- | --- |
+| Xưởng P1 Task 1.3 | README mới 123 dòng (mục đích kênh, cài đặt, 4 giai đoạn, vận hành, lệnh, quy tắc an toàn); README cũ lưu `docs/archive/README-2026-10.md`; 31 spec/plan cũ + runbook M7 chuyển vào `docs/archive/`; `CLAUDE.md`/`AGENTS.md` trỏ spec + plan 2026-10-22; bảng theo dõi trong plan cập nhật | complete | pytest 1197 passed, 1 skipped; Ruff | `docs: archive old specs and rewrite README for the factory` |
 | Xưởng P4 Task 4.1 | Minh họa FLUX.2 klein 4B (venv `cache/flux-venv`, CPU offload): loại asset `illustration` (`prompt`, `seed`), chặn nhãn/chú thích trên ảnh AI, `produce` sinh ảnh còn thiếu + ghi license ledger Apache-2.0 (hash cổng y khoa giữ nguyên), cache theo hash + sidecar, doctor cảnh báo trọng số không phải 4B; spike RTX 3060: nạp ≈97 s, ≈30–116 s/ảnh, VRAM đỉnh ≈9,8 GB | complete | pytest 1197 passed, 1 skipped; Ruff | `feat: generate unlabeled illustrations with FLUX.2 klein 4B` |
 | Xưởng P6 Task 6.1+6.2 | Bước agent `posts` chạy trước `produce` khi `posts/posts.yaml` thiếu/sai; `step posts-check`; cổng video từ chối nếu bài đăng thiếu/lỗi, hash cổng video gồm `posts.yaml`, claim hợp lệ = claim trong ledger khớp hash duyệt y khoa; gói duyệt video có mục "Bài đăng"; `package` chép bài đăng đã duyệt + `posts.md`, từ chối nếu sửa sau duyệt; tên chương có số không bị coi là số liệu | complete | pytest 1173 passed, 1 skipped; Ruff | `feat: draft multi-channel posts before video review` |
 | Xưởng P4 Task 4.2 | Nhạc nền ACE-Step 1.5 (turbo 2B + LM 1.7B, venv `cache/music-venv`): 30 s nhạc không lời lặp dưới giọng, ducking FFmpeg `sidechaincompress`, giữ `narration-voice.wav` cho ASR/QA, cache theo hash, ghi license ledger MIT trong `renders/`, `mood` tùy chọn ở outline/chương, `produce --no-music`, doctor kiểm venv; spike RTX 3060: VRAM đỉnh ≈8,2 GB, ≈120 s sinh/30 s nhạc | complete | pytest 1161 passed, 1 skipped; Ruff | `feat: add ACE-Step background music with ducking` |
@@ -168,415 +120,5 @@ applicability, per-claim doctor notes — hoãn sang M3).
 | Xưởng video: kế hoạch triển khai | 8 giai đoạn P0–P7, 25 task; theo dõi ở đầu file plan | approved | self-review | `docs: add video factory implementation plan` |
 | Xưởng video: spec tái cấu trúc | Cắt gọt tại chỗ, 4 giai đoạn, hàng đợi `run` Codex/agy, PIN chống tự duyệt, Claude chỉ rà code | approved | builder check; `git diff --check` | `docs: add video factory restructure design` |
 | Video gate: sync, chart, motion, captions | TTS từng dòng, timing production có hash, WAV khớp scene và clip tái dùng audio; QA chặn lệch/đuôi im lặng; chart lớn, cơ chế chuyển động xuyên cảnh, phụ đề đủ dấu tiếng Việt | complete | pytest 1416 passed, 3 skipped; vitest passed; typecheck; Ruff; chưa render lại pilot | `feat: sync narration timing and polish mechanism visuals` |
-| Sửa font Remotion 404 | Stage `video/public/fonts/` (hai WOFF2 + OFL) vào `--public-dir` tại điểm dựng argv dùng chung cho long form/chapter/clip/vertical; renderer identity chứa hash font để vô hiệu cache khi đổi font; giữ nguyên render-input và dry run không ghi file | complete (uncommitted) | TDD; fake runner kiểm bytes font long form/clip/vertical; pytest 1345 passed, 3 skipped; Ruff; `git diff --check` | Chờ Claude review và commit |
-| Sửa `review reject` | `reject_gate` kiểm tra chuyển trạng thái trước khi ghi record từ chối (trước đây `--resume-to` sai vẫn để lại file từ chối mồ côi); `--resume-to` liệt kê trạng thái hợp lệ cho từng cổng | complete | TDD; pytest 1320 passed, 3 skipped; Ruff; `git diff --check` | `fix: validate reject transition before writing record` |
-| Xem trực quan | `healthvideo preview <project>` mở Remotion Studio từ run hiện hành v1/v2; chỉ xem, không lease/ghi/duyệt | complete (uncommitted) | TDD: 7 CLI tests; pytest 1336 passed, 3 skipped; Ruff; video 94 passed/typecheck; HTTP 200 trong 30,6 s, bytes không đổi; `git diff --check` | `feat: add healthvideo preview to open Remotion Studio` |
-| Cài `/pyh` một lệnh | Bộ cài PowerShell 5.1 dùng lại venv, VieNeu 3.6.4/Python 3.11 mặc định và `-SkipTts`; CLI UTF-8; doctor kiểm tra skill, Claude command và TTS; hướng dẫn Claude Code/Antigravity | complete | `powershell -NoProfile -ExecutionPolicy Bypass -File install/install.ps1` ×2; `.venv\Scripts\healthvideo.exe doctor`; `.venv\Scripts\python.exe -m pytest -q`; `.venv\Scripts\ruff.exe check src tests tools`; `git diff --check`; `--help` không có `PYTHONUTF8` | `feat: one-command install for /pyh in Claude Code and Antigravity` |
-| Orientation search tiếng Việt | Truy vấn tiếng Anh qua `--query` lặp lại, log theo truy vấn, khử trùng `source_id`; cấu hình NCBI qua môi trường và báo lỗi HTML an toàn; giữ scope/hash | complete | focused 152 passed; pytest 1311 passed, 3 skipped; Ruff; `git diff --check`; pilot rerun: Europe PMC 20 ứng viên, PubMed bị NCBI chặn IP (`ProviderResponseError`) | `feat: add orientation search queries and NCBI env config` |
-| Explain-first spec §14–§15 | Giọng nội dung: cân bằng kiến thức, độ hấp dẫn, hài hước (châm biếm niềm tin không châm biếm người; câu đùa có số liệu vẫn qua cổng 1; hook 3 giây, điểm thưởng 30–45 giây, câu chốt); giọng đọc chọn giữa VoiceStudio và VieNeu; chọn chủ đề: Haiku 5.5 kéo ứng viên → Jev chấm chọn → bác sĩ chốt, mỗi chủ đề một phiên chat | approved 2026-10-19 | spec self-review; `git diff --check` | `docs: add tone and topic selection to explain-first spec` |
-| Chốt giọng đọc | Nghe mù 6 clip cùng đoạn thử (VieNeu Adam/Thái Sơn t=0,8/Thái Sơn t=1,0; VoiceStudio anh-tu/anh-tu speed 0,9/nam-trung-nien); người dùng chọn VieNeu `Thái Sơn` mặc định → `produce --tts vieneu --voice "Thái Sơn"`; spec n2n §5.1; audio chỉ ở `.tmp/voice-compare/` | complete | `tts-benchmark` Thái Sơn: RTF 0,44, WER 0,045, đạt; không đổi code | `docs: lock VieNeu Thái Sơn narration voice` |
-| Orientation CLI | `healthvideo operator orientation-search <project>` (PubMed + Europe PMC qua `get_default_clients`, ghi từng provider completed/zero_results/failed) và `operator orientation-complete <project> --file <completed.yaml>` (chỉ nhận ứng viên đã ghi, mở `awaiting_editorial_direction`); `operator status` hướng dẫn từng bước trong `message`; skill pyh cập nhật | complete | TDD; pytest 1294 passed, 3 skipped; Ruff; schema export không đổi; `git diff --check` | `feat: expose orientation search and complete in CLI` |
-| PYH brand thẻ cuối 16:9 | Giữ CTA `youtube_cta` chỉ cho `vertical_clip` (người dùng chốt 19-10-2026); thẻ cuối 16:9 chỉ là still duyệt bố cục (`.tmp/brand-review/end-16x9.png`, mascot 300 px, logo 48 px cách 32 px); spec §9 cập nhật | complete | Claude xem still 16:9; 9:16 không đổi pixel; pytest 1283 passed, 3 skipped; vitest 94 passed; typecheck; Ruff; schema export không đổi | `docs: scope 16:9 end card to review still` |
-| PYH brand §5.3 cảnh báo hình tạm | Gói duyệt video (cổng 2) hiện một dòng "mascot đang dùng hình tạm" khi `render-input.json` của bản chính/clip/CTA đã render ghi mascot `.svg` (rig placeholder); không đọc lại brand profile, không đổi hash cổng, không chặn duyệt | complete | TDD; pytest 1283 passed, 3 skipped; Ruff; schema export không đổi; `git diff --check` | `feat: warn on placeholder mascot in video review` |
-| PYH brand refresh §11 | Mascot kiểu người dẫn: bỏ đĩa tròn; viền sticker `night` 20 px + `off_white` 10 px nướng vào PNG bằng `tools/build_mascot_artwork.py` từ `assets/brand/mascot/source/` (canvas 998×1351); `PresenterMascot` cắt ở đường cắt (16:9 cạnh dưới ~38%, 9:16 mép trên dải phụ đề ~30%); cảnh cơ chế có mascot dùng nền `off_white`; thẻ cuối mascot toàn thân ~30% | complete | TDD; pytest 1276 passed, 3 skipped; Ruff; schema export; vitest 94 passed; typecheck; `git diff --check`; Claude xem cảnh 16:9/9:16, thẻ cuối 9:16, 3 ảnh kiểm viền | `feat: presenter-style outlined mascot` |
-| PYH brand refresh | Thiết kế lại nhận diện: logo bong bóng thoại + dấu kiểm và wordmark PYH outline từ Be Vietnam Pro (4 biến thể, gồm `reverse`); token `night`; font Be Vietnam Pro cho Remotion; mascot mới (concept AI B, 3 pose PNG RGBA 1435 px, khe `mascot.artwork` có SHA-256, placeholder SVG dự phòng); logo trên thẻ cuối clip; lật/giới hạn mascot 30%/24%; xóa alias `render_phy_logo` | complete | TDD; pytest 1275 passed, 3 skipped; Ruff; schema export; vitest 90 passed; typecheck; `git diff --check`; Claude xem logo, mascot, thẻ cuối 9:16, cảnh 9:16/16:9 | `feat: redesign PYH brand identity and mascot` |
-| Explain-first T8 | `review frames`: long/clip contact sheets 4×2, dense sampling, mechanism QA sheets in video packet without changing gate hashes | complete (uncommitted) | TDD; pytest 1239 passed, 3 skipped; Ruff; real 6 s smoke + visual sheet review; `git diff --check` | `feat: add review frames contact sheets` |
-| Explain-first T7 | Brand-derived flat SVG artery/heart library, four mechanism scenes in 16:9 and 9:16, MascotGuide and end-card integration | complete (uncommitted) | TDD; Vitest 76 passed; typecheck; pytest 1225 passed, 3 skipped; Ruff; 3 reviewed Remotion stills; `git diff --check` | `feat: add anatomy library and mechanism scenes` |
-| Explain-first spec + plan | Tái cấu trúc nội dung: giải thích trực quan (giải phẫu → sinh lý → sinh lý bệnh → giải phẫu bệnh) trước, bằng chứng sau; artifact `explainer.yaml`, claim `mechanism`, sàng lọc nhanh `dual_llm`, thư viện cơ quan Remotion kiểu Kurzgesagt, contact sheet; thí điểm 3–5 phút 16:9. Lộ trình M8 còn lại tạm dừng. | approved 2026-10-18 | spec/plan self-review; `git diff --check` | `docs: design and plan explain-first content` |
-| Explain-first spec §12–§13 | Điều chỉnh đầu ra: mỗi chủ đề 1 video dài YouTube 16:9 10–15 phút (≤25) + 1–6 clip TikTok 9:16 1–3 phút cắt từ kịch bản đã duyệt, thẻ cuối mời sang YouTube; tái dùng M8.2; mascot PYH làm người dẫn đường xuyên suốt, chung token màu brand. Plan thêm Task 6b/6c. | approved 2026-10-18 | spec/plan self-review; `git diff --check` | `docs: add long+clip outputs and mascot to explain-first spec` |
-| Explain-first T1 | Explainer mechanism map: frozen models, pure validators, atomic revision YAML storage, exported JSON schema | complete | tests/domain/test_explainer.py tests/storage/test_explainer.py tests/contracts (51 passed); Ruff | `feat: add explainer mechanism map model` |
-| Explain-first T2 | Claim mechanism: kiểm nguồn, chặn từ khóa hiệu quả, nhóm duyệt giải phẫu kèm explainer motion; schema tương thích cũ | complete | TDD; pytest 1039 passed, 3 skipped; Ruff; schema export; `git diff --check` | `feat: add mechanism claim type` |
-| Explain-first T3 | Script arc_beat/layer refs, explain-first lint, cảnh báo tỷ trọng từ, CLI chỉ đọc hỗ trợ v1/v2; schema tương thích cũ | complete | TDD; pytest 1067 passed, 3 skipped; Ruff; schema export; `git diff --check` | `feat: lint explain-first script arc` |
-| Explain-first T4 | Manifest content_profile; explainer + claim refs required before evidence_ready; operator reminder; draft errors block only explain-first, warnings allowed; legacy compatibility | complete | TDD; pytest workflows/e2e/qa 426 passed, 1 skipped; explain-first 26 passed; Ruff; schema export; `git diff --check` | `feat: require explainer before evidence_ready` |
-| Explain-first T5 | Screener + dual_llm; CommandJudge; criteria YAML; CLI evidence screen; atomic UTF-8 BOM screening.csv with review audit; ledger unchanged | complete | TDD; pytest 1127 passed, 3 skipped; Ruff; schema export; `git diff --check` | `feat: add dual-reviewer abstract screening` |
-| Explain-first T6 | Four mechanism scene kinds, anatomy props and layer checks, explain-first frame budget, render contract and supported subjects | complete | TDD; pytest 1168 passed, 3 skipped; Ruff; schema export; `git diff --check` | `feat: add mechanism animation scene kinds` |
-| Explain-first T6b | Merge M8.2 outline, clip plan, vertical rendering and review gates with explain-first; preserve both feature sets and historical rows | complete | pytest 1214 passed, 3 skipped; Ruff; vitest 44 passed; typecheck; staged diff check | Merge branch feat/m8-2-clips |
-| Explain-first T6c | Clips 60-180 s with 3 s YouTube CTA and welcome mascot; 1-6 clips; outline 10-25 min / 4-8 chapters; mascot share warning; per-clip TikTok captions | complete (uncommitted) | TDD; pytest 1225 passed, 3 skipped; Ruff; schema export; vitest 46 passed; typecheck; diff check | feat: extend clips to 3 min with YouTube end card |
-| Jev decision routing | Đã gỡ khỏi runtime theo rà soát tối giản: chỉ là advisory opt-in, không thuộc đường bắt buộc tìm bằng chứng → duyệt y khoa → sản xuất → duyệt video → đóng gói. Gỡ CLI, SDK, domain/workflow và test riêng; giữ tài liệu lịch sử và không xóa advisory đã lưu trong project của người dùng. | removed; user confirmed 2026-09-29 | 973 passed, 3 skipped; Ruff; CLI smoke; `git diff --check` | `refactor: remove Jev advisory runtime` |
-| M8 n2n long-form + channel design | Spec nâng cấp: video YouTube 15–25 phút 16:9 theo chương, clip 9:16 từ kịch bản đã duyệt, bảng 10 bước ĐẠT, Remotion Studio + HyperFrames, VoiceStudio local, SEO/thumbnail, kế hoạch kênh 7 artifact, Antigravity + Claude Code; giữ hai cổng duyệt, không tự đăng | M8.1 complete | spec self-review; `git diff --check` | `docs: design n2n long-form channel upgrade` |
-| M8.1 plan: format profile + long-form render | 6 task TDD: format_profile/chapter_id, Remotion kích thước theo props + LongForm, bảng bố cục 16:9, cache chương, render --frames + FFmpeg concat, nối produce v2 + smoke thật | approved; executed on feat/m8-1-long-form | plan self-review; `git diff --check` | `docs: plan M8.1 format profile and long-form render` |
-| M8.1 Task 1 format profile | format_profile vertical_clip/youtube_long, chapter_id, RenderInput 1920×1080, giới hạn 60 s–25 phút | complete | 982 passed, 3 skipped; Ruff; contracts | `feat: add format profiles for long-form render` |
-| M8.1 Task 2 Remotion format | Kích thước từ props, composition LongForm cho Studio, chapter_id | complete | vitest; tsc | `feat: size Remotion compositions from format profile` |
-| M8.1 Task 3 layout 16:9 | Bảng bố cục dọc/ngang qua LayoutContext; bố cục dọc giữ nguyên giá trị cũ | complete | vitest; tsc; kiểm thử render bố cục ngang (Studio chưa kiểm thủ công) | `feat: add landscape layout table for long-form` |
-| M8.1 Task 4 chapter spans | Tách chương, khóa cache chương không phụ thuộc vị trí tuyệt đối | complete | pytest; Ruff | `feat: add chapter spans and cache keys` |
-| M8.1 Task 5 chapter render | Render muted theo --frames, cache chương, FFmpeg concat + mux narration | complete | pytest; Ruff | `feat: render long-form by chapter with FFmpeg concat` |
-| M8.1 Task 6 produce long-form | produce v2 render youtube_long theo chương, cache renders-cache/, manifest chapter_parts; smoke 1920×1080 thật | complete | 992 passed, 3 skipped; Ruff; smoke 108s | `feat: produce youtube_long by chapter` |
-| M8.1 final review fixes | Runner CLI gọi FFmpeg concat không qua pnpm; cache chương ở cấp project (dùng lại giữa revision); backup bỏ `renders-cache/`; thiếu hash asset thì lỗi; `chapters.txt` nằm trong cache, không vào `renders/` | complete | pytest; Ruff; smoke 1920×1080 qua runner CLI | `fix: route ffmpeg concat past pnpm resolver in CLI runner` … `fix: keep chapters.txt out of renders` |
-| M8.2 agy handoff tooling | `tools/agy_check.py`: lệnh kiểm tra cố định (ruff + pytest, PYTHONPATH=src) cho Antigravity CLI headless; allow-list agy khớp nguyên câu lệnh | complete | agy chạy thử: AGY_CHECK PASS | `chore: add fixed verification entry point for agy` |
-| M8.2 plan: outline + clip plan + VerticalClip | 5 task giao agy: outline.yaml 5–8 chương; clip-plan.yaml 3–6 clip + validator caveat/không lời mới; Cổng 1 hash + gói duyệt; render clip 9:16 từ storyboard (không crop) + Cổng 2; composition VerticalClip | approved; executed via agy, 6/6 tasks complete; whole-branch review passed | plan self-review; `git diff --check` | `docs: plan M8.2 outline and clip plan` |
-| M8.2 Task 1 outline | outline.yaml 5–8 chương, tổng 15–25 phút, thứ tự khớp storyboard, claim của cảnh phải thuộc chương | complete | 1004 passed, 3 skipped; Ruff; contracts | `feat: add long-form outline model` |
-| M8.2 Task 2 clip plan | clip-plan.yaml 3–6 clip 30–90 s chỉ tham chiếu cảnh có sẵn (không lời mới); ledger caveat_claim_ids; clip thiếu câu giới hạn bị chặn | complete | 1021 passed, 3 skipped; Ruff; contracts | `feat: add clip plan with caveat safety check` |
-| M8.2 Task 3 Cổng 1 long-form | youtube_long bắt buộc outline.yaml + clip-plan.yaml; Cổng 1 hash và kiểm cả hai; gói duyệt y khoa hiện dàn ý và clip; sửa sau duyệt chặn produce | complete | 1028 passed, 3 skipped; Ruff | `feat: gate long-form outline and clip plan at medical review` |
-| M8.2 Task 4 clip render | produce youtube_long đọc lại + render từng clip 9:16 từ cảnh đã duyệt (không crop), manifest clips, Cổng 2 hash clip, gói duyệt video hiện clip | complete | 1033 passed, 3 skipped; Ruff; smoke thật: video 1920×1080 170 s + 3 clip 1080×1920 (60/60/50 s) có audio | `feat: render vertical clips and bind them to video review` |
-| M8.2 Task 5 VerticalClip | Composition VerticalClip 1080×1920 cho Remotion Studio; nhận render input clip từ Python | complete | vitest 44 passed; tsc; remotion compositions: HealthVideo, LongForm, VerticalClip; 1033 passed, 3 skipped | `feat: add VerticalClip composition for Studio` |
-| M8.2 runbook Remotion hang | Runbook mục 6: taskkill của Remotion kẹt Suspended giữ ống output làm lệnh treo sau khi render xong; ghi output ra file, lệnh PowerShell dừng taskkill kẹt | complete | test_m7_runbook 4 passed; 1033 passed, 3 skipped | `docs: add Remotion taskkill hang to runbook` |
-| M8.2 Task 6 E2E long-form | E2E youtube_long: Cổng 1 → produce (3 clip) → Cổng 2 → packaged; clip sửa sau duyệt video chặn đóng gói | complete | 1035 passed, 3 skipped; Ruff | `test: cover long-form flow through packaging` |
-| Evidence-first editorial exploration | Thiết kế pha kiểm định kiến thức trước khi ghi nhận góc nhìn bác sĩ; giữ nguyên author confirmation và hai gate | proposed; awaiting user spec review | spec consistency; `git diff --check` | `docs: design evidence-first editorial exploration` |
-| Evidence-first editorial exploration plan | Kế hoạch TDD cho state, orientation artifact, retry, author boundary, operator/CLI và E2E | approved; awaiting execution choice | plan self-review; `git diff --check` | `docs: plan evidence-first editorial exploration` |
-| Evidence-first editorial exploration Task 1 | Thêm hai main state orientation: `topic_selected → orientation_research_in_progress → awaiting_editorial_direction → author_brief_ready`; bắt buộc `orientation/scope.yaml`, `orientation/completed/<run_id>.yaml`, cho phép cả hai state vào/ra `blocked`. `operator brief --confirm` từ `topic_selected` fail-closed và chỉ dẫn `awaiting_editorial_direction`; fixture author/draft/E2E đi qua hai state orientation trước xác nhận. Giữ nguyên `packaged`, hai gate và đăng thủ công. | complete | affected E2E/draft/author/graph: 100 passed; `python -m ruff check src tests` | `feat: add orientation workflow states`; `fix: fail closed before orientation completes`; `test: route fixtures through orientation states` |
-| Evidence-first editorial exploration Task 2 | Thêm contract orientation frozen, strict và run-scoped: scope, provider outcome tách lỗi khỏi zero result, context có nguồn kèm giới hạn, 2–3 lựa chọn trung tính cho bác sĩ và completed record bind source candidate. Không chứa quyết định bác sĩ, khuyến nghị, script, duyệt hoặc xuất bản. | complete | `tests/domain/test_orientation.py` (7 passed); `python -m ruff check src tests` | `feat: define validated orientation artifacts` |
-| Evidence-first editorial exploration Task 3 | Thêm workflow orientation resumable: `begin_orientation` ghi scope + hash canonical của topic card và scope; `run_orientation_search` tách provider error khỏi zero result và ghi candidate (working file retry được); `complete_orientation` validate revision, input hash, binding candidate rồi ghi completed record write-once và append stage record; `read_authoritative_orientation` chỉ tin completed record được stage record `complete` mới nhất trỏ tới. Không xác nhận brief, không duyệt gate, không xuất bản. | complete | `tests/workflows/test_orientation.py tests/storage/test_stages.py tests/domain` (354 passed); `python -m ruff check src tests` | `feat: add resumable orientation research` |
-| Evidence-first editorial exploration Task 4 | Chuyển ranh giới xác nhận của bác sĩ: `save_author_brief(..., confirm=True)` chỉ chạy tại `awaiting_editorial_direction` và bắt buộc đọc được completed orientation record authoritative; operator thêm hành động `orientation_research` và `await_editorial_direction` (mời bác sĩ nói bằng lời của chính họ); thêm lệnh `healthvideo operator orientation <project> --scope <yaml>` có `@project_mutation`, không xác nhận brief, không duyệt gate, không xuất bản. | complete | `tests/workflows tests/e2e tests/test_cli.py tests/contracts` (429 passed, 1 skipped); `python -m ruff check src tests tools` | `feat: guide operators through orientation` |
-| Evidence-first editorial exploration Task 5 | Chứng minh end-to-end: topic đã chọn chỉ tới `author_brief_ready` sau orientation và xác nhận tường minh của bác sĩ; orientation không chạm được cổng duyệt y khoa/video và không tạo `publish/manifest.json` hay `publish/receipt.yaml`; fixture v1 giữ nguyên từng byte; fixture draft/E2E chạy qua workflow orientation thật thay vì transition thủ công. Giữ nguyên `packaged`, hai gate và đăng thủ công. Review toàn nhánh bổ sung: đổi scope giữa chừng sẽ xóa candidate/search-log cũ để nguồn tìm cho câu hỏi trước không chống lưng cho record gắn input hash mới. | complete | `python -m pytest -q` (970 passed, 3 skipped); `python -m ruff check src tests tools`; `git diff --check` | `test: verify evidence-first editorial workflow` |
-| Installer direct dependency | Khai báo trực tiếp `click` vì workflow lease import package này khi CLI khởi động | complete | dependency contract; reinstall + doctor; `python -m pytest -q` (971 passed, 3 skipped); Ruff; `git diff --check` | `fix: declare click runtime dependency` |
-| 1 | Bootstrap repo và CLI có thể kiểm thử | complete | `pytest tests/test_cli.py`; `ruff check src tests` | `chore: bootstrap healthvideo CLI` |
-| 2 | Domain model, state machine và storage nguyên tử | complete | `python -m pytest tests/domain/test_project.py -v`; `python -m pytest tests/storage/test_files.py -v`; `python -m ruff check src tests` | `feat: add project state and atomic storage` |
-| 3 | Project scaffold và author-owned voice | complete | `python -m pytest tests/workflows/test_create_project.py tests/test_cli.py -v` | `feat: scaffold projects from doctor briefs` |
-| 4 | Claim ledger, human script và read-aloud QA | complete | `python tools/export_schemas.py`; `python -m pytest tests/domain/test_script.py tests/qa/test_script_qa.py tests/contracts/test_schemas.py -v` | `feat: validate evidence-linked human scripts` |
-| 5 | Storyboard, evidence highlight và render contract | complete | `python tools/export_schemas.py`; `python -m pytest tests/render/test_input.py tests/contracts/test_schemas.py -v` | `feat: define storyboard render contract` |
-| 6 | Remotion composition 9:16 và visual regression cơ bản | complete | `pnpm --dir video test` (11 passed); `pnpm --dir video typecheck`; still 1080 × 1920 | `feat: render vertical whiteboard scenes` |
-| 7 | TTS giả lập, manifest cache và render workflow | complete | `python -m pytest` (61 passed); `ruff check src tests tools`; `pnpm --dir video test` (11 passed); `pnpm --dir video typecheck` | `feat: add cached production workflow`; `fix: make production failures transactional`; `fix: publish production runs atomically`; `fix: converge production publish over a damaged run` |
-| 8 | Hai cổng duyệt có hash và audit trail | complete | `python -m pytest tests/workflows/test_review.py tests/workflows/test_produce.py tests/storage -v` (35 passed); `python -m pytest -v` (83 passed); `python -m ruff check src tests tools`; `pnpm --dir video test` (11 passed); `pnpm --dir video typecheck` | `feat: enforce doctor review gates`; `fix: bind the medical gate to the storyboard` |
-| 9 | Gói xuất bản và golden end-to-end test | complete | `python -m pytest tests/e2e/test_golden_project.py -v` (15 passed); `python -m pytest -v` (99 passed); `python -m ruff check src tests tools`; `pnpm --dir video test` (11 passed); `pnpm --dir video typecheck` | `feat: package reviewed videos for publishing`; `fix: harden publication package integrity` |
-| 10 | Installer Windows và environment doctor | complete | `python -m pytest -v` (106 passed); `ruff`; video test/typecheck; `install/doctor.ps1` | `feat: add Windows installer and diagnostics` |
-| Final review | Approval, asset, package và Windows render hardening | complete | `python -m pytest -v` (122 passed); Ruff; video test (12 passed)/typecheck; real Windows golden render 1080 × 1920, 30 fps, 45.056 s | `fix: close final production integrity gaps` |
-| Security closure | Loại bỏ Windows batch-shell boundary cho pnpm | complete | `python -m pytest -v` (124 passed); Ruff; video test (12 passed)/typecheck; doctor; real Windows golden render 1080 × 1920, 30 fps, 45.056 s | `fix: remove Windows batch-shell launcher` |
-| A–Z workflow design | Đặc tả pipeline khép kín, migration v1→v2, phân vai AI, token budget và roadmap M1–M7 | approved | state/review/produce: 41 passed; Ruff; spec consistency; source/license verification; `git diff --check` | `8a2b9a7` |
-| M1 implementation plan | Plan chi tiết graph v2, revision/stage/asset manifest, invalidation và migration không phá v1 | approved; ownership audited | path ownership matrix; document consistency; `git diff --check` | `docs: plan workflow kernel M1`; `docs: lock M1 fixture path contracts`; `docs: audit M1 path ownership` |
-| M1.1 | Contract project v2 và dual-golden checkpoint | complete | Baseline 10-09-2026: 124 passed; `python -m pytest -q` (132 passed); `python -m ruff check src tests tools`; dual-golden + schema (18 passed) | `feat: add parallel v2 project contract` |
-| M1.2 | Main-path graph v2 có precondition | complete | `python -m pytest -q --basetemp=.task2-fix2-pytest` (149 passed); `python -m ruff check src tests tools`; `git diff --check` | `feat: add preconditioned v2 state graph` |
-| M1.3 | Side-state graph v2 và đường resume/reject cho `awaiting_browser_login`, `awaiting_second_model_review`, `needs_medical_revision`, `needs_production_revision`, `blocked`, `topic_rejected`. Lối ra `needs_production_revision -> draft_ready` đọc reason class `semantic_issue` tại thời điểm thoát (lỗi semantic được phát hiện khi đang ở side state), không đọc lý do đã ghi lúc vào. `blocked` chỉ nhận nguồn là main state chưa kết thúc: `ProjectManifestV2` chỉ có một ô `side_state`, nên lồng side state trong side state sẽ ghi đè `resume_state` và mất đích resume — mở rộng cần đổi schema, hoãn sang M2. | complete | `python -m pytest tests/domain/test_state_graph.py -q` (85 passed); `python -m pytest tests/e2e/test_golden_project.py tests/e2e/test_golden_workflow_versions.py -q` (21 passed); `python -m pytest -q` (219 passed); `python -m ruff check src tests tools`; `git diff --check` | `feat: add v2 side-state transitions`; `fix: read side-exit reason class at exit time` |
-| M1.4 | Stage manifest bất biến (`StageManifest`: `stage`, `status`, `input_hash`, `output_hash`, `tool_version`, `agent`, `model`, `started_at`, `completed_at`, `estimated_input_tokens`, `estimated_output_tokens`) và storage append-only. `write_yaml_once` mở file exclusive (`"x"`), fsync rồi từ chối mọi lần ghi thứ hai bằng `FileExistsError` mà không đổi byte đã có. Record nằm tại `workflow/stages/<stage>/<started-at>-<input-hash-prefix>.yaml` với timestamp UTC không dấu `:` để chạy trên Windows. Complete bắt buộc `output_hash` + `completed_at`; trạng thái khác cấm `output_hash`; `completed_at` không được sớm hơn `started_at`. | complete | `python -m pytest tests/domain/test_stage.py tests/storage/test_immutable.py tests/storage/test_stages.py tests/contracts/test_schemas.py tests/e2e/test_golden_workflow_versions.py -v` (46 passed); `python -m pytest -q` (251 passed); `python -m ruff check src tests tools`; `git diff --check`; `python tools/export_schemas.py` | `feat: add immutable stage manifests` |
-| M1.5 | Revision workflow bất biến và lệnh `healthvideo revision create <project> --reason "..."`. `RevisionRecord` (`schema_version`, `revision`, `parent_revision`, `reason`, `created_at`) là model bất biến, ID revision đúng 3 chữ số, `reason` không được rỗng/toàn khoảng trắng, `created_at` bắt buộc có múi giờ. `create_revision` copy đúng sáu thư mục `topic/`, `author/`, `evidence/`, `script/`, `storyboard/`, `assets/` từ active revision sang staging `revisions/.<mới>-stage-<uuid>` (không copy `handoffs/`, `reviews/`, `audio/`, `renders/`, `publish/`), ghi `workflow.yaml` bằng `write_yaml_once`, đối chiếu byte mọi file đã copy, rồi promote một lần bằng `promote_directory_once` (primitive mới trong `storage/immutable.py`, cạnh `write_yaml_once`, sẽ dùng lại cho migration ở Task 9) — không bao giờ ghi đè revision đích. Chỉ sau khi promote thành công `project.yaml.active_revision` mới được ghi nguyên tử; mọi lỗi trước đó (copy hỏng, đối chiếu byte lệch, đích đã tồn tại) chỉ xóa đúng thư mục staging vừa tạo và giữ nguyên `project.yaml` cùng revision cha. Project schema `1.0` bị từ chối với thông báo yêu cầu `project migrate`. | complete | `python -m pytest tests/domain/test_revision.py tests/storage/test_revisions.py tests/storage/test_immutable.py tests/test_cli.py tests/e2e/test_golden_workflow_versions.py -v` (48 passed); `python -m pytest -q` (279 passed); `python -m ruff check src tests tools`; `git diff --check` | `feat: create immutable workflow revisions` |
-| M1.6 | Semantic asset manifest và policy phân loại §7. `AssetKind` (`evidence_highlight`, `data_chart`, `medical_diagram`, `medical_text`, `background`, `texture`, `flourish`, `transition`); `evidence_highlight`, chart mang số liệu/claim, medical diagram và medical text luôn `semantic=true` — `AssetRecord` (bất biến) từ chối `semantic=false` cho bốn kind này bằng `ValidationError`; chỉ `background`/`texture`/`flourish`/`transition` mới được `false`. `AssetManifest` (bất biến) từ chối duplicate `path`. `validate_asset_manifest` buộc mọi path POSIX tương đối, không `..`, không absolute, nằm trong revision root, rồi khớp SHA-256 byte cho mọi asset `semantic=true` trước khi đủ điều kiện vào medical gate; lệch hoặc mất file raise `AssetIntegrityError` riêng biệt. `validate_reclassification` so hai manifest, từ chối hạ một asset từ `semantic=true` xuống `false` nếu thiếu `classification_reason`. Fixture golden Task 1 (`assets/evidence-r01.svg`, `evidence_highlight`, `semantic: true`) load + validate giữ nguyên byte trước/sau. Trong lúc làm việc phát hiện typo SHA-256 65 ký tự trong chính fixture đó (khác byte thật của file); leo thang lên controller thay vì tự sửa fixture, được xác nhận và sửa ở `2462ed9` (ngoài diff Task 6). | complete | `python -m pytest tests/domain/test_asset_manifest.py tests/contracts/test_schemas.py tests/e2e/test_golden_workflow_versions.py -v` (53 passed); `python -m pytest -q` (315 passed); `python -m ruff check src tests tools`; `git diff --exit-code -- tests/fixtures/golden-project-v2`; `git diff --check`; `python tools/export_schemas.py` | `feat: classify semantic workflow assets` |
-| M1.7 | Invalidation engine xác định, thuần dữ liệu (`src/healthvideo/domain/invalidation.py`), không đụng filesystem và không tự gọi state graph. `InvalidationLevel` (`IntEnum`) `none < package < video < medical`. `ArtifactChange(path, json_pointers)` và `InvalidationDecision(level, target_state, reason_codes)` đều là dataclass bất biến (`frozen=True`). `evaluate_invalidation(changes, asset_manifest)` phân loại từng change độc lập rồi lấy mức cao nhất (không phải match đầu/cuối) làm quyết định chung; `reason_codes` chỉ giữ lý do của các change đạt đúng mức cao nhất đó. Thứ tự phân loại: (1) path khớp asset trong `AssetManifest` → `semantic=true` là `medical`, `semantic=false` là `video`; (2) đúng `publish/metadata.yaml` → chỉ `package` khi *mọi* JSON pointer nằm trong allowlist đúng 8 phần tử `/posting/platform`, `/posting/account_handle`, `/posting/scheduled_at`, `/posting/visibility`, `/posting/allow_comments`, `/posting/allow_duet`, `/posting/allow_stitch`, `/tracking/campaign_id` — pointer rỗng, pointer lạ (vd. caption/hashtag/disclaimer/source list/thumbnail text/pinned comment) hoặc trộn lẫn allowlist với pointer lạ đều trả `medical`; (3) tiền tố thư mục đã biết — `evidence/`, `script/`, `storyboard/` → `medical`; `audio/`, `timing/`, `renders/` → `video`; (4) path không nhận diện được (kể cả path rỗng) fail-closed về `medical`, không bao giờ hạ xuống `none`/`package` một cách âm thầm. `target_state` là `needs_medical_revision`/`needs_production_revision` ở hai mức nặng, `None` ở `none`/`package` (không đổi gate). Không có change nào → `none`, `target_state=None`, `reason_codes` rỗng. Dual-golden mới xác nhận engine chỉ đọc `asset-manifest.yaml` của golden v2, fail-closed đúng cho path lạ, và không đổi byte của cả hai fixture — golden v1 không có khái niệm asset manifest nên chưa bao giờ bị áp policy v2 này. Review Task 7 thêm một test độc lập chốt đúng 8 phần tử allowlist bằng literal set (không đọc lại từ hằng số production), vì test parametrize cũ tự tham chiếu hằng số nên sẽ không phát hiện một drift âm thầm trong `PUBLISH_METADATA_PACKAGE_ALLOWLIST`. | complete | `python -m pytest tests/domain/test_invalidation.py tests/e2e/test_golden_workflow_versions.py -v` (47 passed); `python -m pytest -q` (356 passed); `python -m ruff check src tests tools`; `git diff --check` | `feat: evaluate deterministic gate invalidation`; `test: pin the publish-metadata package allowlist independent of the constant` |
-| M1.8 | Migration planner v1→v2 thuần read-only. `plan_migration` validate đúng schema v1, ánh xạ đủ 10 state (loại `rendered` về `awaiting_video_review`), khóa đúng tám path nguồn/đích của contract, hash YAML/JSON theo canonical JSON và asset theo byte SHA-256. Topic card và semantic asset manifest được dựng trong bộ nhớ để lập plan, chưa ghi filesystem; approval chỉ mang nhãn `retain_candidate`, chưa được coi là giữ hợp lệ trước equivalence Task 9. Đích mặc định là sibling `<source>-v2`; đích tồn tại chỉ được báo `destination_conflict=true`, planner không ghi đè, không tạo staging và không sửa byte project nguồn. Nguồn schema v2 bị từ chối. | complete | `python -m pytest tests/workflows/test_migrate_plan.py tests/e2e/test_golden_workflow_versions.py -v` (22 passed); `python -m pytest -q` (371 passed); `python -m ruff check src tests tools`; `git diff --check` | `feat: plan non-destructive project migration` |
-| M1.9 | Migration transaction v1→v2 không phá dữ liệu: dựng sibling staging `.<destination>.migrate-<uuid>`, canonicalize YAML, copy asset/render đúng byte, tạo topic + semantic asset manifest, validate Pydantic/layout/hash asset và mọi output trong plan rồi promote một lần bằng `promote_directory_once`; không có in-place/overwrite. Copy, validation hoặc promotion lỗi đều dọn đúng staging của migration, giữ source byte-identical và không để destination bán phần; chạy lần hai fail bằng `FileExistsError`. Approval equivalence đối chiếu cả binding nguồn hiện hành và hash artifact tại revision đích: medical không chứng minh được → `awaiting_medical_review`; medical đúng + render hỏng → `medically_approved`; medical đúng + render hợp lệ nhưng video chưa đúng → `awaiting_video_review`; cả hai gate đúng → tối đa `video_approved` (không tự giữ `published_manual` khi thiếu receipt). Chỉ review record chứng minh tương đương mới được copy vào `revisions/001/reviews/`; không tự ký lại approval. | complete | `python -m pytest tests/workflows/test_migrate_execute.py tests/e2e/test_golden_workflow_versions.py -v` (21 passed); `python -m pytest -q` (384 passed); `python -m ruff check src tests tools`; `git diff --check` | `feat: migrate v1 projects atomically` |
-| M1.10 | CLI `healthvideo project migrate <project> [--dry-run]`. Dry-run in source, sibling destination, state map, approval disposition, conflict và từng path/hash mà không ghi filesystem. Execute inject timezone-aware time + UUID, gọi transaction Task 9 và in destination; lỗi nguồn/đích/validation/integrity trả exit 1 có thông báo. Không có `--in-place`, `--force`, overwrite hay auto approval. Acceptance xác nhận golden v1 cũ và v2/migrated chạy song song, schema export deterministic; review packet/gate-native v2 được hoãn đúng sang M2. | complete | CLI migrate/revision (5 passed); dual-golden E2E (27 passed); `python -m pytest -q` (387 passed); `python -m ruff check src tests tools`; `python tools/export_schemas.py`; `git diff --exit-code -- schemas`; `git diff --check` | `feat: expose safe project migration` |
-| M2.1 | Domain model gate review v2 (`GateKind`, `GateApprovalRecord`, `GateRejectionRecord`). Bắt buộc `reviewer` không rỗng, `reviewed_at` có múi giờ, `artifact_hashes` không rỗng; `GateRejectionRecord` bắt buộc `reason` không rỗng và lưu `resume_state`. | complete | Baseline 11-09-2026: 387 passed; `tests/domain/test_gate_review.py` (4 passed); `python -m pytest -q` (391 passed); `python -m ruff check src tests tools`; `git diff --check` | `feat: add v2 gate review records` |
-| M2.2 | Medical gate v2 (`approve_gate`, `reject_gate`, `resume_gate`). Khớp artifact hash (`medical_reviewed_paths` hash ledger, script, storyboard, asset-manifest và byte asset `semantic=true`), bắt buộc `validate_asset_manifest` trước khi approve. Ghi `reviews/medical-approval.yaml` một lần mỗi revision (`write_yaml_once`), từ chối ký lại; reject ghi audit trail timestamp và chuyển `needs_medical_revision`, resume đưa về `draft_ready`. Dual-golden copy xác nhận không sửa fixture tracked. | complete | `tests/workflows/test_gate_review.py` (5 passed); `tests/e2e/test_golden_workflow_versions.py` (10 passed); `python -m pytest -q` (397 passed); `python -m ruff check src tests tools`; `git diff --exit-code -- tests/fixtures`; `git diff --check` | `feat: add v2 medical gate approve, reject and resume` |
-| M2.3 | Video gate v2 (`approve_gate`, `reject_gate`, `resume_gate` với `GateKind.VIDEO`). Hash `renders/render-manifest.json` và `renders/video.mp4`; reject cho phép quay lại `production_in_progress` hoặc `draft_ready` (yêu cầu reason class `semantic_issue`). Chạy trên synthetic render fixture; chưa có pipeline production v2 thật (M6). | complete | `tests/workflows/test_gate_review.py` (8 passed); `tests/e2e/test_golden_workflow_versions.py` (10 passed); `python -m pytest -q` (400 passed); `python -m ruff check src tests tools`; `git diff --check` | `feat: wire the v2 video gate onto the same approve/reject/resume core` |
-| M2.4 | Render static review packet HTML (`render_medical_packet`, `render_video_packet`). Hàm thuần + `html.escape`, không thêm dependency runtime (không Jinja2/web framework), không tự mở trình duyệt, không tự ký. Medical packet chỉ hiển thị field hiện có trong model (`text_public`, `text_technical`, `sources`), có ghi chú rõ các field spec §14 chưa có trong hệ thống (population, certainty, applicability, quan điểm bác sĩ theo claim). Video packet nhúng thẻ video trỏ path tương đối `../renders/video.mp4` và dump manifest/QA. | complete | `tests/workflows/test_review_html.py` (3 passed); `python -m pytest -q` (403 passed); `python -m ruff check src tests tools`; `git diff --check` | `feat: render static medical and video review packets` |
-| M2.5 | CLI review gate v2 (`review approve`, `review reject`, `review open`, `review resume` với flag `--gate medical|video`), `.gitignore` cho packet HTML và acceptance M2 offline. Lệnh v1 (`review medical`, `review video`) giữ nguyên không đổi. Reject yêu cầu gõ `REJECT` xác nhận (hoặc `--yes`); approve yêu cầu gõ `APPROVE` (hoặc `--yes`). `review open` ban đầu ghi HTML và in đường dẫn; B4 M7 sửa thành in HTML ra stdout để giữ read-only khi lease bận. | complete | `tests/test_cli.py` (4 passed); `tests/workflows/test_gate_review.py` (8 passed); `tests/workflows/test_review_html.py` (3 passed); dual-golden E2E (10 passed); `python -m pytest -q` (407 passed); `python -m ruff check src tests tools`; `git diff --check` | `feat: expose v2 review gate approve, reject, open and resume` |
-| M3.1 | Domain model topic discovery & triage scoring (`TopicSignal`, `TopicScores`, `TopicCard`, `calculate_triage_rank`). Điểm triage chuẩn hoá 0.0–1.0 ưu tiên giá trị phòng bệnh, tính sẵn sàng của bằng chứng và độ rõ ràng của câu hỏi công chúng. Tương thích ngược hoàn toàn với fixture card migration v2. | complete | `tests/domain/test_topic.py` (4 passed); `python -m pytest -q` (411 passed); `python -m ruff check src tests tools`; `git diff --check` | `feat: add topic discovery and triage domain models` |
-| M3.2 | Topic inbox và selection workflow (`list_topics`, `create_topic`, `reject_topic`, `select_topic`). Lưu trữ inbox tại `topics/*.yaml`, hỗ trợ lọc theo status và sắp xếp theo điểm triage. `select_topic` ghi `revisions/<id>/topic/card.yaml` và chuyển trạng thái `idea -> topic_selected` với context input hash hợp lệ. | complete | `tests/workflows/test_topic.py` (3 passed); `python -m pytest -q` (414 passed); `python -m ruff check src tests tools`; `git diff --check` | `feat: manage topic inbox and select topics into projects` |
-| M3.3 | Mở rộng domain model bằng chứng (`EvidenceClaim`, `SourceRecord`, `EvidenceQuestion`, `SearchLogRecord`, `CandidateSource`, `SourceSelection`). Bổ sung các trường hoãn từ M2 (`certainty`, `population`, `applicability`, `evidence_direction`, `doctor_notes`, `pmcid`, `journal`, `retraction_status`, `conflict_of_interest`, `key_findings`). Bảo toàn 100% tương thích ngược với ledger fixture v1 và v2. | complete | `tests/domain/test_evidence.py` (5 passed); `tests/contracts/test_schemas.py` (13 passed); `python -m pytest -q` (419 passed); `python -m ruff check src tests tools`; `git diff --check` | `feat: extend evidence models with certainty population and search artifacts` |
-| M3.4 | Client tìm kiếm y văn (`PubMedClient`, `EuropePMCClient`, `CrossrefClient`, `check_scopus_policy`, `get_cached_response`, `store_cached_response`). Sử dụng `urllib.request` thuần không thêm dependency, hỗ trợ injectable transport để test offline 100%. Thực thi nghiêm ngặt quyết định loại trừ Scopus theo §17 (chặn tự động, yêu cầu tìm kiếm ngoài hệ thống). | complete | `tests/evidence/test_clients.py` (5 passed); `python -m pytest -q` (424 passed); `python -m ruff check src tests tools`; `git diff --check` | `feat: add medical literature search clients for pubmed europepmc crossref` |
-| M3.5 | Workflow tổng hợp bằng chứng (`record_question`, `search_literature`, `record_source_selections`, `build_evidence_ledger`, `reject_topic_for_lack_of_evidence`). Quản lý artifact PICO `question.yaml`, `search-log.yaml`, `candidates.jsonl`, tách sàng lọc `included-sources.yaml`/`excluded-sources.yaml`, kiểm tra rút bài (retraction check) trước khi tạo `ledger.yaml` và chuyển trạng thái `research_in_progress -> evidence_ready` hoặc `topic_rejected`. | complete | `tests/workflows/test_evidence.py` (5 passed); `python -m pytest -q` (429 passed); `python -m ruff check src tests tools`; `git diff --check` | `feat: synthesize evidence ledger and manage literature search workflow` |
-| M3.6 | Tích hợp review packet HTML, schema contracts, CLI topic & evidence và acceptance M3. Bổ sung hiển thị `certainty` và `population` vào medical packet; export `topic-card.schema.json`; bổ sung CLI `healthvideo topic list|create|select|reject` và `healthvideo evidence search|ingest|build-ledger`. Bỏ qua cache y văn `source-cache/` trong `.gitignore`. Xác nhận toàn bộ 435 tests vượt qua, giữ nguyên 0-byte diff fixtures v1/v2 và tính bất biến offline. | complete | `tests/test_cli.py` (4 passed); `tests/workflows/test_review_html.py` (4 passed); `tests/contracts/test_schemas.py` (14 passed); dual-golden E2E (28 passed); `python -m pytest -q` (435 passed); `python -m ruff check src tests tools`; `git diff --exit-code -- tests/fixtures`; `git diff --check` | `feat: wire topic and evidence CLI and complete M3 discovery pipeline` |
-| PYH.1 | Tạo project schema v2 bằng sibling staging và xác nhận author brief qua cạnh `topic_selected -> author_brief_ready` có hash/artifact guard sẵn có. Giữ nguyên `AuthorBrief`, creator v1 và graph v2; brief nháp không đổi state. | complete | `python -m pytest tests/workflows/test_create_project_v2.py tests/workflows/test_author.py tests/workflows/test_create_project.py tests/domain/test_state_graph.py -v` | `feat: create and confirm pyh workflow v2 projects` |
-| PYH.2 | Chiếu read-only state/layout v1/v2 đã validate thành action `/pyh`, gồm main path, side state, migration v1 và status tái lập; không ghi `STATUS.md`, approval hoặc workflow state. | complete | `python -m pytest tests/workflows/test_operator.py tests/storage/test_project_layout.py tests/domain/test_state_graph.py -v` | `feat: project workflow state into pyh actions` |
-| PYH.3 | Mở rộng `produce_project` và `package_project` qua compatibility boundary: v2 dùng active revision, gate record M2, cache render hiện có và atomic package promotion; v1 giữ nguyên đường chạy. | complete | `python -m pytest tests/workflows/test_produce.py tests/workflows/test_package.py tests/e2e/test_golden_project.py tests/e2e/test_golden_workflow_versions.py tests/workflows/test_gate_review.py -v` (65 passed); `python -m ruff check src tests tools` | `feat: produce and package approved v2 projects` |
-| PYH.4 | Chứng minh lifecycle offline từ chọn topic, brief, evidence đến package qua hai cổng duyệt; xác nhận invalidation y khoa/video. | complete | `python -m pytest tests/e2e tests/workflows/test_gate_review.py tests/domain/test_invalidation.py -q` (79 passed); `python -m ruff check src tests tools` | `test: prove pyh lifecycle across both review gates` |
-| PYH.5 | Thêm CLI `operator new/status/select/brief` cho v2 và một skill `/pyh` chuẩn dùng chung với Claude Code; giữ nguyên lệnh v1 và các cổng duyệt hiện có. | complete | `python -m pytest tests/test_cli.py tests/contracts/test_pyh_skill.py tests/workflows/test_operator.py -q` (51 passed); `python -m ruff check src tests tools` | `feat: expose shared pyh operator workflow` |
-| PYH.6 | Quick Start `/pyh` và acceptance toàn hệ thống, giữ v1, không thêm auto-publishing. | complete | `python -m pytest -q` (475 passed); Ruff; schema export/diff; video test (12 passed)/typecheck; operator smoke | `docs: complete pyh operator milestone` |
-| PYH review | Làm rõ hai đường bắt đầu topic và ý định duyệt trong skill chuẩn; Quick Start tách chọn topic khỏi xác nhận brief. | complete | Contract/CLI/operator/E2E; full Python/Ruff/schema/video gates | `docs: clarify pyh entry and doctor approval boundaries` |
-| M4.1 | Gói phản biện mô hình thứ hai thủ công, bất biến, gắn response với request/revision/source hashes; nhánh blocking về medical revision, nhánh sạch trở lại state trước đó. | complete | Domain/workflow/CLI/schema/skill contracts; full Python/Ruff/schema/video gates | `feat: add bound manual second-model review handoff` |
-| M5.1 | Từ điển phát âm tiếng Việt có phiên bản cho production v2: thay thế literal chỉ trong yêu cầu TTS, profile được medical gate hash/duyệt; cache, render manifest và video gate ràng buộc kết quả; v1 giữ nguyên. Profile mặc định rỗng, chưa có benchmark VieNeu, ASR hay ElevenLabs. | complete | `python -m pytest -q`; Ruff; schema export; video test/typecheck | `feat: bind versioned pronunciation to v2 production` |
-| M5.2 | Adapter lệnh TTS cục bộ cấu hình rõ ràng, kiểm tra cấu trúc/tín hiệu WAV, nhận diện voice/runtime trong cache v2 và harness benchmark offline không chấm điểm chủ quan. Chưa chọn model hay chạy benchmark thật. | complete; C2C review DONE | `python -m pytest -q` (525 passed); Ruff; video test (12 passed)/typecheck; `git diff --check` | `1376663` |
-| M5 handoff | Đồng bộ báo cáo tiến độ, giới hạn còn mở và đầu vào M5.3 để tiếp tục từ HEAD hiện tại. | complete | README review; `git diff --check` | `docs: hand off pyh M5 progress` |
-| M5.3 | Xác minh môi trường (RTX 3060, Python 3.11, ffmpeg 8.1.1) và nguồn/giấy phép VieNeu-TTS v3 Turbo (`vieneu==3.6.4`, HF revision `8b7e9cf`, Apache-2.0); wrapper `tools/tts/vieneu_synth.py`; `evaluate_benchmark` với ngưỡng khách quan; lệnh `healthvideo tts-benchmark`; bộ 13 case; benchmark thật fp32/int8 ghi trong plan. Voice chính thức, ASR, ElevenLabs và `produce --tts vieneu` chưa làm. | complete | `python -m pytest -q` (532 passed); `ruff check src tests tools`; `git diff --check`; benchmark thật 2×13 case | `feat: benchmark VieNeu-TTS with objective gates` |
-| M5.4 | ASR back-check `CommandASR` + `word_error_rate` (faster-whisper 1.2.1, MIT; wrapper `tools/tts/whisper_transcribe.py`); `NormalizedTTS` FFmpeg loudnorm; `tts-benchmark --asr-*`/`--max-wer`; `produce --tts vieneu --voice`; sửa `build_render_argv` dùng đường dẫn tuyệt đối. Chạy thật: WER 13 case (10/13 ≤ 0,2), produce golden v2 bằng VieNeu đến `awaiting_video_review`. Voice chính thức và ElevenLabs chưa làm. | complete | `python -m pytest -q` (548 passed); `ruff check src tests tools`; `git diff --check`; benchmark + produce thật | `feat: add ASR back-check and loudnorm to VieNeu production` |
-| M5 handoff 2 | Chốt M5: kỹ thuật xong tại `c4a500c`; còn chờ bác sĩ chọn voice và bổ sung từ điển tên thuốc; ElevenLabs chờ key. M6 bắt đầu từ HEAD này. | complete | README review; `git diff --check` | `docs: hand off M5 completion` |
-| M6.1 | Chart SVG count-of-total xác định từ datum explicit trong evidence ledger; asset semantic hash và license/right ledger cùng revision, medical gate ràng buộc bytes/metadata; không đổi v1/state. Các visual/render khác theo plan M6. | complete; C2C review DONE | `python -m pytest -q` (585 passed); Ruff; schema export; video test (12 passed)/typecheck; `git diff --check` | `feat: register evidence-bound charts and asset rights` |
-| M6.2 | Crop paper highlight từ ảnh trang PNG/JPEG cục bộ ngoài project; source/page/marker/quote/tọa độ gốc, kích thước pixel crop, quyền dùng explicit, semantic hash/medical gate; renderer `contain` và remap overlay trên crop; retry crash-safe. Không PDF/OCR/full page. | complete; C2C review DONE | `python -m pytest -q` (599 passed); Ruff; schema export/diff; video test (16 passed)/typecheck; `git diff --check` | `feat: add provenance-safe paper highlights` |
-| M6.3 | Nhận diện PYH xác định: logo/palette, mascot phi lâm sàng ba pose và bốn whiteboard template; asset khai báo, phân loại decorative/semantic, rights/hash, retry crash-safe, medical/production preflight và Remotion `staticFile`; giữ fallback cũ. Không intro/outro, budget hay Veo. | complete; C2C review iteration 3 DONE | `python -m pytest -q` (642 passed); Ruff; schema export/diff; video test (21 passed)/typecheck; compatibility (55 passed); `git diff --check` | `feat: add the PHY visual identity and mascot` (tên commit lịch sử trước khi sửa typo) |
-| M6.3 naming correction | Tên và hình học chuẩn là Protect Your Health (PYH): wordmark P–Y–H, ARIA/mascot/whiteboard/outro/Remotion và asset mới dùng `PYH`/`pyh-*`; giữ `render_phy_logo` làm alias và tiếp tục đọc revision cũ nguyên trạng. | Complete; C2C review iteration 2 DONE | `python -m pytest -q` (799 passed); Ruff; video test (30 passed)/typecheck; `git diff --check` | `fix: correct visual identity to PYH`; `test: isolate legacy PHY compatibility` |
-| M6.4 design | Đặc tả hook ở frame 0 không intro; câu kết pin trong script và storyboard trước duyệt; brand asset khai báo; v2 không giới hạn tổng thời lượng, audio phải khớp timeline; v1 giữ nguyên. Đã triển khai qua sáu lát M6.4. | Complete; C2C implementation review iteration 2 DONE | C2C planning/spec review; 22 contract tests; Ruff; `git diff --check` | `docs: design M6.4 hook and reviewed outro` |
-| M6.4 plan | Kế hoạch triển khai sáu lát: contract, authoring/gate, logo khai báo, timing/audio QA, Remotion, tích hợp/acceptance. Đã triển khai đủ sáu lát. | Complete; C2C implementation review iteration 2 DONE | 22 contract tests; Ruff; plan/spec self-review; `git diff --check` | `docs: plan M6.4 hook and outro implementation` |
-| M6.4 contract | Profile `hook_outro_v1`, câu kết cố định, scene–line binding và yêu cầu logo ở cổng duyệt; dữ liệu legacy giữ mặc định riêng. | Complete; included in C2C implementation review iteration 2 DONE | 24 domain/contract tests; schema export; Ruff; `git diff --check` | `feat: define M6.4 script storyboard contract` |
-| M6.4 authoring/gate | Lệnh `outro author` ghi script và storyboard có intent phục hồi; cổng duyệt y khoa từ chối intent dở hoặc thiếu logo, kiểm tra hook–claim–marker–source; packet hiển thị hook/outro. | Complete; included in C2C implementation review iteration 2 DONE | 63 workflow/CLI tests; Ruff; `git diff --check` | `feat: author reviewed PHY outro before medical gate` |
-| M6.4 logo | Logo PYH decorative được khai báo `FLOURISH`/`brand`, có hash và rights ledger; cổng duyệt kiểm tra role/kind/file và đưa bytes logo vào hash duyệt. | Complete; included in C2C implementation review iteration 2 DONE | 83 domain/workflow tests; schema export; Ruff; `git diff --check` | `feat: register declared PHY logo for outro` (tên commit lịch sử trước khi sửa typo) |
-| M6.4 timing | V2 dùng thời lượng storyboard theo nội dung; WAV thực đo phải vừa timeline trước render, QA lưu thời lượng audio, composition và đoạn hình cuối không tiếng; V1 giữ 45–90 giây. | Complete; included in C2C implementation review iteration 2 DONE | 69 render/produce/e2e tests; Ruff; `git diff --check` | `feat: match v2 video duration to reviewed audio timeline` |
-| M6.4 Remotion | Composition lấy đúng frame cuối storyboard; frame đầu là hook, scene cuối dùng logo/mascot đã khai báo và caption trong vùng an toàn. | Complete; included in C2C implementation review iteration 2 DONE | 24 video tests; TypeScript typecheck; `git diff --check` | `feat: render hook-first PHY outro at exact duration` |
-| M6.4 integration | E2E xác nhận hook ở frame 0, outro cuối với logo khai báo, QA WAV, hai cổng duyệt thủ công và caption từ hook; packet nêu nguồn gốc logo. | Complete; C2C implementation review iteration 2 DONE | 662 Python tests; Ruff; schema export không đổi; 24 video tests; typecheck; `git diff --check` | `feat: complete reviewed M6.4 hook and outro workflow` |
-| M6.4 retry QA | Cache M6.4 nhận QA thời lượng đã chuyển sang `reviews`, kiểm tra lại số đo WAV và frame cuối, phục hồi được khi trạng thái dự án chưa cập nhật; retry không gọi lại TTS/render. | Complete; C2C implementation review iteration 2 DONE | 663 Python tests; Ruff; schema export không đổi; 24 video tests; typecheck; `git diff --check` | `fix: reuse promoted M6.4 timing QA on retry` |
-| M6.5 design | Ngân sách visual tính theo frame storyboard đã duyệt; ba nhóm loại trừ nhau, override nằm trong medical hash; chart dùng SVG khai báo, AI production chờ M6.6. | Complete; C2C review DONE | Spec/plan review; Ruff; `git diff --check` | `docs: clarify M6.5 chart binding contract` |
-| M6.5 plan | Năm lát test-first cho contract, medical packet, chart render, production QA và E2E; lát sáu acceptance/C2C. | Complete; Task 1–6 triển khai, acceptance passed; C2C review DONE | Plan/spec consistency; Ruff; `git diff --check` | `docs: plan M6.5 visual budget implementation` |
-| M6.5 Task 1 | Contract domain/schema opt-in `m6_5_v1`, phân nhóm scene theo frame, biên số nguyên, override có rationale và feasibility; legacy mặc định không bị cưỡng chế. | Complete; included in C2C review DONE | 43 focused + 29 render regression tests; schema export/diff; Ruff; `git diff --check` | `feat: define deterministic M6.5 visual budgets` |
-| M6.5 Task 2 | Medical gate cưỡng chế cùng visual-budget validator trước khi ghi approval; packet hiển thị frame/basis point/bound/override đã escape, vẫn chỉ có một cổng medical. | Complete; included in C2C review DONE | Gate/packet/domain/produce regression tests; Ruff; `git diff --check` | `feat: bind M6.5 budget to medical review` |
-| M6.5 Task 3 | Bind chart M6.1 có intent/recovery manifest-first, ownership/hash/rights hai chiều; render đúng SVG khai báo qua Remotion và giữ legacy fallback. | Complete; included in C2C review DONE | 136 Python tests; 29 video tests; schema export/diff; Ruff; typecheck; `git diff --check` | `feat: render declared M6.1 chart assets` |
-| M6.5 Task 4 | Production tính lại visual budget sau medical approval, trước TTS/render; `ai_clip` dừng với lỗi chờ M6.6; `video-qa.json` ghi đủ report cạnh timing M6.4; cache staged/promoted so canonical JSON với report tái tính nên thiếu, sửa field, thêm field hoặc đổi kiểu đều bị từ chối; retry/recovery không gọi lại TTS/render. | Complete; included in C2C review DONE | 46 produce tests; 60 render/gate/e2e-version tests; 91 review/package/CLI/e2e tests; Ruff; `git diff --check` | `feat: record recomputable M6.5 visual QA` |
-| M6.5 Task 5 | Video packet tái tính report từ storyboard đã duyệt và báo QA production khớp/không khớp/thiếu; E2E zero-AI 75% whiteboard/outro và 25% crop/chart DATA_CHART đã bind: hook frame 0, không intro, outro pin, logo khai báo, 60 s theo nội dung, một lần TTS, hai cổng thủ công, package thủ công; legacy không đổi. | Complete; included in C2C review DONE | 173 packet/e2e/CLI/produce/gate/render tests; 29 video tests; typecheck; Ruff; `git diff --check` | `feat: integrate reviewed M6.5 visual budgets` |
-| M6.5 Task 6 | Acceptance toàn bộ M6.5: không có audio/render/cache/model/credential/ảnh nguồn trong các commit M6.5; AI clip production vẫn chặn tới M6.6; hai cổng và đăng thủ công giữ nguyên. M6.5 complete sau C2C DONE. | Complete; C2C review DONE | `python -m pytest -q` (733 passed); `ruff check src tests tools`; `tools/export_schemas.py` không đổi schema; video test (29 passed)/typecheck; `git diff --check` | `docs: record M6.5 acceptance` |
-| M6.6 design | Veo 3.1 Fast opt-in trước medical gate; AI clip có provenance/hash/rights typed, ownership một scene, duration 4/6/8 s và mọi bytes được medical hash; production không gọi provider; Remotion muted; disclosure chỉ phục vụ đăng thủ công. | Complete; C2C review DONE | Official Veo/Vertex/terms/TikTok review; live workspace C2C PLAN; `git diff --check` | `docs: design M6.6 optional Veo workflow`; `docs: resolve M6.6 review findings` |
-| M6.6 plan | Sáu lát test-first: contract asset, provider/authoring recovery, medical binding, production/Remotion, disclosure E2E và acceptance/C2C. | Complete; implementation and C2C review DONE | Plan/spec consistency; schema and compatibility matrix | `docs: design M6.6 optional Veo workflow`; `docs: resolve M6.6 review findings` |
-| M6.6 Task 1 | Contract `AI_CLIP` và provenance typed; role/ownership một scene; duration M6.5 đúng 120/180/240 frame; semantic/decorative policy; rights bắt buộc; referenced decorative clip vẫn kiểm byte/hash; legacy giữ nguyên. | Complete; C2C review iteration 2 DONE | 102 focused tests; 94 nearest regressions; deterministic schema export; Ruff; `git diff --check` | `feat: define reviewed AI clip assets`; `fix: expose AI clip media validator` |
-| M6.6 Task 2 | Veo transport inject token/HTTP, request hash canonical và lỗi đã khử bí mật; ffprobe argv kiểm đúng MP4 dọc 24 fps 4/6/8 s; authoring pre-medical ghi bytes/manifest/quyền/storyboard theo intent R0–R4, retry cùng identity không gọi provider; CLI bắt buộc opt-in trước live boundary. | Complete; C2C review iteration 2 DONE | 66 provider/workflow/CLI tests; 122 Task 1 regressions; Ruff; `git diff --check` | `feat: author optional Veo clips safely`; `fix: use Veo fetch operation contract` |
-| M6.6 Task 3 | Medical gate phục hồi intent AI hợp lệ, kiểm ownership/citation/quyền và đưa mọi AI clip kể cả decorative vào review hash; packet hiển thị classification, provider/model/duration/hash prefix/quyền (đã escape) mà không lộ prompt hoặc runtime secret. Review độc lập bổ sung test từ chối ledger thiếu/lệch, citation tới nguồn không tồn tại, decorative mang claim, và stale khi sửa prompt/classification/quyền/binding. | Complete; C2C review iteration 2 DONE | 60 gate/packet/authoring tests (mutation check: bỏ citation AI làm 2 test fail); Ruff; `git diff --check` | `feat: bind AI clips to medical review`; `test: cover AI clip medical gate refusals` |
-| M6.6 Task 4 | Production chạy recovery AI rồi kiểm approval hash (bytes/provenance/quyền), resolver role/ownership và duration scene khớp provenance trước TTS/render; bỏ lỗi "unsupported until M6.6"; stage đúng bytes đã duyệt, hash vào render manifest/cache; không gọi provider. Render input/Zod: `ai_clip` chỉ nằm trong scene `ai_clip`, tối đa một, đúng một ở `m6_5_v1`, 120/180/240 frame. `AiClipScene` dùng `OffthreadVideo` muted qua `staticFile` một lần, không loop/trim/playback rate; overlay ảnh bỏ qua `ai_clip`. Zero-AI và legacy giữ nguyên. | Complete; C2C review iteration 1 DONE | 86 focused Python tests; 33 video tests; typecheck | `feat: render approved AI clips` |
-| M6.6 Task 5 | Package v2 sinh `ai-disclosure.json` (schema 1.0, `contains_ai`, scene/path/provider/model/classification, hướng dẫn bật nhãn AI khi đăng thủ công) từ storyboard và asset manifest đã được medical approval hash, không chứa prompt/project/token, và đưa hash vào `manifest.json`; zero-AI giữ đúng payload cũ, không có file. E2E AI: fake transport + bytes dưới `tmp_path` → medical gate → production không gọi provider, stage đúng clip, hook frame 0, không intro, outro/logo pin, 63 s @30 fps, budget 1260/450/180 → video gate → package; đúng hai approval, state dừng ở `packaged`, không đăng. Review iteration 1 bổ sung exact payload cho v1 và assertion E2E rằng renderer AI dùng một `OffthreadVideo` muted, không loop/trim/rate/volume. | Complete; C2C review iteration 2 DONE | 37 focused package/review/E2E tests; Ruff; `git diff --check` | `feat: package AI disclosure guidance`; `test: strengthen M6.6 package compatibility` |
-| M6.6 Task 6 | Acceptance M6.6: rà toàn bộ commit M6.6 không có media/model/cache/credential hay Google project ID thật; media được track chỉ là icon skill Remotion có trước M6.6. Không test nào gọi provider thật; CLI/Veo test inject token/HTTP giả. `produce`/`package`/`render` không import `video_ai` hay gọi generation. `GateKind` chỉ có `medical`/`video`; package dừng ở `packaged`, `published_manual` vẫn là bước thủ công. MP4 AI dưới `projects/**/assets/ai-clips/` và `workflow/staged-ai-clips/` đã có test `git check-ignore`. | Complete; C2C review iteration 1 DONE — M6.6 complete | `python -m pytest -q` (831 passed); `python -m ruff check src tests tools`; `python tools/export_schemas.py` hai lần không diff; `corepack pnpm --dir video test` (33 passed); `corepack pnpm --dir video typecheck`; `git diff --check` | `docs: record M6.6 acceptance`; `docs: refresh M6.6 acceptance review status` |
-| M7 design | Lease single-writer trên shared filesystem đã probe; backup/restore bất biến và fail-closed; subprocess E2E; audit bảo mật offline; runbook vận hành. Giữ nguyên v1/v2, đúng hai cổng và đăng thủ công. | Complete; C2C DONE | Spec self-review; `git diff --check` | `docs: design M7 hardening workflow` |
-| M7 plan | Sáu lát test-first: lease/storage, toàn bộ CLI mutation, backup/restore, process E2E, security/doctor/runbook và acceptance/C2C. B1–B4 closeout ở `docs/superpowers/plans/2026-09-16-m7-closeout-steps.md`. | Tasks 1–6 complete; C2C DONE | Plan/spec consistency; `git diff --check` | `docs: design M7 hardening workflow` |
-| M7.1 | Lease project schema 1.0 độc lập, acquire bằng exclusive create, heartbeat/release theo token, recovery stale phân biệt cùng/khác host và chống PID reuse; atomic text write dùng temp duy nhất cùng thư mục; runtime lease bị Git ignore. Chưa bọc CLI mutation — thuộc M7.2. | Complete; final M7 C2C DONE | 50 focused lease/storage/schema/gitignore tests; deterministic schema export; Ruff; `git diff --check` | `feat: add project write leases` |
-| M7.2 | Toàn bộ lệnh CLI ghi vào project được bọc lease single-writer; dry-run giữ read-only. Operator status, mở packet và lease inspect vẫn hoạt động khi bận; recovery stale cùng host kiểm PID/start fingerprint, khác host bắt buộc cờ explicit và giữ bản ghi stale. Subprocess contention/failure dùng pipe barrier, không sleep. | Complete; final M7 C2C DONE | 89 focused lease/CLI/operator/skill/subprocess tests chạy hai lần; toàn bộ Python 861 passed; Ruff; `git diff --check` | `feat: serialize project mutations` |
-| M7.3 | Snapshot thư mục bất biến với `backup-manifest.json` schema 1.0 độc lập (path POSIX chuẩn đã sort, size, SHA-256; không hash chính nó). `healthvideo backup create <project> <backup-root> --id <id>` giữ lease ghi, loại `.healthvideo`/cache/model/credential/`.env`/pending cache/`source-documents`, nhưng giữ recovery journal và `staged-ai-clips`; từ chối link/reparse point và artifact có thẩm quyền tham chiếu path bị cấm; staging cạnh đích, hash lại rồi mới promote. `healthvideo backup restore <snapshot> <new-project-dir>` chỉ ghi đích mới: kiểm manifest đóng, entry bị cấm, thiếu/thừa/sửa bytes, layout v1/v2, cấu trúc approval và artifact được approval ràng buộc, rồi copy staging, xác minh lần hai và promote. Approval stale nguyên vẹn vẫn stale; không resign, migrate, đổi state hay publish. | Complete; final M7 C2C DONE | 94 focused backup/CLI/schema/inventory tests (1 symlink test skipped khi Windows thiếu quyền symlink); mutation check journal/validation làm test fail; schema export hai lần deterministic; toàn bộ Python 893 passed, 1 skipped; Ruff; `git diff --check` | `feat: add verified project backup restore` |
-| M7.4 | E2E qua ranh giới tiến trình: worker `tests/e2e/subprocess_worker.py` chạy CLI `healthvideo` thật, chỉ thay Remotion bằng renderer giả, chặn socket/Veo; đồng bộ bằng pipe barrier, không sleep. Golden v2 zero-AI và AI bytes giả đi qua medical gate → produce → video gate → package → backup → restore: hook frame 0, không intro, outro/logo PYH, 48 s/63 s, đúng hai approval, dừng ở `packaged`, validator approval hiện có vẫn current sau restore. Hai writer tranh lease chỉ một bên thắng; CLI ghi và backup bị từ chối khi bận, không đổi bytes; restore không chạm source đang bận; holder bị kill chỉ được recover cùng host sau khi chết; lease khác host hết hạn cần `--allow-foreign-host` và giữ bản ghi cũ. v1 qua CLI tới package trong 45–90 s, backup/restore giữ schema 1.0, không migrate. Worker đặt ở `tests/e2e/` vì `tests/helpers.py` là module, không thể là package. | Complete; final M7 C2C DONE | 7 E2E mới chạy ba lần (mỗi lần 7 passed); mutation: lease ghi đè làm 3 test fail, bỏ kiểm tra tiến trình sống làm 1 test fail; toàn bộ E2E 42 passed; toàn bộ Python 900 passed, 1 skipped; Ruff; `git diff --check` | `test: cover M7 process boundaries` |
-| M7.5 B1 | Audit project offline: CLI `security-audit` chỉ in rule/path tương đối/lý do, phát hiện link, binding backup hỏng, credential field và media ở path Git chưa ignore; read-only, không in secret. | Complete | 60 focused passed, 1 skipped; full Python 907 passed, 2 skipped; Ruff; `git diff --check` | `feat: add offline project security audit` |
-| M7.5 B2 | `healthvideo doctor --project <project>` kiểm tra exclusive-create và same-directory rename bằng file tạm duy nhất trong chính filesystem của project; chỉ dọn file còn đúng marker của probe, báo FAIL và exit 1 nếu thiếu khả năng hoặc dọn chưa xong. | Complete | 53 focused passed; full Python 914 passed, 2 skipped; Ruff; `git diff --check` | `feat: probe project filesystem capabilities` |
-| M7.5 B3 | Runbook lệnh thật cho doctor, busy/lease recovery, backup/restore, security và Git audit; cập nhật AGENTS và `/pyh` giữ hai cổng duyệt và đăng thủ công. | Complete; B4 acceptance/C2C DONE | 9 contract/skill tests; full Python 918 passed, 2 skipped; Ruff; `git diff --check` | `docs: add M7 operational runbook` |
-| M7.5 audit followup | Chặn trường `token` và raw provider response trong typed artifact, fail-closed khi file vượt ngưỡng đọc audit; test độc lập khóa backup exclusion và cấm import network/provider ở production/package. | Complete; C2C DONE | 11 focused passed, 1 skipped; full Python 922 passed, 2 skipped; Ruff | B4 acceptance diff |
-| M7.6 local acceptance | Kiểm Python/video/schema/E2E offline, audit project v1/v2 tạm, kiểm commit M7 không thêm media/model/cache/credential/fulltext, đúng hai GateKind và package dừng ở `packaged`. C2C vòng 1 phát hiện `review open` ghi project khi không giữ lease; đã sửa để in HTML ra stdout, khóa bằng contract và test lease bận không đổi byte project. | M7 complete; C2C vòng 2 DONE | Python 922 passed, 2 skipped sau sửa; CLI/contract 41 passed; video 33 passed; typecheck; schema export hai lần không diff; E2E 7 passed × 3 trước sửa và 7 passed sau sửa; Ruff; `git diff --check` | B4 acceptance diff |
-| PYH draft bridge | CLI `operator draft` nhận script/storyboard/manifest do người viết tạo, kiểm claim, citation, visual, asset và chuyển `evidence_ready → draft_ready`; `operator submit-medical` kiểm lại rồi chuyển `awaiting_medical_review` mà không duyệt thay bác sĩ. E2E dùng lệnh công khai; smoke Remotion thật là opt-in (`PYH_REAL_RENDER_SMOKE=1`). | Complete; C2C review ACCEPT | Python 925 passed, 3 skipped; real Remotion smoke passed; Ruff; video 33 passed/typecheck; `git diff --check` | `fix: bridge draft submission to medical review` |
-| Render identity & caption QA | Cache và render manifest v1/v2 gắn tên, phiên bản package và source hash của Remotion để buộc render lại khi renderer đổi. Caption giữ tối đa hai dòng, co vừa canvas và kiểm WCAG AA cho chữ thường/chữ đang đọc. | Complete | `tests/workflows/test_produce.py` (55 passed); Ruff; video 34 passed/typecheck; `git diff --check` | `fix: bind Remotion identity to production cache` |
-| Pilot tooling fixes: evidence provider outcomes + editorial status artifact | Ghi kết quả từng provider, nối log tìm kiếm và giữ bản cũ; CLI báo lỗi hạ tầng; status trỏ completed orientation có thẩm quyền hoặc báo thiếu bản ghi. | complete | `python -m pytest -q tests/workflows tests/domain tests/e2e tests/test_cli.py tests/test_orientation_cli.py` (932 passed, 1 skipped); `python -m pytest -q` (1318 passed, 3 skipped); `python -m ruff check src tests tools` (All checks passed!) | `fix: surface evidence provider failures and real orientation artifact` |
-| Medical gate reopen + anatomy draft check | CLI `review reopen` đưa project sau cổng y khoa về `needs_medical_revision` khi artifact gated đổi, dùng invalidation engine, giữ approval cũ làm lịch sử; `operator draft` nhận lại bản nháp ở `draft_ready`; draft validation chặn anatomy subject renderer chưa hỗ trợ. | complete | `python -m pytest -q tests/workflows tests/domain tests/e2e tests/test_cli.py` (944 passed, 1 skipped); `python -m pytest -q` (1342 passed, 3 skipped); `python -m ruff check src tests tools` (All checks passed!); `git diff --check` (pass) | `feat: reopen medical gate after approved-artifact changes` |
 
-## Kiến trúc
-
-Python CLI điều phối artifact YAML/JSON theo schema. Domain thuần Python tách
-khỏi TTS và renderer; Remotion nhận `render-input.json` bất biến.
-
-## Lệnh kỹ thuật và tương thích v1
-
-PubMed đọc email liên hệ từ `NCBI_EMAIL` và API key tùy chọn từ `NCBI_API_KEY` trong môi trường.
-Đặt các giá trị này trước khi chạy; không lưu API key vào Git.
-
-```powershell
-# Cài lại an toàn được: chỉ tạo/cập nhật .venv và dependencies trong repo.
-powershell -NoProfile -ExecutionPolicy Bypass -File install/install.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File install/doctor.ps1
-& .venv\Scripts\healthvideo.exe version
-& .venv\Scripts\healthvideo.exe project new muoi-va-huyet-ap --title "Ăn mặn và tăng huyết áp"
-# Bác sĩ viết evidence/ledger.yaml, script/script.yaml, storyboard/storyboard.yaml
-# theo mẫu tests/fixtures/golden-project, rồi đặt state=awaiting_medical_review
-# trong project.yaml (MVP chưa có lệnh intake cho các bước này).
-& .venv\Scripts\healthvideo.exe review medical projects/2026/09/muoi-va-huyet-ap --reviewer "BS An" --note "Đã đối chiếu số liệu"
-& .venv\Scripts\healthvideo.exe produce projects/2026/09/muoi-va-huyet-ap --tts silent
-& .venv\Scripts\healthvideo.exe review video projects/2026/09/muoi-va-huyet-ap --reviewer "BS An"
-& .venv\Scripts\healthvideo.exe package projects/2026/09/muoi-va-huyet-ap
-& .venv\Scripts\healthvideo.exe status projects/2026/09/muoi-va-huyet-ap
-
-# M1: xem plan không ghi dữ liệu, rồi migrate sang sibling `<project>-v2`.
-& .venv\Scripts\healthvideo.exe project migrate projects/2026/09/muoi-va-huyet-ap --dry-run
-& .venv\Scripts\healthvideo.exe project migrate projects/2026/09/muoi-va-huyet-ap
-
-# M2: mở gói HTML review, duyệt cổng y khoa/video hoặc từ chối và nối lại.
-& .venv\Scripts\healthvideo.exe review open projects/2026/09/muoi-va-huyet-ap-v2 --gate medical
-& .venv\Scripts\healthvideo.exe review approve projects/2026/09/muoi-va-huyet-ap-v2 --gate medical --reviewer "BS An" --yes
-
-# M3: quản lý chủ đề và tìm kiếm bằng chứng y khoa.
-& .venv\Scripts\healthvideo.exe topic create --title "Ăn mặn và huyết áp" --question "Ăn mặn có làm tăng huyết áp không?" --slug an-man-va-huyet-ap
-& .venv\Scripts\healthvideo.exe topic list
-& .venv\Scripts\healthvideo.exe topic select projects/2026/09/muoi-va-huyet-ap-v2 --slug an-man-va-huyet-ap
-& .venv\Scripts\healthvideo.exe evidence search projects/2026/09/muoi-va-huyet-ap-v2 --query "sodium blood pressure"
-& .venv\Scripts\healthvideo.exe evidence build-ledger projects/2026/09/muoi-va-huyet-ap-v2
-```
-
-Smoke test fixture golden độc lập (không thay thế render của dự án thật, không tạo
-artifact và không đổi state):
-
-```powershell
-& .venv\Scripts\healthvideo.exe produce tests/fixtures/golden-project --tts silent --dry-run
-```
-
-`healthvideo doctor` yêu cầu Python >=3.11, Node >=22, pnpm >=11, FFmpeg >=8 và
-Arial hoặc Noto Sans. Doctor và production dùng chung resolver: ưu tiên executable
-`pnpm`; trên Windows, nếu PATH chỉ có shim `.cmd`, resolver gọi `pnpm.cjs` hoặc
-`corepack.js` trực tiếp bằng `node.exe` và không đi qua `cmd.exe`. Batch launcher
-khác bị từ chối với lỗi rõ ràng; CUDA chỉ là cảnh báo tùy chọn. Lần kiểm tra Windows
-gần nhất (08-09-2026) phát hiện Python 3.14.3, Node 24.14.0, pnpm 12.3.4 và
-FFmpeg 8.1.1.
-
-Artifact nằm trong thư mục dự án: `evidence/`, `script/`, `storyboard/` là đầu vào
-do bác sĩ sở hữu; `reviews/` giữ audit trail của hai cổng duyệt;
-`renders/<input_hash>/` giữ WAV, `render-input.json`, MP4 và manifest của một lần
-sản xuất; `publish/` là gói cuối cùng để đăng thủ công. Chỉ `evidence/`, `script/`,
-`storyboard/`, `project.yaml`, `author-brief.yaml` và `reviews/` nên vào Git;
-`audio/`, `renders/` và `publish/` đã được `.gitignore` bỏ qua.
-
-## Workflow
-
-Author brief → evidence ledger → script + storyboard → medical review → production
-→ video review → publication package. Cả hai cổng duyệt của bác sĩ là bắt buộc;
-storyboard phải tồn tại trước khi duyệt y khoa.
-`produce` chỉ nhận dự án ở `script_approved` khi có `ReviewRecord` y khoa hiện hành,
-kể cả với `--dry-run` hoặc cache hit; state YAML đơn lẻ không mở cổng. Nếu dự án đã ở
-`awaiting_video_review`, nó chỉ trả lại video cache khi hash đầu vào vẫn khớp.
-
-## Cổng duyệt và audit trail
-
-`healthvideo review medical` chỉ chạy ở `awaiting_medical_review`, gắn hash của
-`evidence/ledger.yaml`, `script/script.yaml`, `storyboard/storyboard.yaml` và byte
-của mọi ảnh `evidence_highlight` rồi chuyển `script_approved`; đường dẫn asset phải
-là POSIX tương đối, nằm trong dự án và trỏ tới file có thật. Storyboard nằm trong
-cổng vì nó quyết định nội dung và dấu trích dẫn hiện trên màn hình.
-`healthvideo review video` chỉ chạy ở `awaiting_video_review`, gắn hash của MP4 và
-`render-input.json` trong run đang hoạt động rồi chuyển `approved_to_publish`.
-Mỗi lần duyệt ghi một `ReviewRecord` bất biến (`reviews/medical-<uuid>.yaml`,
-`reviews/video-<uuid>.yaml`) gồm người duyệt, thời điểm có múi giờ, quyết định,
-ghi chú và hash artifact. Cả hai lệnh bắt buộc `--reviewer`, nhận `--note`, và
-yêu cầu gõ `APPROVE` trên terminal trừ khi có `--yes`; xác nhận chỉ nằm ở lớp CLI
-nên `approve_medical`/`approve_video` vẫn thuần và test được offline.
-
-Tài liệu YAML/JSON được hash theo nghĩa (canonical JSON), MP4 hash theo byte, nên
-định dạng lại file không làm mất hiệu lực duyệt còn sửa nội dung thì có.
-Khi artifact đã duyệt đổi hoặc biến mất, `healthvideo status` báo
-`approval_stale=true` và `produce` từ chối chạy với lỗi `medical approval is stale`;
-`package` dùng lại `ensure_approval_current` cho cổng video.
-
-## Gói xuất bản
-
-`healthvideo package <project>` chỉ chạy khi dự án ở `approved_to_publish` **và**
-cả `ReviewRecord` y khoa (ledger, script, storyboard) lẫn video (`render-input.json`,
-MP4) còn hiệu lực. Thiếu bản ghi nào cũng bị từ chối như bản ghi đã cũ, vì gói này đi
-ra ngoài nên mọi lần duyệt phải truy vết được. Lệnh không gọi API đăng bài và không
-đổi state, nên đóng gói lại nhiều lần vẫn an toàn.
-
-`publish/` gồm bốn payload được tự kiểm tra và manifest của chúng:
-
-- `video.mp4` — bản sao `shutil.copy2` của MP4 đã duyệt trong run đang hoạt động.
-- `render-input.json` — render contract đúng bản đã được duyệt video.
-- `caption.txt` — hook ngắn lấy từ câu đầu kịch bản, disclaimer thông tin chung và
-  danh sách `[n]` kèm nguồn.
-- `sources.md` — nguồn đầy đủ theo từng dấu `[n]`: tiêu đề, tác giả, năm, thiết kế
-  nghiên cứu, cỡ mẫu, DOI/PMID/URL.
-- `manifest.json` — `payload_sha256` của bốn payload trên (không hash chính
-  manifest), cùng `approval_bindings` riêng cho hai gate với canonical
-  `approval_sha256` và hash artifact mà mỗi gate đã ký.
-
-Mỗi dấu `[n]` hiện trong `render-input.json` đã duyệt phải khớp claim và nguồn trong
-script/ledger; nếu không, `package` từ chối thay vì phát hành một trích dẫn không có
-nguồn. Câu
-`professional_opinion` không mang `source_marker` nên không bao giờ xuất hiện trong
-danh sách nguồn. Gói được dựng trong thư mục staging cạnh `publish/` rồi publish
-bằng một lần đổi tên thư mục; trước promotion, MP4 và canonical `render-input.json`
-trong staging phải khớp chính xác video approval. Caption và sources chỉ sinh từ
-snapshot ledger/script/storyboard đã đối chiếu với medical approval, nên sửa file
-đồng thời trong lúc copy không thể đưa byte hoặc nội dung chưa duyệt vào gói.
-
-Project v2 có AI clip đã duyệt được thêm `ai-disclosure.json` (scene, path,
-provider, model, classification và hướng dẫn bật nhãn AI-generated content khi đăng
-thủ công), sinh từ storyboard và asset manifest đã được medical approval hash và có
-trong `payload_sha256`. File không chứa prompt, token hay cloud project ID; không
-có AI clip thì không có file. Hướng dẫn không tự bật nhãn hay gọi nền tảng.
-
-## Kiểm thử gần nhất
-
-Ngày chạy acceptance M6.6 cục bộ: **15-09-2026** trên `codex/m1-workflow-kernel`.
-`python -m pytest -q` (831 passed); `python -m ruff check src tests tools`;
-`python tools/export_schemas.py` hai lần không đổi schema; `corepack pnpm --dir video
-test` (33 passed) và `typecheck`; `git diff --check`. Không gọi Veo/provider thật;
-M6.6 complete; Task 3/5 C2C DONE ở iteration 2, Task 4/6 DONE ở iteration 1.
-
-Ngày chạy M2 gần nhất: **11-09-2026**. `python -m pytest -q` (407 passed);
-`python -m ruff check src tests tools`; `git diff --check`. Golden v1 giữ nguyên 100%
-hành vi; dual-golden test xác nhận cổng v2 chạy hoàn toàn offline không sửa fixture.
-
-Ngày chạy MVP ban đầu: **08-09-2026**. `python -m pytest -v` (124 passed);
-`python -m ruff check src tests tools`; `pnpm --dir video test` (12 passed);
-`pnpm --dir video typecheck`; `install/doctor.ps1`. Golden project
-(`tests/fixtures/golden-project`) chạy hết luồng từ duyệt y khoa, sản xuất, duyệt
-video đến `package` offline với TTS im lặng và renderer giả lập; hai cổng duyệt,
-audit trail và test approval stale (`status` báo `approval_stale=true`, `produce`
-và `package` từ chối chạy) đều PASS, không cần TTY, mạng hay GPU. Ngoài test giả,
-CLI Windows đã render thật golden project bằng silent TTS qua
-`node.exe` + Corepack entrypoint, không qua `cmd.exe`: MP4 H.264 1080 × 1920,
-30 fps, 45.056 giây. Regression test chạy thật bảo toàn nguyên văn đối số chứa
-`&`, `%`, `!`, `^`, khoảng trắng và Unicode. Bộ dev ghim
-`jsonschema==4.26.0` để kiểm tra các contract JSON Schema đã xuất.
-
-## Quyết định
-
-Tiếng Việt trước; AI chỉ chấp bút từ ý kiến bác sĩ; mọi claim y khoa cần định
-danh và nguồn đã xác minh; không tự động đăng video. Read-aloud QA gắn cờ câu
-vượt 32 từ, claim không có trong ledger và cụm từ máy móc bị cấm.
-
-## Giới hạn hiện tại
-
-Đã có domain model, schema JSON, storyboard, render input bất biến, composition
-`HealthVideo` và cache render SHA-256. Render contract cố định khung hình dọc 1080 × 1920 ở 30 fps;
-storyboard phải có cảnh liên tiếp, không chồng lấp và tổng thời lượng 45–90 giây.
-Composition dùng tối thiểu 1.350 frame, render whiteboard/subtitle hoặc ảnh bằng
-chứng với bôi vàng; Zod kiểm tra điều kiện `x + width <= 1`, `y + height <= 1`
-và dữ liệu bắt buộc cho `evidence_highlight` trước render. Whiteboard và chart
-đều hiển thị `source_marker` nhất quán ở góc trên bên phải. Mỗi dự án mới lưu
-`author-brief.yaml` ở thư mục gốc dự án. `install/install.ps1` tạo hoặc dùng lại
-`.venv`, cài dependency Python/video trong repo rồi chạy doctor; nó không sửa PATH,
-cài driver hay ghi secret. `SilentTTS` chỉ ghi WAV im lặng, xác định
-(mono PCM 16-bit, 24 kHz), phục vụ test và smoke render — chưa phải giọng đọc để
-đăng: `publish/video.mp4` dựng bằng `--tts silent` là video câm, chỉ dùng để kiểm
-tra luồng chứ chưa đăng được. Chưa có intake nguồn hay TTS thực; đăng video vẫn là
-thao tác thủ công của con người từ thư mục `publish/`. CUDA không bắt buộc cho MVP;
-GPU acceleration và Linux installer thuộc các plan tiếp theo.
-
-M5.2 thêm `CommandTTS` cho lệnh TTS cục bộ do operator cung cấp qua Python.
-Lệnh nhận file văn bản UTF-8 và ghi WAV qua các tham số `{input}`, `{output}`;
-không chạy qua shell. Ví dụ cấu hình dùng `CommandTTS(executable="local-tts",
-arguments=("--input", "{input}", "--output", "{output}"),
-model_id="candidate", voice_id="generic", runtime_id="revision")` sau khi đã
-xác minh riêng lệnh, model và quyền sử dụng trên máy. Các
-định danh provider/model/voice/runtime chỉ nhận alias công khai dài tối đa 128 ký tự,
-bắt đầu bằng chữ hoặc số ASCII, các ký tự còn lại là chữ, số, dấu `.`, `_`, `-`.
-`run_benchmark` nhận các
-`BenchmarkCase` tiếng Việt và provider được cấp, ghi WAV vào thư mục output cục
-bộ (nên đặt dưới `cache/`); record chỉ chứa thời gian, trạng thái và kiểm tra
-WAV khách quan, không suy ra chất lượng giọng. Không commit audio, model hay
-credential. `produce` hiện vẫn chỉ chọn `silent`; ElevenLabs và ASR chưa được
-kích hoạt trong workflow.
-
-M5.3 nối VieNeu-TTS v3 Turbo qua `CommandTTS` mà không thêm adapter mới: môi
-trường riêng `cache/tts-venv` (`uv venv --python 3.11 cache/tts-venv` rồi
-`uv pip install --python cache/tts-venv/Scripts/python.exe vieneu==3.6.4`,
-ONNX/CPU, không torch), wrapper `tools/tts/vieneu_synth.py --input {input}
---output {output} [--voice Adam] [--precision fp32|int8]` ghi PCM16 48 kHz mono.
-Lệnh `healthvideo tts-benchmark <cases.yaml> --output cache/<dir> --command <exe>
---arg ... --model-id ... --voice-id ...` chạy `tests/fixtures/tts-benchmark-cases.yaml`
-(12 câu khó + 1 bài ghép 185 từ), ghi `benchmark.json` và trả exit 1 nếu có case
-trượt ngưỡng khách quan: WAV PCM16 24/48 kHz có tín hiệu, RTF ≤ `--max-rtf`
-(mặc định 1,0), tốc độ đọc 1,5–5,0 từ/s. Lệnh này không chấm phát âm hay độ tự
-nhiên; kết quả đo thật và cách đọc ghi trong plan M5.3. Lần đầu chạy wrapper sẽ
-tải model từ Hugging Face vào cache người dùng, ngoài Git.
-
-M5.4: `tts-benchmark` nhận thêm `--asr-command <exe> --asr-arg ... --asr-model-id
-... --max-wer 0.2`; `tools/tts/whisper_transcribe.py` (faster-whisper trong cùng
-`cache/tts-venv`, `uv pip install --python cache/tts-venv/Scripts/python.exe
-faster-whisper==1.2.1`) ghi transcript JSON; record thêm `transcript`, `wer`.
-WER là lỗi gộp TTS+ASR và chưa quy đổi số–chữ, chỉ dùng để khoanh câu cần bác sĩ
-nghe. `healthvideo produce <project> --tts vieneu --voice <preset> [--precision
-fp32|int8] [--tts-python <python của tts-venv>]` dựng `NormalizedTTS(CommandTTS)`:
-VieNeu tổng hợp rồi FFmpeg `loudnorm I=-16 TP=-1.5 LRA=11` về 48 kHz mono PCM16;
-`runtime_id` trong manifest/cache mang hậu tố `-loudnorm`. `--voice` bắt buộc và
-do bác sĩ chọn; `--tts silent` giữ nguyên. Mọi lần tổng hợp lại vẫn dừng ở cổng
-duyệt video.
-
-## Remotion preview
-
-### Xem trực quan
-
-Chạy `.venv\Scripts\healthvideo.exe preview <project>` rồi mở URL được in
-(mặc định `http://localhost:3000`) trong trình duyệt tích hợp của Antigravity IDE
-hoặc browser/preview pane của Claude Code. Studio có timeline và scrub frame;
-chọn `LongForm` (16:9) hoặc `VerticalClip` (9:16) theo format được lệnh chỉ dẫn.
-`--port 3100` đổi cổng; `--print-only` chỉ in argv và URL. Cần render hiện hành
-từ `produce` sau duyệt y khoa. Studio chỉ để xem: chỉnh props không lưu vào dự án
-và không tính là duyệt video. Ctrl+C dừng server; không tự động xuất bản.
-
-Frame kiểm tra gần nhất: [frame-001.png](tests/artifacts/frame-001.png) (1080 ×
-1920, nền trắng ngà, chữ than, bôi vàng). Đã chạy:
-
-```powershell
-pnpm --dir video test
-pnpm --dir video typecheck
-pnpm --dir video exec remotion still src/index.ts HealthVideo ../tests/artifacts/frame-001.png --props=../tests/fixtures/render-input.json --frame=120 --overwrite
-```
-
-Ở Remotion `4.0.522`, JSON props phải truyền bằng `--props`; tham số vị trí thứ
-ba là đường dẫn PNG output. Render video dùng composition `HealthVideo`:
-
-```powershell
-pnpm --dir video render --props ../projects/sample/renders/<input_hash>/render-input.json --output ../projects/sample/renders/<input_hash>/video.mp4
-```
-
-## Production cache
-
-`healthvideo produce <project> --tts silent` kết hợp canonical JSON của script,
-storyboard, profile giọng tác giả, provider và SHA-256 byte của từng evidence asset
-thành input hash. Thay asset làm approval cũ stale và tạo cache identity mới. Một lần render hợp lệ
-được publish nguyên khối ở `renders/<input_hash>/` (WAV, `render-input.json`, MP4,
-manifest); `project.yaml.artifact_hashes.production` chọn run đang hoạt động. Khi
-run đang hoạt động cùng khớp hash, lệnh tái sử dụng MP4 và không gọi Remotion.
-`--dry-run` chỉ in argv Remotion; không tạo WAV/MP4/input/manifest và không đổi state.
-Dry-run chỉ hợp lệ ở `script_approved`, hoặc ở `awaiting_video_review` với cache
-chính xác. Khi render thật, run được tạo trong staging sibling rồi đổi tên thư mục
-nguyên tử sau khi renderer trả kết quả hợp lệ; lỗi TTS/render giữ nguyên state
-`script_approved` để có thể chạy lại. Nếu một run đã publish nhưng không còn đủ
-artifact, lần chạy sau publish đè lên nó và hội tụ về trạng thái đúng. Fixture golden tạo WAV im lặng trong test/smoke
-setup, không lưu audio đã sinh vào Git.
-
-## Tài liệu
-
-- [Thiết kế hệ thống](docs/superpowers/specs/2026-09-07-preventive-health-video-system-design.md)
-- [Kế hoạch MVP](docs/superpowers/plans/2026-09-07-preventive-health-video-mvp.md)
-- [Thiết kế workflow khép kín A–Z](docs/superpowers/specs/2026-09-09-closed-loop-healthvideo-workflow-design.md)
+Lịch sử trước 2026-10-23: docs/archive/README-2026-10.md

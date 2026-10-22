@@ -1,7 +1,7 @@
 # Hướng dẫn tác nhân
 
-1. Đọc `docs/superpowers/specs/2026-09-07-preventive-health-video-system-design.md`
-   và `docs/superpowers/plans/2026-09-07-preventive-health-video-mvp.md` trước
+1. Đọc `docs/superpowers/specs/2026-10-22-video-factory-restructure-design.md`
+   và `docs/superpowers/plans/2026-10-22-video-factory-restructure.md` trước
    khi thay đổi workflow hoặc schema.
 2. Không bịa nguồn, DOI, PMID, số liệu, kết quả nghiên cứu, hoặc trải nghiệm của bác sĩ.
 3. Không vượt cổng duyệt y khoa hoặc cổng duyệt video; không tự động xuất bản.
