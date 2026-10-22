@@ -147,6 +147,7 @@ applicability, per-claim doctor notes — hoãn sang M3).
 
 | Task | Deliverable | Status | Tests | Commit |
 | --- | --- | --- | --- | --- |
+| Xưởng video: spec tái cấu trúc | Cắt gọt tại chỗ, 4 giai đoạn, hàng đợi `run` Codex/agy, PIN chống tự duyệt, Claude chỉ rà code | approved | builder check; `git diff --check` | `docs: add video factory restructure design` |
 | Sửa font Remotion 404 | Stage `video/public/fonts/` (hai WOFF2 + OFL) vào `--public-dir` tại điểm dựng argv dùng chung cho long form/chapter/clip/vertical; renderer identity chứa hash font để vô hiệu cache khi đổi font; giữ nguyên render-input và dry run không ghi file | complete (uncommitted) | TDD; fake runner kiểm bytes font long form/clip/vertical; pytest 1345 passed, 3 skipped; Ruff; `git diff --check` | Chờ Claude review và commit |
 | Sửa `review reject` | `reject_gate` kiểm tra chuyển trạng thái trước khi ghi record từ chối (trước đây `--resume-to` sai vẫn để lại file từ chối mồ côi); `--resume-to` liệt kê trạng thái hợp lệ cho từng cổng | complete | TDD; pytest 1320 passed, 3 skipped; Ruff; `git diff --check` | `fix: validate reject transition before writing record` |
 | Xem trực quan | `healthvideo preview <project>` mở Remotion Studio từ run hiện hành v1/v2; chỉ xem, không lease/ghi/duyệt | complete (uncommitted) | TDD: 7 CLI tests; pytest 1336 passed, 3 skipped; Ruff; video 94 passed/typecheck; HTTP 200 trong 30,6 s, bytes không đổi; `git diff --check` | `feat: add healthvideo preview to open Remotion Studio` |
