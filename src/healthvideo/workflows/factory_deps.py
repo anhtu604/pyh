@@ -20,6 +20,7 @@ from healthvideo.tts.command import CommandTTS
 from healthvideo.tts.normalize import NormalizedTTS
 from healthvideo.tts.silent import SilentTTS
 from healthvideo.workflows.create_project_v2 import create_project_v2
+from healthvideo.workflows.gate_review import check_revision_posts
 from healthvideo.workflows.produce import produce_project
 from healthvideo.workflows.runner import RunDeps
 from healthvideo.workflows.topic import select_topic
@@ -152,6 +153,19 @@ def reject_note(project_dir: Path) -> str | None:
     return str(reason) if reason else None
 
 
+def posts_ready(project_dir: Path) -> bool:
+    """Return True when the active revision has a valid ``posts/posts.yaml``."""
+    try:
+        layout = resolve_project_layout(project_dir)
+        errors = check_revision_posts(
+            layout.artifact_root,
+            require_medical_approval=True,
+        )
+    except Exception:  # noqa: BLE001
+        return False
+    return not errors
+
+
 def _extract_porcelain_path(raw_line: str) -> str | None:
     if not raw_line.strip():
         return None
@@ -209,4 +223,5 @@ def default_run_deps(
         changed_code_paths=lambda repo_root: changed_code_paths(
             repo_root, runner=git_runner
         ),
+        posts_ready=posts_ready,
     )

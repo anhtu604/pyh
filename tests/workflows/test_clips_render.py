@@ -13,7 +13,7 @@ from healthvideo.workflows.gate_review import approve_gate
 from healthvideo.workflows.long_form import clip_render_input
 from healthvideo.workflows.produce import produce_project
 from healthvideo.workflows.review_html import render_video_packet
-from tests.helpers import create_long_form_project_fixture
+from tests.helpers import create_long_form_project_fixture, write_posts_fixture
 
 REVIEWED_AT = datetime(2026, 9, 30, 9, 0, tzinfo=UTC)
 REVIEWER = "BS Nguyễn Văn An"
@@ -75,6 +75,7 @@ def _runner(calls: list[list[str]]):
 def _produced(tmp_path: Path) -> tuple[Path, list[list[str]]]:
     project_dir = create_long_form_project_fixture(tmp_path)
     approve_gate(project_dir, GateKind.MEDICAL, reviewer=REVIEWER, now=REVIEWED_AT)
+    write_posts_fixture(project_dir / "revisions" / "001")
     calls: list[list[str]] = []
     produce_project(project_dir, SilentTTS(), _runner(calls))
     return project_dir, calls
@@ -174,6 +175,7 @@ def test_mascot_warning_in_both_review_packets_and_produce_qa(tmp_path: Path) ->
     assert "Mascot share exceeds 35%" in render_medical_packet(revision)
     before = (revision / "storyboard/storyboard.yaml").read_bytes()
     approve_gate(project, GateKind.MEDICAL, reviewer=REVIEWER, now=REVIEWED_AT)
+    write_posts_fixture(revision)
     produce_project(project, SilentTTS(), _runner([]))
     assert (revision / "storyboard/storyboard.yaml").read_bytes() == before
     assert "Mascot share exceeds 35%" in render_video_packet(revision)

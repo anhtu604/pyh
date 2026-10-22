@@ -3,6 +3,7 @@
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Literal
 
 from healthvideo.agents import (
@@ -25,12 +26,13 @@ StepKind = Literal[
     "create",
     "research",
     "draft",
+    "posts",
     "produce",
     "revise_medical",
     "revise_production",
 ]
 AGENT_STEPS: frozenset[str] = frozenset(
-    {"research", "draft", "revise_medical", "revise_production"}
+    {"research", "draft", "posts", "revise_medical", "revise_production"}
 )
 
 _STEP_BY_STATE: dict[WorkflowState, StepKind] = {
@@ -51,8 +53,6 @@ def next_step(state: WorkflowState | None) -> StepKind | None:
         return "create"
     return _STEP_BY_STATE.get(state)
 
-
-from pathlib import Path
 
 PROMPTS_DIR: Path = Path(__file__).resolve().parent.parent / "prompts"
 
@@ -92,8 +92,6 @@ def render_prompt(step: str, **fields: str) -> str:
     return f"{text.rstrip()}\n\n## Quy tắc cứng\n{rules_block}\n"
 
 
-
-
 @dataclass(frozen=True)
 class RunDeps:
     """Injected dependencies for running the topic queue."""
@@ -104,6 +102,7 @@ class RunDeps:
     python_steps: Mapping[str, Callable[[Path], None]]
     changed_code_paths: Callable[[Path], list[Path]]
     invoke: Callable[..., AgentResult] = invoke_with_failover
+    posts_ready: Callable[[Path], bool] = lambda _: True
 
 
 @dataclass
@@ -208,6 +207,9 @@ def run_queue(
                         report.at_gate.append(entry.slug)
                 break
 
+            if step == "produce" and not deps.posts_ready(project_dir):
+                step = "posts"
+
             if steps_taken >= max_steps_per_topic:
                 _mark_blocked(root, entry.slug, "vượt số bước", report)
                 break
@@ -272,17 +274,30 @@ def run_queue(
 
             steps_taken += 1
             new_state = deps.read_state(project_dir)
-            if step in AGENT_STEPS and new_state == state:
-                _mark_blocked(
-                    root,
-                    entry.slug,
-                    "agent không làm đổi trạng thái",
-                    report,
-                    log_path=result_log_path,
-                )
-                break
-            if new_state != state and entry.slug not in report.advanced:
-                report.advanced.append(entry.slug)
+            if step == "posts":
+                if not deps.posts_ready(project_dir):
+                    _mark_blocked(
+                        root,
+                        entry.slug,
+                        "agent không làm đổi trạng thái: posts.yaml chưa hợp lệ",
+                        report,
+                        log_path=result_log_path,
+                    )
+                    break
+                if entry.slug not in report.advanced:
+                    report.advanced.append(entry.slug)
+            else:
+                if step in AGENT_STEPS and new_state == state:
+                    _mark_blocked(
+                        root,
+                        entry.slug,
+                        "agent không làm đổi trạng thái",
+                        report,
+                        log_path=result_log_path,
+                    )
+                    break
+                if new_state != state and entry.slug not in report.advanced:
+                    report.advanced.append(entry.slug)
 
             if once:
                 return report

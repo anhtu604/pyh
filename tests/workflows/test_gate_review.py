@@ -321,7 +321,11 @@ def test_approve_video_hashes_render_manifest_and_mp4(tmp_path: Path) -> None:
 
     record = approve_gate(project_dir, GateKind.VIDEO, reviewer=REVIEWER, now=NOW)
 
-    assert set(record.artifact_hashes) == {"renders/render-manifest.json", "renders/video.mp4"}
+    assert set(record.artifact_hashes) == {
+        "renders/render-manifest.json",
+        "renders/video.mp4",
+        "posts/posts.yaml",
+    }
     manifest = ProjectManifestV2.model_validate(read_yaml(project_dir / "project.yaml"))
     assert manifest.state is WorkflowState.VIDEO_APPROVED
 

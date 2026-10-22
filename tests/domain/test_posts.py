@@ -143,6 +143,41 @@ def test_chapter_timestamps_not_treated_as_numbers() -> None:
     assert "3 lưu ý" in desc_errors[0]
 
 
+def test_chapter_titles_with_digits_are_not_numbers() -> None:
+    posts = _valid_post_set(
+        youtube_description=(
+            "0:00 Chương 1\n"
+            "Nguồn: Tạp chí Tim mạch Việt Nam; Hướng dẫn ESC về tăng huyết áp"
+        )
+    )
+    errors = validate_posts(
+        posts,
+        approved_claim_ids=APPROVED_CLAIMS,
+        chapter_titles=["Chương 1"],
+        source_labels=SOURCES,
+    )
+    assert errors == []
+
+    posts_with_unclaimed_stat = _valid_post_set(
+        youtube_description=(
+            "0:00 Chương 1\n"
+            "Chương 1 có 30% người bệnh\n"
+            "Nguồn: Tạp chí Tim mạch Việt Nam; Hướng dẫn ESC về tăng huyết áp"
+        )
+    )
+    stat_errors = validate_posts(
+        posts_with_unclaimed_stat,
+        approved_claim_ids=APPROVED_CLAIMS,
+        chapter_titles=["Chương 1"],
+        source_labels=SOURCES,
+    )
+    assert len(stat_errors) == 1
+    assert stat_errors[0].startswith(
+        "youtube_description: câu có số liệu thiếu [claim:…]:"
+    )
+    assert "Chương 1 có 30% người bệnh" in stat_errors[0]
+
+
 def test_description_has_chapters_and_sources() -> None:
     posts = _valid_post_set(
         youtube_description=(

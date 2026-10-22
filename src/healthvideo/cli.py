@@ -57,6 +57,7 @@ from healthvideo.workflows.evidence import (
 from healthvideo.workflows.factory_deps import default_run_deps
 from healthvideo.workflows.gate_review import (
     approve_gate,
+    check_revision_posts,
     reject_gate,
     reopen_gate,
     resume_gate,
@@ -125,6 +126,21 @@ def script_lint(project_dir: Annotated[Path, typer.Argument(help="Thư mục d�
     for issue in issues:
         typer.echo(f"{issue.severity}: {issue.code} [{issue.line_id}] {issue.message}")
     if any(issue.severity == "error" for issue in issues):
+        raise typer.Exit(code=1)
+
+
+@step_app.command("posts-check")
+def posts_check(project_dir: Annotated[Path, typer.Argument(help="Thư mục dự án")]) -> None:
+    """Kiểm tra bài đăng đa kênh trong revisions/<rev>/posts/posts.yaml."""
+    try:
+        layout = resolve_project_layout(project_dir)
+        errors = check_revision_posts(layout.artifact_root)
+    except (OSError, TypeError, ValueError) as error:
+        _echo_error(error)
+        raise typer.Exit(code=1) from error
+    for err in errors:
+        typer.echo(err)
+    if errors:
         raise typer.Exit(code=1)
 
 

@@ -58,7 +58,7 @@ def test_v2_package_promotes_payload_then_transitions_to_packaged(
     output = package_project(project_dir)
 
     assert output == _revision_root(project_dir) / "publish"
-    assert {"video.mp4", "caption.txt", "sources.md", "manifest.json"} <= {
+    assert {"video.mp4", "caption.txt", "sources.md", "posts.yaml", "posts.md", "manifest.json"} <= {
         path.name for path in output.iterdir()
     }
     assert read_yaml(project_dir / "project.yaml")["state"] == (
@@ -116,7 +116,13 @@ def test_v2_package_rejects_render_input_changed_during_copy(
 
 
 ZERO_AI_PAYLOAD = {
-    "video.mp4", "caption.txt", "sources.md", "manifest.json", "render-input.json",
+    "video.mp4",
+    "caption.txt",
+    "sources.md",
+    "posts.yaml",
+    "posts.md",
+    "manifest.json",
+    "render-input.json",
 }
 
 

@@ -16,6 +16,7 @@ from pathlib import Path
 from healthvideo.domain.asset_manifest import AssetManifest
 from healthvideo.domain.evidence import EvidenceClaim, SourceRecord
 from healthvideo.domain.outline import Outline
+from healthvideo.domain.posts import PostSet
 from healthvideo.domain.script import Script
 from healthvideo.domain.storyboard import Storyboard
 from healthvideo.domain.visual_budget import calculate_visual_budget
@@ -306,6 +307,32 @@ def _uses_placeholder_mascot(renders: Path, clips: dict[str, str]) -> bool:
     return False
 
 
+def _render_posts_section(revision_root: Path) -> str:
+    posts_path = revision_root / "posts" / "posts.yaml"
+    if not posts_path.is_file():
+        return ""
+    posts = PostSet.model_validate(read_yaml(posts_path))
+    titles_html = "".join(f"<li>{escape(title)}</li>" for title in posts.youtube_titles)
+    tags_html = ", ".join(escape(tag) for tag in posts.youtube_tags)
+    clips_html = "".join(
+        f"<li><strong>{escape(clip_id)}</strong>: "
+        f"TikTok: {escape(captions.tiktok)} | "
+        f"Shorts: {escape(captions.shorts)} | "
+        f"Reels: {escape(captions.reels)}</li>"
+        for clip_id, captions in sorted(posts.clip_captions.items())
+    )
+    return (
+        "<section><h2>Bài đăng</h2>"
+        f"<h3>Tiêu đề YouTube</h3><ul>{titles_html}</ul>"
+        f"<h3>Mô tả YouTube</h3><pre>{escape(posts.youtube_description)}</pre>"
+        f"<p><strong>Tag:</strong> {tags_html}</p>"
+        + (f"<h3>Caption clip</h3><ul>{clips_html}</ul>" if clips_html else "")
+        + f"<h3>Facebook</h3><p>{escape(posts.facebook_post)}</p>"
+        f"<h3>Community</h3><p>{escape(posts.youtube_community)}</p>"
+        "</section>"
+    )
+
+
 def render_video_packet(revision_root: Path) -> str:
     manifest_path = revision_root / "renders" / "render-manifest.json"
     manifest = read_yaml(manifest_path) if manifest_path.is_file() else {}
@@ -361,6 +388,7 @@ def render_video_packet(revision_root: Path) -> str:
             '</figure>' for path in sheets
         ) + '</section>' if sheets else ""
     )
+    posts_section = _render_posts_section(revision_root)
     return (
         '<!doctype html><html lang="vi"><head><meta charset="utf-8">'
         "<title>Gói duyệt video</title></head><body>"
@@ -369,6 +397,7 @@ def render_video_packet(revision_root: Path) -> str:
         + sheet_section
         + mascot_warning
         + budget_section
+        + posts_section
         + f"<pre>{escape(str(manifest))}</pre>"
         f"<pre>{escape(str(qa))}</pre>"
         "</body></html>"

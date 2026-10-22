@@ -13,6 +13,7 @@ from healthvideo.domain.asset_manifest import (
     load_asset_manifest,
     validate_asset_manifest,
 )
+from healthvideo.domain.evidence import EvidenceClaim, SourceRecord
 from healthvideo.domain.gate_review import (
     GateApprovalRecord,
     GateKind,
@@ -26,6 +27,8 @@ from healthvideo.domain.invalidation import (
     evaluate_invalidation,
 )
 from healthvideo.domain.license_ledger import LicenseLedger, validate_license_ledger
+from healthvideo.domain.outline import Outline
+from healthvideo.domain.posts import PostSet, validate_posts
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.script import Script
 from healthvideo.domain.state_graph import (
@@ -53,6 +56,12 @@ from healthvideo.workflows.visual_assets import recover_chart_asset_binding
 
 MEDICAL_APPROVAL_ARTIFACT = "reviews/medical-approval.yaml"
 VIDEO_APPROVAL_ARTIFACT = "reviews/video-approval.yaml"
+POSTS_ARTIFACT = "posts/posts.yaml"
+
+
+class _MissingPostsError(FileNotFoundError, ValueError):
+    """Raised when posts/posts.yaml is missing at the video gate."""
+
 
 _GATE_OPEN_STATE: dict[GateKind, WorkflowState] = {
     GateKind.MEDICAL: WorkflowState.AWAITING_MEDICAL_REVIEW,
@@ -70,6 +79,77 @@ _GATE_SIDE_STATE: dict[GateKind, WorkflowState] = {
     GateKind.MEDICAL: WorkflowState.NEEDS_MEDICAL_REVISION,
     GateKind.VIDEO: WorkflowState.NEEDS_PRODUCTION_REVISION,
 }
+
+
+def check_revision_posts(
+    revision_root: Path,
+    *,
+    require_medical_approval: bool = False,
+) -> list[str]:
+    """Validate ``posts/posts.yaml`` against the revision's approved ledger and outline."""
+    posts_path = revision_root / POSTS_ARTIFACT
+    if not posts_path.is_file():
+        return [f"{POSTS_ARTIFACT}: thiếu file bài đăng"]
+
+    try:
+        raw_posts = read_yaml(posts_path)
+        posts = PostSet.model_validate(raw_posts)
+    except Exception as exc:  # noqa: BLE001
+        return [f"{POSTS_ARTIFACT}: {exc}"]
+
+    ledger_path = revision_root / "evidence" / "ledger.yaml"
+    if not ledger_path.is_file():
+        return ["evidence/ledger.yaml: thiếu sổ cái bằng chứng"]
+    ledger_data = read_yaml(ledger_path)
+
+    approval_path = revision_root / MEDICAL_APPROVAL_ARTIFACT
+    if approval_path.is_file():
+        try:
+            approval = GateApprovalRecord.model_validate(read_yaml(approval_path))
+        except Exception as exc:  # noqa: BLE001
+            return [f"{MEDICAL_APPROVAL_ARTIFACT}: {exc}"]
+        if approval.kind is not GateKind.MEDICAL:
+            return [f"{MEDICAL_APPROVAL_ARTIFACT}: không phải bản duyệt y khoa"]
+        if approval.artifact_hashes.get("evidence/ledger.yaml") != canonical_json_hash(
+            ledger_data
+        ):
+            return [
+                "evidence/ledger.yaml: không khớp với bản đã duyệt ở cổng y khoa"
+            ]
+    elif require_medical_approval:
+        return [f"{MEDICAL_APPROVAL_ARTIFACT}: thiếu bản duyệt cổng y khoa"]
+
+    claims = [
+        EvidenceClaim.model_validate(item) for item in ledger_data.get("claims", [])
+    ]
+    sources = [
+        SourceRecord.model_validate(item) for item in ledger_data.get("records", [])
+    ]
+    approved_claim_ids = {claim.id for claim in claims}
+    source_labels = [source.title for source in sources]
+
+    outline_path = revision_root / OUTLINE_ARTIFACT
+    chapter_titles: list[str] = []
+    if outline_path.is_file():
+        outline_data = read_yaml(outline_path)
+        if (
+            approval_path.is_file()
+            and OUTLINE_ARTIFACT in approval.artifact_hashes
+            and approval.artifact_hashes.get(OUTLINE_ARTIFACT)
+            != canonical_json_hash(outline_data)
+        ):
+            return [
+                f"{OUTLINE_ARTIFACT}: không khớp với bản đã duyệt ở cổng y khoa"
+            ]
+        outline = Outline.model_validate(outline_data)
+        chapter_titles = [chapter.title for chapter in outline.chapters]
+
+    return validate_posts(
+        posts,
+        approved_claim_ids=approved_claim_ids,
+        chapter_titles=chapter_titles,
+        source_labels=source_labels,
+    )
 
 
 def medical_reviewed_paths(revision_root: Path) -> dict[str, Path]:
@@ -104,7 +184,7 @@ def medical_reviewed_paths(revision_root: Path) -> dict[str, Path]:
 
 
 def video_reviewed_paths(revision_root: Path) -> dict[str, Path]:
-    """Name the artifacts the video gate covers: render manifest, MP4 and every clip."""
+    """Name the artifacts the video gate covers: render manifest, MP4, every clip, and posts."""
     renders = revision_root / "renders"
     paths = {
         "renders/render-manifest.json": renders / "render-manifest.json",
@@ -115,6 +195,9 @@ def video_reviewed_paths(revision_root: Path) -> dict[str, Path]:
         clips = json.loads(manifest_path.read_text(encoding="utf-8")).get("clips", {})
         for relative in clips.values():
             paths[f"renders/{relative}"] = renders / relative
+    posts_path = revision_root / POSTS_ARTIFACT
+    if posts_path.is_file():
+        paths[POSTS_ARTIFACT] = posts_path
     return paths
 
 
@@ -245,6 +328,22 @@ def approve_gate(
         pronunciation_module.load_pronunciation_lexicon(
             pronunciation_module.PRONUNCIATION_PROFILE_PATH
         )
+
+    if kind is GateKind.VIDEO:
+        posts_path = revision_root / POSTS_ARTIFACT
+        if not posts_path.is_file():
+            raise _MissingPostsError(
+                f"video gate needs artifacts: {POSTS_ARTIFACT}"
+            )
+        post_errors = check_revision_posts(
+            revision_root,
+            require_medical_approval=False,
+        )
+        if post_errors:
+            raise ValueError(
+                "video gate refuses invalid posts/posts.yaml: "
+                + "; ".join(post_errors)
+            )
 
     paths = _REVIEWED_PATHS[kind](revision_root)
     missing = [name for name, path in paths.items() if not path.is_file()]

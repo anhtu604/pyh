@@ -10,7 +10,7 @@ from healthvideo.tts.silent import SilentTTS
 from healthvideo.workflows.gate_review import approve_gate
 from healthvideo.workflows.package import package_project
 from healthvideo.workflows.produce import produce_project
-from tests.helpers import create_long_form_project_fixture
+from tests.helpers import create_long_form_project_fixture, write_posts_fixture
 
 REVIEWED_AT = datetime(2026, 9, 30, 9, 0, tzinfo=UTC)
 REVIEWER = "BS Nguyễn Văn An"
@@ -26,6 +26,7 @@ def _runner(argv: list[str]) -> int:
 def _video_approved(tmp_path: Path) -> Path:
     project_dir = create_long_form_project_fixture(tmp_path)
     approve_gate(project_dir, GateKind.MEDICAL, reviewer=REVIEWER, now=REVIEWED_AT)
+    write_posts_fixture(project_dir / "revisions" / "001")
     produce_project(project_dir, SilentTTS(), _runner)
     approve_gate(project_dir, GateKind.VIDEO, reviewer=REVIEWER, now=REVIEWED_AT)
     return project_dir

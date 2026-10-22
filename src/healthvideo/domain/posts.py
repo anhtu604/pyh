@@ -100,12 +100,20 @@ def validate_posts(
             f"youtube_titles: cần 2–3 tiêu đề, hiện có {len(posts.youtube_titles)}"
         )
 
+    ordered_chapters = sorted(
+        (title for title in chapter_titles if title),
+        key=len,
+        reverse=True,
+    )
+
     for field_path, text in iter_texts(posts):
         is_description = field_path == "youtube_description"
         for sentence in _split_sentences(
             text, strip_chapter_timestamps=is_description
         ):
             without_claims = CLAIM_REF.sub("", sentence)
+            for chapter_title in ordered_chapters:
+                without_claims = without_claims.replace(chapter_title, "")
             if _DIGIT_RE.search(without_claims) and not CLAIM_REF.search(sentence):
                 errors.append(
                     f"{field_path}: câu có số liệu thiếu [claim:…]: {_shorten(sentence)}"

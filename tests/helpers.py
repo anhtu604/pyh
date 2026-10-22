@@ -24,6 +24,54 @@ def _write_json(path: Path, data: dict[str, Any]) -> None:
     path.write_text(f"{serialized}\n", encoding="utf-8")
 
 
+def write_posts_fixture(revision_root: Path) -> Path:
+    """Write a valid synthetic ``posts/posts.yaml`` matching the revision's ledger and outline."""
+    ledger = read_yaml(revision_root / "evidence" / "ledger.yaml")
+    records = ledger.get("records", [])
+    claims = ledger.get("claims", [])
+    first_claim_id = claims[0]["id"] if claims else "C01"
+    source_lines = [record["title"] for record in records if "title" in record]
+
+    outline_path = revision_root / "script" / "outline.yaml"
+    chapter_lines: list[str] = []
+    if outline_path.is_file():
+        outline = read_yaml(outline_path)
+        for index, chapter in enumerate(outline.get("chapters", [])):
+            chapter_lines.append(f"{index}:00 {chapter['title']}")
+
+    description_parts = ["Tóm tắt cơ chế ăn mặn và tăng huyết áp."]
+    description_parts.extend(chapter_lines)
+    description_parts.append(
+        f"Giảm ăn mặn giúp hạ huyết áp ở nhiều người [claim:{first_claim_id}]."
+    )
+    if source_lines:
+        description_parts.append("Nguồn tham khảo: " + "; ".join(source_lines))
+
+    posts_path = revision_root / "posts" / "posts.yaml"
+    write_yaml_atomic(
+        posts_path,
+        {
+            "schema_version": "1.0",
+            "youtube_titles": [
+                "Ăn mặn và tăng huyết áp: cơ chế cần biết",
+                "Vì sao giảm muối giúp kiểm soát huyết áp?",
+            ],
+            "youtube_description": "\n".join(description_parts),
+            "youtube_tags": ["tăng huyết áp", "ăn mặn"],
+            "clip_captions": {
+                "CL01": {
+                    "tiktok": "Ăn mặn làm tăng giữ nước trong lòng mạch.",
+                    "shorts": "Cơ chế muối ảnh hưởng huyết áp.",
+                    "reels": "Giảm muối giúp bảo vệ thành mạch.",
+                }
+            },
+            "facebook_post": "Nhiều người ăn mặn mà không biết huyết áp đang tăng âm thầm.",
+            "youtube_community": "Bạn thường kiểm tra lượng muối ăn vào bằng cách nào?",
+        },
+    )
+    return posts_path
+
+
 def synthesize_fixture_audio(project_dir: Path) -> Path:
     """Create a local silent WAV for a copied fixture without tracking generated audio."""
     script = read_yaml(project_dir / "script" / "script.yaml")
@@ -285,6 +333,7 @@ def create_long_form_project_fixture(root: Path) -> Path:
             ],
         },
     )
+    write_posts_fixture(revision_root)
     return project_dir
 
 
@@ -300,6 +349,11 @@ _V2_MAIN_SEQUENCE = [
 
 def _advance_v2_state(project_dir: Path, state: WorkflowState) -> None:
     manifest = ProjectManifestV2.model_validate(read_yaml(project_dir / "project.yaml"))
+    revision_root = project_dir / "revisions" / manifest.active_revision
+    if not (revision_root / "posts" / "posts.yaml").is_file() and (
+        revision_root / "evidence" / "ledger.yaml"
+    ).is_file():
+        write_posts_fixture(revision_root)
     context = TransitionContext(
         active_revision="001",
         current_input_hash="0" * 64,
@@ -327,6 +381,10 @@ def _advance_v2_state(project_dir: Path, state: WorkflowState) -> None:
 def advance_v2_project_to_video_review(project_dir: Path, *, now: datetime) -> None:
     """Push a draft_ready v2 fixture through to awaiting_video_review with synthetic renders."""
     revision_root = project_dir / "revisions" / "001"
+    if not (revision_root / "posts" / "posts.yaml").is_file() and (
+        revision_root / "evidence" / "ledger.yaml"
+    ).is_file():
+        write_posts_fixture(revision_root)
     manifest = ProjectManifestV2.model_validate(read_yaml(project_dir / "project.yaml"))
     context = TransitionContext(
         active_revision="001",
@@ -448,6 +506,7 @@ def complete_explain_first_fixture(revision: Path) -> None:
         "storyboard_role": "brand"})
     write_yaml_atomic(assets_path, assets)
     write_explainer_fixture(revision, "C01")
+    write_posts_fixture(revision)
 
 
 def align_fixture_script(revision: Path, board: dict[str, Any]) -> None:

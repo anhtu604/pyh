@@ -17,6 +17,7 @@ from pydantic import BaseModel
 
 from healthvideo.domain.evidence import EvidenceClaim, SourceRecord
 from healthvideo.domain.gate_review import GateApprovalRecord, GateKind
+from healthvideo.domain.posts import PostSet
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.script import Script
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
@@ -39,6 +40,7 @@ from healthvideo.storage.project_layout import ProjectLayout, resolve_project_la
 from healthvideo.workflows.citations import resolve_citations
 from healthvideo.workflows.gate_review import (
     MEDICAL_APPROVAL_ARTIFACT,
+    POSTS_ARTIFACT,
     VIDEO_APPROVAL_ARTIFACT,
     hash_reviewed_artifacts,
     medical_reviewed_paths,
@@ -50,6 +52,8 @@ LedgerEntry = TypeVar("LedgerEntry", bound=BaseModel)
 PUBLISH_DIRECTORY = "publish"
 CAPTION_NAME = "caption.txt"
 SOURCES_NAME = "sources.md"
+POSTS_YAML_NAME = "posts.yaml"
+POSTS_MD_NAME = "posts.md"
 PACKAGE_MANIFEST_NAME = "manifest.json"
 PROJECT_MANIFEST_NAME = "project.yaml"
 DISCLAIMER = (
@@ -89,6 +93,17 @@ def _package_v2(layout: ProjectLayout) -> Path:
         layout.artifact_root, medical_approval
     )
 
+    posts_path = layout.artifact_root / POSTS_ARTIFACT
+    if not posts_path.is_file():
+        raise FileNotFoundError(f"Approved posts are missing: {posts_path}")
+    posts_data = read_yaml(posts_path)
+    _require_approved_hash(
+        video_approval,
+        POSTS_ARTIFACT,
+        canonical_json_hash(posts_data),
+    )
+    posts = PostSet.model_validate(posts_data)
+
     renders_dir = layout.artifact_root / "renders"
     video = renders_dir / OUTPUT_NAME
     render_input_path = renders_dir / RENDER_INPUT_NAME
@@ -122,11 +137,13 @@ def _package_v2(layout: ProjectLayout) -> Path:
     try:
         shutil.copy2(video, staging_dir / OUTPUT_NAME)
         shutil.copy2(render_input_path, staging_dir / RENDER_INPUT_NAME)
+        shutil.copy2(posts_path, staging_dir / POSTS_YAML_NAME)
         _validate_staged_v2_video_artifacts(
             staging_dir, video_approval, approved_render_input_hash
         )
         write_text_atomic(staging_dir / CAPTION_NAME, _caption(script, citations))
         write_text_atomic(staging_dir / SOURCES_NAME, _sources(script, citations))
+        write_text_atomic(staging_dir / POSTS_MD_NAME, _posts_markdown(posts))
         for clip_id, relative in render_manifest.get("clips", {}).items():
             # Gate 2 freshness above binds these final MP4 bytes.
             clip_dir = staging_dir / "clips"
@@ -228,6 +245,12 @@ def _validate_staged_v2_video_artifacts(
         approval,
         "renders/video.mp4",
         sha256_file(staging_dir / OUTPUT_NAME),
+        staged=True,
+    )
+    _require_approved_hash(
+        approval,
+        POSTS_ARTIFACT,
+        canonical_json_hash(read_yaml(staging_dir / POSTS_YAML_NAME)),
         staged=True,
     )
     staged_render_input = json.loads(
@@ -394,6 +417,52 @@ def _source_fields(record: SourceRecord) -> list[str]:
     return [f"- {label}: {value}" for label, value in fields if value is not None]
 
 
+def _posts_markdown(posts: PostSet) -> str:
+    """Write a readable Markdown summary of the approved multi-channel posts."""
+    lines: list[str] = [
+        "# Bài đăng đa kênh",
+        "",
+        "## Tiêu đề YouTube",
+        "",
+        *(f"- {title}" for title in posts.youtube_titles),
+        "",
+        "## Mô tả YouTube",
+        "",
+        posts.youtube_description,
+        "",
+        "## Tag YouTube",
+        "",
+        ", ".join(posts.youtube_tags) if posts.youtube_tags else "(không có)",
+        "",
+    ]
+    if posts.clip_captions:
+        lines.extend(["## Caption clip", ""])
+        for clip_id, captions in sorted(posts.clip_captions.items()):
+            lines.extend(
+                [
+                    f"### {clip_id}",
+                    "",
+                    f"- **TikTok:** {captions.tiktok}",
+                    f"- **Shorts:** {captions.shorts}",
+                    f"- **Reels:** {captions.reels}",
+                    "",
+                ]
+            )
+    lines.extend(
+        [
+            "## Facebook",
+            "",
+            posts.facebook_post,
+            "",
+            "## YouTube Community",
+            "",
+            posts.youtube_community,
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def _manifest_json(
     *,
     project: ProjectManifestV2,
@@ -422,6 +491,8 @@ def _manifest_json(
             },
             CAPTION_NAME: sha256_file(staging_dir / CAPTION_NAME),
             OUTPUT_NAME: sha256_file(staging_dir / OUTPUT_NAME),
+            POSTS_MD_NAME: sha256_file(staging_dir / POSTS_MD_NAME),
+            POSTS_YAML_NAME: sha256_file(staging_dir / POSTS_YAML_NAME),
             SOURCES_NAME: sha256_file(staging_dir / SOURCES_NAME),
             RENDER_INPUT_NAME: sha256_file(staging_dir / RENDER_INPUT_NAME),
         },

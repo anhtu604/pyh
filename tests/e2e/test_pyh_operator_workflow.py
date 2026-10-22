@@ -29,6 +29,7 @@ from healthvideo.workflows.review_html import render_medical_packet, render_vide
 from healthvideo.workflows.topic import select_topic
 from tests.helpers import (
     write_explainer_fixture,
+    write_posts_fixture,
 )
 
 FROZEN = datetime(2026, 9, 10, 7, 30, tzinfo=UTC)
@@ -113,6 +114,7 @@ def test_pyh_golden_stops_at_both_human_gates(tmp_path: Path) -> None:
     approve_gate(
         project, GateKind.MEDICAL, reviewer="BS Test", note="fixture", now=FROZEN
     )
+    write_posts_fixture(revision)
     produce_project(project, SilentTTS(), _fake_render)
     assert "Gói duyệt video" in render_video_packet(revision)
     assert get_next_action(project).kind is OperatorActionKind.AWAIT_VIDEO_APPROVAL
