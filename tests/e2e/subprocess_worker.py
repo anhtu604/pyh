@@ -25,7 +25,11 @@ def _render(arguments: list[str]) -> int:
 
 def _cli(arguments: list[str]) -> None:
     from healthvideo import cli
+    from healthvideo.workflows import produce
 
+    produce.generate_music = _forbidden
+    if arguments and arguments[0] == "produce":
+        arguments = [*arguments, "--no-music"]
     cli.resolve_pnpm_argv = lambda args: [sys.executable, str(WORKER), "render", *args]
     cli.main()
     cli.app(args=arguments, prog_name="healthvideo")

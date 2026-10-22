@@ -11,10 +11,22 @@ from healthvideo.assets import (
     referenced_evidence_assets,
     referenced_storyboard_assets,
 )
+from healthvideo.audio.music import (
+    DEFAULT_MOOD,
+    DUCK_DB,
+    MIX_VERSION,
+    MODEL_ID,
+    MUSIC_DB,
+    MUSIC_SECONDS,
+    MUSIC_SEED,
+    generate_music,
+    mix_with_ducking,
+)
 from healthvideo.domain.asset_manifest import load_asset_manifest
 from healthvideo.domain.brand import load_brand_profile
 from healthvideo.domain.gate_review import GateApprovalRecord, GateKind
 from healthvideo.domain.hook_outro import validate_hook_outro
+from healthvideo.domain.license_ledger import LicenseEntry, LicenseLedger
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.script import Script
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
@@ -79,16 +91,31 @@ V2_VIDEO_QA_ARTIFACT = "reviews/video-qa.json"
 CHAPTER_CACHE_DIRECTORY = "renders-cache"
 
 
+def _music_mood(root: Path) -> str:
+    path = root / "script/outline.yaml"
+    if path.is_file():
+        outline = read_yaml(path)
+        moods = [outline.get("mood"), *(
+            chapter.get("mood") for chapter in outline.get("chapters", [])
+        )]
+        specified = list(dict.fromkeys(mood.strip() for mood in moods
+                                      if isinstance(mood, str) and mood.strip()))
+        if specified:
+            return "; ".join(specified)
+    return DEFAULT_MOOD
+
+
 def produce_project(
     project_dir: Path,
     tts: TTSProvider,
     runner: Runner,
     *,
     dry_run: bool = False,
+    music: bool = True,
 ) -> Path:
     """Render an approved project, reusing an output with a matching input hash."""
     layout = resolve_project_layout(project_dir)
-    return _produce_v2(layout, tts, runner, dry_run=dry_run)
+    return _produce_v2(layout, tts, runner, dry_run=dry_run, music=music)
 
 
 def _produce_v2(
@@ -97,6 +124,7 @@ def _produce_v2(
     runner: Runner,
     *,
     dry_run: bool,
+    music: bool,
 ) -> Path:
     project = layout.manifest
     assert isinstance(project, ProjectManifestV2)
@@ -145,6 +173,11 @@ def _produce_v2(
         load_brand_profile(BRAND_PROFILE_PATH)
         if storyboard.format_profile == "youtube_long" else None
     )
+    music_settings = {
+        "model_id": MODEL_ID, "mood": _music_mood(layout.artifact_root),
+        "seconds": MUSIC_SECONDS, "seed": MUSIC_SEED,
+        "music_db": MUSIC_DB, "duck_db": DUCK_DB, "mix_version": MIX_VERSION,
+    } if music else None
     input_hash = canonical_json_hash(
         {
             "production": _input_hash(
@@ -159,6 +192,7 @@ def _produce_v2(
             "pronunciation_sha256": pronunciation_sha256,
             "provider_identity": provider_identity_data,
             "renderer_identity": renderer_identity_data,
+            "music": music_settings,
             **(
                 {"clip_plan": read_yaml(layout.artifact_root / CLIP_PLAN_ARTIFACT),
                  "clip_brand": clip_brand.model_dump(mode="json")}
@@ -178,6 +212,7 @@ def _produce_v2(
         pronunciation_sha256=pronunciation_sha256,
         provider_identity=provider_identity_data,
         renderer_identity=renderer_identity_data,
+        music_settings=music_settings,
         require_timing=False,
     )
     if cache_valid:
@@ -274,6 +309,29 @@ def _produce_v2(
             ).duration_ms
         storyboard, timing_record = retime_storyboard(approved_storyboard, line_ms)
         timing_record["audio_alignment"] = concat_scene_audio(storyboard, line_wavs, staged_audio)
+        music_record = None
+        generated_audio_hashes: dict[str, str] = {}
+        if music_settings is not None:
+            # Keep the precisely timed voice for ASR and speech-only QA.
+            voice_audio = staged_audio.with_name("narration-voice.wav")
+            shutil.copyfile(staged_audio, voice_audio)
+            music_audio = staged_audio.with_name("music.wav")
+            generate_music(
+                music_settings["mood"], seconds=MUSIC_SECONDS, seed=MUSIC_SEED, out=music_audio,
+            )
+            mix_with_ducking(voice_audio, music_audio, out=staged_audio,
+                             music_db=MUSIC_DB, duck_db=DUCK_DB)
+            music_record = {**music_settings, "sha256": sha256_file(music_audio)}
+            rights = LicenseLedger(entries=(LicenseEntry(
+                path="audio/music.wav", source="generated:ace-step-1.5", creator="ACE-Step 1.5",
+                license="MIT", rights_basis="Generated instrumental using MIT-licensed ACE-Step 1.5 weights",
+                revision=project.active_revision, sha256=music_record["sha256"],
+            ),))
+            write_yaml_atomic(staging_dir / "license-ledger.yaml", rights.model_dump(mode="json"))
+            generated_audio_hashes = {
+                path.relative_to(staging_dir).as_posix(): sha256_file(path)
+                for path in (voice_audio, music_audio, staged_audio, staging_dir / "license-ledger.yaml")
+            }
         _write_json_atomic(staging_dir / "scene-timing.json", timing_record)
         visual_budget_report = validate_visual_budget(storyboard)
         visual_budget_qa = visual_budget_report.model_dump(mode="json")
@@ -338,6 +396,8 @@ def _produce_v2(
                 "pronunciation_sha256": pronunciation_sha256,
                 "provider_identity": provider_identity_data,
                 "renderer_identity": renderer_identity_data,
+                "music": music_record,
+                "generated_audio_sha256": generated_audio_hashes,
                 **({"chapter_parts": list(chapter_parts)} if chapter_parts else {}),
                 **({"clips": clip_outputs} if clip_outputs else {}),
                 **({"clip_artifact_sha256": {
@@ -372,6 +432,7 @@ def _produce_v2(
             pronunciation_sha256=pronunciation_sha256,
             provider_identity=provider_identity_data,
             renderer_identity=renderer_identity_data,
+            music_settings=music_settings,
             require_timing=require_timing,
             final_frame=final_frame,
             expected_visual_budget=visual_budget_qa,
@@ -422,6 +483,7 @@ def _v2_run_is_valid(
     pronunciation_sha256: str,
     provider_identity: Mapping[str, str],
     renderer_identity: Mapping[str, str],
+    music_settings: Mapping[str, Any] | None = None,
     require_timing: bool = True,
     final_frame: int | None = None,
     expected_visual_budget: Mapping[str, Any] | None = None,
@@ -466,6 +528,27 @@ def _v2_run_is_valid(
     ):
         return False
     line_hashes = manifest.get("line_audio_sha256")
+    music_record = manifest.get("music")
+    if music_settings is None:
+        if music_record is not None:
+            return False
+    elif not isinstance(music_record, dict) or {
+        key: value for key, value in music_record.items() if key != "sha256"
+    } != dict(music_settings):
+        return False
+    generated_hashes = manifest.get("generated_audio_sha256", {})
+    if manifest.get("music") is not None:
+        if not isinstance(generated_hashes, dict) or not {
+            "audio/music.wav", "audio/narration-voice.wav", "audio/narration.wav", "license-ledger.yaml",
+        }.issubset(generated_hashes):
+            return False
+        if not all(
+            (run_dir / relative).is_file() and sha256_file(run_dir / relative) == digest
+            for relative, digest in generated_hashes.items()
+        ):
+            return False
+        if manifest["music"].get("sha256") != generated_hashes["audio/music.wav"]:
+            return False
     if not isinstance(line_hashes, dict) or not line_hashes or not all(
         (run_dir / relative).is_file() and sha256_file(run_dir / relative) == expected
         for relative, expected in line_hashes.items()
@@ -500,6 +583,7 @@ def _validate_v2_staged_run(
     pronunciation_sha256: str,
     provider_identity: Mapping[str, str],
     renderer_identity: Mapping[str, str],
+    music_settings: Mapping[str, Any] | None = None,
     require_timing: bool = True,
     final_frame: int | None = None,
     expected_visual_budget: Mapping[str, Any] | None = None,
@@ -509,6 +593,7 @@ def _validate_v2_staged_run(
         pronunciation_sha256=pronunciation_sha256,
         provider_identity=provider_identity,
         renderer_identity=renderer_identity,
+        music_settings=music_settings,
         require_timing=require_timing,
         final_frame=final_frame,
         expected_visual_budget=expected_visual_budget,

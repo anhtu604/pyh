@@ -294,6 +294,7 @@ def produce(
             "--dry-run", help="In lệnh render, không ghi artifact hoặc đổi state"
         ),
     ] = False,
+    no_music: Annotated[bool, typer.Option("--no-music", help="Disable background music")] = False,
 ) -> None:
     """Tạo video từ script/storyboard đã duyệt y khoa."""
     if tts == "silent":
@@ -312,7 +313,7 @@ def produce(
         raise typer.Exit(code=1)
 
     try:
-        output = produce_project(project_dir, provider, run_render_argv, dry_run=dry_run)
+        output = produce_project(project_dir, provider, run_render_argv, dry_run=dry_run, music=not no_music)
     except (FileNotFoundError, RuntimeError, ValueError) as error:
         typer.echo(str(error))
         raise typer.Exit(code=1) from error

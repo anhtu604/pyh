@@ -19,6 +19,7 @@ class OutlineChapter(BaseModel):
     goal: str = Field(min_length=1)
     claim_ids: tuple[str, ...] = ()
     target_seconds: int = Field(gt=0)
+    mood: str | None = Field(default=None, min_length=1)
 
 
 class Outline(BaseModel):
@@ -26,6 +27,7 @@ class Outline(BaseModel):
 
     schema_version: Literal["1.0"] = "1.0"
     title: str = Field(min_length=1)
+    mood: str | None = Field(default=None, min_length=1)
     chapters: tuple[OutlineChapter, ...] = Field(min_length=4, max_length=8)
 
     @model_validator(mode="after")

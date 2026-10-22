@@ -21,6 +21,19 @@
           "title": "Id",
           "type": "string"
         },
+        "mood": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mood"
+        },
         "target_seconds": {
           "exclusiveMinimum": 0,
           "title": "Target Seconds",
@@ -53,6 +66,19 @@
       "minItems": 4,
       "title": "Chapters",
       "type": "array"
+    },
+    "mood": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Mood"
     },
     "schema_version": {
       "const": "1.0",

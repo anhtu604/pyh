@@ -10,6 +10,7 @@ from pathlib import Path
 
 import yaml
 
+from healthvideo.audio.music import music_python, music_weights
 from healthvideo.process import prepare_subprocess_argv, resolve_pnpm_argv
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -56,8 +57,28 @@ def check_environment(run: RunCommand) -> list[CheckResult]:
         _font_check(),
         _cuda_check(run),
         *_pyh_checks(),
+        *_music_checks(),
     ]
     return results
+
+
+def _music_checks() -> list[CheckResult]:
+    python = music_python(REPO_ROOT)
+    weights = music_weights(REPO_ROOT)
+    required = (
+        "acestep-v15-turbo/model.safetensors",
+        "acestep-5Hz-lm-1.7B/model.safetensors",
+        "Qwen3-Embedding-0.6B/model.safetensors",
+        "vae/diffusion_pytorch_model.safetensors",
+        "config.json",
+    )
+    missing = [name for name in required if not (weights / name).is_file()]
+    return [
+        CheckResult("music_venv", python.is_file(), str(python), "recommended",
+                    "Install ACE-Step in cache/music-venv or set HEALTHVIDEO_MUSIC_PYTHON."),
+        CheckResult("music_weights", not missing, str(weights) if not missing else f"missing: {', '.join(missing)}",
+                    "recommended", "Install ACE-Step 1.5 turbo, LM 1.7B, text encoder and VAE in cache/models/ace-step-1.5."),
+    ]
 
 
 def _pyh_checks() -> list[CheckResult]:
@@ -123,7 +144,7 @@ def run_command(argv: list[str]) -> tuple[int, str]:
 
 def has_mandatory_failure(results: list[CheckResult]) -> bool:
     """Return whether a missing mandatory prerequisite blocks the toolchain."""
-    return any(not result.ok and result.required != "optional" for result in results)
+    return any(not result.ok and result.required not in {"optional", "recommended"} for result in results)
 
 
 def _version_check(

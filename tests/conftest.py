@@ -26,6 +26,29 @@ def synthetic_workflow_brand(brand_profile_path, monkeypatch):
     monkeypatch.setattr(produce, 'BRAND_PROFILE_PATH', brand_profile_path)
 
 
+@pytest.fixture(autouse=True)
+def synthetic_workflow_music(monkeypatch):
+    """Production tests exercise orchestration without importing models or using a GPU."""
+    import shutil
+    import wave
+
+    from healthvideo.workflows import produce
+
+    def generate(mood, *, seconds, out, seed, **kwargs):
+        out.parent.mkdir(parents=True, exist_ok=True)
+        with wave.open(str(out), "wb") as audio:
+            audio.setparams((2, 2, 48000, 0, "NONE", "not compressed"))
+            audio.writeframes(b"\x01\x00" * 2 * 480)
+        return out
+
+    def mix(narration, music, *, out, **kwargs):
+        shutil.copyfile(narration, out)
+        return out
+
+    monkeypatch.setattr(produce, "generate_music", generate)
+    monkeypatch.setattr(produce, "mix_with_ducking", mix)
+
+
 @pytest.fixture
 def artwork_brand(tmp_path, monkeypatch):
     from healthvideo.domain import brand
