@@ -3,11 +3,11 @@
   "components": {
     "joint_fluid_urate_to_inflammation": {
       "file": "UrateFluid.tsx",
-      "layers": ["sample-window", "dissolved-urate", "crystal-seeds", "needle-crystals"]
+      "layers": ["sample-window", "dissolved-urate", "crystal-seeds", "needle-crystals", "joint-capsule", "bone-ends", "trabecular-bone", "cartilage", "synovial-fluid", "synovial-membrane", "sample-connector", "cartilage-deposits", "synovial-deposits"]
     },
     "immune_cell_alarm": {
       "file": "InflammationSignal.tsx",
-      "layers": ["sample-window", "resident-cell", "crystal-cue", "alarm-signal", "recruited-cells"]
+      "layers": ["sample-window", "resident-cell", "crystal-cue", "alarm-signal", "recruited-cells", "synovial-membrane", "subsynovial-tissue", "tissue-fibres", "capillary", "inflammasome", "multilobed-nuclei"]
     },
     "artery_cross_section": {
       "file": "ArterySection.tsx",

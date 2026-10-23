@@ -222,6 +222,8 @@ def run_queue(
                 if state == WorkflowState.BLOCKED:
                     if entry.slug not in report.blocked:
                         report.blocked.append(entry.slug)
+                elif state in (WorkflowState.PACKAGED, WorkflowState.PUBLISHED_MANUAL):
+                    pass  # finished topics are not waiting at any gate
                 else:
                     if entry.slug not in report.at_gate:
                         report.at_gate.append(entry.slug)

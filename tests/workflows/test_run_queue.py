@@ -593,3 +593,18 @@ def test_revise_step_gets_reject_note(tmp_path: Path) -> None:
     assert note_text in captured_prompts[0]
     assert report.advanced == [entry.slug]
     assert report.at_gate == [entry.slug]
+
+
+def test_packaged_topic_is_not_reported_at_gate(tmp_path: Path) -> None:
+    add_to_queue(tmp_path, _entry("da-dong-goi"))
+    (tmp_path / "projects" / "da-dong-goi").mkdir(parents=True)
+    deps = RunDeps(
+        create_project=lambda root, item: root / "projects" / item.slug,
+        read_state=lambda _project_dir: WorkflowState.PACKAGED,
+        reject_note=lambda _project_dir: None,
+        python_steps={},
+        changed_code_paths=lambda _root: [],
+        invoke=lambda *a, **kw: None,
+    )
+    report = run_queue(tmp_path, deps)
+    assert report.at_gate == [] and report.blocked == []

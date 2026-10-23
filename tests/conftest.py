@@ -18,6 +18,19 @@ def brand_profile_path(tmp_path_factory):
 
 
 @pytest.fixture(autouse=True)
+def ignore_real_dotenv(monkeypatch):
+    """CLI tests run from the repo root; never pull the operator's real .env (keys, local paths)."""
+    from pathlib import Path
+
+    from healthvideo import cli, env
+
+    real = (Path(__file__).resolve().parents[1] / ".env").resolve()
+    monkeypatch.setattr(
+        cli, "load_dotenv", lambda path: {} if Path(path).resolve() == real else env.load_dotenv(path)
+    )
+
+
+@pytest.fixture(autouse=True)
 def synthetic_workflow_brand(brand_profile_path, monkeypatch):
     from healthvideo.workflows import long_form, produce, visual_assets
 
