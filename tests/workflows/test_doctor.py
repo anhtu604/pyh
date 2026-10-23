@@ -6,6 +6,25 @@ from healthvideo.workflows import doctor
 from healthvideo.workflows.doctor import check_environment
 
 
+def test_doctor_uses_tts_python_env(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(doctor, "REPO_ROOT", tmp_path)
+    external_python = tmp_path / "external-tts" / "python.exe"
+    external_python.parent.mkdir()
+    external_python.touch()
+    monkeypatch.setenv("HEALTHVIDEO_TTS_PYTHON", str(external_python))
+    checks = {item.name: item for item in check_environment(lambda _: (0, "24.14.0"))}
+    assert checks["tts_venv"].ok
+    external_python.unlink()
+    default_python = tmp_path / "cache/tts-venv/Scripts/python.exe"
+    default_python.parent.mkdir(parents=True)
+    default_python.touch()
+    checks = {item.name: item for item in check_environment(lambda _: (0, "24.14.0"))}
+    assert not checks["tts_venv"].ok
+    monkeypatch.delenv("HEALTHVIDEO_TTS_PYTHON")
+    checks = {item.name: item for item in check_environment(lambda _: (0, "24.14.0"))}
+    assert checks["tts_venv"].ok
+
+
 def test_pyh_entry_points_pass_from_repo_root(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(doctor, "REPO_ROOT", tmp_path, raising=False)
     skill = tmp_path / ".agents/skills/pyh/SKILL.md"

@@ -22,6 +22,10 @@ describe('anatomy registry', () => {
     expect(schemaOptions).toEqual(libraryKeys);
   });
 
+  it('rejects unknown subjects with the mechanism diagnostic', () => {
+    expect(() => AnatomySchema.shape.subject.parse('unknown')).toThrow(/Unsupported anatomy subject/);
+  });
+
   it('points to existing component files with declared layers present in source', () => {
     for (const [subject, entry] of Object.entries(library.components)) {
       const fileUrl = new URL(`./${entry.file}`, import.meta.url);

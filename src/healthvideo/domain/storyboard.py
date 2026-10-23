@@ -1,4 +1,4 @@
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -7,6 +7,7 @@ from healthvideo.domain.brand import MascotPose
 from healthvideo.domain.explainer import Nonblank
 from healthvideo.domain.format_profile import FormatProfile
 from healthvideo.domain.visual_budget import VisualBudgetOverride, VisualBudgetProfile
+from healthvideo.visuals.anatomy_library import load_library
 
 MECHANISM_VISUALS = ("anatomy_animation", "process_animation", "comparison", "timelapse")
 
@@ -219,7 +220,7 @@ class Storyboard(BaseModel):
         return self
 
 
-SUPPORTED_ANATOMY_SUBJECTS = ("artery_cross_section", "heart")
+SUPPORTED_ANATOMY_SUBJECTS = tuple(load_library(Path(__file__).resolve().parents[3]))
 
 
 def validate_anatomy_subjects(storyboard: Storyboard) -> None:

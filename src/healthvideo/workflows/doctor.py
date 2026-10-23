@@ -102,7 +102,10 @@ def _music_checks() -> list[CheckResult]:
 def _pyh_checks() -> list[CheckResult]:
     skill = REPO_ROOT / ".agents" / "skills" / "pyh" / "SKILL.md"
     command = REPO_ROOT / ".claude" / "commands" / "pyh.md"
-    tts = REPO_ROOT / "cache" / "tts-venv" / "Scripts" / "python.exe"
+    tts = Path(os.environ.get(
+        "HEALTHVIDEO_TTS_PYTHON",
+        str(REPO_ROOT / "cache" / "tts-venv" / "Scripts" / "python.exe"),
+    ))
     skill_ok = False
     try:
         lines = skill.read_text(encoding="utf-8-sig").splitlines()

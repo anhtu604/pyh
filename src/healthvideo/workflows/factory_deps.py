@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import subprocess
@@ -28,7 +29,7 @@ from healthvideo.workflows.topic import select_topic
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_TTS_PYTHON = REPO_ROOT / "cache" / "tts-venv" / "Scripts" / "python.exe"
 VIENEU_WRAPPER = REPO_ROOT / "tools" / "tts" / "vieneu_synth.py"
-_EXCLUDED_TOP_DIRS = frozenset({"projects", "topics", "cache"})
+_EXCLUDED_TOP_DIRS = frozenset({"projects", "topics", "cache", ".claude"})
 
 
 def _build_vieneu_tts(*, python: Path, voice: str, precision: str) -> NormalizedTTS:
@@ -166,46 +167,55 @@ def posts_ready(project_dir: Path) -> bool:
     return not errors
 
 
-def _extract_porcelain_path(raw_line: str) -> str | None:
-    if not raw_line.strip():
-        return None
-    if len(raw_line) > 3 and raw_line[2] == " ":
-        path_part = raw_line[3:].strip()
-    else:
-        parts = raw_line.strip().split(maxsplit=1)
-        path_part = parts[-1] if parts else ""
-    if " -> " in path_part:
-        path_part = path_part.split(" -> ", 1)[1].strip()
-    if len(path_part) >= 2 and path_part[0] == path_part[-1] == '"':
-        path_part = path_part[1:-1]
-    return path_part or None
-
-
-def changed_code_paths(
+def code_snapshot(
     root: Path,
     *,
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
-) -> list[Path]:
-    """Return modified/untracked paths from ``git status --porcelain`` outside data dirs."""
+) -> dict[str, str]:
+    """Snapshot each dirty code path's SHA-1, including individual untracked files."""
     completed = runner(
-        ["git", "status", "--porcelain"],
+        ["git", "status", "--porcelain", "-z", "--untracked-files=all"],
         cwd=root,
         capture_output=True,
         text=True,
         encoding="utf-8",
         check=False,
     )
-    paths: list[Path] = []
-    for raw_line in (completed.stdout or "").splitlines():
-        extracted = _extract_porcelain_path(raw_line)
-        if not extracted:
+    if completed.returncode:
+        raise RuntimeError(f"Cannot snapshot git status: {completed.stderr}")
+    snapshot: dict[str, str] = {}
+    records = iter((completed.stdout or "").split("\0"))
+    for record in records:
+        if not record:
             continue
-        normalized = Path(extracted.replace("\\", "/").rstrip("/"))
+        normalized = Path(record[3:])
+        if "R" in record[:2] or "C" in record[:2]:
+            next(records, None)  # -z emits destination first, then the original path.
         if not normalized.parts or normalized.parts[0] in _EXCLUDED_TOP_DIRS:
             continue
-        if normalized not in paths:
-            paths.append(normalized)
-    return paths
+        path = root / normalized
+        try:
+            with path.open("rb") as stream:
+                digest = hashlib.file_digest(stream, "sha1").hexdigest()
+        except FileNotFoundError:
+            digest = "missing"
+        snapshot[normalized.as_posix()] = digest
+    return snapshot
+
+
+def changed_code_paths(
+    root: Path,
+    before: dict[str, str] | None = None,
+    *,
+    runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+) -> list[Path]:
+    """Return new or content-changed dirty paths relative to the step's snapshot."""
+    baseline = before if before is not None else {}
+    after = code_snapshot(root, runner=runner)
+    return [
+        Path(path) for path in dict.fromkeys([*after, *baseline])
+        if baseline.get(path) != after.get(path)
+    ]
 
 
 def default_run_deps(
@@ -224,4 +234,5 @@ def default_run_deps(
             repo_root, runner=git_runner
         ),
         posts_ready=posts_ready,
+        code_snapshot=lambda repo_root: code_snapshot(repo_root, runner=git_runner),
     )

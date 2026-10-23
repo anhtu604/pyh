@@ -1,5 +1,8 @@
 import json
+import runpy
 from pathlib import Path
+
+import pytest
 
 from healthvideo.domain.storyboard import SUPPORTED_ANATOMY_SUBJECTS
 from healthvideo.storage.files import sha256_file
@@ -130,7 +133,26 @@ def test_record_approval_roundtrip(tmp_path: Path) -> None:
 
 def test_supported_subjects_match_library() -> None:
     components = load_library(REPOSITORY_ROOT)
-    assert tuple(components.keys()) == tuple(SUPPORTED_ANATOMY_SUBJECTS)
+    assert isinstance(SUPPORTED_ANATOMY_SUBJECTS, tuple)
+    assert tuple(components) == SUPPORTED_ANATOMY_SUBJECTS
     for info in components.values():
         assert (REPOSITORY_ROOT / LIBRARY_PATH.parent / info["file"]).is_file()
         assert isinstance(info.get("layers"), list) and info["layers"]
+
+
+def test_supported_subjects_loaded_at_import(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "healthvideo.visuals.anatomy_library.load_library",
+        lambda repo: {"new_subject": {"file": "New.tsx"}},
+    )
+    module = runpy.run_path(str(REPOSITORY_ROOT / "src/healthvideo/domain/storyboard.py"))
+    assert module["SUPPORTED_ANATOMY_SUBJECTS"] == ("new_subject",)
+
+
+def test_supported_subjects_unreadable_library_fails(monkeypatch) -> None:
+    def unreadable(repo):
+        raise FileNotFoundError(str(repo / LIBRARY_PATH))
+
+    monkeypatch.setattr("healthvideo.visuals.anatomy_library.load_library", unreadable)
+    with pytest.raises((FileNotFoundError, RuntimeError), match="library.json"):
+        runpy.run_path(str(REPOSITORY_ROOT / "src/healthvideo/domain/storyboard.py"))

@@ -103,6 +103,7 @@ class RunDeps:
     changed_code_paths: Callable[[Path], list[Path]]
     invoke: Callable[..., AgentResult] = invoke_with_failover
     posts_ready: Callable[[Path], bool] = lambda _: True
+    code_snapshot: Callable[[Path], dict[str, str]] | None = None
 
 
 @dataclass
@@ -140,13 +141,23 @@ def _record_code_changes(
     slug: str,
     deps: RunDeps,
     report: RunReport,
+    before: dict[str, str] | None = None,
 ) -> None:
-    paths = deps.changed_code_paths(root)
+    if before is not None and deps.code_snapshot is not None:
+        after = deps.code_snapshot(root)
+        paths = [
+            Path(path) for path in dict.fromkeys([*after, *before])
+            if before.get(path) != after.get(path)
+        ]
+    else:
+        paths = deps.changed_code_paths(root)
     new_paths: list[Path] = []
     for raw_path in paths:
         path = Path(raw_path)
-        if path not in report.code_changes:
+        is_new = path not in report.code_changes
+        if is_new:
             report.code_changes.append(path)
+        if path not in new_paths and (before is not None or is_new):
             new_paths.append(path)
     if not new_paths:
         return
@@ -230,6 +241,7 @@ def run_queue(
                         deps.reject_note(project_dir) or ""
                     )
                 prompt = render_prompt(step, **prompt_fields)
+                before = deps.code_snapshot(root) if deps.code_snapshot is not None else None
                 try:
                     result = deps.invoke(
                         agents,
@@ -238,11 +250,12 @@ def run_queue(
                         log_dir=log_dir,
                     )
                 except AllAgentsExhausted:
+                    _record_code_changes(root, entry.slug, deps, report, before)
                     report.exhausted = True
                     return report
 
                 result_log_path = result.log_path
-                _record_code_changes(root, entry.slug, deps, report)
+                _record_code_changes(root, entry.slug, deps, report, before)
                 if not result.ok:
                     _mark_blocked(
                         root,

@@ -1,5 +1,6 @@
 import {z} from 'zod';
 import {FORMAT_SIZES} from './format';
+import anatomyLibrary from './anatomy/library.json';
 
 const unitCoordinate = z.number().min(0).max(1);
 
@@ -73,8 +74,12 @@ export const EvidenceHighlightSchema = z
     }
   });
 
+type LibrarySubject = keyof typeof anatomyLibrary.components;
+const anatomySubjects = Object.keys(anatomyLibrary.components) as [LibrarySubject, ...LibrarySubject[]];
+if (anatomySubjects.length === 0) throw new Error('Anatomy library must contain at least one subject');
+
 export const AnatomySchema = z.object({
-  subject: z.enum(['artery_cross_section', 'heart']),
+  subject: z.enum(anatomySubjects, {error: 'Unsupported anatomy subject'}),
   state: z.enum(['normal', 'diseased']),
   severity: z.number().min(0).max(1),
   motion: z.string(),
