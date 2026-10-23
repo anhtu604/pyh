@@ -5,7 +5,7 @@ import {
   CAPTION_TEXT_COLOR,
   captionContrastRatio,
   captionRows,
-  captionTextLength,
+  captionFontSize,
 } from './components/Captions';
 
 describe('captionRows', () => {
@@ -56,19 +56,24 @@ describe('captionRows', () => {
   });
 });
 
-describe('captionTextLength', () => {
-  it('leaves a short Vietnamese row at its natural width', () => {
-    expect(captionTextLength('Đọc đúng bối cảnh', 48, 900)).toBeUndefined();
+describe('captionFontSize', () => {
+  it('leaves a short Vietnamese row at its natural size', () => {
+    expect(captionFontSize('Đọc đúng bối cảnh', 48, 900)).toBe(48);
   });
 
-  it('fits a long row to the available width', () => {
-    expect(
-      captionTextLength('điệntâmđồgắngsứcthậtdàivàcầnđượcđọcđúngngữcảnh', 48, 900),
-    ).toBe(900);
+  it('never stretches a medium row that fits (P7 pilot regression)', () => {
+    expect(captionFontSize('thành triglyceride. Còn axit béo', 44, 1160)).toBe(44);
+  });
+
+  it('shrinks a long row to the available width', () => {
+    const size = captionFontSize('điệntâmđồgắngsứcthậtdàivàcầnđượcđọcđúngngữcảnh', 48, 900);
+    expect(size).toBeLessThan(48);
+    expect(Array.from('điệntâmđồgắngsứcthậtdàivàcầnđượcđọcđúngngữcảnh').length * size * 0.6)
+      .toBeLessThanOrEqual(900);
   });
 
   it('counts Unicode code points rather than UTF-16 code units', () => {
-    expect(captionTextLength('A😀 B', 100, 400)).toBeUndefined();
+    expect(captionFontSize('A😀 B', 100, 400)).toBe(100);
   });
 });
 

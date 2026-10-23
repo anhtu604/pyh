@@ -19,12 +19,14 @@ type CaptionWord = {
   text: string;
 };
 
-export const captionTextLength = (
-  text: string,
-  fontSize: number,
-  maxWidth: number,
-): number | undefined =>
-  Array.from(text).length * fontSize > maxWidth ? maxWidth : undefined;
+// ponytail: average glyph ≈ 0.6em for Be Vietnam Pro; measure with canvas if rows still overflow.
+const GLYPH_EM = 0.6;
+
+// Shrinks an over-long row; never stretches glyphs to fill the band.
+export const captionFontSize = (text: string, fontSize: number, maxWidth: number): number => {
+  const estimate = Array.from(text).length * fontSize * GLYPH_EM;
+  return estimate > maxWidth ? Math.floor(fontSize * maxWidth / estimate) : fontSize;
+};
 
 const relativeLuminance = (color: string): number => {
   const match = /^#([0-9a-f]{6})$/i.exec(color);
@@ -95,18 +97,17 @@ export const Captions: React.FC<CaptionsProps> = ({text, durationInFrames}) => {
       }}
     >
       {layout.rows.map((row, rowIndex) => {
-        const textLength = captionTextLength(row.map((word) => word.text).join(' '), c.fontSize, c.maxTextWidth);
+        const fontSize = captionFontSize(row.map((word) => word.text).join(' '), c.fontSize, c.maxTextWidth);
         return (
           <text
             key={row[0]?.index}
             fill={CAPTION_TEXT_COLOR}
             fontFamily={FONT_FAMILY}
-            fontSize={String(c.fontSize)}
+            fontSize={String(fontSize)}
             fontWeight="600"
             textAnchor="middle"
             x={String(c.width / 2)}
             y={c.rowY[rowIndex === 0 ? 0 : 1]}
-            {...(textLength === undefined ? {} : {lengthAdjust: 'spacingAndGlyphs', textLength})}
           >
             {row.map((word, index) => (
               <tspan fill={word.index === activeWord ? CAPTION_ACTIVE_COLOR : undefined} key={word.index}>
