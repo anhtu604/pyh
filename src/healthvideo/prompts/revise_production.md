@@ -10,9 +10,9 @@
 
 ## Việc cần làm
 1. Đọc kỹ ghi chú từ chối `{reject_note}` và file `*-rejected.yaml` mới nhất trong thư mục `reviews/video/` của revision hiện hành để xác định các lỗi hình ảnh, hoạt họa, nhịp dựng, phụ đề hoặc âm thanh cần chỉnh.
-2. Sửa `storyboard.yaml`, `asset-manifest.yaml`, `clip-plan.yaml` hoặc component SVG trong `video/src/anatomy/` (kèm test) theo đúng ghi chú từ chối. Giữ nguyên quy tắc ảnh minh họa AI không mang nhãn giải phẫu hay số liệu, và mỗi asset đều có `license` hợp lệ.
-3. Nếu phải sửa lời thoại, claim, explainer hoặc clip-plan đã duyệt, dừng và yêu cầu bác sĩ mở lại cổng y khoa bằng `review reopen`; không sửa trước khi mở cổng. Sau khi mở, dùng quy trình `revise_medical` để nộp lại.
-4. Nếu chỉ sửa hình ảnh/storyboard/component mà không đụng nội dung y khoa đã duyệt, chạy `healthvideo step resume {project} --gate video --to production_in_progress` để đưa project quay lại giai đoạn sản xuất.
+2. Ở bước này chỉ được sửa component SVG trong `video/src/anatomy/` (kèm test). `storyboard.yaml`, `asset-manifest.yaml`, `clip-plan.yaml`, script, ledger và explainer đều nằm trong hash cổng y khoa: **không sửa** ở bước này.
+3. Nếu góp ý cần sửa bất kỳ tệp nào thuộc cổng y khoa, dừng, không sửa gì, ghi rõ trong báo cáo: "Cần bác sĩ chạy `review reopen --gate medical --changed <tệp> --resume-to draft_ready`" và liệt kê tệp + thay đổi dự kiến. Sau khi bác sĩ mở cổng, bước `draft` sẽ sửa và nộp lại.
+4. Nếu chỉ sửa component SVG, chạy `healthvideo step resume {project} --gate video --to production_in_progress`; lệnh này tự từ chối nếu tệp đã duyệt y khoa bị đổi.
 
 ## Lệnh được dùng
 - `healthvideo step resume {project} --gate video --to production_in_progress`
@@ -21,11 +21,11 @@
 - `healthvideo status {project}`
 
 ## Đầu ra
-- `storyboard.yaml`, `asset-manifest.yaml`, `clip-plan.yaml` hoặc component SVG kèm test trong `video/src/anatomy/` đã sửa theo góp ý
-- Trạng thái project được chuyển về sản xuất (hoặc mở lại cổng y khoa nếu sửa nội dung y khoa)
+- Component SVG kèm test trong `video/src/anatomy/` đã sửa, hoặc báo cáo nêu tệp cần bác sĩ mở lại cổng y khoa
+- Trạng thái project được chuyển về sản xuất (chỉ khi không đụng tệp thuộc cổng y khoa)
 
 ## Xong khi
-- Trạng thái đích của project đạt `production_in_progress` (hoặc `awaiting_medical_review` nếu có thay đổi lời thoại/claim/explainer), kiểm tra bằng lệnh `healthvideo status {project}`.
+- Trạng thái đạt `production_in_progress`, hoặc báo cáo đã nêu rõ tệp cần bác sĩ mở lại cổng y khoa; kiểm tra bằng `healthvideo status {project}`.
 
 ## Đường dẫn revision hiện hành
 Đọc `active_revision` từ `{project}/project.yaml`; `<rev>` là giá trị đó.

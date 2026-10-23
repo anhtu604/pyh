@@ -444,6 +444,18 @@ def resume_gate(
 ) -> WorkflowState:
     """Exit the gate's side state back to `target` after the reviewer's note is addressed."""
     project = _load_project(project_dir)
+    if target is WorkflowState.PRODUCTION_IN_PROGRESS:
+        revision_root = _revision_root(project_dir, project)
+        approval_path = revision_root / MEDICAL_APPROVAL_ARTIFACT
+        approved = (
+            GateApprovalRecord.model_validate(read_yaml(approval_path)).artifact_hashes
+            if approval_path.is_file() else None
+        )
+        if approved != hash_reviewed_artifacts(medical_reviewed_paths(revision_root)):
+            raise ValueError(
+                "Tệp đã duyệt y khoa (storyboard, assets, script, ledger…) đã đổi; "
+                "bác sĩ phải chạy `review reopen --gate medical` rồi nộp lại cổng y khoa"
+            )
     context = TransitionContext(
         active_revision=project.active_revision,
         current_input_hash=canonical_json_hash(

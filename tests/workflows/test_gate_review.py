@@ -381,6 +381,25 @@ def test_reject_video_without_semantic_issue_resumes_to_production_in_progress(
     assert manifest.state is WorkflowState.PRODUCTION_IN_PROGRESS
 
 
+def test_resume_to_production_refuses_after_medical_reviewed_storyboard_edit(
+    tmp_path: Path,
+) -> None:
+    project_dir = create_v2_project_fixture(tmp_path)
+    advance_v2_project_to_video_review(project_dir, now=NOW)
+    reject_gate(project_dir, GateKind.VIDEO, reviewer=REVIEWER, reason="Bố cục.",
+                resume_state=WorkflowState.PRODUCTION_IN_PROGRESS, now=NOW)
+    board_path = project_dir / "revisions/001/storyboard/storyboard.yaml"
+    board = read_yaml(board_path)
+    board["scenes"][0]["narration"] += " Sửa sau duyệt."
+    write_yaml_atomic(board_path, board)
+
+    with pytest.raises(ValueError, match="review reopen --gate medical"):
+        resume_gate(project_dir, GateKind.VIDEO,
+                    target=WorkflowState.PRODUCTION_IN_PROGRESS, now=NOW)
+    manifest = ProjectManifestV2.model_validate(read_yaml(project_dir / "project.yaml"))
+    assert manifest.state is WorkflowState.NEEDS_PRODUCTION_REVISION
+
+
 def _approved_project(tmp_path: Path, *, video: bool = False) -> Path:
     project = create_v2_project_fixture(
         tmp_path, state=WorkflowState.DRAFT_READY if video else WorkflowState.AWAITING_MEDICAL_REVIEW
