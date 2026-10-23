@@ -8,6 +8,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Annotated, Any
 
+import click
 import typer
 
 from healthvideo import __version__
@@ -43,6 +44,7 @@ from healthvideo.tts.base import TTSProvider
 from healthvideo.tts.command import CommandTTS
 from healthvideo.tts.normalize import NormalizedTTS
 from healthvideo.tts.silent import SilentTTS
+from healthvideo.workflows import factory
 from healthvideo.workflows.doctor import (
     check_environment,
     has_mandatory_failure,
@@ -393,6 +395,7 @@ def review_reject(
         if typed.strip() != REJECT_CONFIRMATION:
             typer.echo(f"Đã hủy: cần gõ {REJECT_CONFIRMATION} để xác nhận.")
             raise typer.Exit(code=1)
+    _require_approval_pin()
     try:
         resume_state = WorkflowState(resume_to)
         reject_gate(
@@ -499,6 +502,116 @@ def review_resume(
 Root = Annotated[Path, typer.Option("--root", help="Thư mục gốc xưởng")]
 
 
+def _nonempty_prompt(label: str) -> str:
+    while True:
+        value = typer.prompt(label).strip()
+        if value:
+            return value
+        typer.echo("Vui lòng nhập nội dung.")
+
+
+@app.command()
+def duyet(root: Root = Path('.')) -> None:
+    """Đọc gói duyệt, chọn A/R/B và nhập PIN trực tiếp trong TTY."""
+    from html import escape
+
+    from healthvideo.storage.files import write_text_atomic, write_yaml_atomic
+
+    try:
+        pending = [(p, m) for p, m in factory.projects(root) if m.state in factory.GATES]
+        if pending:
+            _require_tty()
+            config = pin_path().parent / 'operator.yaml'
+            reviewer = str(read_yaml(config).get('reviewer', '')).strip() if config.exists() else ''
+            if not reviewer:
+                reviewer = _nonempty_prompt('Tên bác sĩ duyệt (lưu cho lần sau)')
+                write_yaml_atomic(config, {'reviewer': reviewer})
+            for project_dir, project in pending:
+                gate = GateKind(factory.GATES[project.state])
+                revision = project_dir / 'revisions' / project.active_revision
+                packet = root / 'cache/review' / f'{project_dir.name}-{gate.value}.html'
+                html = _RENDER_PACKET[gate](revision)
+                base = (revision / 'reviews').resolve().as_uri() + '/'
+                html = html.replace('<head>', f'<head><base href="{escape(base, quote=True)}">', 1)
+                write_text_atomic(packet, html)
+                factory.open_packet(packet)
+                typer.echo(f'Chủ đề: {factory.project_title(project_dir, project)}')
+                typer.echo(f'Cổng: {gate.value} — revision {project.active_revision}')
+                if gate is GateKind.MEDICAL:
+                    ledger = read_yaml(revision / 'evidence/ledger.yaml')
+                    typer.echo(f"Claim: {len(ledger.get('claims', []))}; nguồn: {len(ledger.get('records', []))}")
+                else:
+                    render_input = revision / 'renders/render-input.json'
+                    timeline = read_yaml(render_input if render_input.exists() else revision / 'storyboard/storyboard.yaml')
+                    frames = max((s['start_frame'] + s['duration_frames'] for s in timeline.get('scenes', [])), default=0)
+                    frames += (timeline.get('youtube_cta') or {}).get('duration_frames', 0)
+                    manifest = revision / 'renders/render-manifest.json'
+                    clips = read_yaml(manifest).get('clips', {}) if manifest.exists() else {}
+                    typer.echo(f"Thời lượng: {frames / timeline.get('fps', 30):.1f}s; clip: {len(clips)}")
+                    qa = revision / 'reviews/video-qa.json'
+                    report = read_yaml(qa) if qa.exists() else {}
+                    warnings = [*report.get('warnings', []), *report.get('errors', [])]
+                    warnings.extend(key for key, ok in report.get('checks', {}).items() if ok is False)
+                    typer.echo(f'QA: {warnings or report.get("status", "chưa có báo cáo")}')
+                typer.echo(f'Gói duyệt: {packet}')
+                action = typer.prompt('[A] Duyệt  [R] Từ chối  [B] Bỏ qua', type=click.Choice(['A', 'R', 'B'], case_sensitive=False)).upper()
+                if action == 'B':
+                    continue
+                if action == 'A':
+                    note = typer.prompt('Ghi chú (Enter để bỏ qua)', default='', show_default=False)
+                    _require_approval_pin()
+                    approve_gate(project_dir, gate, reviewer=reviewer, note=note,
+                                 now=datetime.now().astimezone())
+                    typer.echo(f'Đã duyệt {gate.value}.')
+                else:
+                    reason = _nonempty_prompt('Lý do từ chối')
+                    if gate is GateKind.MEDICAL:
+                        typer.echo('1. Sửa kịch bản/storyboard\n2. Tìm thêm bằng chứng')
+                        targets = [WorkflowState.DRAFT_READY, WorkflowState.RESEARCH_IN_PROGRESS]
+                    else:
+                        typer.echo('1. Chỉ dựng/render lại\n2. Sai nội dung, quay lại kịch bản')
+                        targets = [WorkflowState.PRODUCTION_IN_PROGRESS, WorkflowState.DRAFT_READY]
+                    choice = typer.prompt('Nơi làm lại', default=1, type=click.IntRange(1, 2))
+                    _require_approval_pin()
+                    reject_gate(project_dir, gate, reviewer=reviewer, reason=reason,
+                                resume_state=targets[choice - 1], now=datetime.now().astimezone(),
+                                reason_code='semantic_issue' if gate is GateKind.VIDEO and choice == 2 else None)
+                    typer.echo(f'Đã từ chối {gate.value}.')
+        else:
+            typer.echo('Không có project đang chờ bác sĩ.')
+        if factory.running_pid(root) is None and typer.confirm('Chạy tiếp xưởng ngay?', default=True):
+            typer.echo(f'Xưởng đang chạy (PID {factory.start_background(root)}).')
+    except (OSError, TypeError, ValueError, RuntimeError) as error:
+        _echo_error(error)
+        raise typer.Exit(code=1) from error
+
+
+@app.command()
+def xuong(
+    root: Root = Path('.'),
+    interval: Annotated[float, typer.Option('--interval', min=1)] = 120,
+    once: Annotated[bool, typer.Option('--once')] = False,
+    background: Annotated[bool, typer.Option('--background')] = False,
+    stop: Annotated[bool, typer.Option('--stop')] = False,
+) -> None:
+    """Chạy xưởng liên tục, tự đóng gói sau cổng video; Ctrl+C để dừng."""
+    if sum([once, background, stop]) > 1:
+        raise typer.BadParameter('Chỉ chọn một trong --once, --background, --stop')
+    try:
+        if stop:
+            pid = factory.stop_background(root)
+            typer.echo(f'Đã dừng xưởng PID {pid}.' if pid else 'Xưởng không chạy.')
+        elif background:
+            typer.echo(f'Xưởng đang chạy (PID {factory.start_background(root, interval)}).')
+        else:
+            factory.run_factory(root, default_run_deps(root), interval=interval, once=once, echo=typer.echo)
+    except factory.FactoryAlreadyRunning as error:
+        typer.echo(str(error))
+    except (OSError, TypeError, ValueError, RuntimeError) as error:
+        _echo_error(error)
+        raise typer.Exit(code=1) from error
+
+
 def _gate_for_project(project_dir: Path) -> str:
     manifest_path = project_dir / "project.yaml"
     if manifest_path.is_file():
@@ -589,6 +702,10 @@ def status(
         operator.status(project_dir, json_output=json_output)
     else:
         _queue_table(root, include_next=True)
+        pid = factory.running_pid(root)
+        typer.echo(f'Xưởng nền: PID {pid}' if pid else 'Xưởng nền: không chạy')
+        waiting = sum(m.state in factory.GATES for _, m in factory.projects(root))
+        typer.echo(f'Đang chờ bác sĩ: {waiting}')
 
 
 @step_app.command("revision-create")

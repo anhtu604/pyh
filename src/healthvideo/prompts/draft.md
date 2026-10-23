@@ -6,6 +6,8 @@
 - Chủ đề: `{title}`
 - Câu hỏi chính: `{question}`
 - Ghi chú bác sĩ: `{doctor_note}`
+- Yêu cầu sửa nội dung từ lần từ chối trước (nếu có): `{reject_note}`. Sửa đầy đủ các điểm này trước khi nộp lại cổng y khoa.
+- Nếu đang ở revision mới, cập nhật `revision` của asset manifest và license ledger sang revision hiện hành khi tái dùng đúng byte ảnh; giữ nguyên nguồn, giấy phép và SHA-256, không bịa quyền sử dụng.
 
 ## Việc cần làm
 1. Soạn `script.yaml`, `storyboard.yaml`, `asset-manifest.yaml`, `outline.yaml` (video dài 16:9 thời lượng 10–25 phút, chia 4–8 chương) và `clip-plan.yaml` (1–6 clip dọc 9:16, 60–180 giây mỗi clip, chỉ cắt từ cảnh có sẵn trong storyboard kèm đủ câu giới hạn caveat, không viết lời mới) theo mạch 7 nhịp explain-first (`docs/superpowers/specs/2026-10-18-explain-first-content-design.md` §1–§15): Mở → Giải phẫu → Sinh lý → Sinh lý bệnh → Giải phẫu bệnh → Bằng chứng → Hành động + giới hạn.

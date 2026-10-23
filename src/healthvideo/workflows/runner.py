@@ -247,7 +247,7 @@ def run_queue(
                     "question": entry.question,
                     "doctor_note": entry.doctor_note or "",
                 }
-                if step.startswith("revise_"):
+                if step.startswith("revise_") or step == 'draft':
                     prompt_fields["reject_note"] = (
                         deps.reject_note(project_dir) or ""
                     )

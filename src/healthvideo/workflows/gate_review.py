@@ -388,6 +388,7 @@ def reject_gate(
     reason: str,
     resume_state: WorkflowState,
     now: datetime,
+    reason_code: str | None = None,
 ) -> GateRejectionRecord:
     """Reject `kind`'s gate: record why, enter the matching side state."""
     project = _load_project(project_dir)
@@ -416,7 +417,7 @@ def reject_gate(
         project,
         _GATE_SIDE_STATE[kind],
         context,
-        reason_code=reason,
+        reason_code=reason if reason_code is None else reason_code,
         resume_state=resume_state,
         entered_at=now,
     )

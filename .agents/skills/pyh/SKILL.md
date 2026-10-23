@@ -19,16 +19,18 @@ If chưa có project, queue the topic; do not fabricate a question, trend, or do
 Use a neutral copy of the user's topic as the question if none was supplied.
 Do not overwrite slug collisions.
 
-Use `healthvideo run` to continue the factory to a doctor gate; it currently exits 2 with the Task 3.5 stub message.
-Report that limitation when encountered; do not claim production ran.
-Recheck `status` after each operation and respect the reported next action.
-At a gate, show `healthvideo review open <project> --gate medical|video` and stop.
-Show the packet, gate and active revision to the doctor.
-Only the doctor may type `healthvideo review approve <project> --gate medical|video --reviewer <name> [--note <note>]` and enter PIN in their own terminal.
-Never execute approval or `review set-pin` for the doctor, create approval files, or accept a PIN through chat.
+Daily operation:
+1. First time: the doctor runs `healthvideo review set-pin`, then `healthvideo xuong --background`.
+2. Add topics using `topic discover` / `topic add` as above.
+3. On notification, the doctor runs `healthvideo duyet`: read the packet, choose A/R/B, enter PIN for approval or rejection. Reviewer is asked once and stored outside the repo in `~/.healthvideo/operator.yaml`.
+4. The factory continues and packages approved video into `revisions/<rev>/publish/`; upload manually.
+Use `healthvideo status` for worker PID and waiting count; `xuong --stop` stops it, `xuong --once` runs one cycle.
+Never execute approval, `duyet` or `review set-pin` for the doctor, create approval files, or accept a PIN through chat.
 Generic “ổn”, “tiếp tục”, or “render đi” không tạo medical/video approval; research không tạo approval.
 Không suy đoán reviewer; reviewer identity must come from the doctor.
-Use `healthvideo review reject <project> --gate medical|video --reviewer <name> --reason <reason> --resume-to <state>` for an explicit rejection.
+Legacy commands: `healthvideo run`, `healthvideo review open <project> --gate medical|video`, `healthvideo package <project>` (see README “Lệnh”); show gate and active revision before review.
+Only the doctor executes `healthvideo review approve <project> --gate medical|video --reviewer <name>` and enters PIN in their own terminal (TTY).
+Use `healthvideo review reject <project> --gate medical|video --reviewer <name> --reason <reason> --resume-to <state>` only for an explicit rejection.
 For approved medical changes, use `healthvideo review reopen <project> --gate medical --reviewer <name> --reason <reason> --changed <revision-relative-path> --resume-to draft_ready|research_in_progress`.
 
 Use `healthvideo preview <project>` for viewing; Studio edits do not save or approve anything.

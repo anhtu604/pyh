@@ -129,9 +129,13 @@ def read_state(project_dir: Path) -> WorkflowState:
 
 
 def reject_note(project_dir: Path) -> str | None:
-    """Read the latest rejection reason for the active revision's current side state."""
+    """Read the rejection note, including semantic rework carried into a revision."""
     layout = resolve_project_layout(project_dir)
     state = layout.manifest.state
+    if state is WorkflowState.DRAFT_READY:
+        provenance = layout.artifact_root / 'workflow.yaml'
+        reason = read_yaml(provenance).get('reason', '') if provenance.exists() else ''
+        return reason if reason.startswith('semantic_issue: ') else None
     if state == WorkflowState.NEEDS_MEDICAL_REVISION:
         gate_dir = layout.artifact_root / "reviews" / "medical"
     elif state == WorkflowState.NEEDS_PRODUCTION_REVISION:

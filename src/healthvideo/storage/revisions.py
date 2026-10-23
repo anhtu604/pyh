@@ -16,16 +16,17 @@ REVISION_SOURCE_DIRS = (
     "topic",
     "author",
     "evidence",
+    "explainer",
     "script",
     "storyboard",
     "assets",
 )
 
 
-def create_revision(project_dir: Path, reason: str, *, now: datetime) -> str:
+def create_revision(project_dir: Path, reason: str, *, now: datetime, recover: bool = False) -> str:
     """Copy the active revision into a new immutable revision and switch to it.
 
-    Only ``topic/``, ``author/``, ``evidence/``, ``script/``, ``storyboard/``
+    Only ``topic/``, ``author/``, ``evidence/``, ``explainer/``, ``script/``, ``storyboard/``
     and ``assets/`` are carried forward; audit trails such as ``handoffs/``,
     ``reviews/``, ``audio/``, ``renders/`` and ``publish/`` belong to a
     specific past run and are never copied into a new revision.
@@ -52,6 +53,17 @@ def create_revision(project_dir: Path, reason: str, *, now: datetime) -> str:
     revisions_dir = project_dir / "revisions"
     parent_root = revisions_dir / parent_revision
     destination = revisions_dir / new_revision
+    if recover and destination.exists():
+        # A prior call may have promoted sources before its manifest switch failed.
+        # Recover only the exact, unchanged source copy for this pending operation.
+        prior = RevisionRecord.model_validate(read_yaml(destination / 'workflow.yaml'))
+        if prior.parent_revision != parent_revision or prior.revision != new_revision or prior.reason != reason:
+            raise ValueError('Existing revision does not match the pending revision operation')
+        _validate_staged_revision(parent_root, destination, prior)
+        updated_manifest = dict(manifest_data)
+        updated_manifest['active_revision'] = new_revision
+        write_yaml_atomic(manifest_path, updated_manifest)
+        return new_revision
     staging_dir = revisions_dir / f".{new_revision}-stage-{uuid4()}"
 
     record = RevisionRecord(

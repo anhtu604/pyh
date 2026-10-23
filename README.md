@@ -39,24 +39,12 @@ Kiểm tra môi trường bất kỳ lúc nào bằng:
 
 ## Vận hành hằng ngày
 
-Đặt mã PIN duyệt lần đầu (chỉ chạy trực tiếp trong terminal của bác sĩ; băm scrypt lưu tại `~/.healthvideo/approver-pin.json` ngoài repo):
+1. Lần đầu: bác sĩ chạy `healthvideo review set-pin`, rồi `healthvideo xuong --background` để khởi động xưởng nền.
+2. Thêm chủ đề: `healthvideo topic discover --query "<từ khóa>"`, rồi `healthvideo topic add --slug <slug> --title "<tiêu đề>" --question "<câu hỏi>" [--note "<ghi chú>"]`.
+3. Khi có thông báo: `healthvideo duyet`. Đọc gói HTML tự mở, chọn **A** duyệt / **R** từ chối / **B** bỏ qua, nhập PIN cho quyết định. Ghi chú duyệt là tùy chọn; từ chối cần lý do và chọn nơi làm lại (Enter nhận mặc định). Tên bác sĩ chỉ hỏi lần đầu, lưu ngoài repo tại `~/.healthvideo/operator.yaml`; PIN chỉ nhập qua `getpass` trong TTY.
+4. Xưởng tự chạy tiếp và đóng gói sau khi duyệt video. Lấy `revisions/<rev>/publish/` để đăng tay.
 
-```powershell
-.venv\Scripts\healthvideo.exe review set-pin
-```
-
-Luồng vận hành chuẩn:
-
-1. `healthvideo topic discover --query "<từ khóa>"` — tìm tín hiệu thật và lưu thẻ gợi ý vào `topics/discovered/<ngày>.yaml`.
-2. `healthvideo topic add --slug <slug> --title "<tiêu đề>" --question "<câu hỏi>" [--note "<ghi chú>"]` — đưa chủ đề vào hàng đợi `topics/queue.yaml`.
-3. `healthvideo run` — chạy tự động hàng đợi qua các bước Python và agent (`codex`/`agy`) cho tới khi chạm cổng duyệt.
-4. `healthvideo status` — xem bảng trạng thái toàn bộ hàng đợi, cổng đang chờ và lệnh mở gói duyệt (hoặc `healthvideo status <project>` cho một dự án).
-5. `healthvideo review open <project> --gate medical|video` — xuất gói HTML duyệt cổng y khoa hoặc cổng video.
-6. Duyệt hoặc từ chối tại cổng:
-   - `healthvideo review approve <project> --gate medical|video --reviewer "<tên bác sĩ>" [--note "<ghi chú>"]` (bác sĩ gõ tay mã PIN trực tiếp trong terminal TTY).
-   - `healthvideo review reject <project> --gate medical|video --reviewer "<tên bác sĩ>" --reason "<lý do>" --resume-to <trạng_thái>` (từ chối để lần `run` tiếp theo tự sửa theo ghi chú).
-7. Chạy lại `healthvideo run` sau khi duyệt cổng y khoa (hoặc sau khi `reject`) để hoàn tất sản xuất và tiến tới cổng duyệt video.
-8. `healthvideo package <project>` — sau khi duyệt cổng video, đóng băng toàn bộ video, clip, nguồn và bài đăng vào `revisions/<rev>/publish/` để bác sĩ tự đăng.
+`healthvideo status` cho biết PID xưởng và số project chờ bác sĩ. Dùng `healthvideo xuong --stop` để dừng, `healthvideo xuong` để chạy trong terminal (Ctrl+C dừng), hoặc `healthvideo xuong --once` để chạy một vòng. Chu kỳ mặc định 120 giây, đổi bằng `--interval`; hết quota cả hai agent thì chờ ít nhất 30 phút rồi thử lại. Log xoay vòng tại `topics/logs/xuong.log`. Các lệnh xưởng và duyệt nhận `--root` nếu chạy ngoài gốc repo.
 
 ## Lệnh
 
@@ -65,11 +53,13 @@ Bộ lệnh công khai của `healthvideo` (xem chi tiết bằng `--help`):
 - `healthvideo topic discover` — tìm tín hiệu chủ đề từ YouTube, Google Trends, Reddit và đếm bài PubMed.
 - `healthvideo topic add` — thêm một thẻ chủ đề mới vào hàng đợi `topics/queue.yaml` (chặn trùng slug).
 - `healthvideo topic list` — liệt kê các chủ đề trong hàng đợi cùng trạng thái dự án.
+- `healthvideo duyet` — mở lần lượt gói chờ bác sĩ theo hàng đợi rồi các project khác; chọn A/R/B và nhập PIN.
+- `healthvideo xuong [--background|--once|--stop] [--interval 120]` — chạy xưởng liên tục, thông báo thay đổi và tự đóng gói video đã duyệt.
 - `healthvideo run` — chạy hàng đợi tự động tới cổng duyệt tiếp theo (`--once` để chạy tối đa một bước).
 - `healthvideo status [project_dir]` — xem bảng tiến độ toàn hàng đợi hoặc chi tiết bước kế tiếp của một project (`--json`).
 - `healthvideo review open <project_dir> --gate medical|video` — in gói duyệt HTML ra stdout (chỉ đọc).
 - `healthvideo review approve <project_dir> --gate medical|video --reviewer <tên> [--note <ghi_chú>]` — duyệt cổng bằng PIN gõ tay trong TTY.
-- `healthvideo review reject <project_dir> --gate medical|video --reviewer <tên> --reason <lý_do> --resume-to <trạng_thái> [--yes]` — từ chối cổng kèm lý do và trạng thái nối lại.
+- `healthvideo review reject <project_dir> --gate medical|video --reviewer <tên> --reason <lý_do> --resume-to <trạng_thái> [--yes]` — từ chối cổng kèm lý do và trạng thái nối lại; PIN vẫn bắt buộc, `--yes` chỉ bỏ xác nhận chữ.
 - `healthvideo review reopen <project_dir> --gate medical|video --reviewer <tên> --reason <lý_do> --changed <path> --resume-to <trạng_thái> [--yes]` — mở lại cổng khi cần sửa artifact đã duyệt.
 - `healthvideo review set-pin` — đặt hoặc đổi mã PIN duyệt của bác sĩ trong terminal TTY.
 - `healthvideo preview <project_dir> [--port <cổng>] [--print-only]` — mở Remotion Studio xem trước bản render hiện hành.
@@ -98,6 +88,7 @@ Ngoài ra, nhóm lệnh ẩn `healthvideo step ...` (`hidden=True`) dành riêng
 
 | Task | Deliverable | Status | Tests | Commit |
 | --- | --- | --- | --- | --- |
+| Xưởng: vận hành một phím | `healthvideo duyet` (tự liệt kê chủ đề chờ cổng, mở gói duyệt, chọn A/R/B, menu nơi làm lại có mặc định, PIN qua TTY, lưu tên người duyệt ở `~/.healthvideo/operator.yaml`); `healthvideo xuong` chạy nền liên tục (khóa đơn thể, tự `package` khi video đã duyệt, chờ khi hết quota, log `topics/logs/xuong.log`, `--background`/`--stop`/`--once`); thông báo Windows khi tới cổng/bị chặn/đóng gói; từ chối video vì sai nội dung tạo revision mới và chuyển lý do cho bước draft; `review reject` nay cũng cần PIN | complete | pytest 1288 passed, 1 skipped; Ruff | `feat: one-key review (duyet) and background factory loop (xuong)` |
 | Gout: hình khớp và viêm màng hoạt dịch; sửa runner, cách ly .env trong test | `UrateFluid` thành mặt cắt khớp (xương, sụn, màng hoạt dịch, tinh thể lắng trên sụn) + ô vuông phóng to urat → tinh thể kim; `InflammationSignal` thành màng hoạt dịch: đại thực bào nuốt tinh thể, inflammasome, tín hiệu, bạch cầu trung tính thoát mạch. Runner không báo topic đã `packaged` là đang chờ cổng. Test không nạp `.env` thật của người vận hành | complete | pytest 1264 passed, 1 skipped; vitest 158; typecheck; Ruff | `feat: gout joint and synovial visuals; skip finished topics; isolate real .env in tests` |
 | Thư viện giải phẫu: `UrateFluid`, `InflammationSignal` | Component SVG agent vẽ khi chạy chủ đề gout (urat hòa tan → tinh thể kim; tế bào miễn dịch báo động, gọi bạch cầu) — bản sơ khởi, sẽ nâng cấp | complete | vitest 154; typecheck | `feat: add urate fluid and inflammation signal anatomy components` |
 | Xưởng: hình ảnh đa dạng hơn | Component `LiverLobule` (tiểu thùy: TM trung tâm, khoảng cửa, dây tế bào, xoang; mỡ/viêm/xơ theo severity) và `LiverOrgan`; camera cận cảnh kẹp theo `CONTENT_BOX` không cắt chủ thể; QA: video dài ≥6 cảnh cơ chế phải ≥2 subject, whiteboard phải có `on_screen_text` hoặc minh họa, thiếu 2 cảnh FLUX thì cảnh báo; prompt draft cập nhật | complete | pytest 1263 passed, 1 skipped; vitest 152; typecheck; Ruff; 4 still Remotion | `feat: liver lobule and organ, framed close-ups, visual variety QA` |

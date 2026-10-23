@@ -353,7 +353,7 @@ def test_review_approve_medical_requires_gate_and_pin(
     assert "Đã duyệt" in result.stdout
 
 
-def test_review_reject_then_resume_round_trip(tmp_path: Path) -> None:
+def test_review_reject_then_resume_round_trip(tmp_path: Path, authenticated_pin) -> None:
     project_dir = create_v2_project_fixture(
         tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW
     )
@@ -651,7 +651,7 @@ def test_public_command_surface():
 
     root = get_command(app)
     expected = {
-        (): {"topic", "run", "status", "review", "preview", "produce", "package", "doctor"},
+        (): {"topic", "run", "status", "review", "preview", "produce", "package", "doctor", "duyet", "xuong"},
         ("topic",): {"discover", "add", "list"},
         ("review",): {"open", "approve", "reject", "reopen", "set-pin"},
     }
@@ -777,10 +777,14 @@ def test_no_cli_path_approves_without_pin(tmp_path, monkeypatch):
         if can_approve(command.callback):
             approvals.append(path)
             for gate in ("medical", "video"):
-                result = runner.invoke(app, [*path, str(project), "--gate", gate, "--reviewer", "Test"])
+                if path == ('duyet',):
+                    monkeypatch.setattr(cli.factory, 'projects', lambda _: [(project, ProjectManifestV2.model_validate(read_yaml(project / 'project.yaml')))])
+                    result = runner.invoke(app, [*path, '--root', str(tmp_path)])
+                else:
+                    result = runner.invoke(app, [*path, str(project), "--gate", gate, "--reviewer", "Test"])
                 assert result.exit_code != 0
                 assert "TTY" in result.output
-    assert approvals == [("review", "approve")]
+    assert set(approvals) == {("review", "approve"), ("duyet",)}
     assert calls == []
     assert before == {p: p.read_bytes() for p in project.rglob("*") if p.is_file()}
 
