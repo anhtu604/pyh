@@ -49,6 +49,7 @@ def test_schema_omits_runtime_configuration() -> None:
         "creator",
         "license",
         "rights_basis",
+        "source_license",
         "revision",
         "sha256",
     }

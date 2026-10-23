@@ -32,6 +32,18 @@
         "source": {
           "title": "Source",
           "type": "string"
+        },
+        "source_license": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source License"
         }
       },
       "required": [

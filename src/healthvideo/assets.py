@@ -3,7 +3,11 @@
 from pathlib import Path, PurePosixPath
 
 from healthvideo.domain.asset_manifest import AssetKind, AssetManifest
-from healthvideo.domain.license_ledger import LicenseLedger, validate_license_ledger
+from healthvideo.domain.license_ledger import (
+    LicenseLedger,
+    validate_crop_license,
+    validate_license_ledger,
+)
 from healthvideo.domain.storyboard import Storyboard
 from healthvideo.storage.files import read_yaml, sha256_file
 
@@ -193,6 +197,22 @@ def validate_evidence_highlights(
             or asset.path not in covered
         ):
             raise ValueError(f"Scene {scene.id}: evidence_highlight requires registered source crop provenance; use source_card")
+        # Keep the doctor's explicit rights declaration mandatory, while using
+        # Europe PMC's actual license to reject unsupported OA-only reuse.
+        from healthvideo.domain.evidence import SourceRecord
+        from healthvideo.evidence.fulltext import load_fulltext
+
+        ledger_path = revision_root / "evidence/ledger.yaml"
+        ledger = read_yaml(ledger_path) if ledger_path.is_file() else {}
+        source = next((SourceRecord.model_validate(row) for row in ledger.get("records", [])
+                       if row["id"] == highlight.source_id), None)
+        fulltext = load_fulltext(highlight.source_id, source) if source else None
+        entry = next(entry for entry in rights.entries if entry.path == asset.path)
+        source_license = (
+            fulltext.license if fulltext and fulltext.origin == "open_access"
+            else entry.source_license
+        )
+        validate_crop_license(entry.license, source_license)
         root = revision_root.resolve()
         path = root.joinpath(*relative.parts).resolve()
         if not path.is_relative_to(root):

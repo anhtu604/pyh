@@ -621,10 +621,23 @@ def test_tampered_existing_license_ledger_refuses_new_chart(project: Path) -> No
     assert not (asset_dir / "chart-two.svg").exists()
 
 
+@pytest.mark.parametrize("source_license", [None, "cc by"])
 def test_register_cropped_highlight_with_source_page_rights(
-    project: Path, tmp_path: Path
+    project: Path, tmp_path: Path, monkeypatch, source_license
 ) -> None:
     revision = project / "revisions/001"
+    from healthvideo.domain.evidence import SourceRecord
+    from healthvideo.evidence import fulltext as ft
+
+    monkeypatch.setattr(ft, "CACHE_DIR", tmp_path / "cache/fulltext")
+    if source_license:
+        source_record = SourceRecord.model_validate(
+            read_yaml(revision / "evidence/ledger.yaml")["records"][0]
+        )
+        ft.store_fulltext(ft.FullText(
+            source_id=source_record.id, origin="open_access", license=source_license,
+            sha256="a" * 64, sections=[], pmid=source_record.pmid, doi=source_record.doi,
+        ))
     storyboard_path = revision / "storyboard/storyboard.yaml"
     storyboard = read_yaml(storyboard_path)
     highlight = _unregistered_highlight(storyboard, revision)
@@ -662,7 +675,8 @@ def test_register_cropped_highlight_with_source_page_rights(
         read_yaml(revision / "assets/license-ledger.yaml")
     )
     assert any(
-        e.path == record.path and e.sha256 == record.sha256 for e in rights.entries
+        e.path == record.path and e.sha256 == record.sha256
+        and e.source_license == source_license for e in rights.entries
     )
     assert str(source) not in (revision / "assets/asset-manifest.yaml").read_text(
         encoding="utf-8"

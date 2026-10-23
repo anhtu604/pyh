@@ -32,6 +32,22 @@ _NOT_YET_MODELED = (
 )
 
 
+def _render_support(claim: EvidenceClaim) -> str:
+    from healthvideo.evidence.fulltext import load_fulltext
+
+    rows = []
+    for support in claim.support:
+        fulltext = load_fulltext(support.source_id)
+        origin = fulltext.origin if fulltext else "abstract"
+        license_text = (fulltext.license if fulltext else None) or "unknown"
+        rows.append(
+            f"<li>{escape(support.source_id)} — {escape(support.locator)}: "
+            f"<q>{escape(support.quote)}</q> "
+            f"({escape(origin)}; {escape(license_text)})</li>"
+        )
+    return "<ul>" + "".join(rows) + "</ul>" if rows else ""
+
+
 def _render_visual_budget_section(storyboard: Storyboard) -> str:
     report = calculate_visual_budget(storyboard)
     rows = []
@@ -96,7 +112,8 @@ def _render_mechanism_section(
         )
         rows.append(
             f"<tr><td>{escape(claim.id)}</td><td>{escape(claim.text_public)}</td>"
-            f"<td>{source_text}</td><td>{'<ul>' + visuals + '</ul>' if visuals else ''}</td></tr>"
+            f"<td>{source_text}{_render_support(claim)}</td>"
+            f"<td>{'<ul>' + visuals + '</ul>' if visuals else ''}</td></tr>"
         )
     return (
         '<section><h2>Cơ chế — cần kiểm độ đúng giải phẫu</h2>'
@@ -140,6 +157,9 @@ def render_medical_packet(revision_root: Path) -> str:
         for record in ledger.get("records", [])
     }
     claims = [EvidenceClaim.model_validate(claim) for claim in ledger.get("claims", [])]
+    from healthvideo.evidence.fulltext import validate_support_records
+
+    validate_support_records(claims, sources.values())
     script = Script.model_validate(read_yaml(revision_root / "script" / "script.yaml"))
     storyboard = Storyboard.model_validate(
         read_yaml(revision_root / "storyboard" / "storyboard.yaml")
@@ -208,7 +228,7 @@ def render_medical_packet(revision_root: Path) -> str:
             f"<td>{escape(claim.id)}</td>"
             f"<td>{escape(claim.text_public)}</td>"
             f"<td>{escape(claim.text_technical)}</td>"
-            f"<td>{source_titles}</td>"
+            f"<td>{source_titles}{_render_support(claim)}</td>"
             f"<td>{escape(certainty)}</td>"
             f"<td>{escape(population)}</td>"
             f"<td>{script_lines}</td>"

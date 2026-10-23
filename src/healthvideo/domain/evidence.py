@@ -119,6 +119,28 @@ class SourceRecord(BaseModel):
     synthetic_test_record: bool = False
 
 
+class ClaimSupport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_id: str = Field(min_length=1)
+    locator: str = Field(min_length=1)
+    quote: str = Field(min_length=1)
+
+    @field_validator("source_id", "locator")
+    @classmethod
+    def _nonblank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("support source_id and locator must be nonblank")
+        return value
+
+    @field_validator("quote")
+    @classmethod
+    def _short_quote(cls, value: str) -> str:
+        if not value.strip() or len(value.split()) > 25:
+            raise ValueError("support quote must contain 1–25 words")
+        return value
+
+
 class EvidenceClaim(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -137,9 +159,19 @@ class EvidenceClaim(BaseModel):
     doctor_notes: str = ""
     synthetic_test_record: bool = False
     chart_data: list[ChartDatum] = Field(default_factory=list)
+    support: list[ClaimSupport] = Field(default_factory=list)
     # Doctor-owned: claims stating the limits/exceptions of this claim. A vertical
     # clip that shows this claim must also show every caveat claim (spec §4.2).
     caveat_claim_ids: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_support(self) -> EvidenceClaim:
+        # Quote matching needs the ignored cache, so it runs on write and review
+        # (validate_support_records), never on load: a cleared cache must not brick a ledger.
+        for item in self.support:
+            if item.source_id not in self.sources:
+                raise ValueError(f"Claim {self.id}: support source {item.source_id} not in sources")
+        return self
 
     @model_validator(mode="after")
     def _validate_mechanism(self) -> EvidenceClaim:

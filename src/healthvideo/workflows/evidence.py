@@ -169,6 +169,9 @@ def build_evidence_ledger(
 ) -> tuple[Path, ProjectManifestV2]:
     """Build and validate evidence/ledger.yaml, ensuring no retracted sources, and advance state."""
     source_ids = {s.id for s in sources}
+    from healthvideo.evidence.fulltext import validate_support_records
+
+    validate_support_records(claims, sources)
     for s in sources:
         if s.retraction_status == "retracted":
             raise ValueError(f"Source {s.id} is retracted and cannot be included in evidence ledger")

@@ -80,6 +80,33 @@
       ],
       "title": "ChartDatum",
       "type": "object"
+    },
+    "ClaimSupport": {
+      "additionalProperties": false,
+      "properties": {
+        "locator": {
+          "minLength": 1,
+          "title": "Locator",
+          "type": "string"
+        },
+        "quote": {
+          "minLength": 1,
+          "title": "Quote",
+          "type": "string"
+        },
+        "source_id": {
+          "minLength": 1,
+          "title": "Source Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_id",
+        "locator",
+        "quote"
+      ],
+      "title": "ClaimSupport",
+      "type": "object"
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -149,6 +176,13 @@
         "type": "string"
       },
       "title": "Sources",
+      "type": "array"
+    },
+    "support": {
+      "items": {
+        "$ref": "#/$defs/ClaimSupport"
+      },
+      "title": "Support",
       "type": "array"
     },
     "synthetic_test_record": {

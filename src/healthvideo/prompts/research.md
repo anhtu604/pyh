@@ -14,12 +14,16 @@
    - Bắt buộc tối thiểu một tầng "bình thường" (`anatomy` hoặc `physiology`) và một tầng "bệnh" (`pathophysiology` hoặc `pathology`), đúng thứ tự từ bình thường sang bệnh; bỏ tầng nào phải ghi trong `skipped_layers`.
    - Mỗi tầng có một ẩn dụ đời thường kèm giới hạn của ẩn dụ, ví dụ: `analogy: {text: "ống tưới vườn", limits: "mạch máu tự co chủ động, ống thì không"}`.
    - Mọi khẳng định cơ chế phải trỏ tới `claim_ids` thuộc loại `mechanism` có nguồn xác minh trong ledger.
-4. Nếu không đủ bằng chứng xác minh để trả lời câu hỏi `{question}`, dừng ngay và ghi rõ lý do vào `{project}/blocked-reason.md` — **không** viết nội dung suy đoán.
+4. Sau khi chọn nguồn và soạn `records.yaml`, chạy `healthvideo step fulltext {project}` (đọc ledger nếu đã có, nếu chưa thì đọc records). Toàn văn chỉ ở `cache/fulltext/`; PDF bác sĩ tự tải đặt trong `cache/fulltext/inbox/` theo tên lệnh báo. Không đăng nhập hay tự động hóa thư viện/ScienceDirect.
+5. Với claim cơ chế/số liệu, chạy `healthvideo step fulltext-search {project} --source <id> --query "<từ khóa>"`, đối chiếu đoạn và ghi `support: [{source_id: <id>, locator: "Results, p.5", quote: "<nguyên văn tối đa 25 từ>"}]`. Nếu chưa có toàn văn, chỉ dùng abstract đã cache và ghi locator `Abstract`; nêu rõ hạn chế. Không chép toàn văn hay đoạn dài vào bất kỳ file nào trong project. Sau khi thêm support, chạy lại `step build-ledger`.
+6. Nêu nguồn `missing`, link DOI và tên PDF cần đặt trong inbox trong báo cáo để bác sĩ tải. Nếu không đủ bằng chứng xác minh để trả lời câu hỏi `{question}`, dừng ngay và ghi rõ lý do vào `{project}/blocked-reason.md` — **không** viết nội dung suy đoán.
 
 ## Lệnh được dùng
 - `healthvideo step evidence-search {project} --query "<q>"`
 - `healthvideo step evidence-screen {project} --criteria <criteria.yaml> --input <candidates.jsonl>`
 - `healthvideo step build-ledger {project}`
+- `healthvideo step fulltext {project}`
+- `healthvideo step fulltext-search {project} --source <id> --query "<từ khóa>"`
 - `healthvideo status {project}`
 
 ## Đầu ra

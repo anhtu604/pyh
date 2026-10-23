@@ -16,6 +16,7 @@ EXPECTED = {
         "evidence_screen",
         "evidence_ingest",
         "evidence_build_ledger",
+        "fulltext_acquire",
     },
     "src/healthvideo/commands/operator.py": {
         "select",
@@ -26,6 +27,7 @@ EXPECTED = {
 READ_ONLY = {
     "src/healthvideo/cli.py": {
         "status", "review_open", "script_lint", "posts_check", "preview",
+        "fulltext_search",
         "review_frames",  # Project state is read-only; only disposable render QA is written.
     },
     "src/healthvideo/commands/operator.py": {"status"},

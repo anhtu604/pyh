@@ -509,9 +509,17 @@ def create_evidence_highlight_asset(
         revision=project.active_revision,
         rights_required=True,
     )
+    from healthvideo.evidence.fulltext import load_fulltext
+
+    source_record = next(
+        (SourceRecord.model_validate(item) for item in ledger.get("records", [])
+         if item["id"] == highlight.source_id), None,
+    )
+    fulltext = load_fulltext(highlight.source_id, source_record) if source_record else None
     entry = LicenseEntry(
         path=path,
         source=highlight.source_id,
+        source_license=fulltext.license if fulltext and fulltext.origin == "open_access" else None,
         creator=creator,
         license=license,
         rights_basis=rights_basis,

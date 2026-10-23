@@ -2,11 +2,33 @@
 
 from __future__ import annotations
 
+import re
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from healthvideo.domain.asset_manifest import AssetManifest, _posix_relative_path
+
+
+def validate_crop_license(declared_license: str, source_license: str | None) -> None:
+    """OA metadata cannot authorize NC/ND crops or be upgraded to CC BY.
+
+    Other rights require an explicit separate permission declaration in the
+    license ledger, with its evidence retained in rights_basis.
+    """
+    if source_license is None:
+        return
+    normalized = source_license.casefold().strip()
+    permitted = bool(re.fullmatch(r"cc[ -]by(?:[ -]sa)?(?:[ -]\d+(?:\.\d+)?)?", normalized))
+    permitted |= bool(re.fullmatch(
+        r"https?://creativecommons\.org/licenses/by(?:-sa)?/\d+(?:\.\d+)?/?", normalized,
+    ))
+    declared = declared_license.casefold().strip()
+    explicit_permission = any(
+        phrase in declared for phrase in ("permission", "cho phép", "quyền sử dụng")
+    )
+    if not permitted and not explicit_permission:
+        raise ValueError("Source license does not allow crop reuse; record separate permission in license ledger")
 
 
 class LicenseEntry(BaseModel):
@@ -17,8 +39,14 @@ class LicenseEntry(BaseModel):
     creator: str
     license: str
     rights_basis: str
+    source_license: str | None = None
     revision: str = Field(pattern=r"^[0-9]{3}$")
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def _crop_source_rights(self) -> LicenseEntry:
+        validate_crop_license(self.license, self.source_license)
+        return self
 
     @field_validator("path")
     @classmethod

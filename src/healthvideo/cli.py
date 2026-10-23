@@ -795,6 +795,52 @@ def evidence_ingest(
     )
 
 
+@step_app.command("fulltext")
+def fulltext_acquire(project_dir: ProjectDir) -> None:
+    """Lấy toàn văn OA hoặc PDF bác sĩ tự tải; chỉ báo nguồn thiếu."""
+    from healthvideo.evidence.fulltext import CACHE_DIR
+    from healthvideo.workflows.fulltext import acquire_fulltext
+
+    try:
+        rows = acquire_fulltext(project_dir)
+    except (OSError, ValueError) as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
+    for row in rows:
+        typer.echo(f"{row['source_id']}: {row['origin']} — {row['license'] or 'license unknown'}")
+        if row['origin'] == 'missing':
+            typer.echo(f"  {row['doi_url'] or 'DOI unavailable'}")
+            for name in row['inbox_filenames']:
+                typer.echo(f"  PDF: {CACHE_DIR / 'inbox' / name}")
+        if row.get('warning'):
+            typer.echo(f"  {row['warning']}")
+
+
+@step_app.command("fulltext-search")
+def fulltext_search(
+    project_dir: ProjectDir,
+    source: Annotated[str, typer.Option("--source")],
+    query: Annotated[str, typer.Option("--query")],
+) -> None:
+    """Tìm tối đa 5 đoạn toàn văn, mỗi đoạn tối đa 600 ký tự."""
+    from healthvideo.evidence.fulltext import load_fulltext, search_fulltext
+    from healthvideo.workflows.fulltext import project_sources
+
+    try:
+        _, records = project_sources(project_dir)
+        record = next((r for r in records if r.id == source), None)
+        if record is None:
+            raise ValueError(f"Unknown source: {source}")
+        if load_fulltext(source, record) is None:
+            typer.echo(f"{source}: missing; run step fulltext")
+            return
+        for match in search_fulltext(source, query):
+            typer.echo(f"[{source}; {match['locator']}] {match['text']}")
+    except (OSError, ValueError) as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
+
+
 @step_app.command("build-ledger")
 def evidence_build_ledger(project_dir: ProjectDir) -> None:
     """Tổng hợp evidence ledger từ nguồn tài liệu và claims đã kiểm chứng."""
