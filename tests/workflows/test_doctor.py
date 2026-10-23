@@ -219,3 +219,21 @@ def test_projects_check_flags_legacy_and_misplaced(tmp_path):
     assert not result.ok
     assert "cu (schema cũ/hỏng)" in result.detected and "2026/09/lac (sai vị trí)" in result.detected
     assert _projects_check(tmp_path / "trong").ok
+
+
+def test_doctor_whisper_recommended_checks(tmp_path, monkeypatch):
+    monkeypatch.setattr(doctor, 'REPO_ROOT', tmp_path)
+    checks = {c.name: c for c in check_environment(lambda _: (0, '24.14.0'))}
+    assert checks['whisper_venv'].required == 'recommended'
+    assert checks['whisper_model'].required == 'recommended'
+    assert not checks['whisper_venv'].ok
+    external = tmp_path/'whisper.exe'
+    external.touch()
+    monkeypatch.setenv('HEALTHVIDEO_WHISPER_PYTHON', str(external))
+    model = tmp_path/'cache/models/whisper-large-v3'
+    model.mkdir(parents=True)
+    from healthvideo.audio.align import MODEL_FILES
+    for name in MODEL_FILES:
+        (model/name).touch()
+    checks = {c.name: c for c in check_environment(lambda _: (0, '24.14.0'))}
+    assert checks['whisper_venv'].ok and checks['whisper_model'].ok

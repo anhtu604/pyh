@@ -51,3 +51,5 @@ export const LiverLobule: React.FC<OrganProps> = ({state, severity}) => {
     </g>}
   </svg>;
 };
+
+export const CUE_ACTIONS: readonly string[] = [];

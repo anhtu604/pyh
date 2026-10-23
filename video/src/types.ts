@@ -83,6 +83,8 @@ export const AnatomySchema = z.object({
   state: z.enum(['normal', 'diseased']),
   severity: z.number().min(0).max(1),
   motion: z.string(),
+  cues: z.array(z.object({word: z.string().trim().min(1), action: z.string().trim().min(1),
+    start_frame: z.number().int().min(0).optional()})).optional(),
 });
 export type Anatomy = z.input<typeof AnatomySchema>;
 export const MECHANISM_VISUALS = ['anatomy_animation', 'process_animation', 'comparison', 'timelapse'] as const;
@@ -106,6 +108,10 @@ export const SceneSchema = z
     start_frame: z.number().int().min(0),
     duration_frames: z.number().int().positive(),
     narration: z.string(),
+    words: z.array(z.object({text: z.string(), start_frame: z.number().int().min(0),
+      end_frame: z.number().int().min(0)}).refine(word => word.end_frame >= word.start_frame,
+      'word end must follow start')).optional(),
+    entrances: z.array(z.object({text: z.string(), start_frame: z.number().int().min(0)})).optional(),
     on_screen_text: z.string().refine((text) => Array.from(text).length <= 90,
       'on_screen_text must be at most 90 Unicode characters').nullable().optional(),
     script_line_id: z.string().nullable().optional(),

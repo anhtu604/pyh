@@ -8,8 +8,21 @@ import {LiverLobule, CONTENT_BOX as LOBULE_CONTENT_BOX} from './LiverLobule';
 import {LiverOrgan, CONTENT_BOX as LIVER_CONTENT_BOX} from './LiverOrgan';
 import {UrateFluid, CONTENT_BOX as URATE_CONTENT_BOX} from './UrateFluid';
 import {InflammationSignal, CONTENT_BOX as SIGNAL_CONTENT_BOX} from './InflammationSignal';
+import {CUE_ACTIONS as URATE_CUES} from './UrateFluid';
+import {CUE_ACTIONS as SIGNAL_CUES} from './InflammationSignal';
+import {CUE_ACTIONS as HEPATIC_CUES} from './HepaticCell';
+import {CUE_ACTIONS as ARTERY_CUES} from './ArterySection';
+import {CUE_ACTIONS as HEART_CUES} from './Heart';
+import {CUE_ACTIONS as LOBULE_CUES} from './LiverLobule';
+import {CUE_ACTIONS as LIVER_CUES} from './LiverOrgan';
 
 export type AnatomySubject = Anatomy['subject'];
+export const ANATOMY_CUE_ACTIONS: Record<AnatomySubject, readonly string[]> = {
+  artery_cross_section: ARTERY_CUES, heart: HEART_CUES,
+  hepatic_cell_and_tissue_lipid_balance: HEPATIC_CUES,
+  liver_lobule: LOBULE_CUES, liver_organ: LIVER_CUES,
+  joint_fluid_urate_to_inflammation: URATE_CUES, immune_cell_alarm: SIGNAL_CUES,
+};
 
 export const ANATOMY_COMPONENTS: Record<AnatomySubject, React.FC<OrganProps>> = {
   artery_cross_section: ArterySection,

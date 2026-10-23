@@ -43,7 +43,7 @@ export const EvidenceHighlightScene: React.FC<EvidenceHighlightSceneProps> = ({s
         }}
       />
       {scene.source_marker ? <SourceMarker sourceMarker={scene.source_marker} /> : null}
-      <Captions text={scene.narration} durationInFrames={scene.duration_frames} />
+      <Captions text={scene.narration} words={scene.words} durationInFrames={scene.duration_frames} />
     </>
   );
 };

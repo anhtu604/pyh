@@ -102,7 +102,7 @@ def test_old_kinds_forbid_anatomy(visual: str) -> None:
         Scene.model_validate(scene_data(visual))
 
 
-def test_old_scene_serialization_is_byte_identical() -> None:
+def test_old_scene_serialization_retains_fields_and_adds_entrance_timing() -> None:
     # Canonical serialization order, including nulls and the visible whiteboard summary.
     expected = {
         "schema_version": "1.0",
@@ -123,6 +123,7 @@ def test_old_scene_serialization_is_byte_identical() -> None:
     actual = build_render_input(board, "audio/a.wav").model_dump(mode="json")["scenes"][
         0
     ]
+    assert actual.pop("entrances") == [{"text": "Synthetic illustration.", "start_frame": 472}]
     assert json.dumps(actual) == json.dumps(expected)
 
 

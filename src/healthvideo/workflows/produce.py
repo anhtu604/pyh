@@ -11,6 +11,7 @@ from healthvideo.assets import (
     referenced_evidence_assets,
     referenced_storyboard_assets,
 )
+from healthvideo.audio.align import align_lines, alignment_identity, pronunciation_qa
 from healthvideo.audio.music import (
     DEFAULT_MOOD,
     DUCK_DB,
@@ -64,6 +65,7 @@ from healthvideo.render.timing import (
     restore_timed_storyboard,
     retime_storyboard,
 )
+from healthvideo.render.word_timing import apply_alignment
 from healthvideo.storage.files import (
     canonical_json_hash,
     read_yaml,
@@ -262,6 +264,7 @@ def _produce_v2(
             "provider_identity": provider_identity_data,
             "renderer_identity": renderer_identity_data,
             "music": music_settings,
+            "alignment": alignment_identity(),
             "sfx": sfx_identity(storyboard, layout.artifact_root),
             **(
                 {"clip_plan": read_yaml(layout.artifact_root / CLIP_PLAN_ARTIFACT),
@@ -294,6 +297,7 @@ def _produce_v2(
             visual_budget_report = validate_visual_budget(storyboard, asset_manifest)
             visual_budget_qa = visual_budget_report.model_dump(mode="json")
             final_frame = storyboard.scenes[-1].start_frame + storyboard.scenes[-1].duration_frames
+            storyboard = apply_alignment(storyboard, _read_alignment(renders_dir, script))
             expected_input = build_render_input(
                 storyboard, audio_file="audio/narration.wav"
             ).model_dump(mode="json")
@@ -331,6 +335,7 @@ def _produce_v2(
                 "Production requires v2 project state medically_approved"
             )
         if not dry_run:
+            _promote_pronunciation_qa(layout.artifact_root, input_hash)
             render_optional_thumbnail(layout.artifact_root, runner=runner)
         return output
     if dry_run:
@@ -380,9 +385,20 @@ def _produce_v2(
             line_ms[line.id] = inspect_wav(
                 line_audio, require_signal=getattr(tts, "require_signal", False)
             ).duration_ms
+        alignment = align_lines(
+            line_wavs, {line.id: line.text for line in script.lines},
+            out_dir=staging_dir / "audio/alignment",
+        )
+        pronunciation_report = pronunciation_qa(
+            alignment, terms=[entry.written for entry in pronunciation.entries],
+        )
+        pronunciation_report["input_hash"] = input_hash
+        _write_json_atomic(staging_dir / "pronunciation-qa.json", pronunciation_report)
         storyboard, timing_record = retime_storyboard(approved_storyboard, line_ms)
+        storyboard = apply_alignment(storyboard, alignment)
         timing_record["audio_alignment"] = concat_scene_audio(storyboard, line_wavs, staged_audio)
-        sfx_events = resolve_sfx(storyboard, layout.artifact_root)
+        # Keyword-timed SFX read the alignment just written to staging, not the previous run's.
+        sfx_events = resolve_sfx(storyboard, staging_dir)
         music_record = None
         generated_rights = list(illustration_rights)
         generated_visual_hashes: dict[str, str] = {}
@@ -494,6 +510,11 @@ def _produce_v2(
                 "asset_sha256": dict(asset_hashes),
                 "render_input_sha256": canonical_json_hash(render_input_data),
                 "scene_timing_sha256": sha256_file(staging_dir / "scene-timing.json"),
+                "alignment_sha256": {
+                    path.relative_to(staging_dir).as_posix(): sha256_file(path)
+                    for path in [staging_dir / "pronunciation-qa.json",
+                                 *(staging_dir / "audio/alignment").glob("*.json")]
+                },
                 "line_audio_sha256": {
                     path.relative_to(staging_dir).as_posix(): sha256_file(path)
                     for path in line_wavs.values()
@@ -636,6 +657,12 @@ def _v2_run_is_valid(
         == canonical_json_hash(render_input)
     ):
         return False
+    alignment_hashes = manifest.get("alignment_sha256", {})
+    if not isinstance(alignment_hashes, dict) or not all(
+        (run_dir / relative).is_file() and sha256_file(run_dir / relative) == digest
+        for relative, digest in alignment_hashes.items()
+    ):
+        return False
     line_hashes = manifest.get("line_audio_sha256")
     music_record = manifest.get("music")
     if music_settings is None:
@@ -744,6 +771,7 @@ def _promote_v2_video_qa_if_needed(
     final_frame: int | None = None,
     expected_visual_budget: Mapping[str, Any] | None = None,
 ) -> None:
+    _promote_pronunciation_qa(revision_root, input_hash)
     if _v2_video_qa_is_valid(
         revision_root, input_hash, require_timing=require_timing,
         final_frame=final_frame,
@@ -980,3 +1008,24 @@ def _write_json_atomic(path: Path, data: Mapping[str, Any]) -> None:
     finally:
         if temporary.exists():
             temporary.unlink()
+
+
+def _read_alignment(run_dir: Path, script: Script) -> dict[str, list[dict]]:
+    result = {}
+    for line in script.lines:
+        path = run_dir / "audio/alignment" / f"{line.id}.json"
+        if path.is_file():
+            words = json.loads(path.read_text(encoding="utf-8"))
+            if [word["word"] for word in words] != line.text.split():
+                raise ValueError("Cached alignment differs from script")
+            result[line.id] = words
+    return result
+
+
+def _promote_pronunciation_qa(revision_root: Path, input_hash: str) -> None:
+    pronunciation_source = revision_root / "renders/pronunciation-qa.json"
+    if pronunciation_source.is_file():
+        pronunciation_data = json.loads(pronunciation_source.read_text(encoding="utf-8"))
+        if pronunciation_data.get("input_hash") != input_hash:
+            raise ValueError("Pronunciation QA does not match active render")
+        _write_json_atomic(revision_root / "reviews/pronunciation-qa.json", pronunciation_data)

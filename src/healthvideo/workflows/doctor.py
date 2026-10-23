@@ -10,6 +10,7 @@ from pathlib import Path
 
 import yaml
 
+from healthvideo.audio.align import model_ready, whisper_model, whisper_python
 from healthvideo.audio.music import music_python, music_weights
 from healthvideo.process import prepare_subprocess_argv, resolve_pnpm_argv
 from healthvideo.visuals.flux import flux_python, flux_weights, validate_flux_weights
@@ -59,6 +60,7 @@ def check_environment(run: RunCommand) -> list[CheckResult]:
         _cuda_check(run),
         *_pyh_checks(),
         *_music_checks(),
+        *_whisper_checks(),
         *_flux_checks(),
         _projects_check(REPO_ROOT),
         _telegram_check(),
@@ -295,3 +297,13 @@ def _display_version(version: Version | None, output: str) -> str:
 
 def _format_version(version: Version) -> str:
     return ".".join(str(part) for part in version)
+
+
+def _whisper_checks() -> list[CheckResult]:
+    python, model = whisper_python(REPO_ROOT), whisper_model(REPO_ROOT)
+    return [
+        CheckResult("whisper_venv", python.is_file(), str(python), "recommended",
+                    "Install tools/whisper/requirements.txt in cache/whisper-venv or set HEALTHVIDEO_WHISPER_PYTHON."),
+        CheckResult("whisper_model", model_ready(REPO_ROOT), str(model), "recommended",
+                    "Download MIT Systran/faster-whisper-large-v3 into cache/models/whisper-large-v3."),
+    ]

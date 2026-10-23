@@ -50,3 +50,17 @@ it('keeps crystal burden monotone throughout growth and is deterministic when se
   }
   expect(urateGeometry('diseased', -1, 240, 30).needles).toBe(0);
 });
+
+it('follows keyword cue progress independently of the scene clock', () => {
+  clock.frame = 900;
+  const markup = (seed: number, grow: number, deposit: number) => renderToStaticMarkup(
+    <UrateFluid state="diseased" severity={1} cueProgress={{seed, grow, deposit}}/>);
+  expect(markup(0, 0, 0)).not.toContain('data-seed="true"');
+  const seeded = markup(1, 0, 0);
+  expect(seeded).toContain('data-seed="true"');
+  expect(seeded).not.toContain('data-crystal="true"');
+  expect(seeded).not.toContain('data-deposit-site=');
+  expect(markup(1, 1, 0)).not.toBe(seeded);
+  expect(markup(1, 1, 1)).toContain('data-deposit-site="cartilage"');
+  expect(markup(1, 1, 1)).toContain('data-deposit-site="synovium"');
+});

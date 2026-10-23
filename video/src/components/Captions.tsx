@@ -2,10 +2,12 @@ import {FONT_FAMILY} from '../fonts';
 import React from 'react';
 import {useCurrentFrame} from 'remotion';
 import {useLayout} from '../layout';
+import type {Scene} from '../types';
 
 type CaptionsProps = {
   text: string;
   durationInFrames: number;
+  words?: Scene['words'];
 };
 
 export const MAX_CAPTION_WORDS = 6;
@@ -75,14 +77,17 @@ export const captionRows = (
   return {startIndex, rows};
 };
 
-export const Captions: React.FC<CaptionsProps> = ({text, durationInFrames}) => {
+export const Captions: React.FC<CaptionsProps> = ({text, durationInFrames, words: timedWords}) => {
   const frame = useCurrentFrame();
   const c = useLayout().captions;
-  const words = text.trim().split(/\s+/).filter(Boolean);
-  const activeWord = words.length === 0
+  const words = timedWords?.length ? timedWords.map(word => word.text) : text.trim().split(/\s+/).filter(Boolean);
+  const activeWord = timedWords?.length ? timedWords.findIndex(word => frame >= word.start_frame && frame < word.end_frame) : words.length === 0
     ? -1
     : Math.min(words.length - 1, Math.floor((frame / Math.max(durationInFrames, 1)) * words.length));
-  const layout = captionRows(words, activeWord, c.maxWords);
+  // Keep the current page through pauses, without highlighting an unspoken word.
+  const pageWord = timedWords?.length && activeWord < 0
+    ? timedWords.reduce((last, word, index) => word.start_frame <= frame ? index : last, 0) : activeWord;
+  const layout = captionRows(words, pageWord, c.maxWords);
 
   return (
     <svg

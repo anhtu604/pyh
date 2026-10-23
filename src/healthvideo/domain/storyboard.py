@@ -43,6 +43,35 @@ class SourceCard(BaseModel):
                    interpretation=claim.text_public)
 
 
+class AnatomyCue(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    word: Nonblank
+    action: Nonblank
+    start_frame: int | None = Field(default=None, ge=0, exclude_if=lambda v: v is None)
+
+
+class CaptionWord(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    text: Nonblank
+    start_frame: int = Field(ge=0)
+    end_frame: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def validate_end(self) -> "CaptionWord":
+        if self.end_frame < self.start_frame:
+            raise ValueError("word end must follow start")
+        return self
+
+
+class TextEntrance(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    text: Nonblank
+    start_frame: int = Field(ge=0)
+
+
 class SceneAnatomy(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -50,6 +79,7 @@ class SceneAnatomy(BaseModel):
     state: Literal["normal", "diseased"]
     severity: float = Field(default=0, ge=0, le=1)
     motion: Nonblank
+    cues: tuple[AnatomyCue, ...] = Field(default=(), exclude_if=lambda v: not v)
 
 
 class VisualAssetRef(BaseModel):
@@ -194,6 +224,8 @@ class Scene(BaseModel):
     start_frame: int = Field(json_schema_extra={"minimum": 0})
     duration_frames: int = Field(json_schema_extra={"exclusiveMinimum": 0})
     narration: str
+    words: tuple[CaptionWord, ...] = Field(default=(), exclude_if=lambda v: not v)
+    entrances: tuple[TextEntrance, ...] = Field(default=(), exclude_if=lambda v: not v)
     sfx: tuple[SceneSFX, ...] = Field(default=(), max_length=2, exclude_if=lambda v: not v)
     on_screen_text: str | None = Field(default=None, max_length=90, exclude_if=lambda v: v is None)
     script_line_id: str | None = None
@@ -254,6 +286,26 @@ class Scene(BaseModel):
                 raise ValueError(
                     f"Scene {self.id}: evidence_highlight requires image and quote"
                 )
+        if self.anatomy and self.anatomy.cues:
+            from healthvideo.audio.align import normalize_word
+            from healthvideo.visuals.anatomy_library import cue_actions
+
+            narration_tokens = [normalize_word(w) for w in self.narration.split()]
+            actions = cue_actions(Path(__file__).resolve().parents[3], self.anatomy.subject)
+            for cue in self.anatomy.cues:
+                tokens = [normalize_word(w) for w in cue.word.split()]
+                if not any(narration_tokens[i:i+len(tokens)] == tokens
+                           for i in range(len(narration_tokens)-len(tokens)+1)):
+                    raise ValueError(f"Scene {self.id}: cue word must be in narration: {cue.word}")
+                if cue.action not in actions:
+                    raise ValueError(f"Scene {self.id}: cue action must exist in component: {cue.action}")
+        for word in self.words:
+            if word.end_frame > self.duration_frames:
+                raise ValueError(f"Scene {self.id}: word timing exceeds scene")
+        if any(b.start_frame < a.end_frame for a, b in zip(self.words, self.words[1:])):
+            raise ValueError(f"Scene {self.id}: word timings overlap or are unordered")
+        if any(e.start_frame >= self.duration_frames for e in self.entrances):
+            raise ValueError(f"Scene {self.id}: entrance exceeds scene")
         paths = [asset.path for asset in self.visual_assets]
         if len(paths) != len(set(paths)):
             raise ValueError(f"Scene {self.id}: duplicate visual asset path")

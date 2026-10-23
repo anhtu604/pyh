@@ -95,3 +95,11 @@ def synthetic_workflow_illustrations(monkeypatch):
 
     monkeypatch.setattr(produce, "generate_illustration", generate)
     monkeypatch.setattr(thumbnail, "generate_illustration", generate)
+
+
+@pytest.fixture(autouse=True)
+def synthetic_workflow_alignment(monkeypatch):
+    """Never load local ASR models in orchestration tests."""
+    from healthvideo.workflows import produce
+
+    monkeypatch.setattr(produce, "align_lines", lambda *args, **kwargs: {})

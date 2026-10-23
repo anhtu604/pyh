@@ -1,4 +1,5 @@
 import json
+import re
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any, Literal
@@ -100,3 +101,15 @@ def record_approval(
         repo / APPROVED_PATH,
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
     )
+
+
+def cue_actions(repo: Path, subject: str) -> tuple[str, ...]:
+    """Read the component's exported action declaration; no second allow-list."""
+    info = load_library(repo).get(subject)
+    if info is None:
+        raise ValueError(f"Unknown anatomy subject: {subject}")
+    source = _component_file(repo, info["file"]).read_text(encoding="utf-8")
+    match = re.search(r"export const CUE_ACTIONS[^=]*=\s*\[([^\]]*)\]", source)
+    if match is None:
+        raise ValueError(f"Component {subject} must export CUE_ACTIONS")
+    return tuple(re.findall(r"['\"]([^'\"]+)['\"]", match[1]))

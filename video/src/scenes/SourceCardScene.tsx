@@ -31,6 +31,6 @@ export const SourceCardScene: React.FC<{scene: Scene}> = ({scene}) => {
       </div>
     </article>
     {scene.source_marker ? <SourceMarker sourceMarker={scene.source_marker} /> : null}
-    {!duplicateNarration ? <Captions text={scene.narration} durationInFrames={scene.duration_frames} /> : null}
+    {!duplicateNarration ? <Captions text={scene.narration} words={scene.words} durationInFrames={scene.duration_frames} /> : null}
   </>;
 };

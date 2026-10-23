@@ -843,3 +843,57 @@ def _write_existing_production_run(project_dir: Path) -> Path:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(contents)
     return run_dir
+
+
+def test_production_carries_alignment_and_reuses_it_on_retry(tmp_path, monkeypatch):
+    from healthvideo.audio.align import map_words
+    from healthvideo.tts.audio_checks import inspect_wav
+    from healthvideo.workflows import produce
+
+    project = create_v2_project_fixture(tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW)
+    revision = project / 'revisions/001'
+    # This fixture's repeated narration starts with Synthetic. Its text entrance
+    # uses a different keyword so the independent front-loading QA does not fire.
+    board_path = revision/'storyboard/storyboard.yaml'
+    board = read_yaml(board_path)
+    for scene in board['scenes']:
+        if scene.get('on_screen_text'):
+            scene['on_screen_text'] = 'Overview'
+    write_yaml_atomic(board_path, board)
+    approve_gate(project, GateKind.MEDICAL, reviewer='doctor', now=V2_REVIEWED_AT)
+    calls = []
+
+    def fake_align(line_wavs, scripts, *, out_dir):
+        calls.append('align')
+        result = {}
+        out_dir.mkdir(parents=True)
+        for line, text in scripts.items():
+            tokens = text.split()
+            seconds = inspect_wav(line_wavs[line]).duration_ms / 1000
+            raw = [{'word': token, 'start': seconds*i/len(tokens),
+                    'end': seconds*(i+1)/len(tokens), 'prob': .9} for i, token in enumerate(tokens)]
+            result[line] = map_words(text, raw, duration=seconds)
+            (out_dir/f'{line}.json').write_text(json.dumps(result[line]), encoding='utf-8')
+        return result
+
+    monkeypatch.setattr(produce, 'align_lines', fake_align)
+
+    def runner(argv):
+        _write_synthetic_output(argv)
+        return 0
+
+    output = produce_project(project, SilentTTS(), runner)
+    rendered = read_yaml(revision/'renders/render-input.json')
+    assert any(scene.get('words') for scene in rendered['scenes'])
+    qa = read_yaml(revision/'reviews/pronunciation-qa.json')
+    assert qa['status'] == 'aligned' and not qa['flags']
+    assert all(line['match_ratio'] == 1 for line in qa['lines'])
+    assert produce_project(project, SilentTTS(), lambda _: pytest.fail('render on cache hit')) == output
+    assert calls == ['align']
+    (revision/'reviews/pronunciation-qa.json').unlink()
+    produce_project(project, SilentTTS(), lambda _: pytest.fail('render on cache hit'))
+    assert read_yaml(revision/'reviews/pronunciation-qa.json') == qa
+    path = next((revision/'renders/audio/alignment').glob('*.json'))
+    path.write_text('[]', encoding='utf-8')
+    with pytest.raises(ValueError, match='medically_approved'):
+        produce_project(project, SilentTTS(), runner)

@@ -4,6 +4,20 @@ import {renderToStaticMarkup} from 'react-dom/server';
 import {expect, it, vi} from 'vitest';
 import {InflammationSignal, signalGeometry, CONTENT_BOX} from './InflammationSignal';
 const clock = vi.hoisted(() => ({frame: 90}));
+it('keeps engulfment, activation and recruitment hidden until their separate cues', () => {
+  const render = (engulf: number, alarm: number, recruit: number) => renderToStaticMarkup(
+    <InflammationSignal state="diseased" severity={1} cueProgress={{engulf, alarm, recruit}}/>);
+  const before = render(0, 0, 0);
+  for (const marker of ['data-crystal="true"', 'data-phagocytosis="true"', 'data-activation="true"', 'data-neutrophil="true"']) expect(before).not.toContain(marker);
+  expect(before).toContain('data-lumen-radius="25"');
+  const engulfed = render(1, 0, 0);
+  expect(engulfed).toContain('data-phagocytosis="true"');
+  expect(engulfed).not.toContain('data-activation="true"');
+  const alarmed = render(1, 1, 0);
+  expect(alarmed).toContain('data-activation="true"');
+  expect(alarmed).not.toContain('data-neutrophil="true"');
+  expect(render(1, 1, 1)).toContain('data-neutrophil="true"');
+});
 vi.mock('remotion', () => ({useCurrentFrame: () => clock.frame, useVideoConfig: () => ({fps: 30})}));
 it('can show a crystal cue without an active alarm and recruits cells only in activated state', () => {
   const quiet = renderToStaticMarkup(<InflammationSignal state="normal" severity={1}/>);

@@ -3,9 +3,15 @@ import {existsSync, readFileSync} from 'node:fs';
 import {describe, expect, it} from 'vitest';
 import {AnatomySchema} from '../types';
 import library from './library.json';
-import {ANATOMY_COMPONENTS, ANATOMY_SUBJECTS} from './registry';
+import {ANATOMY_COMPONENTS, ANATOMY_SUBJECTS, ANATOMY_CUE_ACTIONS} from './registry';
 
 describe('anatomy registry', () => {
+  it('declares cue actions for every component', () => {
+    expect(Object.keys(ANATOMY_CUE_ACTIONS).sort()).toEqual(Object.keys(ANATOMY_COMPONENTS).sort());
+    expect(ANATOMY_CUE_ACTIONS.joint_fluid_urate_to_inflammation).toEqual(['seed', 'grow', 'deposit']);
+    expect(ANATOMY_CUE_ACTIONS.immune_cell_alarm).toEqual(['engulf', 'alarm', 'recruit']);
+    expect(ANATOMY_CUE_ACTIONS.hepatic_cell_and_tissue_lipid_balance).toEqual(['fat', 'inflame', 'fibrose']);
+  });
   it('maps every library.json key to a component and vice versa', () => {
     const libraryKeys = Object.keys(library.components).sort();
     const registryKeys = Object.keys(ANATOMY_COMPONENTS).sort();

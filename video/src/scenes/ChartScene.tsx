@@ -19,7 +19,7 @@ export const ChartScene: React.FC<{scene: Scene}> = ({scene}) => {
         style={{...layoutChart.image, objectFit: 'contain', position: 'absolute'}}
       />
       {scene.source_marker ? <SourceMarker sourceMarker={scene.source_marker} /> : null}
-      <Captions text={scene.narration} durationInFrames={scene.duration_frames} />
+      <Captions text={scene.narration} words={scene.words} durationInFrames={scene.duration_frames} />
     </>
   );
 };

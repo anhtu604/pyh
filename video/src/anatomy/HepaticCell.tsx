@@ -5,6 +5,7 @@ import {anatomyColors as c, brand} from './palette';
 
 /** Full painted bounds, including pulse and flow extremes. */
 export const CONTENT_BOX = {left: 7, top: 12, width: 538, height: 535};
+export const CUE_ACTIONS = ['fat', 'inflame', 'fibrose'] as const;
 
 /** Qualitative teaching states, never a clinical score or a disease clock.
  * Yellow droplets remain intracellular; extracellular matrix never replaces fat.
@@ -22,10 +23,18 @@ export const hepaticGeometry = (state: OrganProps['state'], severity: number, fr
   };
 };
 
-export const HepaticCell: React.FC<OrganProps> = ({state, severity, emphasizeFlow = false, lightBackground = false}) => {
+export const HepaticCell: React.FC<OrganProps> = ({state, severity, emphasizeFlow = false, lightBackground = false, cueProgress}) => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
   const g = hepaticGeometry(state, severity, frame, fps);
+  const cue = (action: string) => Math.max(0, Math.min(1, cueProgress?.[action] ?? 0));
+  if (cueProgress) {
+    g.dropletRadius = 13 + (g.dropletRadius - 13) * cue('fat');
+    g.incomingParticles = 2 + Math.round((g.incomingParticles - 2) * cue('fat'));
+    g.injury = g.injury && cue('inflame') > 0;
+    g.matrix = g.matrix && cue('fibrose') > 0;
+    g.signal *= cue('inflame');
+  }
   const ink = lightBackground ? brand.navy : brand.off_white;
   return <svg viewBox="0 0 560 560" width="100%" height="100%" role="img"
     aria-label="Qualitative hepatocyte and surrounding tissue schematic"
@@ -35,7 +44,7 @@ export const HepaticCell: React.FC<OrganProps> = ({state, severity, emphasizeFlo
       <path d="M150 50 L197 70" stroke={brand.teal} strokeWidth="5" />
       <circle cx={150 + g.flow * .47} cy={50 + g.flow * .2} r="6" fill={ink} />
       <path data-layer="insulin-signal" d="M10 118 Q34 149 58 119" stroke={brand.teal}
-        strokeWidth="5" fill="none" strokeDasharray={state === 'normal' ? undefined : '6 7'} />
+        strokeWidth="5" fill="none" strokeDasharray={state === 'normal' || (cueProgress && cue('fat') <= 0) ? undefined : '6 7'} />
     </g>
     <g data-layer="hepatocyte" transform="translate(280 280) scale(1.4482758621) translate(-280 -280)">
       <rect x="135" y="135" width="290" height="290" rx="75" fill={c.heartDeep} />
@@ -74,7 +83,7 @@ export const HepaticCell: React.FC<OrganProps> = ({state, severity, emphasizeFlo
         fill={g.matrix ? c.bloodInset : brand.teal} />
       <circle r="8" fill={ink} />
     </g>
-    {g.matrix && <g data-layer="extracellular-matrix" stroke={ink} strokeWidth="6" fill="none">
+    {g.matrix && <g data-layer="extracellular-matrix" opacity={cueProgress ? cue('fibrose') : 1} stroke={ink} strokeWidth="6" fill="none">
       <path d="M60 165 Q40 270 60 470 M48 160 Q30 275 48 480 M155 505 Q280 530 440 505 M160 520 Q280 550 450 520" />
       <path d="M42 345 L62 330 M40 370 L64 358 M180 510 L188 535 M355 515 L363 538" />
     </g>}

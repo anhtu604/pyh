@@ -2,6 +2,7 @@ import {FONT_FAMILY} from '../fonts';
 import React from 'react';
 import {interpolate, useCurrentFrame} from 'remotion';
 import {Captions} from '../components/Captions';
+import {textEntrances} from '../components/entrances';
 import {useLayout} from '../layout';
 import type {Scene} from '../types';
 
@@ -50,6 +51,7 @@ export const WhiteboardScene: React.FC<WhiteboardSceneProps> = ({scene}) => {
     extrapolateRight: 'clamp',
   });
   const visualAssets = scene.visual_assets ?? [];
+  const pieces = textEntrances(scene);
 
   return (
     <>
@@ -83,10 +85,11 @@ export const WhiteboardScene: React.FC<WhiteboardSceneProps> = ({scene}) => {
           overflowWrap: 'anywhere',
         }}
       >
-        {scene.on_screen_text}
+        {pieces.map((piece, index) => <span key={index} data-entrance-frame={piece.start_frame}
+          style={{opacity: frame >= piece.start_frame ? 1 : 0}}>{piece.text}</span>)}
       </div> : null}
       {scene.source_marker ? <SourceMarker sourceMarker={scene.source_marker} /> : null}
-      <Captions text={scene.narration} durationInFrames={scene.duration_frames} />
+      <Captions text={scene.narration} words={scene.words} durationInFrames={scene.duration_frames} />
     </>
   );
 };

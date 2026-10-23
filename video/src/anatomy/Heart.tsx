@@ -71,3 +71,5 @@ export const Heart: React.FC<OrganProps & {cutaway?: boolean}> = ({state, severi
     </g>
   </svg>;
 };
+
+export const CUE_ACTIONS: readonly string[] = [];

@@ -9,6 +9,21 @@ vi.mock('remotion', () => ({useCurrentFrame: () => clock.frame, useVideoConfig: 
 const render = (severity: number, state: 'normal' | 'diseased' = 'diseased') =>
   renderToStaticMarkup(<HepaticCell state={state} severity={severity} />);
 
+it('starts fat, injury and extracellular matrix only from their own cues', () => {
+  const cueRender = (fat: number, inflame: number, fibrose: number) => renderToStaticMarkup(
+    <HepaticCell state="diseased" severity={1} cueProgress={{fat, inflame, fibrose}}/>);
+  const before = cueRender(0, 0, 0);
+  expect(before).not.toContain('data-layer="injury-and-immune-signals"');
+  expect(before).not.toContain('data-layer="extracellular-matrix"');
+  expect(before).toContain('r="13"');
+  const fat = cueRender(1, 0, 0);
+  expect(fat).toContain('r="31"');
+  expect(fat).not.toContain('data-layer="injury-and-immune-signals"');
+  expect(cueRender(1, 1, 0)).toContain('data-layer="injury-and-immune-signals"');
+  expect(cueRender(1, 1, 0)).not.toContain('data-layer="extracellular-matrix"');
+  expect(cueRender(1, 1, 1)).toContain('data-layer="extracellular-matrix"');
+});
+
 describe('hepatic cell qualitative mechanism', () => {
   it('makes the hepatocyte itself cover 75% of the square while retaining intracellular droplets', () => {
     const output = render(.9);

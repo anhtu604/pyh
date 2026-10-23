@@ -416,6 +416,7 @@ def render_video_packet(revision_root: Path) -> str:
         ) + '</section>' if sheets else ""
     )
     posts_section = _render_posts_section(revision_root)
+    pronunciation_section = _render_pronunciation_section(revision_root, storyboard)
     sfx_section = '<section><h2>SFX đã dùng</h2><ul>' + ''.join(
         f'<li>{escape(str(event["scene"]))}: {escape(str(event["id"]))}; '
         f'{escape(str(event["time"]))} s (trong cảnh: {escape(str(event["at"]))} s)</li>'
@@ -430,8 +431,41 @@ def render_video_packet(revision_root: Path) -> str:
         + mascot_warning
         + budget_section
         + posts_section
+        + pronunciation_section
         + sfx_section
         + f"<pre>{escape(str(manifest))}</pre>"
         f"<pre>{escape(str(qa))}</pre>"
         "</body></html>"
     )
+
+
+def _render_pronunciation_section(revision_root: Path, storyboard: Storyboard) -> str:
+    path = revision_root / "reviews/pronunciation-qa.json"
+    if not path.is_file():
+        return '<section><h2>Có thể đọc sai</h2><p>Chưa có căn chữ Whisper; dùng phụ đề ước lượng.</p></section>'
+    report = read_yaml(path)
+    origins = {}
+    for scene in storyboard.scenes:
+        origins.setdefault(scene.script_line_id, scene.start_frame / 30)
+    rows = []
+    for flag in report.get("flags", []):
+        line, start, end = flag["line"], float(flag["start"]), float(flag["end"])
+        video_start = origins.get(line, 0) + start
+        audio_path = f"../renders/audio/lines/{line}.wav#t={max(0, start-.2):.3f},{end+.4:.3f}"
+        rows.append(
+            f'<tr><td>{escape(line)}</td><td>{escape(flag["script_word"])}</td>'
+            f'<td>{escape(flag["heard"] or "(không nghe được)")}</td>'
+            f'<td>{start:.2f}–{end:.2f} giây (dòng); '
+            f'<a href="../renders/video.mp4#t={video_start:.3f}">{video_start:.2f} giây video</a></td>'
+            f'<td>{escape(flag["priority"])}</td><td><audio controls preload="none" '
+            f'src="{escape(audio_path, quote=True)}"></audio></td>'
+            f'<td>{escape(flag["suggestion"])}</td></tr>'
+        )
+    ratios = "".join(f'<li>{escape(line["line"])}: {line["match_ratio"]:.1%}</li>'
+                     for line in report.get("lines", []))
+    return ('<section><h2>Có thể đọc sai</h2>'
+            '<p>Gợi ý từ ASR, cần bác sĩ nghe lại; không tự sửa lời thoại.</p>'
+            f'<p>Trạng thái: {escape(report.get("status", "unavailable"))}</p><ul>{ratios}</ul>'
+            '<table border="1"><tr><th>Dòng</th><th>Kịch bản</th><th>Nghe được</th>'
+            '<th>Mốc nghe lại</th><th>Ưu tiên</th><th>Audio</th><th>Gợi ý</th></tr>'
+            + "".join(rows) + '</table></section>')

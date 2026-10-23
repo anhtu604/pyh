@@ -1,5 +1,41 @@
 {
   "$defs": {
+    "AnatomyCue": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Action",
+          "type": "string"
+        },
+        "start_frame": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Start Frame"
+        },
+        "word": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Word",
+          "type": "string"
+        }
+      },
+      "required": [
+        "word",
+        "action"
+      ],
+      "title": "AnatomyCue",
+      "type": "object"
+    },
     "AssetTextLabel": {
       "additionalProperties": false,
       "description": "Baked annotation declared by its target asset; overlay text belongs in Remotion.",
@@ -20,6 +56,34 @@
         "text"
       ],
       "title": "AssetTextLabel",
+      "type": "object"
+    },
+    "CaptionWord": {
+      "additionalProperties": false,
+      "properties": {
+        "end_frame": {
+          "minimum": 0,
+          "title": "End Frame",
+          "type": "integer"
+        },
+        "start_frame": {
+          "minimum": 0,
+          "title": "Start Frame",
+          "type": "integer"
+        },
+        "text": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "start_frame",
+        "end_frame"
+      ],
+      "title": "CaptionWord",
       "type": "object"
     },
     "EvidenceHighlight": {
@@ -374,6 +438,14 @@
           "title": "Duration Frames",
           "type": "integer"
         },
+        "entrances": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/TextEntrance"
+          },
+          "title": "Entrances",
+          "type": "array"
+        },
         "evidence_highlight": {
           "anyOf": [
             {
@@ -503,6 +575,14 @@
           },
           "title": "Visual Assets",
           "type": "array"
+        },
+        "words": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/CaptionWord"
+          },
+          "title": "Words",
+          "type": "array"
         }
       },
       "required": [
@@ -518,6 +598,14 @@
     "SceneAnatomy": {
       "additionalProperties": false,
       "properties": {
+        "cues": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AnatomyCue"
+          },
+          "title": "Cues",
+          "type": "array"
+        },
         "motion": {
           "minLength": 1,
           "pattern": "\\S",
@@ -657,6 +745,28 @@
         "interpretation"
       ],
       "title": "SourceCard",
+      "type": "object"
+    },
+    "TextEntrance": {
+      "additionalProperties": false,
+      "properties": {
+        "start_frame": {
+          "minimum": 0,
+          "title": "Start Frame",
+          "type": "integer"
+        },
+        "text": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "start_frame"
+      ],
+      "title": "TextEntrance",
       "type": "object"
     },
     "VisualAssetRef": {

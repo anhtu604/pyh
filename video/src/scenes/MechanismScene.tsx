@@ -1,7 +1,7 @@
 import React, {createContext, useContext} from 'react';
 import {AbsoluteFill, interpolate, useCurrentFrame} from 'remotion';
 import {brand} from '../anatomy/palette';
-import {ANATOMY_COMPONENTS, ANATOMY_CONTENT_BOXES, ANATOMY_VIEW_BOXES, type AnatomySubject} from '../anatomy/registry';
+import {ANATOMY_COMPONENTS, ANATOMY_CONTENT_BOXES, ANATOMY_VIEW_BOXES, ANATOMY_CUE_ACTIONS, type AnatomySubject} from '../anatomy/registry';
 import {Captions, CAPTION_BACKGROUND_COLOR} from '../components/Captions';
 import {MascotGuide} from '../components/MascotGuide';
 import {useLayout, type Box} from '../layout';
@@ -9,6 +9,20 @@ import {isMechanismVisual, type Scene} from '../types';
 import {SourceMarker} from './WhiteboardScene';
 
 export type MechanismKind = 'anatomy' | 'process' | 'comparison' | 'timelapse';
+/** Only resolved alignment cues replace the legacy continuous animation. */
+export const anatomyCueProgress = (scene: Scene, frame: number): Record<string, number> | undefined => {
+  const anatomy = scene.anatomy;
+  const cues = anatomy?.cues?.filter(cue => cue.start_frame !== undefined);
+  if (!anatomy || !cues?.length) return undefined;
+  const result: Record<string, number> = Object.fromEntries(ANATOMY_CUE_ACTIONS[anatomy.subject].map(action => [action, 0]));
+  cues.forEach(cue => {
+    const start = cue.start_frame!;
+    const next = cues.filter(other => other.start_frame! > start).reduce((end, other) => Math.min(end, other.start_frame!), scene.duration_frames);
+    const duration = Math.max(1, Math.min(45, next - start));
+    result[cue.action] = Math.max(result[cue.action] ?? 0, Math.max(0, Math.min(1, (frame - start) / duration)));
+  });
+  return result;
+};
 /** Trailing scene numbers cycle through four views, including across 09/10 boundaries. */
 export const mechanismContentBounds = (subject: AnatomySubject, boxes: readonly Box[], viewport: Box): Box => {
   const content = ANATOMY_CONTENT_BOXES[subject], view = ANATOMY_VIEW_BOXES[subject];
@@ -74,11 +88,14 @@ export const MechanismScene: React.FC<{scene: Scene; kind: MechanismKind}> = ({s
   if (!scene.anatomy) throw new Error(`${scene.visual} requires anatomy`);
   const light = scene.visual_assets?.some((asset) => asset.role === 'mascot') ?? false;
   const anatomy = scene.anatomy;
+  const cueProgress = anatomyCueProgress(scene, frame);
   const Organ = ANATOMY_COMPONENTS[anatomy.subject];
   if (!Organ) throw new Error(`Unsupported anatomy subject: ${anatomy.subject}`);
   const progress = interpolate(frame, [0, Math.max(1, scene.duration_frames - 1)], [0, 1],
     {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
-  const severity = kind === 'comparison' || kind === 'timelapse' ? anatomy.severity * progress
+  // Cue progress controls the change; do not apply a second scene-wide disease clock.
+  const severity = cueProgress ? (anatomy.state === 'normal' && kind !== 'timelapse' && kind !== 'comparison' ? 0 : anatomy.severity)
+    : kind === 'comparison' || kind === 'timelapse' ? anatomy.severity * progress
     : anatomy.state === 'normal' ? 0
     : kind === 'anatomy' ? anatomy.severity * (0.4 + 0.6 * progress) : anatomy.severity;
   const boxes = kind === 'comparison' ? layout.comparison : [layout.subject];
@@ -96,17 +113,17 @@ export const MechanismScene: React.FC<{scene: Scene; kind: MechanismKind}> = ({s
     <AbsoluteFill data-mechanism-camera="true" style={{transform: `translate(${camera.x}%, ${camera.y}%) scale(${camera.zoom})`, transformOrigin: camera.origin}} data-framing={camera.framing}>
       {kind === 'comparison' ? <div style={{position: 'absolute', inset: 0, display: 'flex', flexDirection: layout.axis}}>
         {layout.comparison.map((box, i) => <div key={i} style={{...relative(box), position: 'absolute'}}>
-          <Organ state={i === 0 ? 'normal' : 'diseased'} severity={i === 0 ? 0 : severity} lightBackground={light} />
+          <Organ state={i === 0 ? 'normal' : 'diseased'} severity={i === 0 ? 0 : severity} lightBackground={light} cueProgress={cueProgress} />
         </div>)}
       </div> : <div style={{...relative(layout.subject), position: 'absolute'}}>
-        <Organ state={kind === 'timelapse' ? 'diseased' : anatomy.state} severity={severity} emphasizeFlow={kind === 'process'} lightBackground={light} />
+        <Organ state={kind === 'timelapse' ? 'diseased' : anatomy.state} severity={severity} emphasizeFlow={kind === 'process'} lightBackground={light} cueProgress={cueProgress} />
       </div>}
     </AbsoluteFill>
     </div>
     <MascotGuide scene={scene} />
     <div data-mechanism-caption-band="true" style={{position: 'absolute', left: caption.left, bottom: caption.bottom,
       width: caption.width, height: caption.height, backgroundColor: CAPTION_BACKGROUND_COLOR, borderRadius: 16}} />
-    <Captions text={scene.narration} durationInFrames={scene.duration_frames} />
+    <Captions text={scene.narration} words={scene.words} durationInFrames={scene.duration_frames} />
     {scene.source_marker ? <SourceMarker sourceMarker={scene.source_marker} /> : null}
   </AbsoluteFill>;
 };

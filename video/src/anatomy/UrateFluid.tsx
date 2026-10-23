@@ -5,6 +5,7 @@ import {anatomyColors as c, brand} from './palette';
 
 // Union of the joint capsule, exposed bone shafts and circular fluid inset.
 export const CONTENT_BOX = {left: 28, top: 28, width: 504, height: 504};
+export const CUE_ACTIONS = ['seed', 'grow', 'deposit'] as const;
 export const urateGeometry = (state: OrganProps['state'], severity: number, frame: number, fps: number) => {
   const level = state === 'normal' ? 0 : Math.max(0, Math.min(1, severity));
   const growth = Math.min(1, Math.max(0, frame / fps / 8));
@@ -17,10 +18,17 @@ const synovialSites = [[59, 215], [58, 274], [72, 332], [279, 252], [274, 319]];
 
 /** Qualitative joint section and fluid inset, not to scale. Deposits sit along
  * cartilage and within synovium; needle shape does not imply tissue puncture. */
-export const UrateFluid: React.FC<OrganProps> = ({state, severity}) => {
+export const UrateFluid: React.FC<OrganProps> = ({state, severity, cueProgress}) => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
   const g = urateGeometry(state, severity, frame, fps);
+  const cue = (action: string) => Math.max(0, Math.min(1, cueProgress?.[action] ?? 0));
+  if (cueProgress) {
+    g.needles = Math.ceil(g.level * 8 * cue('seed'));
+    g.growth = cue('grow');
+    g.length = 8 + 62 * g.growth * g.level;
+  }
+  const deposits = g.level * (cueProgress ? cue('deposit') : 1);
   return <svg viewBox="0 0 560 560" width="100%" height="100%" role="img"
     aria-label="Synovial joint section with magnified urate in fluid" data-state={state} data-severity={g.level}>
     <path data-layer="joint-capsule" d="M98 28 H222 C226 111 294 139 304 231 C318 344 244 410 231 532 H89 C86 423 28 359 28 274 C28 155 91 126 98 28Z" fill={c.adventitia}/>
@@ -38,11 +46,11 @@ export const UrateFluid: React.FC<OrganProps> = ({state, severity}) => {
       <path d="M78 332 C99 303 222 300 253 330 L253 314 C227 280 104 279 78 315Z"/>
     </g>
     <g data-layer="cartilage-deposits" fill={brand.off_white}>
-      {cartilageSites.slice(0, g.level >= .6 ? Math.ceil((g.level - .5) * 14) : 0).map(([x, y], i) =>
+      {cartilageSites.slice(0, deposits >= .6 ? Math.ceil((deposits - .5) * 14) : 0).map(([x, y], i) =>
         <path key={i} data-crystal="true" data-deposit-site="cartilage" transform={`translate(${x} ${y}) rotate(${i % 2 ? -8 : 8})`} d="M-13 0 L0 -2 L13 0 L0 2Z"/>)}
     </g>
     <g data-layer="synovial-deposits" fill={brand.off_white}>
-      {synovialSites.slice(0, g.level >= .7 ? Math.ceil((g.level - .6) * 12.5) : 0).map(([x, y], i) =>
+      {synovialSites.slice(0, deposits >= .7 ? Math.ceil((deposits - .6) * 12.5) : 0).map(([x, y], i) =>
         <path key={i} data-crystal="true" data-deposit-site="synovium" transform={`translate(${x} ${y}) rotate(${70 + i * 7})`} d="M-10 0 L0 -2 L10 0 L0 2Z"/>)}
     </g>
     <g data-layer="sample-connector" stroke={brand.teal} strokeWidth="3" fill="none">
@@ -62,7 +70,7 @@ export const UrateFluid: React.FC<OrganProps> = ({state, severity}) => {
       {insetSites.slice(0, g.needles).map(([x,y], i) => <circle key={i} data-seed="true" r="4" cx={x} cy={y}/>)}
     </g>
     <g data-layer="needle-crystals" fill={brand.off_white}>
-      {insetSites.slice(0, g.needles).map(([x,y], i) => <path key={i} data-crystal="true"
+      {insetSites.slice(0, cueProgress && g.growth <= 0 ? 0 : g.needles).map(([x,y], i) => <path key={i} data-crystal="true"
         transform={`translate(${x} ${y}) rotate(${i * 37 + 20})`}
         d={`M${-g.length / 2} 0 L0 -2.5 L${g.length / 2} 0 L0 2.5Z`}/>)}
     </g>

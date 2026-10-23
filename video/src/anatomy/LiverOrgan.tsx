@@ -29,3 +29,5 @@ export const LiverOrgan: React.FC<OrganProps> = ({state, severity}) => {
       fill="none" stroke={brand.off_white} strokeWidth="8" strokeLinecap="round" />
   </svg>;
 };
+
+export const CUE_ACTIONS: readonly string[] = [];
