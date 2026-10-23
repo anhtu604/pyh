@@ -310,3 +310,13 @@ def test_pin_never_in_argv_env_or_files(operator, monkeypatch):
     for path in operator[0].rglob('*'):
         if path.is_file():
             assert b'918273' not in path.read_bytes()
+
+
+def test_projects_skips_invalid_manifest(tmp_path, capsys):
+    from healthvideo.workflows.factory import projects
+
+    bad = tmp_path / "projects" / "cu" / "project.yaml"
+    bad.parent.mkdir(parents=True)
+    bad.write_text("schema_version: '2.0'\nslug: cu\ncontent_profile: legacy\n", encoding="utf-8")
+    assert list(projects(tmp_path)) == []
+    assert "Bỏ qua cu" in capsys.readouterr().err

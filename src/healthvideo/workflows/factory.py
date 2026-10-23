@@ -34,8 +34,14 @@ def projects(root: Path):
     paths = [root / 'projects' / entry.slug for entry in load_queue(root)]
     paths.extend(path.parent for path in sorted((root / 'projects').glob('*/project.yaml')))
     for path in dict.fromkeys(paths):
-        if (path / 'project.yaml').is_file():
-            yield path, ProjectManifestV2.model_validate(read_yaml(path / 'project.yaml'))
+        if not (path / 'project.yaml').is_file():
+            continue
+        try:
+            project = ProjectManifestV2.model_validate(read_yaml(path / 'project.yaml'))
+        except ValueError as error:  # one stale project must not stop the whole factory
+            print(f'Bỏ qua {path.name}: project.yaml không hợp lệ ({type(error).__name__})', file=sys.stderr)
+            continue
+        yield path, project
 
 
 def child_env() -> dict[str, str]:
