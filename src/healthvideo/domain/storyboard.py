@@ -193,6 +193,12 @@ class Scene(BaseModel):
 
     @model_validator(mode="after")
     def validate_scene(self) -> "Scene":
+        if self.visual == "whiteboard" and not (
+            (self.on_screen_text or "").strip()
+            or any(asset.role == "whiteboard" for asset in self.visual_assets)
+        ):
+            raise ValueError(f"Scene {self.id}: whiteboard requires on_screen_text "
+                             "or a visual_assets reference with role whiteboard")
         if self.visual == "source_card" and (
             self.source_card is None or not self.claim_id or not self.source_marker
         ):
@@ -245,6 +251,11 @@ class Storyboard(BaseModel):
                 raise ValueError(f"Scene {scene.id}: more than 4 consecutive mechanism scenes "
                                  "with the same anatomy.subject and visual; vary the view")
             previous = key
+        mechanisms = [scene for scene in self.scenes if scene.anatomy is not None]
+        if (self.format_profile == "youtube_long" and len(mechanisms) >= 6
+                and len({scene.anatomy.subject for scene in mechanisms}) < 2):
+            raise ValueError("youtube_long with at least 6 mechanism scenes requires at least 2 anatomy.subject "
+                             "values; choose from library.json: " + ", ".join(SUPPORTED_ANATOMY_SUBJECTS))
         return self
 
     @model_validator(mode="after")

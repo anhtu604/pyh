@@ -117,7 +117,7 @@ def render_clips(
         # The reviewed clip content is followed by an intentional silent CTA.
         cta = Scene(
             id=f"{clip_id}-CTA", start_frame=frames - 90, duration_frames=90,
-            narration="", visual="whiteboard",
+            narration="", visual="whiteboard", on_screen_text=brand.cta.youtube_full_video,
         )
         board = storyboard.model_copy(update={"scenes": (*render_input.scenes, cta)})
         alignment = concat_scene_audio(

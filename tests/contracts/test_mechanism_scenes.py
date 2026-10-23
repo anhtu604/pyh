@@ -47,7 +47,7 @@ def scene_data(visual: str = "anatomy_animation", **changes: object) -> dict:
         "start_frame": 0,
         "duration_frames": 1350,
         "narration": "Illustration only",
-        "visual": visual,
+        "visual": visual, "on_screen_text": "Synthetic illustration.",
         "anatomy": dict(ANATOMY),
         "explainer_layer_id": "L1",
         **changes,
@@ -103,13 +103,14 @@ def test_old_kinds_forbid_anatomy(visual: str) -> None:
 
 
 def test_old_scene_serialization_is_byte_identical() -> None:
-    # Exact pre-T6 serialized scene, including the existing null-valued fields.
+    # Canonical serialization order, including nulls and the visible whiteboard summary.
     expected = {
         "schema_version": "1.0",
         "id": "S1",
         "start_frame": 0,
         "duration_frames": 1350,
         "narration": "Illustration",
+        "on_screen_text": "Synthetic illustration.",
         "script_line_id": None,
         "claim_id": None,
         "chapter_id": None,

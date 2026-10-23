@@ -71,7 +71,7 @@ def _enable_visual_budget(
             "narration": "Visual whiteboard synthetic.",
             "claim_id": "C01",
             "source_marker": "[1]",
-            "visual": "whiteboard",
+            "visual": "whiteboard", "on_screen_text": "Synthetic illustration.",
         },
         {
             **highlight,

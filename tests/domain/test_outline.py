@@ -31,7 +31,7 @@ def _board(claims: dict[str, str] | None = None) -> Storyboard:
     scenes = tuple(
         Scene(
             id=f"S{index:02d}", start_frame=(index - 1) * 900, duration_frames=900,
-            narration="Nội dung", visual="whiteboard", chapter_id=chapter,
+            narration="Nội dung", visual="whiteboard", on_screen_text="Synthetic illustration.", chapter_id=chapter,
             claim_id=claims.get(f"S{index:02d}"),
         )
         for index, chapter in enumerate(CHAPTERS, start=1)
@@ -91,7 +91,7 @@ def test_scene_claim_must_be_planned_in_its_chapter() -> None:
 def test_outline_requires_youtube_long_storyboard() -> None:
     board = Storyboard(
         title="PYH",
-        scenes=(Scene(id="S01", start_frame=0, duration_frames=1350, narration="N", visual="whiteboard"),),
+        scenes=(Scene(id="S01", start_frame=0, duration_frames=1350, narration="N", visual="whiteboard", on_screen_text="Synthetic illustration."),),
     )
     with pytest.raises(ValueError, match="requires a youtube_long storyboard"):
         validate_outline(_outline(), board, {"C01"})

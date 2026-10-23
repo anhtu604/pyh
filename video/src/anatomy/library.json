@@ -24,6 +24,14 @@
         "extracellular-matrix"
       ]
     },
+    "liver_lobule": {
+      "file": "LiverLobule.tsx",
+      "layers": ["lobule-boundary", "central-vein", "portal-triads", "hepatocyte-cords", "sinusoids", "inflammation", "portal-fibrosis"]
+    },
+    "liver_organ": {
+      "file": "LiverOrgan.tsx",
+      "layers": ["liver-silhouette", "right-lobe", "left-lobe", "falciform-ligament"]
+    },
     "heart": {
       "file": "Heart.tsx",
       "layers": [

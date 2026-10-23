@@ -14,7 +14,7 @@ from healthvideo.render.input import audio_timing_qa, build_render_input
 def test_duration_tracks_content(frames: int) -> None:
     board = Storyboard(title="variable", scenes=(Scene(
         id="S01", start_frame=0, duration_frames=frames,
-        narration="content", visual="whiteboard",
+        narration="content", visual="whiteboard", on_screen_text="Synthetic illustration.",
     ),))
     assert build_render_input(board, "audio/narration.wav").scenes[0].duration_frames == frames
 
@@ -213,7 +213,7 @@ def test_scene_rejects_whitespace_only_source_marker() -> None:
             duration_frames=1350,
             narration="Không có dấu nguồn hợp lệ.",
             source_marker="   ",
-            visual="whiteboard",
+            visual="whiteboard", on_screen_text="Synthetic illustration.",
         )
 
 
@@ -227,7 +227,7 @@ def test_build_render_input_rejects_gap_with_scene_id() -> None:
                 start_frame=700,
                 duration_frames=675,
                 narration="Phần kết luận.",
-                visual="whiteboard",
+                visual="whiteboard", on_screen_text="Synthetic illustration.",
             ),
         ],
     )
@@ -251,7 +251,7 @@ def test_visual_asset_ref_validates_path_role_pose_and_duplicates() -> None:
             start_frame=0,
             duration_frames=1350,
             narration="Legacy compatible.",
-            visual="whiteboard",
+            visual="whiteboard", on_screen_text="Synthetic illustration.",
             visual_assets=(mascot, mascot),
         )
 
@@ -262,7 +262,7 @@ def test_visual_assets_round_trip_through_render_input() -> None:
         start_frame=0,
         duration_frames=1350,
         narration="Declared visual.",
-        visual="whiteboard",
+        visual="whiteboard", on_screen_text="Synthetic illustration.",
         visual_assets=(
             VisualAssetRef(
                 path="assets/guide.svg", role="mascot", pose="explain"

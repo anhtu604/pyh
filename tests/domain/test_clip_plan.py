@@ -14,7 +14,7 @@ def _board(profile: str = "youtube_long") -> Storyboard:
     for scene_id, chapter, frames, claim in LAYOUT:
         scenes.append(Scene(
             id=scene_id, start_frame=start, duration_frames=frames, narration=f"Lời {scene_id}",
-            visual="whiteboard", claim_id=claim,
+            visual="whiteboard", on_screen_text="Synthetic illustration.", claim_id=claim,
             chapter_id=chapter if profile == "youtube_long" else None,
         ))
         start += frames

@@ -9,7 +9,7 @@ def _input(*chapters: tuple[str, int, str]):
     scenes, start = [], 0
     for index, (chapter, frames, text) in enumerate(chapters, start=1):
         scenes.append(Scene(id=f"S{index:02d}", start_frame=start, duration_frames=frames,
-                            narration=text, visual="whiteboard", chapter_id=chapter))
+                            narration=text, visual="whiteboard", on_screen_text="Synthetic illustration.", chapter_id=chapter))
         start += frames
     board = Storyboard(title="PYH", scenes=tuple(scenes), format_profile="youtube_long")
     return build_render_input(board, "audio/narration.wav")
@@ -101,7 +101,7 @@ def test_referenced_asset_without_hash_raises() -> None:
     from healthvideo.render.input import build_render_input
 
     scene = Scene(id="S01", start_frame=0, duration_frames=1800, narration="a",
-                  visual="whiteboard", chapter_id="CH01",
+                  visual="whiteboard", on_screen_text="Synthetic illustration.", chapter_id="CH01",
                   visual_assets=({"path": "assets/missing.png", "role": "whiteboard"},))
     board = Storyboard(title="PYH", scenes=(scene,), format_profile="youtube_long")
     ri = build_render_input(board, "audio/narration.wav")

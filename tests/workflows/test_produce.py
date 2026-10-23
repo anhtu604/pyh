@@ -138,7 +138,7 @@ def _m65_project(tmp_path: Path) -> Path:
             "script_line_id": "L01",
             "claim_id": "C01",
             "source_marker": "[1]",
-            "visual": "whiteboard",
+            "visual": "whiteboard", "on_screen_text": "Synthetic illustration.",
         },
         {
             **highlight,
@@ -767,7 +767,7 @@ def test_v2_unbound_tail_is_rejected_before_synthesis(tmp_path):
     data = read_yaml(board_path)
     data["scenes"].append({
         "id": "SILENT-TAIL", "start_frame": sum(s["duration_frames"] for s in data["scenes"]),
-        "duration_frames": 300, "narration": "", "visual": "whiteboard",
+        "duration_frames": 300, "narration": "", "visual": "whiteboard", "on_screen_text": "Synthetic illustration.",
     })
     write_yaml_atomic(board_path, data)
     _resign_medical_approval(revision)

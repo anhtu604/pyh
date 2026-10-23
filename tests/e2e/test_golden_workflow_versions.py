@@ -452,6 +452,7 @@ def _m65_golden_board(revision: Path) -> dict:
         scene.pop("anatomy", None)
         scene.pop("evidence_highlight", None)
         scene["visual"] = "whiteboard"
+        scene["on_screen_text"] = "Synthetic illustration."
         if scene["id"] == "S03":
             scene.update(visual="evidence_highlight", evidence_highlight=highlight,
                          claim_id="C01", source_marker="[1]")

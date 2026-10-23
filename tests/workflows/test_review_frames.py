@@ -28,7 +28,7 @@ def scene(
         start_frame=start,
         duration_frames=duration,
         narration="Synthetic illustration only.",
-        visual=visual,
+        visual=visual, on_screen_text="Synthetic illustration.",
         anatomy=(
             {
                 "subject": subject,
@@ -221,6 +221,7 @@ def test_packet_attaches_only_mechanism_sheets_without_changing_gate_hashes(tmp_
 
     project, renders, data = setup_project(tmp_path, video=True)
     revision = renders.parent
+    write_yaml_atomic(revision / "assets/asset-manifest.yaml", {"assets": []})
     write_yaml_atomic(
         revision / "storyboard/storyboard.yaml",
         {

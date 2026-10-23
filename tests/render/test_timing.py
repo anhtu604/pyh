@@ -19,7 +19,7 @@ def board(*lines: str | None, durations=None, profile="explain_first_v1", visual
     return Storyboard(title="Timing", visual_budget_profile=profile, scenes=tuple(
         Scene(id=f"S{i}", start_frame=i * 60, duration_frames=duration,
               narration="approved", script_line_id=line,
-              visual=(visuals or ["whiteboard"] * len(lines))[i])
+              visual=(visuals or ["whiteboard"] * len(lines))[i], on_screen_text="Synthetic illustration.")
         for i, (line, duration) in enumerate(zip(lines, durations, strict=True))
     ))
 
@@ -224,7 +224,7 @@ def test_concat_source_board_checks_source_identity_and_allows_new_silence(tmp_p
     source = wav(tmp_path / "source.wav", 100)
     selected = source_board.scenes[0]
     silent = Scene(id="CTA", start_frame=selected.duration_frames,
-                   duration_frames=3, narration="", visual="whiteboard")
+                   duration_frames=3, narration="", visual="whiteboard", on_screen_text="Synthetic illustration.")
     clip = source_board.model_copy(update={"scenes": (selected, silent)})
     concat_scene_audio(clip, {"L": source}, tmp_path / "out.wav", source_board=source_board)
     bad = clip.model_copy(update={"scenes": (

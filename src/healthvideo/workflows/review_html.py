@@ -48,8 +48,8 @@ def _render_support(claim: EvidenceClaim) -> str:
     return "<ul>" + "".join(rows) + "</ul>" if rows else ""
 
 
-def _render_visual_budget_section(storyboard: Storyboard) -> str:
-    report = calculate_visual_budget(storyboard)
+def _render_visual_budget_section(storyboard: Storyboard, assets: AssetManifest) -> str:
+    report = calculate_visual_budget(storyboard, assets)
     rows = []
     for category in report.effective_bounds:
         frames = report.category_frames[category]
@@ -240,10 +240,10 @@ def render_medical_packet(revision_root: Path) -> str:
     mechanism_section = _render_mechanism_section(
         revision_root, [claim for claim in claims if claim.type == "mechanism"], sources,
     )
-    visual_budget_section = _render_visual_budget_section(storyboard)
     asset_manifest = AssetManifest.model_validate(
         read_yaml(revision_root / "assets" / "asset-manifest.yaml")
     )
+    visual_budget_section = _render_visual_budget_section(storyboard, asset_manifest)
     hook_outro_section = ""
     if script.format_profile == "hook_outro_v1":
         final = storyboard.scenes[-1]
@@ -375,10 +375,11 @@ def render_video_packet(revision_root: Path) -> str:
     timing_path = revision_root / "renders" / "scene-timing.json"
     if timing_path.is_file():
         storyboard = restore_timed_storyboard(storyboard, read_yaml(timing_path))
-    budget_section = _render_visual_budget_section(storyboard)
+    assets = AssetManifest.model_validate(read_yaml(revision_root / "assets/asset-manifest.yaml"))
+    budget_section = _render_visual_budget_section(storyboard, assets)
     if budget_section:
         recorded = qa.get("visual_budget")
-        expected = calculate_visual_budget(storyboard).model_dump(mode="json")
+        expected = calculate_visual_budget(storyboard, assets).model_dump(mode="json")
         if recorded is None:
             status = "thiếu visual_budget"
         elif canonical_json_hash(recorded) == canonical_json_hash(expected):

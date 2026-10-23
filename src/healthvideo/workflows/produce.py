@@ -200,7 +200,8 @@ def _produce_v2(
         read_yaml(layout.artifact_root / "storyboard" / "storyboard.yaml")
     )
     validate_anatomy_subjects(storyboard)
-    visual_budget_report = validate_visual_budget(storyboard)
+    asset_manifest = load_asset_manifest(layout.artifact_root / "assets/asset-manifest.yaml")
+    visual_budget_report = validate_visual_budget(storyboard, asset_manifest)
     visual_budget_qa = visual_budget_report.model_dump(mode="json")
     validate_hook_outro(
         script, storyboard, require_brand=script.format_profile == "hook_outro_v1",
@@ -214,7 +215,6 @@ def _produce_v2(
     provider_name = _provider_name(tts)
     provider_identity_data = provider_identity(tts)
     renderer_identity_data = renderer_identity()
-    asset_manifest = load_asset_manifest(layout.artifact_root / "assets/asset-manifest.yaml")
     # Validate pending declarations before any model invocation. All GPU subprocesses
     # finish synchronously: FLUX first, then VieNeu, then ACE-Step.
     referenced_storyboard_assets(layout.artifact_root, storyboard, asset_manifest)
@@ -283,7 +283,7 @@ def _produce_v2(
             if timing_record["fps"] != 30 or timing_record["pad_frames"] != PAD_FRAMES:
                 raise ValueError("Cached scene timing uses another timing policy")
             storyboard = restore_timed_storyboard(approved_storyboard, timing_record)
-            visual_budget_report = validate_visual_budget(storyboard)
+            visual_budget_report = validate_visual_budget(storyboard, asset_manifest)
             visual_budget_qa = visual_budget_report.model_dump(mode="json")
             final_frame = storyboard.scenes[-1].start_frame + storyboard.scenes[-1].duration_frames
             expected_input = build_render_input(
@@ -409,7 +409,7 @@ def _produce_v2(
                 generated_visual_hashes = {entry.path: entry.sha256 for entry in illustration_rights}
                 generated_visual_hashes["license-ledger.yaml"] = ledger_hash
         _write_json_atomic(staging_dir / "scene-timing.json", timing_record)
-        visual_budget_report = validate_visual_budget(storyboard)
+        visual_budget_report = validate_visual_budget(storyboard, asset_manifest)
         visual_budget_qa = visual_budget_report.model_dump(mode="json")
         render_input = build_render_input(
             storyboard, audio_file="audio/narration.wav"

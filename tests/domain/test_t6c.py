@@ -21,7 +21,7 @@ def board(frames: int, mascot_frames: int = 0) -> Storyboard:
                 start_frame=0,
                 duration_frames=mascot_frames,
                 narration="Synthetic fixture",
-                visual="whiteboard",
+                visual="whiteboard", on_screen_text="Synthetic illustration.",
                 chapter_id="CH01",
                 visual_assets=(
                     VisualAssetRef(
@@ -37,7 +37,7 @@ def board(frames: int, mascot_frames: int = 0) -> Storyboard:
                 start_frame=mascot_frames,
                 duration_frames=frames - mascot_frames,
                 narration="Synthetic fixture",
-                visual="whiteboard",
+                visual="whiteboard", on_screen_text="Synthetic illustration.",
                 chapter_id="CH01",
             )
         )
@@ -108,7 +108,7 @@ def test_brand_cta_default_and_nonblank(brand_profile_path):
 def test_mascot_share_is_frame_weighted_warning(frames, warns):
     report = calculate_visual_budget(board(1000, frames))
     assert report.mascot_frames == frames
-    assert bool(report.warnings) is warns
+    assert any("Mascot share" in warning for warning in report.warnings) is warns
 
 
 def test_clip_uses_custom_brand_invitation(brand_profile_path):

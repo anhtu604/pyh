@@ -108,6 +108,7 @@ scenes:
   narration: Synthetic illustration.
   claim_id: C02
   visual: whiteboard
+  on_screen_text: Synthetic illustration.
   script_line_id: L06
 - id: OUTRO
   start_frame: 1110

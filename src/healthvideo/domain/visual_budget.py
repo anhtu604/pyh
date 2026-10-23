@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from healthvideo.domain.asset_manifest import AssetKind, AssetManifest
+
 if TYPE_CHECKING:
     from healthvideo.domain.storyboard import Storyboard
 
@@ -129,7 +131,7 @@ def _effective_bounds(storyboard: Storyboard) -> dict[VisualCategory, PercentRan
     }
 
 
-def calculate_visual_budget(storyboard: Storyboard) -> VisualBudgetReport:
+def calculate_visual_budget(storyboard: Storyboard, assets: AssetManifest | None = None) -> VisualBudgetReport:
     bounds = _effective_bounds(storyboard)
     category_frames = {category: 0 for category in bounds}
     expected_start = 0
@@ -165,6 +167,17 @@ def calculate_visual_budget(storyboard: Storyboard) -> VisualBudgetReport:
         ("Mascot share exceeds 35% of storyboard frames.",)
         if 100 * mascot_frames > 35 * mascot_total else ()
     )
+    if storyboard.format_profile == "youtube_long":
+        flux_paths = {asset.path for asset in assets.assets
+                      if asset.kind is AssetKind.ILLUSTRATION
+                      and asset.source == "generated:flux2-klein-4b"} if assets else set()
+        illustrated = [scene for scene in storyboard.scenes if scene.visual == "whiteboard"
+                       and any(ref.role == "whiteboard" and ref.path in flux_paths
+                               for ref in scene.visual_assets)]
+        if len(illustrated) < 2:
+            warnings += (("youtube_long: use at least 2 whiteboard scenes with FLUX illustrations "
+                         "(hook and chapter opener); declare illustration recipes in asset-manifest.yaml. "
+                         "Advisory only: FLUX may be omitted when GPU is unavailable."),)
     return VisualBudgetReport(
         mascot_frames=mascot_frames,
         mascot_basis_points=10_000 * mascot_frames // mascot_total if mascot_total else 0,
@@ -179,8 +192,8 @@ def calculate_visual_budget(storyboard: Storyboard) -> VisualBudgetReport:
     )
 
 
-def validate_visual_budget(storyboard: Storyboard) -> VisualBudgetReport:
-    report = calculate_visual_budget(storyboard)
+def validate_visual_budget(storyboard: Storyboard, assets: AssetManifest | None = None) -> VisualBudgetReport:
+    report = calculate_visual_budget(storyboard, assets)
     if not report.passed:
         failures = []
         for category, bound in report.effective_bounds.items():

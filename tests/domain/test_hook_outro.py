@@ -12,7 +12,7 @@ def _pair():
         ScriptLine(id="OUTRO", text=OUTRO_TEXT, purpose="outro", delivery=Delivery(intent="close")),
     ])
     board = Storyboard(title="Thử nghiệm", scenes=(
-        Scene(id="HOOK", start_frame=0, duration_frames=30, narration="Câu hỏi?", script_line_id="HOOK", visual="whiteboard"),
+        Scene(id="HOOK", start_frame=0, duration_frames=30, narration="Câu hỏi?", script_line_id="HOOK", visual="whiteboard", on_screen_text="Synthetic illustration."),
         Scene(id="OUTRO", start_frame=30, duration_frames=60, narration=OUTRO_TEXT, script_line_id="OUTRO", visual="brand_outro"),
     ))
     return script, board

@@ -80,7 +80,7 @@ def _enable_packet_budget(project_dir: Path, *, override: bool = False) -> None:
             "narration": "Visual whiteboard synthetic.",
             "claim_id": "C01",
             "source_marker": "[1]",
-            "visual": "whiteboard",
+            "visual": "whiteboard", "on_screen_text": "Synthetic illustration.",
         },
         {
             **highlight,

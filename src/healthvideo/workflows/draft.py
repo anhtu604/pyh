@@ -76,7 +76,7 @@ def _validate(
     errors = [issue for issue in issues if issue.severity == "error"]
     if errors:
         raise ValueError(f"script review error ({errors[0].code}): {errors[0].message}")
-    validate_visual_budget(storyboard)
+    validate_visual_budget(storyboard, assets)
     validate_anatomy_subjects(storyboard)
     validate_hook_outro(script, storyboard, require_brand=True, allow_line_references=True)
     resolve_citations(

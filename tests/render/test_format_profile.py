@@ -9,7 +9,7 @@ from healthvideo.render.input import RenderInput, build_render_input
 def _scene(scene_id: str, start: int, frames: int, chapter: str | None) -> Scene:
     return Scene(
         id=scene_id, start_frame=start, duration_frames=frames,
-        narration="Nội dung", visual="whiteboard", chapter_id=chapter,
+        narration="Nội dung", visual="whiteboard", on_screen_text="Synthetic illustration.", chapter_id=chapter,
     )
 
 

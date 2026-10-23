@@ -115,7 +115,7 @@ def test_illustration_recipe_and_normalized_reference_control_reuse(tmp_path, mo
     recipe = illustration_record()
     board = Storyboard.model_validate({'title': 'Park', 'scenes': [{
         'id': 'S01', 'start_frame': 0, 'duration_frames': 90, 'narration': 'Park',
-        'visual': 'whiteboard', 'visual_assets': [
+        'visual': 'whiteboard', "on_screen_text": "Synthetic illustration.", 'visual_assets': [
             {'path': 'assets/illustrations/./park.png', 'role': 'whiteboard'}],
     }]})
     manifest = AssetManifest.model_validate({'assets': [recipe]})

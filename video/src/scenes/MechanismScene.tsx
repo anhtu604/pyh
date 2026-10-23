@@ -1,25 +1,54 @@
 import React, {createContext, useContext} from 'react';
 import {AbsoluteFill, interpolate, useCurrentFrame} from 'remotion';
 import {brand} from '../anatomy/palette';
-import {ANATOMY_COMPONENTS} from '../anatomy/registry';
+import {ANATOMY_COMPONENTS, ANATOMY_CONTENT_BOXES, ANATOMY_VIEW_BOXES, type AnatomySubject} from '../anatomy/registry';
 import {Captions, CAPTION_BACKGROUND_COLOR} from '../components/Captions';
 import {MascotGuide} from '../components/MascotGuide';
-import {useLayout} from '../layout';
+import {useLayout, type Box} from '../layout';
 import {isMechanismVisual, type Scene} from '../types';
 import {SourceMarker} from './WhiteboardScene';
 
 export type MechanismKind = 'anatomy' | 'process' | 'comparison' | 'timelapse';
 /** Trailing scene numbers cycle through four views, including across 09/10 boundaries. */
-export const mechanismCamera = (id: string, progress: number, framingIndex?: number) => {
+export const mechanismContentBounds = (subject: AnatomySubject, boxes: readonly Box[], viewport: Box): Box => {
+  const content = ANATOMY_CONTENT_BOXES[subject], view = ANATOMY_VIEW_BOXES[subject];
+  const mapped = boxes.map(box => {
+    const scale = Math.min(box.width / view.width, box.height / view.height);
+    return {left: box.left - viewport.left + (box.width - view.width * scale) / 2 + (content.left - view.left) * scale,
+      top: box.top - viewport.top + (box.height - view.height * scale) / 2 + (content.top - view.top) * scale,
+      width: content.width * scale, height: content.height * scale};
+  });
+  const left = Math.min(...mapped.map(b => b.left)), top = Math.min(...mapped.map(b => b.top));
+  return {left, top, width: Math.max(...mapped.map(b => b.left + b.width)) - left,
+    height: Math.max(...mapped.map(b => b.top + b.height)) - top};
+};
+
+export const mechanismCamera = (id: string, progress: number, framingIndex?: number,
+  fit?: {viewport: Box; content: Box}) => {
   const seed = Array.from(id).reduce((hash, char) => (hash * 31 + char.charCodeAt(0)) >>> 0, 0);
   const suffix = id.match(/(\d+)$/)?.[1];
   const index = framingIndex ?? (suffix ? Number(BigInt(suffix) % 4n) : seed % 4);
   const framing = (['wide', 'left', 'right', 'center'] as const)[index];
   const t = Math.max(0, Math.min(1, progress));
-  const zoom = [1, 1.18, 1.18, 1.35][index] + [0.08, 0.14, 0.14, 0.15][index] * t;
+  let zoom = [1, 1.18, 1.18, 1.35][index] + [0.08, 0.14, 0.14, 0.15][index] * t;
   const angle = (seed % 360) * Math.PI / 180;
-  return {framing, zoom, x: [0, 8, -8, 0][index] + Math.cos(angle) * t,
-    y: Math.sin(angle) * t, origin: ['50% 50%', '35% 50%', '65% 50%', '50% 50%'][index]};
+  let x = [0, 8, -8, 0][index] + Math.cos(angle) * t, y = Math.sin(angle) * t;
+  const origin = ['50% 50%', '35% 50%', '65% 50%', '50% 50%'][index];
+  if (fit) {
+    const {viewport: v, content: c} = fit;
+    const maxZoom = Math.min(v.width / c.width, v.height / c.height);
+    // Compress the authored camera range into available space, preserving motion.
+    zoom = Math.min(maxZoom, 1 + (zoom - 1) / .5 * Math.max(0, Math.min(1.5, maxZoom) - 1));
+    const [ox, oy] = origin.split(' ').map(n => parseFloat(n) / 100);
+    const clampTranslation = (desired: number, size: number, start: number, extent: number, pivot: number) => {
+      const low = -(pivot * size + (start - pivot * size) * zoom);
+      const high = size - (pivot * size + (start + extent - pivot * size) * zoom);
+      return Math.max(low, Math.min(high, desired / 100 * size)) / size * 100;
+    };
+    x = clampTranslation(x, v.width, c.left, c.width, ox);
+    y = clampTranslation(y, v.height, c.top, c.height, oy);
+  }
+  return {framing, zoom, x, y, origin};
 };
 
 export const MechanismCameraContext = createContext<number | undefined>(undefined);
@@ -52,12 +81,14 @@ export const MechanismScene: React.FC<{scene: Scene; kind: MechanismKind}> = ({s
   const severity = kind === 'comparison' || kind === 'timelapse' ? anatomy.severity * progress
     : anatomy.state === 'normal' ? 0
     : kind === 'anatomy' ? anatomy.severity * (0.4 + 0.6 * progress) : anatomy.severity;
-  const camera = mechanismCamera(scene.id, progress, framingIndex);
   const boxes = kind === 'comparison' ? layout.comparison : [layout.subject];
   const viewport = {left: Math.min(...boxes.map(b => b.left)), top: Math.min(...boxes.map(b => b.top)),
     width: 0, height: 0};
   viewport.width = Math.max(...boxes.map(b => b.left + b.width)) - viewport.left;
   viewport.height = Math.max(...boxes.map(b => b.top + b.height)) - viewport.top;
+  const camera = mechanismCamera(scene.id, progress, framingIndex, {
+    viewport, content: mechanismContentBounds(anatomy.subject, boxes, viewport),
+  });
   const relative = (box: typeof layout.subject) => ({...box, left: box.left - viewport.left, top: box.top - viewport.top});
   const caption = frameLayout.captions;
   return <AbsoluteFill style={{backgroundColor: light ? brand.off_white : brand.night, color: light ? brand.navy : brand.off_white}}>

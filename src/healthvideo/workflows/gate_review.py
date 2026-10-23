@@ -276,7 +276,7 @@ def approve_gate(
         storyboard = Storyboard.model_validate(
             read_yaml(revision_root / "storyboard/storyboard.yaml")
         )
-        validate_visual_budget(storyboard)
+        validate_visual_budget(storyboard, manifest)
         script = Script.model_validate(read_yaml(revision_root / "script/script.yaml"))
         validate_hook_outro(script, storyboard, require_brand=True, allow_line_references=True)
         if storyboard.format_profile == "youtube_long":

@@ -279,6 +279,7 @@ def create_long_form_project_fixture(root: Path) -> Path:
             "narration": texts[index],
             "script_line_id": f"L{index + 1:02d}",
             "visual": "whiteboard",
+            "on_screen_text": "Synthetic chapter summary.",
             "chapter_id": chapters[index],
         }
         if index < 5:
@@ -496,7 +497,8 @@ def complete_explain_first_fixture(revision: Path) -> None:
             script["lines"].append(line)
             board["scenes"].append({"id": f"S{index:02}", "start_frame": 0,
                 "duration_frames": 225, "script_line_id": line["id"],
-                "narration": line["text"], "visual": "whiteboard"})
+                "narration": line["text"], "visual": "whiteboard",
+                "on_screen_text": "Synthetic illustration."})
     highlight = next(scene["evidence_highlight"] for scene in board["scenes"]
                      if scene.get("evidence_highlight"))
     board["scenes"][0].update(visual="evidence_highlight", evidence_highlight=highlight)

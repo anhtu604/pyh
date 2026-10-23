@@ -39,7 +39,7 @@ def board(ref: VisualAssetRef) -> Storyboard:
                 start_frame=0,
                 duration_frames=1350,
                 narration="Visual",
-                visual="whiteboard",
+                visual="whiteboard", on_screen_text="Synthetic illustration.",
                 visual_assets=(ref,),
             ),
         ),
@@ -80,7 +80,7 @@ def test_storyboard_asset_resolver_rejects_orphan_scene_asset(tmp_path: Path) ->
                 start_frame=0,
                 duration_frames=1350,
                 narration="Legacy",
-                visual="whiteboard",
+                visual="whiteboard", on_screen_text="Synthetic illustration.",
             ),
         ),
     )

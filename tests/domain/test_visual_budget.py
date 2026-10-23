@@ -29,7 +29,7 @@ def storyboard(
                 start_frame=start,
                 duration_frames=duration,
                 narration=f"Cảnh {index}",
-                visual=visual,
+                visual=visual, on_screen_text="Synthetic illustration.",
             )
         )
         start += duration

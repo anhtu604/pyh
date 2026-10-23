@@ -91,7 +91,7 @@ def test_illustration_asset_rejects_text_labels(tmp_path, field, target):
 
     manifest = AssetManifest.model_validate({'assets': [illustration_record()]})
     board = Storyboard.model_validate({'title': 'Park', 'scenes': [{
-        'id': 'S01', 'start_frame': 0, 'duration_frames': 90, 'narration': 'Park', 'visual': 'whiteboard',
+        'id': 'S01', 'start_frame': 0, 'duration_frames': 90, 'narration': 'Park', 'visual': 'whiteboard', "on_screen_text": "Synthetic illustration.",
         'visual_assets': [{'path': 'assets/illustrations/park.png', 'role': 'whiteboard'}],
         field: [{'asset_path': target, 'text': 'artery'}],
     }]})

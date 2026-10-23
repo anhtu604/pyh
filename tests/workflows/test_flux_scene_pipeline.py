@@ -57,7 +57,8 @@ def test_flux_recipe_reaches_scene_renderer_with_identical_bytes_and_provenance(
     board_path = revision / "storyboard/storyboard.yaml"
     board = read_yaml(board_path)
     reference = {"path": recipe["path"], "role": "whiteboard"}
-    board["scenes"][0]["visual_assets"] = [reference]
+    illustrated_scene = next(scene for scene in board["scenes"] if scene["visual"] == "whiteboard")
+    illustrated_scene["visual_assets"] = [reference]
     write_yaml_atomic(board_path, board)
     approve_gate(project, GateKind.MEDICAL, reviewer="synthetic test doctor",
                  now=datetime(2026, 10, 23, tzinfo=UTC))
@@ -70,7 +71,8 @@ def test_flux_recipe_reaches_scene_renderer_with_identical_bytes_and_provenance(
         render_input = json.loads(Path(argv[argv.index("--props") + 1]).read_text(encoding="utf-8"))
         public_dir = Path(argv[argv.index("--public-dir") + 1])
         scene = next(scene for scene in render_input["scenes"]
-                     if scene["id"] == board["scenes"][0]["id"])
+                     if scene["id"] == illustrated_scene["id"])
+        assert scene["visual"] == "whiteboard"
         assert scene["visual_assets"] == [{**reference, "pose": None}]
         assert (public_dir / scene["visual_assets"][0]["path"]).read_bytes() == fake_flux
         assert (revision / recipe["path"]).read_bytes() == fake_flux
@@ -78,13 +80,20 @@ def test_flux_recipe_reaches_scene_renderer_with_identical_bytes_and_provenance(
         Path(argv[argv.index("--output") + 1]).write_bytes(b"synthetic video")
         return 0
 
-    output = produce.produce_project(project, SilentTTS(), renderer, music=False)
+    class CheckedTTS(SilentTTS):
+        def synthesize(self, request, output):
+            # The synchronous FLUX subprocess must finish before another GPU stage.
+            assert (revision / recipe["path"]).read_bytes() == fake_flux
+            return super().synthesize(request, output)
+
+    output = produce.produce_project(project, CheckedTTS(), renderer, music=False)
 
     assert len(rendered_scenes) == 1
     assert output.is_file()
     assert (revision / "renders" / recipe["path"]).read_bytes() == fake_flux
     promoted_input = json.loads((revision / "renders/render-input.json").read_text(encoding="utf-8"))
-    assert promoted_input["scenes"][0] == rendered_scenes[0]
+    assert next(scene for scene in promoted_input["scenes"]
+                if scene["id"] == illustrated_scene["id"]) == rendered_scenes[0]
     assert manifest_path.read_bytes() == reviewed_manifest_bytes
     assert board_path.read_bytes() == reviewed_board_bytes
     entry, = read_yaml(revision / "renders/license-ledger.yaml")["entries"]
