@@ -5,7 +5,7 @@ from typing import Any
 
 from healthvideo.domain.evidence import EvidenceClaim, SourceRecord
 from healthvideo.domain.script import Script
-from healthvideo.domain.storyboard import Scene
+from healthvideo.domain.storyboard import Scene, SourceCard
 
 
 def resolve_citations(
@@ -30,6 +30,20 @@ def resolve_citations(
     lines_by_id = {line.id: line for line in script.lines}
     citations: dict[str, list[SourceRecord]] = {}
     for index, scene in enumerate(scenes):
+        if (scene.on_screen_text and any(char.isdigit() for char in scene.on_screen_text)
+                and (scene.claim_id not in claims or not scene.source_marker)):
+            raise ValueError(f"Scene {scene.id}: on_screen_text numbers require a ledger claim/source mapping")
+        if scene.source_card is not None:
+            expected = SourceCard.from_ledger(ledger, scene.claim_id or "", scene.source_card.source_id)
+            if scene.source_card != expected:
+                raise ValueError(f"Scene {scene.id}: source card must match evidence ledger exactly")
+        if scene.evidence_highlight is not None:
+            source_id = scene.evidence_highlight.source_id
+            if source_id is not None and (
+                scene.claim_id not in claims or source_id not in records
+                or source_id not in claims[scene.claim_id].sources
+            ):
+                raise ValueError(f"Scene {scene.id}: source crop must belong to claim in ledger")
         if strict_line_ids:
             line = lines_by_id.get(scene.script_line_id or "")
             if index == 0 and line is not None and line.claim_id and not line.source_marker:

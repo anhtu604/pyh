@@ -1,5 +1,6 @@
+from collections.abc import Mapping
 from pathlib import Path, PurePosixPath
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -10,6 +11,36 @@ from healthvideo.domain.visual_budget import VisualBudgetOverride, VisualBudgetP
 from healthvideo.visuals.anatomy_library import load_library
 
 MECHANISM_VISUALS = ("anatomy_animation", "process_animation", "comparison", "timelapse")
+
+
+class SourceCard(BaseModel):
+    """Renderer text copied exactly from the evidence ledger, never a source image."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    source_id: Nonblank
+    title: Nonblank
+    journal: str
+    year: int | None = None
+    pmid: str | None = None
+    doi: str | None = None
+    interpretation: Nonblank
+
+    @classmethod
+    def from_ledger(cls, ledger: Mapping[str, Any], claim_id: str, source_id: str) -> "SourceCard":
+        from healthvideo.domain.evidence import EvidenceClaim, SourceRecord
+
+        claims = {item["id"]: item for item in ledger.get("claims", [])}
+        records = {item["id"]: item for item in ledger.get("records", [])}
+        if claim_id not in claims or source_id not in records:
+            raise ValueError("source card requires claim and source in ledger")
+        claim = EvidenceClaim.model_validate(claims[claim_id])
+        source = SourceRecord.model_validate(records[source_id])
+        if source_id not in claim.sources:
+            raise ValueError("source card source must belong to claim in ledger")
+        return cls(source_id=source.id, title=source.title, journal=source.journal,
+                   year=source.year, pmid=source.pmid, doi=source.doi,
+                   interpretation=claim.text_public)
 
 
 class SceneAnatomy(BaseModel):
@@ -134,6 +165,7 @@ class Scene(BaseModel):
     start_frame: int = Field(json_schema_extra={"minimum": 0})
     duration_frames: int = Field(json_schema_extra={"exclusiveMinimum": 0})
     narration: str
+    on_screen_text: str | None = Field(default=None, max_length=90, exclude_if=lambda v: v is None)
     script_line_id: str | None = None
     claim_id: str | None = None
     chapter_id: str | None = Field(default=None, pattern=r"^CH\d{2}$")
@@ -141,12 +173,13 @@ class Scene(BaseModel):
         default=None, json_schema_extra={"pattern": r"\S"}
     )
     visual: Literal[
-        "whiteboard", "chart", "evidence_highlight", "brand_outro",
+        "whiteboard", "chart", "evidence_highlight", "source_card", "brand_outro",
         "anatomy_animation", "process_animation", "comparison", "timelapse",
     ]
     explainer_layer_id: str | None = Field(default=None, exclude_if=lambda v: v is None)
     anatomy: SceneAnatomy | None = Field(default=None, exclude_if=lambda v: v is None)
     evidence_highlight: EvidenceHighlight | None = None
+    source_card: SourceCard | None = Field(default=None, exclude_if=lambda v: v is None)
     visual_assets: tuple[VisualAssetRef, ...] = ()
     labels: tuple[AssetTextLabel, ...] = Field(default=(), exclude_if=lambda value: not value)
     annotations: tuple[AssetTextLabel, ...] = Field(default=(), exclude_if=lambda value: not value)
@@ -160,6 +193,14 @@ class Scene(BaseModel):
 
     @model_validator(mode="after")
     def validate_scene(self) -> "Scene":
+        if self.visual == "source_card" and (
+            self.source_card is None or not self.claim_id or not self.source_marker
+        ):
+            raise ValueError(f"Scene {self.id}: source_card requires claim, marker and ledger metadata")
+        if self.visual != "source_card" and self.source_card is not None:
+            raise ValueError(f"Scene {self.id}: source_card metadata requires source_card visual")
+        if self.visual != "evidence_highlight" and self.evidence_highlight is not None:
+            raise ValueError(f"Scene {self.id}: highlight metadata requires evidence_highlight visual")
         if self.visual in MECHANISM_VISUALS and self.anatomy is None:
             raise ValueError(f"Scene {self.id}: {self.visual} requires anatomy")
         if self.visual not in MECHANISM_VISUALS and self.anatomy is not None:
@@ -192,6 +233,19 @@ class Storyboard(BaseModel):
     visual_budget_profile: VisualBudgetProfile = "explain_first_v1"
     visual_budget_override: VisualBudgetOverride | None = None
     format_profile: FormatProfile = "vertical_clip"
+
+    @model_validator(mode="after")
+    def validate_mechanism_variety(self) -> "Storyboard":
+        previous = None
+        run = 0
+        for scene in self.scenes:
+            key = (scene.visual, scene.anatomy.subject) if scene.anatomy else None
+            run = run + 1 if key is not None and key == previous else 1
+            if run > 4:
+                raise ValueError(f"Scene {scene.id}: more than 4 consecutive mechanism scenes "
+                                 "with the same anatomy.subject and visual; vary the view")
+            previous = key
+        return self
 
     @model_validator(mode="after")
     def validate_chapters(self) -> "Storyboard":

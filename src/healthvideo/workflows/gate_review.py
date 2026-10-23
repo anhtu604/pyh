@@ -282,12 +282,15 @@ def approve_gate(
         if storyboard.format_profile == "youtube_long":
             load_clip_scenes(revision_root, storyboard)
         referenced_storyboard_assets(revision_root, storyboard, manifest)
-        if script.format_profile == "hook_outro_v1":
+        if script.format_profile == "hook_outro_v1" or any(
+            scene.source_card is not None or scene.on_screen_text is not None
+            for scene in storyboard.scenes
+        ):
             resolve_citations(
                 script,
                 read_yaml(revision_root / "evidence/ledger.yaml"),
                 storyboard.scenes,
-                strict_line_ids=True,
+                strict_line_ids=script.format_profile == "hook_outro_v1",
             )
         for asset in hardened_highlights:
             if not any(

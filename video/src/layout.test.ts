@@ -11,6 +11,21 @@ vi.mock('remotion', () => ({interpolate: () => 1, useCurrentFrame: () => 0}));
 
 const inside = (box: Box, frame: {width: number; height: number}) =>
   box.left >= 0 && box.top >= 0 && box.left + box.width <= frame.width && box.top + box.height <= frame.height;
+const overlaps = (a: Box, b: Box) => a.left < b.left + b.width && b.left < a.left + a.width && a.top < b.top + b.height && b.top < a.top + a.height;
+
+it.each(Object.keys(LAYOUTS) as (keyof typeof LAYOUTS)[])('%s reserves large mechanism and separate whiteboard text areas', format => {
+  const l = LAYOUTS[format];
+  const caption = {...l.captions, top: l.frame.height - l.captions.bottom - l.captions.height};
+  expect(l.mechanism.subject.width).toBeGreaterThanOrEqual(format === 'vertical_clip' ? 1000 : 880);
+  expect(l.mechanism.subject.height).toBeGreaterThanOrEqual(format === 'vertical_clip' ? 1100 : 820);
+  for (const box of [l.mechanism.subject, ...l.mechanism.comparison]) {
+    expect(inside(box, l.frame)).toBe(true);
+    expect(overlaps(box, caption)).toBe(false);
+    expect(overlaps(box, l.mechanism.mascot)).toBe(false);
+  }
+  expect(inside(l.whiteboardText, l.frame)).toBe(true);
+  for (const reserved of [l.assets.standard, l.assets.explain, caption]) expect(overlaps(l.whiteboardText, reserved)).toBe(false);
+});
 
 describe('layouts', () => {
   it.each(Object.keys(LAYOUTS) as (keyof typeof LAYOUTS)[])('%s gives both caption rows room for Vietnamese accents and descenders', (format) => {
@@ -61,14 +76,14 @@ describe('layouts', () => {
   });
 
   it('WhiteboardScene renders landscape values inside the youtube_long provider', () => {
-    const scene = {id: 'S01', start_frame: 0, duration_frames: 90, narration: 'Noi dung', visual: 'whiteboard' as const, visual_assets: []};
+    const scene = {id: 'S01', start_frame: 0, duration_frames: 90, narration: 'Noi dung', on_screen_text: 'Y chinh', visual: 'whiteboard' as const, visual_assets: []};
     const html = (layout: typeof LAYOUTS.vertical_clip) => renderToStaticMarkup(
       React.createElement(LayoutContext.Provider, {value: layout}, React.createElement(WhiteboardScene, {scene})),
     );
     const landscape = html(LAYOUTS.youtube_long);
     expect(landscape).toContain('viewBox="0 0 1200 148"');
     expect(landscape).toContain('width:1200px');
-    expect(landscape).toContain('top:380px');
+    expect(landscape).toContain('top:300px');
     expect(html(LAYOUTS.vertical_clip)).toContain('viewBox="0 0 936 160"');
   });
 });
@@ -78,7 +93,7 @@ it('uses presenter windows at the cut line, clear of captions and vertical butto
   for (const layout of Object.values(LAYOUTS)) {
     const vertical = layout.frame.height > layout.frame.width;
     const cut = vertical ? layout.frame.height - layout.captions.bottom - layout.captions.height : layout.frame.height;
-    for (const box of [layout.mechanism.mascot, layout.assets.standard, layout.assets.explain, layout.assets.outroMascot]) {
+    for (const box of [layout.assets.standard, layout.assets.explain, layout.assets.outroMascot]) {
       expect(box.height / layout.frame.height).toBeCloseTo(vertical ? 0.30 : 0.38);
       expect(box.top + box.height).toBe(cut);
       expect(inside(box, layout.frame)).toBe(true);

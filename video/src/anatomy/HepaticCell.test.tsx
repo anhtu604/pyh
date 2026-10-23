@@ -10,6 +10,23 @@ const render = (severity: number, state: 'normal' | 'diseased' = 'diseased') =>
   renderToStaticMarkup(<HepaticCell state={state} severity={severity} />);
 
 describe('hepatic cell qualitative mechanism', () => {
+  it('makes the hepatocyte itself cover 75% of the square while retaining intracellular droplets', () => {
+    const output = render(.9);
+    const scale = Number(output.match(/data-layer="hepatocyte" transform="translate\(280 280\) scale\(([^)]+)\)/)![1]);
+    const cell = output.match(/data-layer="hepatocyte"[^>]*><rect x="([^"]+)" y="([^"]+)" width="([^"]+)" height="([^"]+)"/)!.slice(1).map(Number);
+    const left = 280 + (cell[0] - 280) * scale;
+    const right = left + cell[2] * scale;
+    expect(cell[2] * scale / 560).toBeGreaterThanOrEqual(.75);
+    expect(cell[3] * scale / 560).toBeGreaterThanOrEqual(.75);
+    // Maximum fat droplet stays inside the enlarged cell membrane.
+    const radius = hepaticGeometry('diseased', .9, 0, 30).dropletRadius * scale;
+    for (const x of [310, 346, 288]) {
+      const center = 280 + (x - 280) * scale;
+      expect(center - radius).toBeGreaterThan(left);
+      expect(center + radius).toBeLessThan(right);
+    }
+    expect(output).toContain('data-layer="extracellular-matrix"');
+  });
   it('keeps storage separate from injury and extracellular matrix', () => {
     expect(render(.25)).toContain('intracellular-storage');
     expect(render(.25)).not.toContain('injury-and-immune-signals');

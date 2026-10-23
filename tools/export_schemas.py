@@ -55,6 +55,18 @@ def _annotate_storyboard_contract(schema: dict[str, object]) -> None:
 
     scene["allOf"] = [
         {
+            "if": {"properties": {"visual": {"const": "source_card"}}, "required": ["visual"]},
+            "then": {
+                "required": ["claim_id", "source_marker", "source_card"],
+                "properties": {
+                    "claim_id": {"type": "string", "pattern": r"\S"},
+                    "source_marker": {"type": "string", "pattern": r"\S"},
+                    "source_card": {"$ref": "#/$defs/SourceCard"},
+                },
+            },
+            "else": {"properties": {"source_card": {"type": "null"}}},
+        },
+        {
             "if": {
                 "properties": {"visual": {"const": "evidence_highlight"}},
                 "required": ["visual"],

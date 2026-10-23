@@ -289,6 +289,14 @@ def test_produce_mechanism_needs_no_generated_asset_and_rejects_unknown_subject(
         tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW
     )
     revision = project / "revisions/001"
+    # This scenario replaces the evidence scene entirely; remove its owned crop
+    # and rights declaration so approval checks the mechanism-only storyboard.
+    manifest_path = revision / "assets/asset-manifest.yaml"
+    assets = read_yaml(manifest_path)
+    assets["assets"] = [asset for asset in assets["assets"]
+                        if asset["path"] != "assets/evidence-r01-crop.png"]
+    write_yaml_atomic(manifest_path, assets)
+    write_yaml_atomic(revision / "assets/license-ledger.yaml", {"schema_version": "2.0", "entries": []})
     board = {
         "title": "Illustration",
         "visual_budget_profile": "explain_first_v1",

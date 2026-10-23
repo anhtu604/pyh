@@ -1,10 +1,10 @@
-import {FONT_FAMILY} from '../fonts';
 import React from 'react';
 import {Img, interpolate, staticFile, useCurrentFrame} from 'remotion';
 import {Captions} from '../components/Captions';
 import {useLayout} from '../layout';
 import type {Scene} from '../types';
 import {highlightImageLayout, highlightObjectFit, localHighlightRect} from './highlightGeometry';
+import {SourceMarker} from './WhiteboardScene';
 
 type EvidenceHighlightSceneProps = {
   scene: Scene;
@@ -33,7 +33,8 @@ export const EvidenceHighlightScene: React.FC<EvidenceHighlightSceneProps> = ({s
       />
       <div
         style={{
-          backgroundColor: 'rgba(250, 204, 21, 0.72)',
+          backgroundColor: 'rgba(250, 204, 21, 0.3)',
+          mixBlendMode: 'multiply',
           height: local.height * imageLayout.height,
           left: imageLayout.left + local.x * imageLayout.width,
           position: 'absolute',
@@ -41,25 +42,7 @@ export const EvidenceHighlightScene: React.FC<EvidenceHighlightSceneProps> = ({s
           width: highlightedWidth,
         }}
       />
-      <div
-        style={{
-          backgroundColor: 'rgba(255, 253, 247, 0.95)',
-          borderRadius: 28,
-          bottom: layout.quote.bottom,
-          color: '#202124',
-          fontFamily: FONT_FAMILY,
-          fontSize: layout.quote.fontSize,
-          fontWeight: 700,
-          left: layout.quote.inset,
-          lineHeight: 1.3,
-          padding: 36,
-          position: 'absolute',
-          right: layout.quote.inset,
-        }}
-      >
-        <span>{highlight.quote}</span>
-        <span style={{color: '#B45309', marginLeft: 18}}>{scene.source_marker}</span>
-      </div>
+      {scene.source_marker ? <SourceMarker sourceMarker={scene.source_marker} /> : null}
       <Captions text={scene.narration} durationInFrames={scene.duration_frames} />
     </>
   );

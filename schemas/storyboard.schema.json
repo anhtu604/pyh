@@ -224,6 +224,45 @@
     "Scene": {
       "allOf": [
         {
+          "else": {
+            "properties": {
+              "source_card": {
+                "type": "null"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "visual": {
+                "const": "source_card"
+              }
+            },
+            "required": [
+              "visual"
+            ]
+          },
+          "then": {
+            "properties": {
+              "claim_id": {
+                "pattern": "\\S",
+                "type": "string"
+              },
+              "source_card": {
+                "$ref": "#/$defs/SourceCard"
+              },
+              "source_marker": {
+                "pattern": "\\S",
+                "type": "string"
+              }
+            },
+            "required": [
+              "claim_id",
+              "source_marker",
+              "source_card"
+            ]
+          }
+        },
+        {
           "if": {
             "properties": {
               "visual": {
@@ -374,6 +413,19 @@
           "title": "Narration",
           "type": "string"
         },
+        "on_screen_text": {
+          "anyOf": [
+            {
+              "maxLength": 90,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "On Screen Text"
+        },
         "schema_version": {
           "default": "1.0",
           "title": "Schema Version",
@@ -390,6 +442,17 @@
           ],
           "default": null,
           "title": "Script Line Id"
+        },
+        "source_card": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceCard"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "source_marker": {
           "anyOf": [
@@ -414,6 +477,7 @@
             "whiteboard",
             "chart",
             "evidence_highlight",
+            "source_card",
             "brand_outro",
             "anatomy_animation",
             "process_animation",
@@ -479,6 +543,78 @@
         "motion"
       ],
       "title": "SceneAnatomy",
+      "type": "object"
+    },
+    "SourceCard": {
+      "additionalProperties": false,
+      "description": "Renderer text copied exactly from the evidence ledger, never a source image.",
+      "properties": {
+        "doi": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Doi"
+        },
+        "interpretation": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Interpretation",
+          "type": "string"
+        },
+        "journal": {
+          "title": "Journal",
+          "type": "string"
+        },
+        "pmid": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pmid"
+        },
+        "source_id": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "title": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Title",
+          "type": "string"
+        },
+        "year": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Year"
+        }
+      },
+      "required": [
+        "source_id",
+        "title",
+        "journal",
+        "interpretation"
+      ],
+      "title": "SourceCard",
       "type": "object"
     },
     "VisualAssetRef": {

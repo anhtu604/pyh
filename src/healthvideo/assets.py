@@ -3,8 +3,9 @@
 from pathlib import Path, PurePosixPath
 
 from healthvideo.domain.asset_manifest import AssetKind, AssetManifest
+from healthvideo.domain.license_ledger import LicenseLedger, validate_license_ledger
 from healthvideo.domain.storyboard import Storyboard
-from healthvideo.storage.files import sha256_file
+from healthvideo.storage.files import read_yaml, sha256_file
 
 
 def referenced_evidence_assets(
@@ -44,6 +45,7 @@ def referenced_storyboard_assets(
 ) -> dict[str, Path]:
     """Resolve declared scene visuals and verify kind, location, and all bytes."""
     root = revision_root.resolve()
+    validate_evidence_highlights(revision_root, storyboard, manifest)
     records = {PurePosixPath(record.path).as_posix(): record for record in manifest.assets}
     allowed = {
         "brand": {AssetKind.FLOURISH},
@@ -149,6 +151,60 @@ def referenced_storyboard_assets(
                 f"chart asset must be referenced by exactly one scene: {record.path}"
             )
     return resolved_assets
+
+
+def validate_evidence_highlights(
+    revision_root: Path, storyboard: Storyboard, manifest: AssetManifest,
+) -> None:
+    """Only registered raster excerpts may be presented as source images.
+
+    Originality remains an explicit operator declaration in the license ledger;
+    technical checks bind that declaration to a source, crop and exact PNG bytes.
+    """
+    highlights = [scene for scene in storyboard.scenes if scene.evidence_highlight is not None]
+    if not highlights:
+        return
+    from PIL import Image
+
+    records = {asset.path: asset for asset in manifest.assets}
+    rights_path = revision_root / "assets/license-ledger.yaml"
+    if not rights_path.is_file():
+        raise ValueError("evidence_highlight requires source crop in license ledger; use source_card for interpretation")
+    rights = LicenseLedger.model_validate(read_yaml(rights_path))
+    # Draft validation uses a temporary sibling directory; its name is not a revision ID.
+    revisions = {asset.revision for asset in manifest.assets}
+    if len(revisions) != 1:
+        raise ValueError("source crop assets must belong to one revision")
+    validate_license_ledger(manifest, rights, next(iter(revisions)))
+    covered = {entry.path for entry in rights.entries}
+    for scene in highlights:
+        highlight = scene.evidence_highlight
+        assert highlight is not None
+        relative = _relative_posix_path(highlight.image, scene.id)
+        asset = records.get(relative.as_posix())
+        if (
+            relative.suffix.lower() not in {".png", ".jpg", ".jpeg"}
+            or highlight.source_id is None or highlight.page is None
+            or highlight.crop_x is None or highlight.crop_y is None
+            or highlight.crop_width is None or highlight.crop_height is None
+            or highlight.crop_pixel_width is None or highlight.crop_pixel_height is None
+            or asset is None or asset.kind is not AssetKind.EVIDENCE_HIGHLIGHT
+            or not asset.rights_required or asset.source != highlight.source_id
+            or asset.path not in covered
+        ):
+            raise ValueError(f"Scene {scene.id}: evidence_highlight requires registered source crop provenance; use source_card")
+        root = revision_root.resolve()
+        path = root.joinpath(*relative.parts).resolve()
+        if not path.is_relative_to(root):
+            raise ValueError(f"Scene {scene.id}: evidence asset must remain inside the project")
+        if sha256_file(path) != asset.sha256:
+            raise ValueError(f"Scene {scene.id}: source crop sha256 mismatch")
+        with Image.open(path) as image:
+            if image.format not in {"PNG", "JPEG"} or image.size != (
+                highlight.crop_pixel_width, highlight.crop_pixel_height
+            ) or getattr(image, "n_frames", 1) != 1:
+                raise ValueError(f"Scene {scene.id}: source crop image dimensions or format mismatch")
+            image.verify()
 
 
 def _relative_posix_path(value: str, scene_id: str) -> PurePosixPath:

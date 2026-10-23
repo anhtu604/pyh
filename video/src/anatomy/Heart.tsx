@@ -4,6 +4,9 @@ import type {Anatomy} from '../types';
 import type {OrganProps} from './ArterySection';
 import {anatomyColors as c, brand} from './palette';
 
+/** Full painted bounds, including pulse and flow extremes. */
+export const CONTENT_BOX = {left: 102, top: 24, width: 483, height: 486};
+
 // Anterior view: patient's left is screen-right; the cone leans toward its apex.
 const apex = {x: 365, y: 510};
 const base = {x: 260, y: 180};
@@ -29,8 +32,9 @@ export const Heart: React.FC<OrganProps & {cutaway?: boolean}> = ({state, severi
   const {fps} = useVideoConfig();
   const g = heartGeometry(state, severity, frame, fps);
   const flowPosition = frame / fps * (emphasizeFlow ? 150 : 60);
-  return <svg viewBox="40 10 440 540" width="100%" height="100%" role="img" aria-label="Stylised anterior heart"
+  return <svg viewBox="80 10 520 520" width="100%" height="100%" role="img" aria-label="Stylised anterior heart"
     data-state={state} data-severity={severity} data-cutaway={cutaway}>
+    <g transform="translate(-20 0) scale(1.3 1)">
     {/* Filled vessel walls: the arch turns left and descends behind the base. */}
     <path data-vessel="aortic-arch" fill={c.heartDeep}
       d="M270 233 L263 134 C262 94 241 64 210 64 C167 64 141 91 141 130 L141 213 L177 213 L177 130 C177 108 189 100 209 100 C225 100 228 114 228 137 L234 233Z" />
@@ -64,5 +68,6 @@ export const Heart: React.FC<OrganProps & {cutaway?: boolean}> = ({state, severi
     <path fill={c.vesselLight} d="M236 231 C224 205 227 183 243 158 L282 137 L371 143 L372 153 L283 148 L254 169 C242 192 245 208 254 219Z" />
     {emphasizeFlow && <path data-flow-arrow="true" transform={`translate(0 ${Math.sin(frame / fps * Math.PI * 2) * 14})`}
       d="M442 304 L442 362 L433 351 L427 357 L446 380 L465 357 L459 351 L450 362 L450 304Z" fill={brand.yellow} />}
+    </g>
   </svg>;
 };

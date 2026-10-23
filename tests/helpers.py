@@ -439,10 +439,47 @@ def write_explainer_fixture(revision: Path, claim_id: str) -> None:
     write_explainer(revision, Explainer.model_validate(data))
 
 
+def add_synthetic_evidence_crop(revision: Path) -> None:
+    """Bind a test-only raster excerpt to R01, with explicit synthetic rights."""
+    from PIL import Image, ImageDraw
+
+    relative = "assets/evidence-r01-crop.png"
+    image = Image.new("RGB", (640, 360), "white")
+    ImageDraw.Draw(image).text((24, 90), "SYNTHETIC TEST FIXTURE ONLY - NO REAL PAPER", fill="black")
+    image.save(revision / relative, format="PNG")
+    record = {
+        "path": relative, "kind": "evidence_highlight", "semantic": True,
+        "classification_reason": "Synthetic raster excerpt used only by automated tests.",
+        "sha256": sha256_file(revision / relative), "source": "R01",
+        "license": "synthetic_test_only", "creator": "repository_fixture",
+        "revision": "001", "rights_required": True,
+    }
+    assets_path = revision / "assets/asset-manifest.yaml"
+    assets = read_yaml(assets_path)
+    assets["assets"] = [asset for asset in assets["assets"] if asset["path"] != relative] + [record]
+    write_yaml_atomic(assets_path, assets)
+    write_yaml_atomic(revision / "assets/license-ledger.yaml", {
+        "schema_version": "2.0", "entries": [{
+            key: record[key] for key in ("path", "source", "creator", "license", "revision", "sha256")
+        } | {"rights_basis": "Repository-authored synthetic test image; no source paper content."}],
+    })
+    board_path = revision / "storyboard/storyboard.yaml"
+    board = read_yaml(board_path)
+    for scene in board["scenes"]:
+        if scene.get("evidence_highlight") is not None:
+            scene["evidence_highlight"].update({
+                "image": relative, "source_id": "R01", "page": 1,
+                "crop_x": 0.0, "crop_y": 0.0, "crop_width": 1.0, "crop_height": 1.0,
+                "crop_pixel_width": 640, "crop_pixel_height": 360,
+            })
+    write_yaml_atomic(board_path, board)
+
+
 def complete_explain_first_fixture(revision: Path) -> None:
     """Complete synthetic fixture content with mechanism scenes and a pinned outro."""
     from healthvideo.domain.hook_outro import OUTRO_TEXT
 
+    add_synthetic_evidence_crop(revision)
     script_path = revision / "script/script.yaml"
     board_path = revision / "storyboard/storyboard.yaml"
     script = read_yaml(script_path)

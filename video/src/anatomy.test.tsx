@@ -12,6 +12,7 @@ import {brand} from './anatomy/palette';
 import {HealthVideo} from './HealthVideo';
 import {LAYOUTS, LayoutContext} from './layout';
 import {parseRenderInput, type Scene} from './types';
+import {ANATOMY_COMPONENTS, ANATOMY_CONTENT_BOXES} from './anatomy/registry';
 
 const clock = vi.hoisted(() => ({frame: 0}));
 vi.mock('remotion', async (original) => ({
@@ -32,6 +33,20 @@ const html = (Component: React.FC<{scene: Scene}>, s = scene, format: keyof type
   renderToStaticMarkup(<LayoutContext.Provider value={LAYOUTS[format]}><Component scene={s} /></LayoutContext.Provider>);
 
 describe('anatomy geometry', () => {
+  it('every registered subject fills at least 75% of its square viewBox in both dimensions', () => {
+    for (const [subject, Organ] of Object.entries(ANATOMY_COMPONENTS)) {
+      const output = renderToStaticMarkup(<Organ state="diseased" severity={1} emphasizeFlow />);
+      const [x, y, width, height] = output.match(/viewBox="([^"]+)"/)![1].split(' ').map(Number);
+      const content = ANATOMY_CONTENT_BOXES[subject as keyof typeof ANATOMY_CONTENT_BOXES];
+      expect(width).toBe(height);
+      expect(content.width / width, subject).toBeGreaterThanOrEqual(.75);
+      expect(content.height / height, subject).toBeGreaterThanOrEqual(.75);
+      expect(content.left).toBeGreaterThanOrEqual(x);
+      expect(content.top).toBeGreaterThanOrEqual(y);
+      expect(content.left + content.width).toBeLessThanOrEqual(x + width);
+      expect(content.top + content.height).toBeLessThanOrEqual(y + height);
+    }
+  });
   it('thickens the wall and narrows the lumen monotonically, preserving normal geometry', () => {
     const normal = arteryGeometry('normal', 0, 0, 30);
     const mild = arteryGeometry('diseased', 0.4, 0, 30);
@@ -57,6 +72,21 @@ describe('anatomy geometry', () => {
 });
 
 describe('mechanism scenes', () => {
+  it('renders an authored source marker outside the subject camera', () => {
+    const output = html(AnatomyScene, {...scene, source_marker: '[12]'});
+    expect(output).toContain('Nguồn [12]');
+    expect(output).toContain('>[12]</div>');
+    expect(output.indexOf('Nguồn [12]')).toBeGreaterThan(output.indexOf('data-mechanism-caption-band'));
+  });
+  it('places readable captions and presenter after the closed subject camera', () => {
+    clock.frame = 0;
+    const output = html(AnatomyScene, {...scene, narration: 'Caption words', visual_assets: []});
+    expect(output).toContain('data-mechanism-caption-band="true"');
+    expect(output).toContain('background-color:#FFFDF7');
+    expect(output).toContain('Caption');
+    const end = output.indexOf('data-mechanism-caption-band');
+    expect(output.slice(0, end)).toContain('</div>');
+  });
   for (const Component of [AnatomyScene, ProcessScene, ComparisonScene, TimelapseScene]) {
     for (const format of ['youtube_long', 'vertical_clip'] as const) {
       for (const subject of ['artery_cross_section', 'heart'] as const) {
@@ -69,7 +99,8 @@ describe('mechanism scenes', () => {
             expect(output).toContain('data-mascot-presenter="true"');
             expect(output).not.toContain('data-mascot-plate');
             expect(output).toContain('/static/assets/explain.svg');
-            expect(output).not.toContain(scene.narration);
+            expect(output).toContain('data-mechanism-caption-band="true"');
+            expect(output).toContain('Illustration');
             expect(output).not.toMatch(/NaN|Infinity|linearGradient|radialGradient|filter=|animation:/);
             expect(html(Component, {...scene, anatomy: {...scene.anatomy!, subject}}, format)).toBe(output);
           }
@@ -93,15 +124,12 @@ describe('mechanism scenes', () => {
     clock.frame = 89;
     expect(html(TimelapseScene)).toContain('data-severity="0.8"');
   });
-  it('keeps subject and mascot in safe bounds at maximum camera scale', () => {
-    const l = LAYOUTS.vertical_clip.mechanism;
-    for (const box of [l.subject, ...l.comparison]) {
-      expect(box.left - box.width * 0.075).toBeGreaterThanOrEqual(0);
-      expect(box.left + box.width * 1.075).toBeLessThanOrEqual(1080 * 0.85);
-      expect(box.top + box.height * 1.075).toBeLessThanOrEqual(1920 * 0.8);
-    }
-    expect(l.mascot.top + l.mascot.height + 5).toBeLessThan(1920 * 0.88);
-    expect(l.mascot.left + l.mascot.width).toBeLessThan(1080 * 0.85);
+  it('clips camera detail to a viewport before rendering the stationary presenter', () => {
+    const output = html(AnatomyScene);
+    expect(output).toContain('data-mechanism-subject-region="true"');
+    expect(output).toContain('overflow:hidden');
+    expect(output.indexOf('data-mascot-presenter')).toBeGreaterThan(output.indexOf('data-mechanism-camera'));
+    expect(output).toMatch(/<\/svg><\/div><\/div><\/div><div data-mascot-presenter/);
   });
   it.each(['anatomy_animation', 'process_animation', 'comparison', 'timelapse'] as const)('dispatches %s without duplicate mascots', (visual) => {
     const props = parseRenderInput({title: 'Illustration only', audio_file: 'audio/silence.wav', visual_budget_profile: 'explain_first_v1', scenes: [{...scene, visual}]});
@@ -119,14 +147,14 @@ describe('visual regression fixes', () => {
     expect(output).not.toContain('M202 271 L231 286');
     expect(output).toContain('data-vessel="aortic-arch"');
     expect(output).toContain('data-vessel="pulmonary-trunk"');
-    expect(output).toContain('viewBox="40 10 440 540"');
+    expect(output).toContain('viewBox="80 10 520 520"');
   });
   it('keeps organs opposite the presenter without overlapping its window', () => {
     for (const layout of Object.values(LAYOUTS)) {
       const l = layout.mechanism;
       for (const box of [l.subject, ...l.comparison]) {
         if (layout.frame.height > layout.frame.width) {
-          expect(box.top + box.height * 1.075).toBeLessThan(l.mascot.top);
+          expect(box.top + box.height).toBeLessThanOrEqual(l.mascot.top);
           expect(box.left + box.width / 2).toBeGreaterThan(l.mascot.left + l.mascot.width / 2);
         } else {
           expect(box.left).toBeGreaterThanOrEqual(l.mascot.left + l.mascot.width);

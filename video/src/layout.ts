@@ -11,6 +11,7 @@ export type FrameLayout = {
   narration: {left: number; right: number; top: number; fontSize: number};
   sourceMarker: {right: number; top: number; fontSize: number};
   whiteboardPath: string;
+  whiteboardText: Box;
   chart: {image: Box};
   outroText: {left: number; top: number; width: number; fontSize: number};
   quote: {bottom: number; inset: number; fontSize: number};
@@ -20,9 +21,9 @@ export type FrameLayout = {
 export const LAYOUTS: Record<FormatProfile, FrameLayout> = {
   vertical_clip: {
     mechanism: {
-      subject: {left: 300, top: 160, width: 560, height: 800},
-      comparison: [{left: 360, top: 100, width: 500, height: 420}, {left: 360, top: 560, width: 500, height: 420}],
-      axis: 'column', mascot: {left: 48, top: 1034, width: 660, height: 576},
+      subject: {left: 40, top: 180, width: 1000, height: 1100},
+      comparison: [{left: 290, top: 180, width: 500, height: 530}, {left: 290, top: 740, width: 500, height: 530}],
+      axis: 'column', mascot: {left: 48, top: 1280, width: 378.125, height: 330},
     },
     frame: {width: 1080, height: 1920},
     // Preserve the caption band's top while padding the bundled font's stacked accents.
@@ -30,7 +31,8 @@ export const LAYOUTS: Record<FormatProfile, FrameLayout> = {
       maxTextWidth: 900, rowY: [64, 140], maxWords: 6},
     narration: {left: 96, right: 96, top: 760, fontSize: 72},
     sourceMarker: {right: 72, top: 96, fontSize: 52},
-    whiteboardPath: 'M150 570 C 350 400, 650 740, 930 530',
+    whiteboardText: {left: 96, top: 760, width: 888, height: 240},
+    whiteboardPath: 'M180 1050 C 420 1010, 680 1090, 900 1040',
     chart: {image: {left: 40, top: 210, width: 1000, height: 1368}},
     outroText: {left: 90, top: 850, width: 900, fontSize: 54},
     quote: {bottom: 390, inset: 72, fontSize: 46},
@@ -45,7 +47,7 @@ export const LAYOUTS: Record<FormatProfile, FrameLayout> = {
   },
   youtube_long: {
     mechanism: {
-      subject: {left: 590, top: 130, width: 850, height: 800},
+      subject: {left: 520, top: 40, width: 880, height: 820},
       comparison: [{left: 500, top: 160, width: 600, height: 680}, {left: 1180, top: 160, width: 600, height: 680}],
       axis: 'row', mascot: {left: 0, top: 669.6, width: 470, height: 410.4},
     },
@@ -54,7 +56,8 @@ export const LAYOUTS: Record<FormatProfile, FrameLayout> = {
       maxTextWidth: 1160, rowY: [60, 130], maxWords: 10},
     narration: {left: 160, right: 160, top: 380, fontSize: 64},
     sourceMarker: {right: 72, top: 56, fontSize: 44},
-    whiteboardPath: 'M260 300 C 620 180, 1180 460, 1660 280',
+    whiteboardText: {left: 500, top: 300, width: 1200, height: 300},
+    whiteboardPath: 'M620 640 C 900 600, 1300 680, 1580 630',
     chart: {image: {left: 70, top: 60, width: 1780, height: 808}},
     outroText: {left: 360, top: 420, width: 1200, fontSize: 54},
     quote: {bottom: 200, inset: 160, fontSize: 40},

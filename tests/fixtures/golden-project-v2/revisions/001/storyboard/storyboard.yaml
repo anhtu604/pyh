@@ -17,12 +17,20 @@ scenes:
   visual: evidence_highlight
   script_line_id: L01
   evidence_highlight:
-    image: assets/evidence-r01.svg
+    image: assets/evidence-r01-crop.png
     quote: Giảm natri ăn vào liên quan tới mức giảm huyết áp tâm thu.
     x: 0.08
     y: 0.32
     width: 0.84
     height: 0.18
+    source_id: R01
+    page: 1
+    crop_x: 0.0
+    crop_y: 0.0
+    crop_width: 1.0
+    crop_height: 1.0
+    crop_pixel_width: 640
+    crop_pixel_height: 360
 - id: S02
   start_frame: 240
   duration_frames: 195

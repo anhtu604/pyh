@@ -117,8 +117,10 @@ def test_medical_reviewed_paths_includes_ledger_script_storyboard_manifest_and_s
         "script/script.yaml",
         "storyboard/storyboard.yaml",
         "assets/asset-manifest.yaml",
+        "assets/license-ledger.yaml",
         "profiles/pronunciation.vi.yaml",
         "asset:assets/evidence-r01.svg",
+        "asset:assets/evidence-r01-crop.png",
         "asset:assets/test-logo.svg",
     }
 

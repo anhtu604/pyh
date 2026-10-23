@@ -5,6 +5,7 @@ import {VisualAsset} from './components/VisualAsset';
 import {ChartScene} from './scenes/ChartScene';
 import {OutroScene} from './scenes/OutroScene';
 import {WhiteboardScene} from './scenes/WhiteboardScene';
+import {SourceCardScene} from './scenes/SourceCardScene';
 import {parseRenderInput} from './types';
 
 vi.mock('remotion', () => ({
@@ -79,6 +80,27 @@ describe('HealthVideo visual asset layer', () => {
       expect(assets).toHaveLength(1);
     },
   );
+  it('keeps illustrations behind authored whiteboard text and the presenter in front', () => {
+    const props = parseRenderInput({...input('whiteboard'), scenes: [{...input('whiteboard').scenes[0],
+      on_screen_text: 'Ý chính', visual_assets: [
+        {path: 'assets/drawing.svg', role: 'whiteboard'},
+        {path: 'assets/guide.svg', role: 'mascot', pose: 'welcome'},
+      ]}]});
+    const sequence = React.Children.toArray(renderVideo(props).props.children)[1] as React.ReactElement<{children: React.ReactNode}>;
+    const elements = React.Children.toArray(sequence.props.children) as React.ReactElement<{asset?: {role: string}}>[];
+    expect(elements.map(element => element.type)).toEqual([VisualAsset, WhiteboardScene, VisualAsset]);
+    expect(elements[0].props.asset?.role).toBe('whiteboard');
+    expect(elements[2].props.asset?.role).toBe('mascot');
+  });
+  it('dispatches source cards to their dedicated renderer', () => {
+    const props = parseRenderInput({...input('whiteboard'), scenes: [{...input('whiteboard').scenes[0],
+      visual: 'source_card', claim_id: 'C01', source_marker: '[1]', source_card: {
+        source_id: 'R01', title: 'Study title', journal: 'Journal', year: null, pmid: null, doi: null,
+        interpretation: 'Diễn giải được duyệt.',
+      }}]});
+    const sequence = React.Children.toArray(renderVideo(props).props.children)[1] as React.ReactElement<{children: React.ReactNode}>;
+    expect(React.Children.toArray(sequence.props.children).some(child => React.isValidElement(child) && child.type === SourceCardScene)).toBe(true);
+  });
   it('dispatches an enabled declared chart once outside the overlay layer', () => {
     const props = parseRenderInput({
       ...input('whiteboard'),

@@ -102,6 +102,7 @@ _VISUAL_CATEGORIES: dict[str, VisualCategory] = {
     "brand_outro": VisualCategory.WHITEBOARD_SVG,
     "chart": VisualCategory.CHART_CROP,
     "evidence_highlight": VisualCategory.CHART_CROP,
+    "source_card": VisualCategory.CHART_CROP,
     "anatomy_animation": VisualCategory.MECHANISM,
     "process_animation": VisualCategory.MECHANISM,
     "comparison": VisualCategory.MECHANISM,

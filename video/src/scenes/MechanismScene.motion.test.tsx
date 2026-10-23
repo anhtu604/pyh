@@ -2,15 +2,17 @@ import React from 'react';
 // @ts-expect-error @types/react-dom is not installed
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, it, vi} from 'vitest';
-import {MechanismScene, type MechanismKind} from './MechanismScene';
+import {mechanismCamera, MechanismScene, type MechanismKind} from './MechanismScene';
 import {ArterySection, arteryGeometry} from '../anatomy/ArterySection';
 import {Heart} from '../anatomy/Heart';
 import type {Scene} from '../types';
+import {HealthVideo} from '../HealthVideo';
+import {parseRenderInput} from '../types';
 
 const clock = vi.hoisted(() => ({frame: 0}));
 vi.mock('remotion', async (original) => ({
   ...await original<typeof import('remotion')>(),
-  AbsoluteFill: 'div', useCurrentFrame: () => clock.frame,
+  AbsoluteFill: 'div', Audio: 'audio', Sequence: ({children}: {children: React.ReactNode}) => children, useCurrentFrame: () => clock.frame,
   useVideoConfig: () => ({fps: 30}),
 }));
 const scene: Scene = {
@@ -26,6 +28,34 @@ const camera = (markup: string) => markup.match(/data-mechanism-camera="true" st
 const numbers = (markup: string, name: string) => [...markup.matchAll(new RegExp(`${name}="([^"]+)"`, 'g'))].map(m => Number(m[1]));
 
 describe('visible mechanism motion', () => {
+  it('avoids colliding arbitrary scene ids for the same subject across visual types and editorial breaks', () => {
+    const mechanism = (id: string, start_frame: number) => ({...scene, id, start_frame});
+    const input = parseRenderInput({title: 'Framing test', audio_file: 'silence.wav', visual_budget_profile: 'explain_first_v1', scenes: [
+      mechanism('alpha', 0), {...mechanism('alphaX', 90), visual: 'process_animation'},
+      {id: 'pause', start_frame: 180, duration_frames: 90, narration: 'Pause', visual: 'whiteboard'},
+      mechanism('alphaXX', 270), mechanism('alphaXXX', 360), mechanism('alphaXXXX', 450),
+    ]});
+    clock.frame = 45;
+    const output = renderToStaticMarkup(<HealthVideo {...input} />);
+    const framings = [...output.matchAll(/data-framing="([^"]+)"/g)].map(match => match[1]);
+    expect(framings).toHaveLength(5);
+    for (let i = 1; i < framings.length; i++) expect(framings[i]).not.toBe(framings[i - 1]);
+    expect(renderToStaticMarkup(<HealthVideo {...input} />)).toBe(output);
+  });
+  it('offers four deterministic framings and never repeats adjacent numeric scene ids', () => {
+    const names = new Set<string>();
+    for (let id = 1; id <= 100; id++) {
+      const first = mechanismCamera(`S-${id}`, 0);
+      const last = mechanismCamera(`S-${id}`, 1);
+      names.add(first.framing);
+      expect(first.framing).not.toBe(mechanismCamera(`S-${id + 1}`, 0).framing);
+      expect(first.zoom).toBeGreaterThanOrEqual(1);
+      expect(last.zoom).toBeLessThanOrEqual(1.5);
+      expect(last).toEqual(mechanismCamera(`S-${id}`, 1));
+      expect(last.zoom).toBeGreaterThan(first.zoom);
+    }
+    expect([...names].sort()).toEqual(['center', 'left', 'right', 'wide']);
+  });
   for (const kind of ['anatomy', 'process', 'comparison', 'timelapse'] as const) {
     for (const subject of ['artery_cross_section', 'heart'] as const) {
       it(`${kind}/${subject} moves the camera and organ geometry through first/mid/last frames`, () => {
@@ -33,8 +63,7 @@ describe('visible mechanism motion', () => {
         const cameras = outputs.map(camera);
         expect(cameras.every(Boolean)).toBe(true);
         expect(new Set(cameras).size).toBe(3);
-        expect(cameras[0]).toContain('scale(1)');
-        expect(cameras[2]).toContain('scale(1.12)');
+        expect(cameras[0]).not.toBe(cameras[2]);
         const geometry = outputs.map(output => subject === 'heart'
           ? attribute(output, 'data-beat-scale') : attribute(output, 'data-lumen-radius'));
         expect(new Set(geometry).size).toBeGreaterThan(1);

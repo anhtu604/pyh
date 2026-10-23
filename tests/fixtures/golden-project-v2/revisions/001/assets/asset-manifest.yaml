@@ -19,3 +19,13 @@ assets:
   creator: test
   revision: '001'
   storyboard_role: brand
+- path: assets/evidence-r01-crop.png
+  kind: evidence_highlight
+  semantic: true
+  classification_reason: Synthetic raster excerpt used only by automated tests.
+  sha256: e9e7db3763d529aac4d49b8a265bc4e9dfc4738e2230946c2557c1f415481714
+  source: R01
+  license: synthetic_test_only
+  creator: repository_fixture
+  revision: '001'
+  rights_required: true

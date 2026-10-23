@@ -59,7 +59,34 @@ def project(tmp_path: Path) -> Path:
     return root
 
 
+def _remove_fixture_crop(revision: Path) -> None:
+    """Discard the original crop when a scenario replaces its evidence scene."""
+    path = "assets/evidence-r01-crop.png"
+    manifest_path = revision / "assets/asset-manifest.yaml"
+    if not manifest_path.exists():
+        # Leave missing/promoted asset directories for the production recovery path.
+        return
+    manifest = read_yaml(manifest_path)
+    manifest["assets"] = [asset for asset in manifest["assets"] if asset["path"] != path]
+    write_yaml_atomic(manifest_path, manifest)
+    rights_path = revision / "assets/license-ledger.yaml"
+    if rights_path.exists():
+        rights = read_yaml(rights_path)
+        rights["entries"] = [entry for entry in rights["entries"] if entry["path"] != path]
+        write_yaml_atomic(rights_path, rights)
+
+
+def _unregistered_highlight(storyboard, revision: Path):
+    _remove_fixture_crop(revision)
+    highlight = storyboard["scenes"][0]["evidence_highlight"]
+    for field in tuple(highlight):
+        if field.startswith("crop_"):
+            highlight.pop(field)
+    return highlight
+
+
 def make_chart(project: Path, **changes: str) -> Path:
+    _remove_fixture_crop(project / "revisions/001")
     board_path = project / "revisions/001/storyboard/storyboard.yaml"
     board = read_yaml(board_path)
     board["scenes"][0]["visual"] = "chart"
@@ -600,7 +627,7 @@ def test_register_cropped_highlight_with_source_page_rights(
     revision = project / "revisions/001"
     storyboard_path = revision / "storyboard/storyboard.yaml"
     storyboard = read_yaml(storyboard_path)
-    highlight = storyboard["scenes"][0]["evidence_highlight"]
+    highlight = _unregistered_highlight(storyboard, revision)
     highlight.update(
         {
             "image": "assets/paper-excerpt.png",
@@ -647,7 +674,7 @@ def test_highlight_rejects_oversized_excerpt(project: Path, tmp_path: Path) -> N
     revision = project / "revisions/001"
     storyboard_path = revision / "storyboard/storyboard.yaml"
     storyboard = read_yaml(storyboard_path)
-    highlight = storyboard["scenes"][0]["evidence_highlight"]
+    highlight = _unregistered_highlight(storyboard, revision)
     highlight.update(
         {"image": "assets/paper-excerpt.png", "source_id": "R01", "page": 2}
     )
@@ -673,7 +700,7 @@ def test_highlight_source_marker_and_rights_are_required(
     revision = project / "revisions/001"
     storyboard_path = revision / "storyboard/storyboard.yaml"
     storyboard = read_yaml(storyboard_path)
-    highlight = storyboard["scenes"][0]["evidence_highlight"]
+    highlight = _unregistered_highlight(storyboard, revision)
     highlight.update(
         {
             "image": "assets/paper-excerpt.png",
@@ -717,7 +744,7 @@ def test_registered_highlight_requires_rights_at_medical_gate(
     revision = project / "revisions/001"
     storyboard_path = revision / "storyboard/storyboard.yaml"
     storyboard = read_yaml(storyboard_path)
-    storyboard["scenes"][0]["evidence_highlight"].update(
+    _unregistered_highlight(storyboard, revision).update(
         {
             "image": "assets/paper-excerpt.png",
             "source_id": "R01",
@@ -753,7 +780,7 @@ def test_registered_highlight_requires_rights_at_medical_gate(
     state = read_yaml(project / "project.yaml")
     state["state"] = "awaiting_medical_review"
     write_yaml_atomic(project / "project.yaml", state)
-    with pytest.raises(FileNotFoundError, match="license ledger"):
+    with pytest.raises(ValueError, match="license ledger"):
         approve_gate(
             project, GateKind.MEDICAL, reviewer="test doctor", now=datetime.now(UTC)
         )
@@ -768,7 +795,7 @@ def test_highlight_retry_repairs_storyboard_after_asset_promotion(
     revision = project / "revisions/001"
     storyboard_path = revision / "storyboard/storyboard.yaml"
     storyboard = read_yaml(storyboard_path)
-    storyboard["scenes"][0]["evidence_highlight"].update(
+    _unregistered_highlight(storyboard, revision).update(
         {
             "image": "assets/paper-excerpt.png",
             "source_id": "R01",
@@ -813,7 +840,7 @@ def test_highlight_retry_after_promotion_failure_is_gate_safe(
     revision = project / "revisions/001"
     storyboard_path = revision / "storyboard/storyboard.yaml"
     storyboard = read_yaml(storyboard_path)
-    storyboard["scenes"][0]["evidence_highlight"].update(
+    _unregistered_highlight(storyboard, revision).update(
         {
             "image": "assets/paper-excerpt.png",
             "source_id": "R01",

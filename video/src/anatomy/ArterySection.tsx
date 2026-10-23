@@ -3,6 +3,9 @@ import {useCurrentFrame, useVideoConfig} from 'remotion';
 import type {Anatomy} from '../types';
 import {anatomyColors as c, brand} from './palette';
 
+/** Full painted bounds, including pulse and flow extremes. */
+export const CONTENT_BOX = {left: 38, top: 38, width: 484, height: 488};
+
 export type OrganProps = Pick<Anatomy, 'state' | 'severity'> & {emphasizeFlow?: boolean; lightBackground?: boolean};
 export const arteryGeometry = (state: Anatomy['state'], severity: number, frame: number, fps: number) => {
   const disease = state === 'diseased' ? Math.max(0, Math.min(1, severity)) : 0;

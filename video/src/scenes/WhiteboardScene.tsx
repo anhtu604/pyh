@@ -9,6 +9,16 @@ type WhiteboardSceneProps = {
   scene: Scene;
 };
 
+// Conservative one-em character width keeps even unbroken 90-character text inside its box.
+export const whiteboardFontSize = (text: string, width: number, height: number, preferred: number): number => {
+  const length = Array.from(text).length;
+  for (let size = preferred; size >= 1; size--) {
+    const rows = Math.ceil(length / Math.max(1, Math.floor(width / size)));
+    if (rows * size * 1.15 <= height) return size;
+  }
+  return 1;
+};
+
 export const SourceMarker = ({sourceMarker}: {sourceMarker: string}): React.JSX.Element => {
   const m = useLayout().sourceMarker;
   return (
@@ -43,7 +53,7 @@ export const WhiteboardScene: React.FC<WhiteboardSceneProps> = ({scene}) => {
 
   return (
     <>
-      {visualAssets.length === 0 ? <svg
+      {!visualAssets.some(asset => asset.role === 'whiteboard') ? <svg
         aria-label="Nét vẽ whiteboard"
         style={{height: '100%', left: 0, position: 'absolute', top: 0, width: '100%'}}
         viewBox={`0 0 ${layout.frame.width} ${layout.frame.height}`}
@@ -58,22 +68,23 @@ export const WhiteboardScene: React.FC<WhiteboardSceneProps> = ({scene}) => {
           style={{strokeDasharray: 1, strokeDashoffset: dashOffset}}
         />
       </svg> : null}
-      <div
+      {scene.on_screen_text ? <div
+        aria-label="Ý chính"
         style={{
           color: '#202124',
           fontFamily: FONT_FAMILY,
-          fontSize: layout.narration.fontSize,
+          fontSize: whiteboardFontSize(scene.on_screen_text, layout.whiteboardText.width,
+            layout.whiteboardText.height, layout.narration.fontSize),
           fontWeight: 800,
-          left: layout.narration.left,
+          ...layout.whiteboardText,
           lineHeight: 1.15,
           position: 'absolute',
-          right: layout.narration.right,
           textAlign: 'center',
-          top: layout.narration.top,
+          overflowWrap: 'anywhere',
         }}
       >
-        {scene.narration}
-      </div>
+        {scene.on_screen_text}
+      </div> : null}
       {scene.source_marker ? <SourceMarker sourceMarker={scene.source_marker} /> : null}
       <Captions text={scene.narration} durationInFrames={scene.duration_frames} />
     </>

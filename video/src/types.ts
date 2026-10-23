@@ -89,6 +89,16 @@ export const MECHANISM_VISUALS = ['anatomy_animation', 'process_animation', 'com
 export const isMechanismVisual = (visual: string): boolean =>
   (MECHANISM_VISUALS as readonly string[]).includes(visual);
 
+export const SourceCardSchema = z.object({
+  source_id: z.string().trim().min(1),
+  title: z.string().trim().min(1),
+  journal: z.string().trim().min(1),
+  year: z.number().int().positive().nullable(),
+  pmid: z.string().trim().min(1).nullable(),
+  doi: z.string().trim().min(1).nullable(),
+  interpretation: z.string().trim().min(1),
+});
+
 export const SceneSchema = z
   .object({
     schema_version: z.string().default('1.0'),
@@ -96,14 +106,17 @@ export const SceneSchema = z
     start_frame: z.number().int().min(0),
     duration_frames: z.number().int().positive(),
     narration: z.string(),
+    on_screen_text: z.string().refine((text) => Array.from(text).length <= 90,
+      'on_screen_text must be at most 90 Unicode characters').nullable().optional(),
     script_line_id: z.string().nullable().optional(),
     claim_id: z.string().nullable().optional(),
     chapter_id: z.string().regex(/^CH\d{2}$/).nullable().optional(),
     source_marker: z.string().regex(/\S/).nullable().optional(),
-    visual: z.enum(['whiteboard', 'chart', 'evidence_highlight', 'brand_outro', ...MECHANISM_VISUALS]),
+    visual: z.enum(['whiteboard', 'chart', 'evidence_highlight', 'source_card', 'brand_outro', ...MECHANISM_VISUALS]),
     anatomy: AnatomySchema.optional(),
     explainer_layer_id: z.string().optional(),
     evidence_highlight: EvidenceHighlightSchema.nullable().optional(),
+    source_card: SourceCardSchema.nullable().optional(),
     visual_assets: z.array(VisualAssetRefSchema).default([]),
   })
   .superRefine((scene, context) => {
@@ -123,9 +136,22 @@ export const SceneSchema = z
           scene.visual_assets.some((asset) => asset.role === 'whiteboard')) {
         context.addIssue({code: 'custom', path: ['visual_assets'], message: 'outro requires one brand asset'});
       }
-      if (scene.claim_id || scene.source_marker || scene.evidence_highlight) {
+      if (scene.claim_id || scene.source_marker || scene.evidence_highlight || scene.source_card) {
         context.addIssue({code: 'custom', path: ['visual'], message: 'outro cannot contain evidence'});
       }
+    }
+    if (scene.visual === 'source_card') {
+      if (!scene.claim_id?.trim()) {
+        context.addIssue({code: 'custom', path: ['claim_id'], message: 'source_card requires claim_id'});
+      }
+      if (!scene.source_marker?.trim()) {
+        context.addIssue({code: 'custom', path: ['source_marker'], message: 'source_card requires source_marker'});
+      }
+      if (!scene.source_card) {
+        context.addIssue({code: 'custom', path: ['source_card'], message: 'source_card requires source metadata'});
+      }
+    } else if (scene.source_card) {
+      context.addIssue({code: 'custom', path: ['source_card'], message: 'source_card payload requires source_card visual'});
     }
     if (scene.visual !== 'evidence_highlight') {
       return;
@@ -196,6 +222,7 @@ export const RenderInputSchema = z.object({
 });
 
 export type EvidenceHighlight = z.input<typeof EvidenceHighlightSchema>;
+export type SourceCard = z.input<typeof SourceCardSchema>;
 export type VisualAssetRef = z.input<typeof VisualAssetRefSchema>;
 export type Scene = z.input<typeof SceneSchema>;
 export type SceneTiming = Pick<Scene, 'id' | 'start_frame' | 'duration_frames'>;
