@@ -345,3 +345,15 @@ def test_posts_check_cli_reports_errors(tmp_path: Path) -> None:
     assert err_result.exit_code == 1
     assert "facebook_post: câu có số liệu thiếu [claim:…]:" in err_result.stdout
     assert "youtube_community: claim chưa duyệt y khoa: C99" in err_result.stdout
+
+
+def test_posts_markdown_hides_claim_markers(tmp_path: Path) -> None:
+    from healthvideo.domain.posts import PostSet
+    from healthvideo.workflows.package import _posts_markdown
+
+    project_dir = create_v2_project_fixture(tmp_path)
+    data = read_yaml(write_posts_fixture(project_dir / "revisions" / "001"))
+    data["youtube_titles"] = ["Thấy mỡ đã là viêm gan chưa? [claim:M04]", *data["youtube_titles"][1:]]
+    md = _posts_markdown(PostSet.model_validate(data))
+    assert "[claim:" not in md
+    assert "- Thấy mỡ đã là viêm gan chưa?" in md.splitlines()

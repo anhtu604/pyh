@@ -21,7 +21,7 @@
 | P4 | Giai đoạn 2 mới: FLUX, nhạc, thư viện SVG | 4.1–4.3 | ✅ |
 | P5 | Giai đoạn 1 mới: tìm chủ đề | 5.1 | ✅ |
 | P6 | Giai đoạn 4 mới: bài đăng đa kênh | 6.1–6.2 | ✅ |
-| P7 | Chạy thật một chủ đề A–Z | 7.1 | ☐ |
+| P7 | Chạy thật một chủ đề A–Z | 7.1 | ✅ (bản thử gan-nhiem-mo-test, 2026-10-23) |
 
 Cập nhật cột "Trạng thái" và bảng tiến độ trong `README.md` trong cùng commit của mỗi task.
 

@@ -119,6 +119,13 @@ class RunReport:
     exhausted: bool = False
 
 
+def _mark_advanced(root: Path, slug: str, report: RunReport) -> None:
+    """Record progress and drop a stale block note from an earlier run."""
+    if slug not in report.advanced:
+        report.advanced.append(slug)
+    (root / "topics" / "logs" / slug / "blocked.txt").unlink(missing_ok=True)
+
+
 def _mark_blocked(
     root: Path,
     slug: str,
@@ -299,8 +306,7 @@ def run_queue(
                         log_path=result_log_path,
                     )
                     break
-                if entry.slug not in report.advanced:
-                    report.advanced.append(entry.slug)
+                _mark_advanced(root, entry.slug, report)
             else:
                 if step in AGENT_STEPS and new_state == state:
                     _mark_blocked(
@@ -311,8 +317,8 @@ def run_queue(
                         log_path=result_log_path,
                     )
                     break
-                if new_state != state and entry.slug not in report.advanced:
-                    report.advanced.append(entry.slug)
+                if new_state != state:
+                    _mark_advanced(root, entry.slug, report)
 
             if once:
                 return report

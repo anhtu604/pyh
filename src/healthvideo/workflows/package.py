@@ -7,6 +7,7 @@ after the payload directory is atomically promoted.
 """
 
 import json
+import re
 import shutil
 from collections.abc import Mapping
 from pathlib import Path
@@ -17,7 +18,7 @@ from pydantic import BaseModel
 
 from healthvideo.domain.evidence import EvidenceClaim, SourceRecord
 from healthvideo.domain.gate_review import GateApprovalRecord, GateKind
-from healthvideo.domain.posts import PostSet
+from healthvideo.domain.posts import CLAIM_REF, PostSet
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.script import Script
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
@@ -467,7 +468,8 @@ def _posts_markdown(posts: PostSet) -> str:
             "",
         ]
     )
-    return "\n".join(lines)
+    # posts.yaml keeps [claim:…] for audit; the paste-ready copy must not show them.
+    return re.sub(r"[ \t]*" + CLAIM_REF.pattern, "", "\n".join(lines))
 
 
 def _manifest_json(

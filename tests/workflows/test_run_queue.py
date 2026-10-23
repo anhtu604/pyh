@@ -51,6 +51,9 @@ def _log_file(log_dir: Path, name: str = "fake-codex.log") -> Path:
 def test_run_stops_at_medical_gate(tmp_path: Path) -> None:
     entry = _entry("tang-huyet-ap")
     add_to_queue(tmp_path, entry)
+    stale_block = tmp_path / "topics" / "logs" / "tang-huyet-ap" / "blocked.txt"
+    stale_block.parent.mkdir(parents=True)
+    stale_block.write_text("lỗi từ lần chạy trước\n", encoding="utf-8")
 
     states: dict[str, WorkflowState] = {}
     created: list[str] = []
@@ -101,6 +104,7 @@ def test_run_stops_at_medical_gate(tmp_path: Path) -> None:
     assert report.at_gate == ["tang-huyet-ap"]
     assert report.blocked == []
     assert report.exhausted is False
+    assert not stale_block.exists()
 
 
 def test_run_rerun_resumes_same_step(tmp_path: Path) -> None:
