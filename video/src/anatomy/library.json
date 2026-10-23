@@ -10,6 +10,20 @@
         "lumen"
       ]
     },
+    "hepatic_cell_and_tissue_lipid_balance": {
+      "file": "HepaticCell.tsx",
+      "layers": [
+        "adipose-source",
+        "insulin-signal",
+        "hepatocyte",
+        "intracellular-storage",
+        "energy-use",
+        "parallel-flux",
+        "injury-and-immune-signals",
+        "stellate-cell",
+        "extracellular-matrix"
+      ]
+    },
     "heart": {
       "file": "Heart.tsx",
       "layers": [
