@@ -60,8 +60,32 @@ def check_environment(run: RunCommand) -> list[CheckResult]:
         *_pyh_checks(),
         *_music_checks(),
         *_flux_checks(),
+        _projects_check(REPO_ROOT),
     ]
     return results
+
+
+def _projects_check(root: Path) -> CheckResult:
+    """Flag project folders the factory cannot load (old schemas, misplaced nesting)."""
+    from healthvideo.domain.project_v2 import ProjectManifestV2
+
+    projects_dir = root / "projects"
+    bad: list[str] = []
+    for manifest in sorted(projects_dir.rglob("project.yaml")) if projects_dir.is_dir() else []:
+        relative = manifest.relative_to(projects_dir)
+        if "revisions" in relative.parts:
+            continue
+        if len(relative.parts) != 2:
+            bad.append(f"{relative.parent.as_posix()} (sai vị trí)")
+            continue
+        try:
+            ProjectManifestV2.model_validate(yaml.safe_load(manifest.read_text(encoding="utf-8")))
+        except ValueError:
+            bad.append(f"{relative.parent.as_posix()} (schema cũ/hỏng)")
+    return CheckResult(
+        "projects", not bad, "; ".join(bad) or "ok", "recommended",
+        "Xóa hoặc chuyển các thư mục này ra khỏi projects/; xưởng sẽ bỏ qua chúng.",
+    )
 
 
 def _flux_checks() -> list[CheckResult]:

@@ -204,3 +204,18 @@ def test_runner_reports_when_no_safe_windows_pnpm_launcher(monkeypatch) -> None:
 
     assert code == 1
     assert "Cannot launch pnpm safely" in output
+
+
+def test_projects_check_flags_legacy_and_misplaced(tmp_path):
+    from healthvideo.workflows.doctor import _projects_check
+
+    legacy = tmp_path / "projects" / "cu" / "project.yaml"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text("schema_version: '2.0'\nslug: cu\ncontent_profile: legacy\n", encoding="utf-8")
+    nested = tmp_path / "projects" / "2026" / "09" / "lac" / "project.yaml"
+    nested.parent.mkdir(parents=True)
+    nested.write_text("slug: lac\n", encoding="utf-8")
+    result = _projects_check(tmp_path)
+    assert not result.ok
+    assert "cu (schema cũ/hỏng)" in result.detected and "2026/09/lac (sai vị trí)" in result.detected
+    assert _projects_check(tmp_path / "trong").ok
