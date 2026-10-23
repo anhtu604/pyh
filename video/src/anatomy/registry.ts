@@ -6,6 +6,8 @@ import {HepaticCell, CONTENT_BOX as HEPATIC_CONTENT_BOX} from './HepaticCell';
 import library from './library.json';
 import {LiverLobule, CONTENT_BOX as LOBULE_CONTENT_BOX} from './LiverLobule';
 import {LiverOrgan, CONTENT_BOX as LIVER_CONTENT_BOX} from './LiverOrgan';
+import {UrateFluid, CONTENT_BOX as URATE_CONTENT_BOX} from './UrateFluid';
+import {InflammationSignal, CONTENT_BOX as SIGNAL_CONTENT_BOX} from './InflammationSignal';
 
 export type AnatomySubject = Anatomy['subject'];
 
@@ -15,6 +17,8 @@ export const ANATOMY_COMPONENTS: Record<AnatomySubject, React.FC<OrganProps>> = 
   hepatic_cell_and_tissue_lipid_balance: HepaticCell,
   liver_lobule: LiverLobule,
   liver_organ: LiverOrgan,
+  joint_fluid_urate_to_inflammation: UrateFluid,
+  immune_cell_alarm: InflammationSignal,
 };
 
 export const ANATOMY_SUBJECTS = Object.keys(library.components);
@@ -25,6 +29,8 @@ export const ANATOMY_CONTENT_BOXES: Record<AnatomySubject, {left: number; top: n
   hepatic_cell_and_tissue_lipid_balance: HEPATIC_CONTENT_BOX,
   liver_lobule: LOBULE_CONTENT_BOX,
   liver_organ: LIVER_CONTENT_BOX,
+  joint_fluid_urate_to_inflammation: URATE_CONTENT_BOX,
+  immune_cell_alarm: SIGNAL_CONTENT_BOX,
 };
 
 // SVG coordinates used when mapping content bounds through preserveAspectRatio="xMidYMid meet".
@@ -34,4 +40,6 @@ export const ANATOMY_VIEW_BOXES: Record<AnatomySubject, {left: number; top: numb
   hepatic_cell_and_tissue_lipid_balance: {left: 0, top: 0, width: 560, height: 560},
   liver_lobule: {left: 0, top: 0, width: 560, height: 560},
   liver_organ: {left: 0, top: 0, width: 560, height: 560},
+  joint_fluid_urate_to_inflammation: {left: 0, top: 0, width: 560, height: 560},
+  immune_cell_alarm: {left: 0, top: 0, width: 560, height: 560},
 };

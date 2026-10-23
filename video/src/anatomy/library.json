@@ -1,6 +1,14 @@
 {
   "version": 1,
   "components": {
+    "joint_fluid_urate_to_inflammation": {
+      "file": "UrateFluid.tsx",
+      "layers": ["sample-window", "dissolved-urate", "crystal-seeds", "needle-crystals"]
+    },
+    "immune_cell_alarm": {
+      "file": "InflammationSignal.tsx",
+      "layers": ["sample-window", "resident-cell", "crystal-cue", "alarm-signal", "recruited-cells"]
+    },
     "artery_cross_section": {
       "file": "ArterySection.tsx",
       "layers": [
