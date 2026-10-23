@@ -1,10 +1,12 @@
 """Long-form Gate 1 plans: script/outline.yaml and script/clip-plan.yaml."""
 
 import json
+import shutil
 from collections.abc import Callable, Mapping, Sequence
 from hashlib import sha256
 from pathlib import Path
 
+from healthvideo.audio.sfx import mix_sfx
 from healthvideo.domain.asset_manifest import AssetKind, AssetManifest, AssetRecord
 from healthvideo.domain.brand import (
     BrandProfile,
@@ -99,6 +101,7 @@ def render_clips(
     runner: Callable[[list[str]], int],
     brand: BrandProfile | None = None,
     revision: str = "001",
+    sfx_events: list[dict] | None = None,
 ) -> dict[str, str]:
     """Reuse measured line audio for each clip; return run-relative mp4 paths."""
     # ponytail: clips re-render with every long-form render; cache per clip if it gets slow.
@@ -124,6 +127,20 @@ def render_clips(
             board, {line: line_wavs[line] for line in selected_lines}, staging_dir / audio,
             source_board=storyboard,
         )
+        # Reuse each selected scene's resolved cues, including original chapter defaults.
+        # Remap their timestamps rather than introducing a new chapter cue at a clip cut.
+        clip_events = []
+        for original, retimed in zip(scenes, render_input.scenes, strict=True):
+            for event in sfx_events or []:
+                if event['scene'] == original.id:
+                    clip_events.append({**event, 'time': retimed.start_frame / 30 + event['at']})
+        if clip_events:
+            voice = staging_dir / f'audio/clips/{clip_id}-voice.wav'
+            shutil.copyfile(staging_dir / audio, voice)
+            mix_sfx(voice, clip_events, out=staging_dir / audio)
+            (staging_dir / f'audio/clips/{clip_id}.sfx.json').write_text(
+                json.dumps(clip_events, ensure_ascii=False), encoding='utf-8',
+            )
         duration_ms = inspect_wav(staging_dir / audio).duration_ms
         timing_record = {
             "schema_version": "1.0", "fps": 30, "audio_alignment": alignment,

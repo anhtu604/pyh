@@ -651,7 +651,8 @@ def test_public_command_surface():
 
     root = get_command(app)
     expected = {
-        (): {"topic", "run", "status", "review", "preview", "produce", "package", "doctor", "duyet", "xuong"},
+        (): {"topic", "run", "status", "review", "preview", "produce", "package", "doctor", "duyet", "xuong",
+             "notify-test", "notify-setup"},
         ("topic",): {"discover", "add", "list"},
         ("review",): {"open", "approve", "reject", "reopen", "set-pin"},
     }

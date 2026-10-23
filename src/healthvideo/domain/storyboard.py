@@ -157,6 +157,35 @@ class AssetTextLabel(BaseModel):
     text: Nonblank
 
 
+class SceneSFX(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    id: str
+    at: str | float = 'start'
+    volume: float = Field(default=.2, ge=.15, le=.4, allow_inf_nan=False)
+
+    @field_validator('id')
+    @classmethod
+    def catalog_id(cls, value: str) -> str:
+        from healthvideo.audio.sfx import load_catalog
+
+        if value not in load_catalog():
+            raise ValueError('SFX id must belong to CC0 catalog')
+        return value
+
+    @field_validator('at')
+    @classmethod
+    def valid_at(cls, value):
+        import math
+
+        if isinstance(value, str):
+            if not value.strip():
+                raise ValueError('SFX keyword must not be empty')
+        elif not math.isfinite(value) or value < 0:
+            raise ValueError('SFX time must be finite and nonnegative')
+        return value
+
+
 class Scene(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -165,6 +194,7 @@ class Scene(BaseModel):
     start_frame: int = Field(json_schema_extra={"minimum": 0})
     duration_frames: int = Field(json_schema_extra={"exclusiveMinimum": 0})
     narration: str
+    sfx: tuple[SceneSFX, ...] = Field(default=(), max_length=2, exclude_if=lambda v: not v)
     on_screen_text: str | None = Field(default=None, max_length=90, exclude_if=lambda v: v is None)
     script_line_id: str | None = None
     claim_id: str | None = None
@@ -235,6 +265,7 @@ class Storyboard(BaseModel):
 
     schema_version: str = "1.0"
     title: str
+    sfx_defaults: bool = Field(default=True, exclude_if=lambda v: v is True)
     scenes: tuple[Scene, ...] = Field(default_factory=tuple)
     visual_budget_profile: VisualBudgetProfile = "explain_first_v1"
     visual_budget_override: VisualBudgetOverride | None = None

@@ -222,6 +222,25 @@ def version() -> None:
 
 
 @app.command()
+def notify_test() -> None:
+    """Gửi một tin Telegram thử; không in thông tin bí mật."""
+    from healthvideo.workflows.factory import notify
+
+    ok = notify('Kiểm tra thông báo', 'tin thử')
+    typer.echo('Telegram: thành công' if ok else 'Telegram: thất bại hoặc chưa cấu hình')
+    if not ok:
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def notify_setup() -> None:
+    """Hướng dẫn cấu hình Telegram, tìm chat_id; không ghi .env."""
+    from healthvideo.workflows.telegram import setup
+
+    setup(echo=typer.echo)
+
+
+@app.command()
 def doctor() -> None:
     """Kiểm tra dependency của toolchain local."""
     results = check_environment(run_command)

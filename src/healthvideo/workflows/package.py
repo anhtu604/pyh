@@ -139,6 +139,14 @@ def _package_v2(layout: ProjectLayout) -> Path:
         shutil.copy2(video, staging_dir / OUTPUT_NAME)
         shutil.copy2(render_input_path, staging_dir / RENDER_INPUT_NAME)
         shutil.copy2(posts_path, staging_dir / POSTS_YAML_NAME)
+        if render_manifest.get('sfx'):
+            for name in ('sfx.json', 'license-ledger.yaml'):
+                target = staging_dir / 'audio' / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(renders_dir / name, target)
+                _require_approved_hash(video_approval, f'renders/{name}',
+                                       canonical_json_hash(json.loads(target.read_text(encoding='utf-8'))
+                                                           if target.suffix == '.json' else read_yaml(target)), staged=True)
         if posts.thumbnail is not None:
             for name in ("thumbnail.png", "thumbnail-background.png", "license-ledger.yaml"):
                 target = staging_dir / name
@@ -494,6 +502,8 @@ def _manifest_json(
             "video": _approval_binding(video_approval),
         },
         "payload_sha256": {
+            **{path.relative_to(staging_dir).as_posix(): sha256_file(path)
+               for path in sorted((staging_dir / 'audio').glob('*')) if path.is_file()},
             **{
                 name: sha256_file(staging_dir / name)
                 for name in ("thumbnail.png", "thumbnail-background.png", "license-ledger.yaml")

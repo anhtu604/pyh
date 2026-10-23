@@ -1,11 +1,12 @@
 """Invoke coding agents with quota-exhaustion failover."""
 
-import os
 import subprocess
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+
+from healthvideo.env import child_env
 
 
 @dataclass(frozen=True)
@@ -79,7 +80,7 @@ def invoke(
         argv = [prompt if token == "{prompt}" else token for token in agent.argv]
         stdin_input = None
 
-    env = {key: value for key, value in os.environ.items() if "pin" not in key.lower()}
+    env = child_env()
     log_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%f")
     log_path = log_dir / f"{timestamp}-{agent.name}.log"

@@ -61,8 +61,17 @@ def check_environment(run: RunCommand) -> list[CheckResult]:
         *_music_checks(),
         *_flux_checks(),
         _projects_check(REPO_ROOT),
+        _telegram_check(),
     ]
     return results
+
+
+def _telegram_check() -> CheckResult:
+    from healthvideo.workflows.telegram import configured
+
+    ok = configured()
+    return CheckResult('telegram', ok, 'đã cấu hình' if ok else 'chưa cấu hình',
+                       'optional', 'Chạy healthvideo notify-setup.')
 
 
 def _projects_check(root: Path) -> CheckResult:

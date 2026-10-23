@@ -1,0 +1,56 @@
+- id: whoosh-soft
+  file: whoosh-soft.wav
+  source_url: https://kenney.nl/assets/interface-sounds
+  license: CC0-1.0
+  author: Kenney
+  sha256: dc3a57bafc641478a3c625ad2316a1b47d6f3b67dfe9672d7b0535408c477740
+  mood: calm, soft, restrained
+  original_file: Audio/open_001.ogg
+- id: chime-soft
+  file: chime-soft.wav
+  source_url: https://kenney.nl/assets/interface-sounds
+  license: CC0-1.0
+  author: Kenney
+  sha256: 8f6e5cf297aea1c580ca241ed626050add00c0bd8532cd1369722763f54f02c3
+  mood: calm, soft, restrained
+  original_file: Audio/glass_001.ogg
+- id: pop-soft
+  file: pop-soft.wav
+  source_url: https://kenney.nl/assets/interface-sounds
+  license: CC0-1.0
+  author: Kenney
+  sha256: 034a5d01e896b82df4c7404525d3f2779e3d7d580eea13e8e2d069d51f75d17d
+  mood: calm, soft, restrained
+  original_file: Audio/drop_001.ogg
+- id: tick
+  file: tick.wav
+  source_url: https://kenney.nl/assets/interface-sounds
+  license: CC0-1.0
+  author: Kenney
+  sha256: 273f16d9102c1624402903b3da9d5da4bdd49efca49215ed3a946ce2e296dcd7
+  mood: calm, soft, restrained
+  original_file: Audio/tick_001.ogg
+- id: swell-low
+  file: swell-low.wav
+  source_url: https://kenney.nl/assets/interface-sounds
+  license: CC0-1.0
+  author: Kenney
+  sha256: 132e40bc2618985c57b087a81cc1b8ae286adc5d74ad632d16c044cc07eb6500
+  mood: calm, soft, restrained
+  original_file: Audio/maximize_001.ogg
+- id: chime-warm
+  file: chime-warm.wav
+  source_url: https://kenney.nl/assets/interface-sounds
+  license: CC0-1.0
+  author: Kenney
+  sha256: eb4f54cb7da07885e941a812d3f2a32d49a1ecea8bc7aae8d02d1f8321857d10
+  mood: calm, soft, restrained
+  original_file: Audio/confirmation_001.ogg
+- id: tap-soft
+  file: tap-soft.wav
+  source_url: https://kenney.nl/assets/interface-sounds
+  license: CC0-1.0
+  author: Kenney
+  sha256: 3095ccb1915f569e1cdfea5ebbce6f3fdcac6b786e332b7160b6cb4defb5338f
+  mood: calm, soft, restrained
+  original_file: Audio/select_001.ogg

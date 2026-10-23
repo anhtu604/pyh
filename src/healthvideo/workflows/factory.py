@@ -16,6 +16,7 @@ from pathlib import Path
 from healthvideo.agents import AllAgentsExhausted
 from healthvideo.domain.gate_review import GateKind, GateRejectionRecord
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
+from healthvideo.env import child_env
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.storage.queue import load_queue
 from healthvideo.storage.revisions import create_revision
@@ -44,8 +45,14 @@ def projects(root: Path):
         yield path, project
 
 
-def child_env() -> dict[str, str]:
-    return {key: value for key, value in os.environ.items() if 'pin' not in key.lower()}
+def notify(title: str, event: str, *, transport=None) -> bool:
+    from healthvideo.workflows.telegram import event_label, send
+
+    try:
+        notify_windows(title, event_label(event))
+    except (OSError, subprocess.SubprocessError):
+        logging.getLogger(__name__).warning('Windows notification failed (details hidden).')
+    return send(title, event, transport=transport)
 
 
 def project_title(path: Path, project: ProjectManifestV2) -> str:
@@ -268,7 +275,7 @@ def run_factory(root: Path, deps: RunDeps, *, interval: float = 120, once: bool 
                 sleep: Callable = time.sleep, notify: Callable | None = None,
                 echo: Callable = print) -> None:
     """Advance, package approved work, and announce changes until interrupted."""
-    notify = notify or notify_windows
+    notify = notify or globals()['notify']
     with FactoryLock(root):
         logs = root / 'topics/logs'
         logs.mkdir(parents=True, exist_ok=True)

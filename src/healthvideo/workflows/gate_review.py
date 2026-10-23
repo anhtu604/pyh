@@ -195,6 +195,9 @@ def video_reviewed_paths(revision_root: Path) -> dict[str, Path]:
         clips = json.loads(manifest_path.read_text(encoding="utf-8")).get("clips", {})
         for relative in clips.values():
             paths[f"renders/{relative}"] = renders / relative
+        if json.loads(manifest_path.read_text(encoding="utf-8")).get('sfx'):
+            for name in ('sfx.json', 'license-ledger.yaml'):
+                paths[f'renders/{name}'] = renders / name
     posts_path = revision_root / POSTS_ARTIFACT
     if posts_path.is_file():
         paths[POSTS_ARTIFACT] = posts_path

@@ -417,6 +417,15 @@
           "default": null,
           "title": "Script Line Id"
         },
+        "sfx": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SceneSFX"
+          },
+          "maxItems": 2,
+          "title": "Sfx",
+          "type": "array"
+        },
         "source_card": {
           "anyOf": [
             {
@@ -517,6 +526,39 @@
         "motion"
       ],
       "title": "SceneAnatomy",
+      "type": "object"
+    },
+    "SceneSFX": {
+      "additionalProperties": false,
+      "properties": {
+        "at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "default": "start",
+          "title": "At"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "volume": {
+          "default": 0.2,
+          "maximum": 0.4,
+          "minimum": 0.15,
+          "title": "Volume",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "SceneSFX",
       "type": "object"
     },
     "SourceCard": {

@@ -416,6 +416,11 @@ def render_video_packet(revision_root: Path) -> str:
         ) + '</section>' if sheets else ""
     )
     posts_section = _render_posts_section(revision_root)
+    sfx_section = '<section><h2>SFX đã dùng</h2><ul>' + ''.join(
+        f'<li>{escape(str(event["scene"]))}: {escape(str(event["id"]))}; '
+        f'{escape(str(event["time"]))} s (trong cảnh: {escape(str(event["at"]))} s)</li>'
+        for event in manifest.get('sfx', [])
+    ) + '</ul></section>'
     return (
         '<!doctype html><html lang="vi"><head><meta charset="utf-8">'
         "<title>Gói duyệt video</title></head><body>"
@@ -425,6 +430,7 @@ def render_video_packet(revision_root: Path) -> str:
         + mascot_warning
         + budget_section
         + posts_section
+        + sfx_section
         + f"<pre>{escape(str(manifest))}</pre>"
         f"<pre>{escape(str(qa))}</pre>"
         "</body></html>"

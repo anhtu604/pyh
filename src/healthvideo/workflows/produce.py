@@ -22,6 +22,13 @@ from healthvideo.audio.music import (
     generate_music,
     mix_with_ducking,
 )
+from healthvideo.audio.sfx import (
+    SFX_ROOT,
+    mix_sfx,
+    resolve_sfx,
+    sfx_identity,
+    sfx_rights,
+)
 from healthvideo.domain.asset_manifest import (
     AssetKind,
     AssetManifest,
@@ -255,6 +262,7 @@ def _produce_v2(
             "provider_identity": provider_identity_data,
             "renderer_identity": renderer_identity_data,
             "music": music_settings,
+            "sfx": sfx_identity(storyboard, layout.artifact_root),
             **(
                 {"clip_plan": read_yaml(layout.artifact_root / CLIP_PLAN_ARTIFACT),
                  "clip_brand": clip_brand.model_dump(mode="json")}
@@ -374,6 +382,7 @@ def _produce_v2(
             ).duration_ms
         storyboard, timing_record = retime_storyboard(approved_storyboard, line_ms)
         timing_record["audio_alignment"] = concat_scene_audio(storyboard, line_wavs, staged_audio)
+        sfx_events = resolve_sfx(storyboard, layout.artifact_root)
         music_record = None
         generated_rights = list(illustration_rights)
         generated_visual_hashes: dict[str, str] = {}
@@ -386,8 +395,11 @@ def _produce_v2(
             generate_music(
                 music_settings["mood"], seconds=MUSIC_SECONDS, seed=MUSIC_SEED, out=music_audio,
             )
-            mix_with_ducking(voice_audio, music_audio, out=staged_audio,
-                             music_db=MUSIC_DB, duck_db=DUCK_DB)
+            if sfx_events:
+                mix_sfx(voice_audio, sfx_events, out=staged_audio, music=music_audio)
+            else:
+                mix_with_ducking(voice_audio, music_audio, out=staged_audio,
+                                 music_db=MUSIC_DB, duck_db=DUCK_DB)
             music_record = {**music_settings, "sha256": sha256_file(music_audio)}
             generated_rights.append(LicenseEntry(
                 path="audio/music.wav", source="generated:ace-step-1.5", creator="ACE-Step 1.5",
@@ -398,12 +410,29 @@ def _produce_v2(
                 path.relative_to(staging_dir).as_posix(): sha256_file(path)
                 for path in (voice_audio, music_audio, staged_audio)
             }
+        elif sfx_events:
+            voice_audio = staged_audio.with_name("narration-voice.wav")
+            shutil.copyfile(staged_audio, voice_audio)
+            mix_sfx(voice_audio, sfx_events, out=staged_audio)
+            generated_audio_hashes = {
+                path.relative_to(staging_dir).as_posix(): sha256_file(path)
+                for path in (voice_audio, staged_audio)
+            }
+        if sfx_events:
+            for entry in sfx_rights(sfx_events, project.active_revision):
+                target = staging_dir / entry.path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(SFX_ROOT / Path(entry.path).name, target)
+                generated_audio_hashes[entry.path] = entry.sha256
+                generated_rights.append(entry)
+            _write_json_atomic(staging_dir / "sfx.json", sfx_events)
+            generated_audio_hashes["sfx.json"] = sha256_file(staging_dir / "sfx.json")
         if generated_rights:
             rights = LicenseLedger(entries=tuple(generated_rights))
             ledger_path = staging_dir / "license-ledger.yaml"
             write_yaml_atomic(ledger_path, rights.model_dump(mode="json"))
             ledger_hash = sha256_file(ledger_path)
-            if music_settings is not None:
+            if music_settings is not None or sfx_events:
                 generated_audio_hashes["license-ledger.yaml"] = ledger_hash
             if illustration_rights:
                 generated_visual_hashes = {entry.path: entry.sha256 for entry in illustration_rights}
@@ -434,6 +463,7 @@ def _produce_v2(
                 runner=runner,
                 brand=clip_brand,
                 revision=project.active_revision,
+                sfx_events=sfx_events,
             )
             chapter_parts = render_long_form(
                 render_input_path=staged_render_input,
@@ -473,6 +503,7 @@ def _produce_v2(
                 "provider_identity": provider_identity_data,
                 "renderer_identity": renderer_identity_data,
                 "music": music_record,
+                "sfx": sfx_events,
                 "generated_audio_sha256": generated_audio_hashes,
                 "generated_visual_sha256": generated_visual_hashes,
                 **({"chapter_parts": list(chapter_parts)} if chapter_parts else {}),
@@ -629,17 +660,20 @@ def _v2_run_is_valid(
         or any(generated_visual_hashes[path] != asset_hashes[path] for path in illustration_paths)
     ):
         return False
-    if manifest.get("music") is not None:
-        if not isinstance(generated_hashes, dict) or not {
-            "audio/music.wav", "audio/narration-voice.wav", "audio/narration.wav", "license-ledger.yaml",
-        }.issubset(generated_hashes):
+    if manifest.get("music") is not None or manifest.get("sfx"):
+        required_audio = {"audio/narration-voice.wav", "audio/narration.wav", "license-ledger.yaml"}
+        if manifest.get("music") is not None:
+            required_audio.add("audio/music.wav")
+        if manifest.get("sfx"):
+            required_audio.add("sfx.json")
+        if not isinstance(generated_hashes, dict) or not required_audio.issubset(generated_hashes):
             return False
         if not all(
             (run_dir / relative).is_file() and sha256_file(run_dir / relative) == digest
             for relative, digest in generated_hashes.items()
         ):
             return False
-        if manifest["music"].get("sha256") != generated_hashes["audio/music.wav"]:
+        if manifest.get("music") and manifest["music"].get("sha256") != generated_hashes["audio/music.wav"]:
             return False
     if not isinstance(line_hashes, dict) or not line_hashes or not all(
         (run_dir / relative).is_file() and sha256_file(run_dir / relative) == expected

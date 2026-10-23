@@ -44,8 +44,10 @@ def test_clips_reuse_line_wavs_and_match_measured_scene_boundaries(tmp_path: Pat
     content_frames = sum(scene["duration_frames"] for scene in clip["scenes"])
     with wave.open(str(run / "audio/clips/CL01.wav"), "rb") as audio:
         assert audio.getnframes() == (content_frames + 90) * audio.getframerate() // 30
+    # Compare the original spoken bytes; final tracks also contain separately ducked SFX.
+    with wave.open(str(run / "audio/clips/CL01-voice.wav"), "rb") as audio:
         clip_content = audio.readframes(content_frames * audio.getframerate() // 30)
-    with wave.open(str(run / "audio/narration.wav"), "rb") as audio:
+    with wave.open(str(run / "audio/narration-voice.wav"), "rb") as audio:
         assert clip_content == audio.readframes(content_frames * audio.getframerate() // 30)
     qa_path = run / "clips/CL01.video-qa.json"
     qa = json.loads(qa_path.read_text(encoding="utf-8"))

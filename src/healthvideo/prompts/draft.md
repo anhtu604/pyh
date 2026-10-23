@@ -21,6 +21,10 @@
 9. Mỗi cảnh `whiteboard` phải có `on_screen_text` (≤ 90 ký tự) hoặc `visual_assets` role `whiteboard`; `brand_outro` được miễn. Chữ lớn chỉ tóm ý, không chép cả narration. Chữ có số liệu phải gắn `claim_id` và `source_marker` hợp lệ như lời đọc. Phụ đề tự dựng từ narration; không nhúng chữ lặp vào ảnh.
 10. Video dài phải có ít nhất 2 cảnh whiteboard dùng minh họa FLUX (hook và một cảnh mở chương); máy không có GPU có thể bỏ và ghi rõ lý do (QA chỉ cảnh báo). Ảnh không chữ, không nhãn giải phẫu: khai báo asset `kind: illustration`, `semantic: false`, `rights_required: false`, `path: assets/illustrations/<name>.png`, `source: generated:flux2-klein-4b`, `license: Apache-2.0`, `creator`, `revision`, `prompt`, `seed`, `storyboard_role: whiteboard`; scene tham chiếu `visual_assets` với `role: whiteboard`. Produce sinh ảnh từ recipe đã duyệt, trước TTS; không dùng ảnh AI làm bằng chứng hay sơ đồ có nhãn.
 
+SFX (tùy chọn): mỗi cảnh tối đa 2 mục `sfx: [{{id: tick, at: start, volume: 0.2}}]`; chọn id từ `assets/sfx/catalog.yaml` (chỉ CC0).
+`at` là `start`, giây trong cảnh hoặc từ khóa lời đọc; volume 0.15–0.4. Dùng nhẹ, tránh âm báo động/giật gân.
+Mặc định có `whoosh-soft` mở chương và `chime-soft` vào `source_card`; đặt `sfx_defaults: false` ở storyboard để tắt.
+
 ## Lệnh được dùng
 - `healthvideo step draft {project} --script <path> --storyboard <path> --assets <path>`
 - `healthvideo step submit-medical {project}`
