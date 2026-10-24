@@ -10,3 +10,4 @@
 5. Dùng `pathlib.Path` cho đường dẫn nội bộ để các lệnh chạy được trong PowerShell.
 6. Chạy các test liên quan và lint trước commit; cập nhật bảng tiến độ trong `README.md`
    trong cùng commit với thay đổi nhiệm vụ.
+7. Đang có việc dở? Đọc `docs/HANDOFF.md` trước tiên.
