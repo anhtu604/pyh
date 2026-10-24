@@ -65,8 +65,23 @@ def check_environment(run: RunCommand) -> list[CheckResult]:
         _projects_check(REPO_ROOT),
         _telegram_check(),
         _elevenlabs_check(),
+        _vibi_check(),
     ]
     return results
+
+
+def _vibi_check() -> CheckResult:
+    from healthvideo.tts.vibi import VibiError, account
+
+    key = os.environ.get("VIBI_API_KEY", "").strip()
+    remedy = "Set VIBI_API_KEY in .env; profiles/voice.yaml chọn provider: vibi_minimax."
+    if not key:
+        return CheckResult("vibi", False, "missing API key", "recommended", remedy)
+    try:
+        credit = int(account(api_key=key)["credit_balance"])
+    except (VibiError, KeyError, TypeError, ValueError):
+        return CheckResult("vibi", False, "account check failed", "recommended", remedy)
+    return CheckResult("vibi", True, f"{credit} credits remaining", "recommended", remedy)
 
 
 def _elevenlabs_check() -> CheckResult:

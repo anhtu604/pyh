@@ -96,7 +96,14 @@ def test_provider_identity_changes_with_settings():
     assert provider_identity(first)["model_id"] == "eleven_v3"
 
 
-def test_provider_falls_back_to_vieneu_without_key(monkeypatch, tmp_path):
+@pytest.fixture
+def elevenlabs_profile(monkeypatch, tmp_path):
+    profile = tmp_path / "voice.yaml"
+    profile.write_text("voice_id: test-voice", encoding="utf-8")
+    monkeypatch.setattr(factory_deps, "VOICE_PROFILE_PATH", profile)
+
+
+def test_provider_falls_back_to_vieneu_without_key(monkeypatch, tmp_path, elevenlabs_profile):
     monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
     selected = []
     sentinel = object()
@@ -108,7 +115,7 @@ def test_provider_falls_back_to_vieneu_without_key(monkeypatch, tmp_path):
     assert selected == [sentinel]
 
 
-def test_provider_auto_selects_elevenlabs(monkeypatch, tmp_path):
+def test_provider_auto_selects_elevenlabs(monkeypatch, tmp_path, elevenlabs_profile):
     monkeypatch.setenv("ELEVENLABS_API_KEY", "key")
     selected = []
     monkeypatch.setattr(factory_deps, "produce_project", lambda project, provider, *a, **k: selected.append(provider))
@@ -116,7 +123,7 @@ def test_provider_auto_selects_elevenlabs(monkeypatch, tmp_path):
     assert selected[0].cache_identity()["model_id"] == "eleven_v3"
 
 
-def test_shared_provider_builder_defaults_to_auto(monkeypatch):
+def test_shared_provider_builder_defaults_to_auto(monkeypatch, elevenlabs_profile):
     monkeypatch.setenv("ELEVENLABS_API_KEY", "key")
     provider = factory_deps.build_tts_provider()
     assert provider_identity(provider)["model_id"] == "eleven_v3"

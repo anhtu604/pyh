@@ -12,9 +12,9 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from healthvideo.storage.files import read_yaml
 from healthvideo.tts.audio_checks import inspect_wav
@@ -32,13 +32,30 @@ class VoiceSettings(BaseModel, frozen=True):
     speed: float = Field(default=1.0, ge=0.7, le=1.2)
 
 
+class MiniMaxSettings(BaseModel, frozen=True):
+    model_config = ConfigDict(extra="forbid")
+    speed: float = Field(default=1.0, ge=0.5, le=2.0)
+    pitch: int = Field(default=0, ge=-12, le=12)
+    vol: float = Field(default=1.0, ge=0.01, le=10)
+
+
 class VoiceProfile(BaseModel, frozen=True):
     model_config = ConfigDict(extra="forbid")
+    provider: Literal["elevenlabs", "vibi_minimax"] = "elevenlabs"
+    model_id: str | None = None
     voice_id: str = Field(min_length=1, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
-    settings: VoiceSettings = Field(default_factory=VoiceSettings)
+    settings: VoiceSettings | MiniMaxSettings = Field(default_factory=VoiceSettings)
     allowed_tags: tuple[str, ...] = (
         "sarcastic", "curious", "excited", "chuckles", "sighs", "whispers", "pause",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _settings_for_provider(cls, data: Any) -> Any:
+        if isinstance(data, dict) and isinstance(data.get("settings"), dict):
+            model = MiniMaxSettings if data.get("provider") == "vibi_minimax" else VoiceSettings
+            data = {**data, "settings": model.model_validate(data["settings"])}
+        return data
 
 
 def load_voice_profile(path: Path = VOICE_PROFILE_PATH) -> VoiceProfile:

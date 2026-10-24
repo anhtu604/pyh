@@ -317,7 +317,7 @@ def produce(
     project_dir: Annotated[
         Path, typer.Argument(help="Thư mục dự án đã duyệt kịch bản")
     ],
-    tts: Annotated[str, typer.Option("--tts", help="Nhà cung cấp TTS: silent | auto | elevenlabs | vieneu")] = "silent",
+    tts: Annotated[str, typer.Option("--tts", help="Nhà cung cấp TTS: silent | auto | vibi | elevenlabs | vieneu")] = "silent",
     voice: Annotated[
         str | None, typer.Option("--voice", help="Preset voice VieNeu do bác sĩ chọn")
     ] = None,

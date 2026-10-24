@@ -1,10 +1,12 @@
-# Public starter voice; run tools/voice/sample.py and set the doctor's chosen voice_id.
-voice_id: JBFqnCBsd6RMkjVDRZzb
+# Giọng nhân bản của bác sĩ trên vibi.pro (MiniMax "lanhvcl"); cần VIBI_API_KEY trong .env.
+# Đổi model sang speech-2.8-turbo nếu muốn rẻ/nhanh hơn.
+provider: vibi_minimax
+model_id: speech-2.8-hd
+voice_id: 1d90e9bd-a67b-4d63-a415-032eb9ce91b5
 settings:
-  stability: 0.5
-  similarity_boost: 0.75
-  style: 0.3
   speed: 1.0
+  pitch: 0
+  vol: 1.0
 allowed_tags:
   - sarcastic
   - curious

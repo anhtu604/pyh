@@ -26,6 +26,7 @@ from healthvideo.tts.elevenlabs import (
 )
 from healthvideo.tts.normalize import NormalizedTTS
 from healthvideo.tts.silent import SilentTTS
+from healthvideo.tts.vibi import VibiTTS
 from healthvideo.workflows.create_project_v2 import create_project_v2
 from healthvideo.workflows.gate_review import check_revision_posts
 from healthvideo.workflows.produce import produce_project
@@ -83,9 +84,20 @@ def build_tts_provider(
     precision: str = "fp32",
 ) -> TTSProvider:
     """Select the channel provider, preserving explicit local and silent modes."""
+    profile = load_voice_profile(VOICE_PROFILE_PATH) if VOICE_PROFILE_PATH.is_file() else None
+    if tts == "vibi" or (tts == "auto" and profile is not None and profile.provider == "vibi_minimax"):
+        if profile is None or profile.provider != "vibi_minimax":
+            raise ValueError("--tts vibi cần profiles/voice.yaml với provider: vibi_minimax")
+        if os.environ.get("VIBI_API_KEY", "").strip():
+            return NormalizedTTS(VibiTTS(profile))
+        if tts == "vibi":
+            raise ValueError("--tts vibi cần VIBI_API_KEY trong .env")
+        warnings.warn("vibi unavailable: configure VIBI_API_KEY; using VieNeu.", RuntimeWarning, stacklevel=2)
+        return _build_vieneu_tts(python=tts_python, voice=voice or FACTORY_VOICE, precision=precision)
     if tts in {"auto", "elevenlabs"}:
-        if os.environ.get("ELEVENLABS_API_KEY", "").strip() and VOICE_PROFILE_PATH.is_file():
-            provider: TTSProvider = NormalizedTTS(ElevenLabsTTS(load_voice_profile(VOICE_PROFILE_PATH)))
+        if (os.environ.get("ELEVENLABS_API_KEY", "").strip() and profile is not None
+                and profile.provider == "elevenlabs"):
+            provider: TTSProvider = NormalizedTTS(ElevenLabsTTS(profile))
         else:
             warnings.warn(
                 "ElevenLabs unavailable: configure ELEVENLABS_API_KEY and profiles/voice.yaml; using VieNeu.",
