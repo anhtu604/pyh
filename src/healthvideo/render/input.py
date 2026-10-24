@@ -55,10 +55,12 @@ class RenderInput(BaseModel):
 
     @model_validator(mode="after")
     def validate_m6_5_chart_refs(self) -> "RenderInput":
+        from healthvideo.render.beats import visual_rhythm_qa
         from healthvideo.render.word_timing import entrance_timing_qa
 
         for scene in self.scenes:
             entrance_timing_qa(scene)
+            visual_rhythm_qa(scene)
         spec = FORMAT_SPECS[self.format_profile]
         if (self.width, self.height) != (spec.width, spec.height):
             raise ValueError(
@@ -112,12 +114,12 @@ def build_render_input(
             f"{spec.min_frames} and {spec.max_frames} frames"
         )
 
-    from healthvideo.render.word_timing import resolve_scene_entrances
+    from healthvideo.render.beats import resolve_scene_beats
 
     return RenderInput(
         title=storyboard.title,
         audio_file=audio_file,
-        scenes=tuple(resolve_scene_entrances(scene) for scene in storyboard.scenes),
+        scenes=tuple(resolve_scene_beats(scene) for scene in storyboard.scenes),
         visual_budget_profile=storyboard.visual_budget_profile,
         format_profile=storyboard.format_profile,
         width=spec.width,

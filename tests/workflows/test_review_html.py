@@ -14,6 +14,23 @@ from healthvideo.workflows.review_html import render_medical_packet, render_vide
 from tests.helpers import advance_v2_project_to_video_review, create_v2_project_fixture
 
 
+def test_video_packet_shows_visual_review(tmp_path):
+    revision = create_v2_project_fixture(tmp_path) / 'revisions/001'
+    write_yaml_atomic(revision / 'reviews/visual/candidates.yaml', {'assets': [{
+        'scenes': ['S01'], 'selected': 'reviews/visual/asset-00/round-0/candidate-2.png',
+    }], 'contact_sheet': {'path': 'reviews/visual/contact-sheet.jpg'}})
+    write_yaml_atomic(revision / 'reviews/visual-review.yaml', {'scenes': [{
+        'scene': 'S01', 'reason': 'swollen toe matches approved narration',
+        'layout_issues': ['title overlaps <img>'],
+    }]})
+    html = render_video_packet(revision)
+    assert 'visual-review.yaml' in html
+    assert 'candidate-2.png' in html
+    assert 'contact-sheet.jpg' in html
+    assert 'swollen toe matches approved narration' in html
+    assert 'title overlaps &lt;img&gt;' in html
+
+
 @pytest.mark.parametrize("with_explainer", [False, True])
 def test_mechanism_packet_groups_claims_sources_and_all_referencing_layers(
     tmp_path: Path, with_explainer: bool,

@@ -45,6 +45,11 @@ scenes:
   source_marker: '[1]'
   visual: comparison
   script_line_id: L02
+  beats:
+  - at: 0
+    focus: overview
+  - at: 1
+    focus: null
   anatomy:
     subject: artery_cross_section
     state: normal
@@ -63,8 +68,13 @@ scenes:
   source_marker: '[1]'
   visual: comparison
   script_line_id: L03
+  beats:
+  - at: 0
+    focus: overview
+  - at: 1
+    focus: null
   anatomy:
-    subject: artery_cross_section
+    subject: heart
     state: normal
     motion: Illustrative test motion
 - id: S04
@@ -81,6 +91,11 @@ scenes:
   source_marker: '[1]'
   visual: comparison
   script_line_id: L04
+  beats:
+  - at: 0
+    focus: overview
+  - at: 1
+    focus: null
   anatomy:
     subject: artery_cross_section
     state: normal
@@ -98,6 +113,11 @@ scenes:
   claim_id: C02
   visual: comparison
   script_line_id: L05
+  beats:
+  - at: 0
+    focus: overview
+  - at: 1
+    focus: null
   anatomy:
     subject: artery_cross_section
     state: normal

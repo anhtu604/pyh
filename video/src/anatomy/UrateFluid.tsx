@@ -2,6 +2,7 @@ import React from 'react';
 import {useCurrentFrame, useVideoConfig} from 'remotion';
 import type {OrganProps} from './ArterySection';
 import {anatomyColors as c, brand} from './palette';
+import {DiagramAnnotations, ProcessArrow, type DiagramLabels} from './annotations';
 
 // Union of the joint capsule, exposed bone shafts and circular fluid inset.
 export const CONTENT_BOX = {left: 28, top: 28, width: 504, height: 504};
@@ -18,7 +19,7 @@ const synovialSites = [[59, 215], [58, 274], [72, 332], [279, 252], [274, 319]];
 
 /** Qualitative joint section and fluid inset, not to scale. Deposits sit along
  * cartilage and within synovium; needle shape does not imply tissue puncture. */
-export const UrateFluid: React.FC<OrganProps> = ({state, severity, cueProgress}) => {
+export const UrateFluid: React.FC<OrganProps> = ({state, severity, cueProgress, visibleLabels}) => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
   const g = urateGeometry(state, severity, frame, fps);
@@ -74,5 +75,10 @@ export const UrateFluid: React.FC<OrganProps> = ({state, severity, cueProgress})
         transform={`translate(${x} ${y}) rotate(${i * 37 + 20})`}
         d={`M${-g.length / 2} 0 L0 -2.5 L${g.length / 2} 0 L0 2.5Z`}/>)}
     </g>
+    <ProcessArrow d="M280 300 L310 315 L300 302 M310 315 L294 315" visible={g.level > 0}/>
+    <DiagramAnnotations labels={LABELS} visibleLabels={visibleLabels}/>
   </svg>;
 };
+
+export const FOCUS_REGIONS = {"bone": {"left": 80, "top": 28, "width": 180, "height": 210}, "cartilage": {"left": 60, "top": 193, "width": 220, "height": 154}, "synovium": {"left": 28, "top": 134, "width": 285, "height": 270}, "fluid": {"left": 60, "top": 222, "width": 225, "height": 110}, "capsule": {"left": 28, "top": 28, "width": 285, "height": 504}, "crystal": {"left": 296, "top": 52, "width": 236, "height": 236}};
+export const LABELS: DiagramLabels = {"bone": {"text": "Xương", "region": "bone", "x": 330, "y": 310, "width": 180, "height": 34, "anchor": [170, 170]}, "cartilage": {"text": "Sụn khớp", "region": "cartilage", "x": 330, "y": 352, "width": 180, "height": 34, "anchor": [166, 242]}, "synovium": {"text": "Màng hoạt dịch", "region": "synovium", "x": 330, "y": 394, "width": 180, "height": 34, "anchor": [278, 320]}, "fluid": {"text": "Dịch khớp", "region": "fluid", "x": 330, "y": 436, "width": 180, "height": 34, "anchor": [185, 270]}, "capsule": {"text": "Bao khớp", "region": "capsule", "x": 330, "y": 478, "width": 180, "height": 34, "anchor": [285, 360]}, "crystal": {"text": "Tinh thể urat", "region": "crystal", "x": 330, "y": 8, "width": 180, "height": 34, "anchor": [415, 155]}};

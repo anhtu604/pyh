@@ -15,6 +15,7 @@ def _board(profile: str = "youtube_long") -> Storyboard:
         scenes.append(Scene(
             id=scene_id, start_frame=start, duration_frames=frames, narration=f"Lời {scene_id}",
             visual="whiteboard", on_screen_text="Synthetic illustration.", claim_id=claim,
+            words=tuple({"text": f"word{i}", "start_frame": i, "end_frame": min(frames, i+30)} for i in range(0, frames, 150)),
             chapter_id=chapter if profile == "youtube_long" else None,
         ))
         start += frames
@@ -140,6 +141,7 @@ def test_clip_plan_accepts_mechanism_scenes_and_preserves_anatomy(visual: str) -
     data = _board().model_dump(mode="json")
     data["scenes"][0].update(
         visual=visual,
+        beats=[{"at": 0, "focus": "overview"}, {"at": 1, "focus": None}],
         anatomy={"subject": "artery_cross_section", "state": "normal",
                  "severity": 0, "motion": "Synthetic test motion"},
     )

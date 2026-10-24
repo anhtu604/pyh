@@ -89,3 +89,6 @@ export const HepaticCell: React.FC<OrganProps> = ({state, severity, emphasizeFlo
     </g>}
   </svg>;
 };
+
+export const FOCUS_REGIONS = {"overview": {"left": 0, "top": 0, "width": 560, "height": 560}, "hepatocyte": {"left": 65, "top": 65, "width": 430, "height": 430}, "lipid": {"left": 275, "top": 170, "width": 180, "height": 230}};
+export const LABELS = {};

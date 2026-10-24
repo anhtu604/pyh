@@ -31,3 +31,6 @@ export const LiverOrgan: React.FC<OrganProps> = ({state, severity}) => {
 };
 
 export const CUE_ACTIONS: readonly string[] = [];
+
+export const FOCUS_REGIONS = {"overview": {"left": 0, "top": 0, "width": 560, "height": 560}, "right_lobe": {"left": 30, "top": 50, "width": 290, "height": 460}, "left_lobe": {"left": 285, "top": 90, "width": 250, "height": 270}};
+export const LABELS = {};

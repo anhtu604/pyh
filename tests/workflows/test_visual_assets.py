@@ -498,6 +498,8 @@ def test_chart_binding_refuses_post_approval_and_different_scene_retry(
     board = read_yaml(board_path)
     board["scenes"][2]["visual"] = "chart"
     board["scenes"][2].pop("anatomy", None)
+    board["scenes"][2].pop("beats", None)
+    board["scenes"][3]["anatomy"]["subject"] = "heart"
     write_yaml_atomic(board_path, board)
     with pytest.raises(ValueError, match="owned|referenced|different"):
         bind_chart_asset(project, scene_id="S03", asset_path="assets/chart-count.svg")
@@ -518,6 +520,8 @@ def test_chart_binding_allows_distinct_owned_charts_in_distinct_scenes(
     board = read_yaml(board_path)
     board["scenes"][2]["visual"] = "chart"
     board["scenes"][2].pop("anatomy", None)
+    board["scenes"][2].pop("beats", None)
+    board["scenes"][3]["anatomy"]["subject"] = "heart"
     write_yaml_atomic(board_path, board)
 
     bind_chart_asset(project, scene_id="S01", asset_path="assets/chart-count.svg")

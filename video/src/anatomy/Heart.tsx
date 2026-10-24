@@ -73,3 +73,6 @@ export const Heart: React.FC<OrganProps & {cutaway?: boolean}> = ({state, severi
 };
 
 export const CUE_ACTIONS: readonly string[] = [];
+
+export const FOCUS_REGIONS = {"overview": {"left": 80, "top": 10, "width": 520, "height": 520}, "ventricle": {"left": 300, "top": 250, "width": 230, "height": 260}, "aortic_arch": {"left": 160, "top": 30, "width": 190, "height": 220}};
+export const LABELS = {};

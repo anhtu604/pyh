@@ -38,7 +38,7 @@ def test_render_input_carries_word_frames():
 
 
 def test_render_input_slices_shared_line_words_and_local_cues():
-    first = mechanism(duration_frames=150, anatomy={'subject': 'joint_fluid_urate_to_inflammation',
+    first = mechanism(duration_frames=150, anatomy={'subject': 'immune_cell_alarm',
                       'state': 'diseased', 'motion': 'test', 'cues': []})
     second = mechanism(id='S02', start_frame=150, duration_frames=150)
     board = Storyboard(title='test', scenes=(first, second))

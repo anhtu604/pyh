@@ -6,6 +6,24 @@ import pytest
 from PIL import Image
 
 
+def test_flux_three_candidates(tmp_path):
+    from healthvideo.visuals.flux import generate_candidates
+
+    calls = []
+
+    def generate(prompt, *, out, width, height, seed):
+        calls.append(seed)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        Image.new('RGB', (width, height), (seed, 0, 0)).save(out)
+        return out
+
+    paths = generate_candidates('swollen big toe, no text', out_dir=tmp_path,
+                                width=64, height=32, seed=42, generate=generate)
+    assert len(paths) == 3
+    assert calls == [42, 43, 44]
+    assert len({path.read_bytes() for path in paths}) == 3
+
+
 def test_illustration_cached_by_hash(tmp_path, monkeypatch):
     from healthvideo.visuals import flux
 

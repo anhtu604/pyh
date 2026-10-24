@@ -21,6 +21,7 @@ from healthvideo.storage.files import (
     write_yaml_atomic,
 )
 from healthvideo.storage.queue import load_queue
+from healthvideo.workflows.visual_review import review_pending
 
 StepKind = Literal[
     "create",
@@ -28,11 +29,12 @@ StepKind = Literal[
     "draft",
     "posts",
     "produce",
+    "visual_review",
     "revise_medical",
     "revise_production",
 ]
 AGENT_STEPS: frozenset[str] = frozenset(
-    {"research", "draft", "posts", "revise_medical", "revise_production"}
+    {"research", "draft", "posts", "visual_review", "revise_medical", "revise_production"}
 )
 
 _STEP_BY_STATE: dict[WorkflowState, StepKind] = {
@@ -106,6 +108,7 @@ class RunDeps:
     invoke: Callable[..., AgentResult] = invoke_with_failover
     posts_ready: Callable[[Path], bool] = lambda _: True
     code_snapshot: Callable[[Path], dict[str, str]] | None = None
+    visual_review_pending: Callable[[Path], bool] = review_pending
 
 
 @dataclass
@@ -229,7 +232,9 @@ def run_queue(
                         report.at_gate.append(entry.slug)
                 break
 
-            if step == "produce" and not deps.posts_ready(project_dir):
+            if step == "produce" and deps.visual_review_pending(project_dir):
+                step = "visual_review"
+            elif step == "produce" and not deps.posts_ready(project_dir):
                 step = "posts"
 
             if steps_taken >= max_steps_per_topic:
@@ -276,6 +281,14 @@ def run_queue(
                         log_path=result.log_path,
                     )
                     break
+                if step == "visual_review":
+                    # Python validates the report, bounds regeneration and renders the
+                    # chosen candidate/fallback before it can enter the physician gate.
+                    try:
+                        deps.python_steps["produce"](project_dir)
+                    except Exception as exc:  # noqa: BLE001
+                        _mark_blocked(root, entry.slug, f"visual_review lỗi: {exc}", report)
+                        break
             elif step in deps.python_steps:
                 try:
                     deps.python_steps[step](project_dir)
@@ -298,7 +311,9 @@ def run_queue(
 
             steps_taken += 1
             new_state = deps.read_state(project_dir)
-            if step == "posts":
+            if step == "visual_review":
+                _mark_advanced(root, entry.slug, report)
+            elif step == "posts":
                 if not deps.posts_ready(project_dir):
                     _mark_blocked(
                         root,

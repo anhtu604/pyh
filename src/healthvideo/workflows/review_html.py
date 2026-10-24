@@ -433,9 +433,44 @@ def render_video_packet(revision_root: Path) -> str:
         + posts_section
         + pronunciation_section
         + sfx_section
+        + _render_visual_review_section(revision_root)
         + f"<pre>{escape(str(manifest))}</pre>"
         f"<pre>{escape(str(qa))}</pre>"
         "</body></html>"
+    )
+
+
+def _render_visual_review_section(root: Path) -> str:
+    report_path = root / "reviews/visual-review.yaml"
+    index_path = root / "reviews/visual/candidates.yaml"
+    if not index_path.is_file():
+        return ""
+    index = read_yaml(index_path)
+    report = read_yaml(report_path) if report_path.is_file() else {}
+    rows = []
+    for asset in index.get("assets", []):
+        selected = asset.get("selected")
+        image = (
+            f'<img style="max-width:480px" alt="Ứng viên đã chọn" src="../{escape(selected)}">'
+            if selected else f'<p>SVG thay thế: {escape(str(asset.get("fallback") or "chờ xem ảnh"))}</p>'
+        )
+        rows.append(f'<h3>{escape(", ".join(asset["scenes"]))}</h3>{image}')
+    sheets = index.get('contact_sheets') or ([index['contact_sheet']] if index.get('contact_sheet') else [])
+    final_path = root / 'reviews/visual/final-contact-sheets.yaml'
+    final = read_yaml(final_path) if final_path.is_file() else {}
+    final_section = ('<h3>Bố cục bản cuối sau chọn ứng viên/SVG</h3>' + ''.join(
+        f'<img style="max-width:100%" alt="Contact sheet bản cuối" src="../{escape(s["path"])}">'
+        for s in final.get('sheets', [])
+    )) if final else ''
+    return (
+        '<section><h2>Kiểm trực quan — visual_review</h2>'
+        '<a href="visual-review.yaml">Báo cáo visual-review.yaml</a>'
+        + ''.join(rows)
+        + final_section
+        + '<h3>Contact sheet ứng viên ban đầu</h3>'
+        + ''.join(f'<img style="max-width:100%" alt="Contact sheet toàn video" src="../{escape(s["path"])}">'
+                  for s in sheets)
+        + f'<pre>{escape(str(report))}</pre></section>'
     )
 
 

@@ -122,7 +122,8 @@ def _prepare_v2_awaiting_medical(
     for index, (scene, frames) in enumerate(zip(board["scenes"], durations, strict=True)):
         scene.update(start_frame=frame, duration_frames=frames)
         if index < 3:
-            scene["narration"] = " ".join(["Synthetic."] * words[index])
+            # Alternate words so captions change; a single repeated word reads as a frozen frame.
+            scene["narration"] = " ".join(("Synthetic.", "Example.")[i % 2] for i in range(words[index]))
         frame += frames
     from tests.helpers import align_fixture_script
 

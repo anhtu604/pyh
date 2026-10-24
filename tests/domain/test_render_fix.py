@@ -61,11 +61,14 @@ def test_mechanism_run_limit_resets_on_different_visual_or_subject():
             "visual": "process_animation", "anatomy": {
                 "subject": "heart", "state": "normal", "motion": "pulse"}}
     scenes = [deepcopy(base) for _ in range(5)]
-    Storyboard(title="Four", scenes=scenes[:4])
+    # An additional distinct subject satisfies diversity without interrupting the run under test.
+    different = deepcopy(base)
+    different["anatomy"]["subject"] = "artery_cross_section"
+    Storyboard(title="Four", scenes=[*scenes[:4], different])
     with pytest.raises(ValidationError, match="more than 4 consecutive"):
         Storyboard(title="Five", scenes=scenes)
     scenes[2]["visual"] = "comparison"
-    Storyboard(title="Varied", scenes=scenes)
+    Storyboard(title="Varied", scenes=[*scenes, different])
     scenes[2]["visual"] = "process_animation"
     scenes[2]["anatomy"]["subject"] = "artery_cross_section"
     Storyboard(title="Varied subject", scenes=scenes)

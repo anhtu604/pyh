@@ -11,12 +11,13 @@ from healthvideo.render.input import audio_timing_qa, build_render_input
 
 
 @pytest.mark.parametrize("frames", [600, 5401])
-def test_duration_tracks_content(frames: int) -> None:
+def test_static_content_duration_rejected_over_six_seconds(frames: int) -> None:
     board = Storyboard(title="variable", scenes=(Scene(
         id="S01", start_frame=0, duration_frames=frames,
         narration="content", visual="whiteboard", on_screen_text="Synthetic illustration.",
     ),))
-    assert build_render_input(board, "audio/narration.wav").scenes[0].duration_frames == frames
+    with pytest.raises(ValueError, match="visual gap"):
+        build_render_input(board, "audio/narration.wav")
 
 
 def test_audio_timing_guard_uses_integer_frame_boundary() -> None:
@@ -73,7 +74,7 @@ def valid_highlight_scene(**overrides: object) -> Scene:
     values: dict[str, object] = {
         "id": "S01",
         "start_frame": 0,
-        "duration_frames": 1350,
+        "duration_frames": 150,
         "narration": "Một nghiên cứu cho thấy giảm muối có thể hạ huyết áp.",
         "source_marker": "[1]",
         "visual": "evidence_highlight",
@@ -210,7 +211,7 @@ def test_scene_rejects_whitespace_only_source_marker() -> None:
         Scene(
             id="S01",
             start_frame=0,
-            duration_frames=1350,
+            duration_frames=150,
             narration="Không có dấu nguồn hợp lệ.",
             source_marker="   ",
             visual="whiteboard", on_screen_text="Synthetic illustration.",
@@ -249,7 +250,7 @@ def test_visual_asset_ref_validates_path_role_pose_and_duplicates() -> None:
         Scene(
             id="S01",
             start_frame=0,
-            duration_frames=1350,
+            duration_frames=150,
             narration="Legacy compatible.",
             visual="whiteboard", on_screen_text="Synthetic illustration.",
             visual_assets=(mascot, mascot),
@@ -260,7 +261,7 @@ def test_visual_assets_round_trip_through_render_input() -> None:
     scene = Scene(
         id="S01",
         start_frame=0,
-        duration_frames=1350,
+        duration_frames=150,
         narration="Declared visual.",
         visual="whiteboard", on_screen_text="Synthetic illustration.",
         visual_assets=(
@@ -277,7 +278,7 @@ def test_render_input_carries_m6_5_profile_and_requires_one_chart_ref() -> None:
     scene = Scene(
         id="S01",
         start_frame=0,
-        duration_frames=1350,
+        duration_frames=150,
         narration="Declared chart.",
         visual="chart",
         visual_assets=(VisualAssetRef(path="assets/chart.svg", role="chart"),),

@@ -1,18 +1,20 @@
 import React, {createContext, useContext} from 'react';
 import {AbsoluteFill, interpolate, useCurrentFrame} from 'remotion';
 import {brand} from '../anatomy/palette';
-import {ANATOMY_COMPONENTS, ANATOMY_CONTENT_BOXES, ANATOMY_VIEW_BOXES, ANATOMY_CUE_ACTIONS, type AnatomySubject} from '../anatomy/registry';
+import {ANATOMY_COMPONENTS, ANATOMY_CONTENT_BOXES, ANATOMY_VIEW_BOXES, ANATOMY_CUE_ACTIONS, ANATOMY_FOCUS_REGIONS, ANATOMY_LABELS, type AnatomySubject} from '../anatomy/registry';
 import {Captions, CAPTION_BACKGROUND_COLOR} from '../components/Captions';
 import {MascotGuide} from '../components/MascotGuide';
 import {useLayout, type Box} from '../layout';
 import {isMechanismVisual, type Scene} from '../types';
 import {SourceMarker} from './WhiteboardScene';
+import {activeSceneBeat, beatCamera} from './mechanismBeats';
+import {DiagramAnnotations} from '../anatomy/annotations';
 
 export type MechanismKind = 'anatomy' | 'process' | 'comparison' | 'timelapse';
 /** Only resolved alignment cues replace the legacy continuous animation. */
 export const anatomyCueProgress = (scene: Scene, frame: number): Record<string, number> | undefined => {
   const anatomy = scene.anatomy;
-  const cues = anatomy?.cues?.filter(cue => cue.start_frame !== undefined);
+  const cues = [...(anatomy?.cues ?? []), ...(scene.beats ?? []).filter(beat => beat.action).map(beat => ({action: beat.action!, start_frame: beat.start_frame}))].filter(cue => cue.start_frame !== undefined);
   if (!anatomy || !cues?.length) return undefined;
   const result: Record<string, number> = Object.fromEntries(ANATOMY_CUE_ACTIONS[anatomy.subject].map(action => [action, 0]));
   cues.forEach(cue => {
@@ -103,9 +105,12 @@ export const MechanismScene: React.FC<{scene: Scene; kind: MechanismKind}> = ({s
     width: 0, height: 0};
   viewport.width = Math.max(...boxes.map(b => b.left + b.width)) - viewport.left;
   viewport.height = Math.max(...boxes.map(b => b.top + b.height)) - viewport.top;
-  const camera = mechanismCamera(scene.id, progress, framingIndex, {
+  const legacyCamera = mechanismCamera(scene.id, progress, framingIndex, {
     viewport, content: mechanismContentBounds(anatomy.subject, boxes, viewport),
   });
+  const camera = scene.beats?.length ? beatCamera(scene, frame, ANATOMY_FOCUS_REGIONS[anatomy.subject],
+    ANATOMY_VIEW_BOXES[anatomy.subject], boxes, viewport) : legacyCamera;
+  const activeBeat = activeSceneBeat(scene, frame);
   const relative = (box: typeof layout.subject) => ({...box, left: box.left - viewport.left, top: box.top - viewport.top});
   const caption = frameLayout.captions;
   return <AbsoluteFill style={{backgroundColor: light ? brand.off_white : brand.night, color: light ? brand.navy : brand.off_white}}>
@@ -113,12 +118,31 @@ export const MechanismScene: React.FC<{scene: Scene; kind: MechanismKind}> = ({s
     <AbsoluteFill data-mechanism-camera="true" style={{transform: `translate(${camera.x}%, ${camera.y}%) scale(${camera.zoom})`, transformOrigin: camera.origin}} data-framing={camera.framing}>
       {kind === 'comparison' ? <div style={{position: 'absolute', inset: 0, display: 'flex', flexDirection: layout.axis}}>
         {layout.comparison.map((box, i) => <div key={i} style={{...relative(box), position: 'absolute'}}>
-          <Organ state={i === 0 ? 'normal' : 'diseased'} severity={i === 0 ? 0 : severity} lightBackground={light} cueProgress={cueProgress} />
+          <Organ state={i === 0 ? 'normal' : 'diseased'} severity={i === 0 ? 0 : severity} lightBackground={light} cueProgress={cueProgress} visibleLabels={[]} />
         </div>)}
       </div> : <div style={{...relative(layout.subject), position: 'absolute'}}>
-        <Organ state={kind === 'timelapse' ? 'diseased' : anatomy.state} severity={severity} emphasizeFlow={kind === 'process'} lightBackground={light} cueProgress={cueProgress} />
+        <Organ state={kind === 'timelapse' ? 'diseased' : anatomy.state} severity={severity} emphasizeFlow={kind === 'process'} lightBackground={light} cueProgress={cueProgress} visibleLabels={[]} />
       </div>}
     </AbsoluteFill>
+    {activeBeat?.labels?.length ? boxes.filter((_, index) => kind !== 'comparison' || index === 1).map((box, i) => {
+      const view = ANATOMY_VIEW_BOXES[anatomy.subject];
+      const scale = Math.min(box.width/view.width, box.height/view.height);
+      const offsetX = box.left-viewport.left+(box.width-view.width*scale)/2;
+      const offsetY = box.top-viewport.top+(box.height-view.height*scale)/2;
+      const labels = Object.fromEntries(Object.entries(ANATOMY_LABELS[anatomy.subject]).map(([id, label]) => {
+        const [ax, ay] = label.anchor;
+        const px = offsetX+(ax-view.left)*scale, py = offsetY+(ay-view.top)*scale;
+        // Labels stay in a fixed overlay while leader endpoints follow the moving artwork.
+        const [ox, oy] = camera.origin.split(' ').map(n => parseFloat(n)/100);
+        const x = ox*viewport.width+(px-ox*viewport.width)*camera.zoom+camera.x/100*viewport.width;
+        const y = oy*viewport.height+(py-oy*viewport.height)*camera.zoom+camera.y/100*viewport.height;
+        return [id, {...label, anchor: [(x-offsetX)/scale+view.left, (y-offsetY)/scale+view.top] as const}];
+      }));
+      return <svg key={i} data-beat-label-overlay="true" viewBox={`${view.left} ${view.top} ${view.width} ${view.height}`}
+        style={{...relative(box), position: 'absolute', pointerEvents: 'none'}}>
+        <DiagramAnnotations labels={labels} visibleLabels={activeBeat?.labels ?? []} />
+      </svg>;
+    }) : null}
     </div>
     <MascotGuide scene={scene} />
     <div data-mechanism-caption-band="true" style={{position: 'absolute', left: caption.left, bottom: caption.bottom,

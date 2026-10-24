@@ -45,7 +45,7 @@ def scene_data(visual: str = "anatomy_animation", **changes: object) -> dict:
     return {
         "id": "S-TEST-01",
         "start_frame": 0,
-        "duration_frames": 1350,
+        "duration_frames": 150,
         "narration": "Illustration only",
         "visual": visual, "on_screen_text": "Synthetic illustration.",
         "anatomy": dict(ANATOMY),
@@ -108,7 +108,7 @@ def test_old_scene_serialization_retains_fields_and_adds_entrance_timing() -> No
         "schema_version": "1.0",
         "id": "S1",
         "start_frame": 0,
-        "duration_frames": 1350,
+        "duration_frames": 150,
         "narration": "Illustration",
         "on_screen_text": "Synthetic illustration.",
         "script_line_id": None,
@@ -123,7 +123,8 @@ def test_old_scene_serialization_retains_fields_and_adds_entrance_timing() -> No
     actual = build_render_input(board, "audio/a.wav").model_dump(mode="json")["scenes"][
         0
     ]
-    assert actual.pop("entrances") == [{"text": "Synthetic illustration.", "start_frame": 472}]
+    assert actual.pop("entrances") == [{"text": "Synthetic illustration.", "start_frame": 52}]
+    assert actual.pop("words") == [{"text": "Illustration", "start_frame": 0, "end_frame": 150}]
     assert json.dumps(actual) == json.dumps(expected)
 
 
@@ -165,6 +166,8 @@ def budget_board(mechanism: int, evidence: int, text: int) -> Storyboard:
         )
         if visual not in KINDS:
             data.pop("anatomy")
+        elif len(scenes) % 2:
+            data["anatomy"]["subject"] = "heart"
         if visual == "evidence_highlight":
             data.update(
                 source_marker="[R-TEST-01]",
@@ -308,7 +311,8 @@ def test_produce_mechanism_needs_no_generated_asset_and_rejects_unknown_subject(
                 id=f"S{i}",
                 start_frame=i * 240,
                 duration_frames=240,
-                anatomy={**ANATOMY, "subject": subject},
+                anatomy={**ANATOMY, "subject": subject if i % 2 == 0 else ("heart" if subject != "heart" else "artery_cross_section")},
+                **({"beats": [{"at": 0, "focus": "overview"}, {"at": 1, "focus": None}]} if subject != "future_organ" else {}),
             )
             for i, kind in enumerate(KINDS)
         ],
@@ -335,7 +339,7 @@ def test_produce_mechanism_needs_no_generated_asset_and_rejects_unknown_subject(
     script_data = read_yaml(revision / "script/script.yaml")
     lines = []
     for index, scene in enumerate(board["scenes"]):
-        text = " ".join(["Illustration."] * (50 if index < 4 else 70))
+        text = " ".join(["Illustration only."] * (25 if index < 4 else 35))
         lines.append({"id": scene["id"], "text": text,
                       "delivery": {"intent": "explain"}})
         scene["script_line_id"] = scene["id"]
@@ -368,7 +372,7 @@ def test_produce_mechanism_needs_no_generated_asset_and_rejects_unknown_subject(
         )
         assert [scene["visual"] for scene in payload["scenes"][:4]] == list(KINDS)
         assert all(
-            scene["anatomy"]["subject"] == subject for scene in payload["scenes"][:4]
+            scene["anatomy"]["subject"] == (subject if i % 2 == 0 else ("heart" if subject != "heart" else "artery_cross_section")) for i, scene in enumerate(payload["scenes"][:4])
         )
         assert all(scene["visual_assets"] == [] for scene in payload["scenes"][:4])
         qa = json.loads(

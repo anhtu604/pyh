@@ -30,7 +30,7 @@ describe('VisualAsset', () => {
       expect(box.left + box.width).toBeLessThan(1000);
     }
     expect(visualAssetBox({path: 'assets/board.svg', role: 'whiteboard'})).toEqual(
-      {height: 980, left: 90, top: 190, width: 900},
+      {height: 550, left: 90, top: 180, width: 900},
     );
   });
 });

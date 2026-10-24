@@ -7,7 +7,7 @@ import {anatomyColors as c, brand} from './palette';
 export const CONTENT_BOX = {left: 38, top: 38, width: 484, height: 488};
 
 export const CUE_ACTIONS: readonly string[] = [];
-export type OrganProps = Pick<Anatomy, 'state' | 'severity'> & {emphasizeFlow?: boolean; lightBackground?: boolean; cueProgress?: Record<string, number>};
+export type OrganProps = Pick<Anatomy, 'state' | 'severity'> & {emphasizeFlow?: boolean; lightBackground?: boolean; visibleLabels?: readonly string[]; focus?: string | null; cueProgress?: Record<string, number>};
 export const arteryGeometry = (state: Anatomy['state'], severity: number, frame: number, fps: number) => {
   const disease = state === 'diseased' ? Math.max(0, Math.min(1, severity)) : 0;
   const pulse = Math.sin(frame / fps * Math.PI * 2 * 1.1);
@@ -45,3 +45,6 @@ export const ArterySection: React.FC<OrganProps> = ({state, severity, emphasizeF
       d="M240 510 H320 L306 498 M320 510 L306 522" fill="none" stroke={lightBackground ? brand.navy : brand.yellow} strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />}
   </svg>;
 };
+
+export const FOCUS_REGIONS = {"overview": {"left": 0, "top": 0, "width": 560, "height": 560}, "lumen": {"left": 150, "top": 150, "width": 260, "height": 260}, "wall": {"left": 60, "top": 90, "width": 180, "height": 350}};
+export const LABELS = {};

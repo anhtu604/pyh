@@ -225,6 +225,10 @@ def test_youtube_long_still_requires_explainer_before_evidence_ready(tmp_path: P
     data["format_profile"] = "youtube_long"
     for scene in data["scenes"]:
         scene["chapter_id"] = "CH01"
+    subjects = iter(("artery_cross_section", "heart", "liver_organ", "liver_lobule"))
+    for scene in data["scenes"]:
+        if scene.get("anatomy"):
+            scene["anatomy"]["subject"] = next(subjects)
     board = Storyboard.model_validate(data)
     write_yaml_atomic(path, board.model_dump(mode="json"))
     before = (project / "project.yaml").read_bytes()

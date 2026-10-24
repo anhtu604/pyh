@@ -51,6 +51,37 @@ class AnatomyCue(BaseModel):
     start_frame: int | None = Field(default=None, ge=0, exclude_if=lambda v: v is None)
 
 
+class SceneBeat(BaseModel):
+    """A scene-local visual change anchored to narration or elapsed seconds."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    at: str | float
+    focus: Nonblank | None = None
+    labels: tuple[Nonblank, ...] = Field(default=(), max_length=6)
+    action: Nonblank | None = None
+    start_frame: int | None = Field(default=None, ge=0, exclude_if=lambda v: v is None)
+
+    @field_validator("at")
+    @classmethod
+    def validate_at(cls, value):
+        import math
+
+        if isinstance(value, str):
+            if not value.strip():
+                raise ValueError("beat keyword must be nonblank")
+        elif not math.isfinite(value) or value < 0:
+            raise ValueError("beat time must be finite and nonnegative")
+        return value
+
+    @field_validator("labels")
+    @classmethod
+    def unique_labels(cls, value):
+        if len(value) != len(set(value)):
+            raise ValueError("beat labels must be unique")
+        return value
+
+
 class CaptionWord(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -226,6 +257,7 @@ class Scene(BaseModel):
     narration: str
     words: tuple[CaptionWord, ...] = Field(default=(), exclude_if=lambda v: not v)
     entrances: tuple[TextEntrance, ...] = Field(default=(), exclude_if=lambda v: not v)
+    beats: tuple[SceneBeat, ...] = Field(default=(), exclude_if=lambda v: not v)
     sfx: tuple[SceneSFX, ...] = Field(default=(), max_length=2, exclude_if=lambda v: not v)
     on_screen_text: str | None = Field(default=None, max_length=90, exclude_if=lambda v: v is None)
     script_line_id: str | None = None
@@ -286,6 +318,33 @@ class Scene(BaseModel):
                 raise ValueError(
                     f"Scene {self.id}: evidence_highlight requires image and quote"
                 )
+        if self.beats:
+            from healthvideo.audio.align import normalize_word
+            from healthvideo.visuals.anatomy_library import cue_actions
+
+            if self.anatomy is None:
+                raise ValueError(f"Scene {self.id}: beats require a mechanism anatomy component")
+            repo = Path(__file__).resolve().parents[3]
+            info = load_library(repo).get(self.anatomy.subject)
+            if info is None:
+                raise ValueError(f"Scene {self.id}: unsupported anatomy subject {self.anatomy.subject!r}")
+            focus_regions, labels = info.get("focus_regions", {}), info.get("labels", {})
+            actions = cue_actions(repo, self.anatomy.subject)
+            narration = [normalize_word(w) for w in self.narration.split()]
+            for beat in self.beats:
+                if beat.focus is not None and beat.focus not in focus_regions:
+                    raise ValueError(f"Scene {self.id}: beat focus must exist in component: {beat.focus}")
+                if any(label not in labels for label in beat.labels):
+                    raise ValueError(f"Scene {self.id}: beat label must exist in component")
+                if beat.action is not None and beat.action not in actions:
+                    raise ValueError(f"Scene {self.id}: beat action must exist in component: {beat.action}")
+                if isinstance(beat.at, str):
+                    tokens = [normalize_word(w) for w in beat.at.split()]
+                    if not any(narration[i:i+len(tokens)] == tokens
+                               for i in range(len(narration)-len(tokens)+1)):
+                        raise ValueError(f"Scene {self.id}: beat keyword must be in narration: {beat.at}")
+                if beat.start_frame is not None and beat.start_frame >= self.duration_frames:
+                    raise ValueError(f"Scene {self.id}: beat timing exceeds scene")
         if self.anatomy and self.anatomy.cues:
             from healthvideo.audio.align import normalize_word
             from healthvideo.visuals.anatomy_library import cue_actions
@@ -335,10 +394,10 @@ class Storyboard(BaseModel):
                                  "with the same anatomy.subject and visual; vary the view")
             previous = key
         mechanisms = [scene for scene in self.scenes if scene.anatomy is not None]
-        if (self.format_profile == "youtube_long" and len(mechanisms) >= 6
-                and len({scene.anatomy.subject for scene in mechanisms}) < 2):
-            raise ValueError("youtube_long with at least 6 mechanism scenes requires at least 2 anatomy.subject "
-                             "values; choose from library.json: " + ", ".join(SUPPORTED_ANATOMY_SUBJECTS))
+        required = 4 if self.format_profile == "youtube_long" else 2
+        if len(mechanisms) >= required and len({scene.anatomy.subject for scene in mechanisms}) < required:
+            raise ValueError(f"{self.format_profile} requires at least {required} anatomy.subject values; "
+                             "choose from library.json: " + ", ".join(SUPPORTED_ANATOMY_SUBJECTS))
         return self
 
     @model_validator(mode="after")

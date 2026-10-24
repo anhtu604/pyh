@@ -13,6 +13,7 @@
 2. Ở bước này chỉ được sửa component SVG trong `video/src/anatomy/` (kèm test). `storyboard.yaml`, `asset-manifest.yaml`, `clip-plan.yaml`, script, ledger và explainer đều nằm trong hash cổng y khoa: **không sửa** ở bước này.
 3. Nếu góp ý cần sửa bất kỳ tệp nào thuộc cổng y khoa, dừng, không sửa gì, ghi rõ trong báo cáo: "Cần bác sĩ chạy `review reopen --gate medical --changed <tệp> --resume-to draft_ready`" và liệt kê tệp + thay đổi dự kiến. Sau khi bác sĩ mở cổng, bước `draft` sẽ sửa và nộp lại.
 4. Nếu chỉ sửa component SVG, chạy `healthvideo step resume {project} --gate video --to production_in_progress`; lệnh này tự từ chối nếu tệp đã duyệt y khoa bị đổi.
+5. Khi sửa SVG: giữ phong cách sơ đồ tiếng Việt có leader line/mũi tên; tối đa 6 nhãn không chồng/cắt. Đọc `reviews/visual-review.yaml` và contact sheet để sửa lỗi nhìn thấy. Nếu cần đổi beat/subject/prompt FLUX, áp dụng mục 3 vì các trường này thuộc storyboard/manifest đã duyệt; không sửa lách cổng.
 
 ## Lệnh được dùng
 - `healthvideo step resume {project} --gate video --to production_in_progress`

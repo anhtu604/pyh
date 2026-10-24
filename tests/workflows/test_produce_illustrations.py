@@ -18,6 +18,7 @@ from healthvideo.workflows.gate_review import (
 )
 from tests.helpers import create_v2_project_fixture
 from tests.test_flux import illustration_record
+from tests.workflows.test_visual_review import submit
 
 
 @pytest.fixture
@@ -32,6 +33,25 @@ def illustrated_project(tmp_path):
     write_yaml_atomic(root / 'storyboard/storyboard.yaml', board)
     approve_gate(project, GateKind.MEDICAL, reviewer='doctor', now=datetime(2026, 10, 23, tzinfo=UTC))
     return project
+
+
+@pytest.fixture(autouse=True)
+def fake_contact_sheet(monkeypatch):
+    def prepare(root, *, final=False):
+        from healthvideo.workflows.visual_review import CANDIDATES
+
+        index = read_yaml(root / CANDIDATES)
+        contact = root / 'reviews/visual/contact-sheet.jpg'
+        Image.new('RGB', (32, 32)).save(contact)
+        sheet = {'path': contact.relative_to(root).as_posix(), 'sha256': sha256_file(contact)}
+        if final:
+            write_yaml_atomic(root / 'reviews/visual/final-contact-sheets.yaml', {
+                'render_sha256': sha256_file(root / 'renders/video.mp4'), 'sheets': [sheet],
+            })
+            return
+        index['contact_sheet'] = sheet
+        write_yaml_atomic(root / CANDIDATES, index)
+    monkeypatch.setattr(produce, 'prepare_contact_sheet', prepare)
 
 
 def renderer(argv):
@@ -57,6 +77,10 @@ def test_illustration_license_recorded(illustrated_project, music, monkeypatch):
     assert illustration['sha256'] == sha256_file(root / 'renders' / illustration['path'])
     assert len(entries) == (2 if music else 1)
     assert before == hash_reviewed_artifacts(medical_reviewed_paths(root))
+    submit(root)
+    produce.produce_project(illustrated_project, SilentTTS(), renderer, music=music)
+    final_sheets = read_yaml(root / 'reviews/visual/final-contact-sheets.yaml')
+    assert final_sheets['render_sha256'] == sha256_file(root / 'renders/video.mp4')
     # Both generated provenance and staged PNG bytes must be verified on reuse.
     produce.produce_project(illustrated_project, SilentTTS(), lambda _: pytest.fail('cache missed'), music=music)
     (root / 'renders/license-ledger.yaml').write_text('tampered')
@@ -76,12 +100,13 @@ def test_produce_generates_missing_illustration_once(illustrated_project, monkey
     monkeypatch.setattr(produce, 'generate_illustration', generate, raising=False)
     class Voice(SilentTTS):
         def synthesize(self, request, out):
-            assert len(calls) == 1, 'FLUX must finish before TTS'
+            assert len(calls) == 3, 'All three FLUX candidates must finish before TTS'
             return super().synthesize(request, out)
 
     produce.produce_project(illustrated_project, Voice(), renderer)
     produce.produce_project(illustrated_project, Voice(), lambda _: pytest.fail('render repeated'))
-    assert calls == [('A park without lettering', 1080, 1920, 42)]
+    assert calls == [('A park without lettering', 1080, 1920, seed) for seed in (42, 43, 44)]
+    assert read_yaml(illustrated_project / 'project.yaml')['state'] == 'production_in_progress'
     assert Image.open(illustrated_project / 'revisions/001/assets/illustrations/park.png').size == (1080, 1920)
 
 
@@ -123,9 +148,9 @@ def test_illustration_recipe_and_normalized_reference_control_reuse(tmp_path, mo
     assert len(rights) == 1
     assert Image.open(tmp_path / recipe['path']).getpixel((0, 0)) == (0, 128, 0)
     produce._prepare_illustrations(tmp_path, board, manifest, generate=True)
-    assert calls == ['A park without lettering']
+    assert calls == ['A park without lettering'] * 3
     recipe['prompt'] = 'A different park'
     changed = AssetManifest.model_validate({'assets': [recipe]})
     produce._prepare_illustrations(tmp_path, board, changed, generate=True)
-    assert calls == ['A park without lettering', 'A different park']
+    assert calls == ['A park without lettering'] * 3 + ['A different park'] * 3
     assert Image.open(tmp_path / recipe['path']).getpixel((0, 0)) == (0, 0, 255)

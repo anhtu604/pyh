@@ -17,6 +17,18 @@ MODEL_ID = "black-forest-labs/FLUX.2-klein-4B"
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
+def generate_candidates(
+    prompt: str, *, out_dir: Path, width: int, height: int, seed: int,
+    generate=None,
+) -> tuple[Path, ...]:
+    """Generate three independently seeded, cached PNGs, sequentially on the GPU."""
+    generate = generate or generate_illustration
+    return tuple(generate(
+        prompt, out=out_dir / f"candidate-{index + 1}.png", width=width,
+        height=height, seed=(seed + index) % 2**63,
+    ) for index in range(3))
+
+
 def flux_python(repo: Path = REPO_ROOT) -> Path:
     return Path(os.environ.get(
         FLUX_PYTHON_ENV, str(shared_repo_root(repo) / "cache/flux-venv/Scripts/python.exe")

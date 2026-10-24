@@ -101,6 +101,15 @@ export const SourceCardSchema = z.object({
   interpretation: z.string().trim().min(1),
 });
 
+export const BeatSchema = z.object({
+  at: z.union([z.string().trim().min(1), z.number().finite().nonnegative()]),
+  focus: z.string().trim().min(1).nullable().optional(),
+  labels: z.array(z.string().trim().min(1)).max(6).default([]),
+  action: z.string().trim().min(1).nullable().optional(),
+  start_frame: z.number().int().nonnegative().optional(),
+});
+export type SceneBeat = z.input<typeof BeatSchema>;
+
 export const SceneSchema = z
   .object({
     schema_version: z.string().default('1.0'),
@@ -111,6 +120,7 @@ export const SceneSchema = z
     words: z.array(z.object({text: z.string(), start_frame: z.number().int().min(0),
       end_frame: z.number().int().min(0)}).refine(word => word.end_frame >= word.start_frame,
       'word end must follow start')).optional(),
+    beats: z.array(BeatSchema).optional(),
     entrances: z.array(z.object({text: z.string(), start_frame: z.number().int().min(0)})).optional(),
     on_screen_text: z.string().refine((text) => Array.from(text).length <= 90,
       'on_screen_text must be at most 90 Unicode characters').nullable().optional(),
@@ -128,6 +138,21 @@ export const SceneSchema = z
   .superRefine((scene, context) => {
     if (isMechanismVisual(scene.visual) && !scene.anatomy) {
       context.addIssue({code: 'custom', path: ['anatomy'], message: `${scene.visual} requires anatomy`});
+    }
+    if (scene.beats?.length) {
+      const metadata = scene.anatomy ? anatomyLibrary.components[scene.anatomy.subject] : undefined;
+      const info = metadata as unknown as {focus_regions?: Record<string, unknown>; labels?: Record<string, unknown>};
+      scene.beats.forEach((beat, index) => {
+        if (!scene.anatomy || (beat.focus && !info?.focus_regions?.[beat.focus])) {
+          context.addIssue({code: 'custom', path: ['beats', index, 'focus'], message: 'beat focus must exist in component'});
+        }
+        if (new Set(beat.labels).size !== beat.labels.length || beat.labels.some(label => !info?.labels?.[label])) {
+          context.addIssue({code: 'custom', path: ['beats', index, 'labels'], message: 'beat labels must exist and be unique'});
+        }
+        if (beat.start_frame !== undefined && beat.start_frame >= scene.duration_frames) {
+          context.addIssue({code: 'custom', path: ['beats', index, 'start_frame'], message: 'beat exceeds scene'});
+        }
+      });
     }
     const paths = scene.visual_assets.map((asset) => asset.path);
     if (new Set(paths).size !== paths.length) {

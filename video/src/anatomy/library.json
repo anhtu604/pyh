@@ -3,11 +3,249 @@
   "components": {
     "joint_fluid_urate_to_inflammation": {
       "file": "UrateFluid.tsx",
-      "layers": ["sample-window", "dissolved-urate", "crystal-seeds", "needle-crystals", "joint-capsule", "bone-ends", "trabecular-bone", "cartilage", "synovial-fluid", "synovial-membrane", "sample-connector", "cartilage-deposits", "synovial-deposits"]
+      "layers": [
+        "sample-window",
+        "dissolved-urate",
+        "crystal-seeds",
+        "needle-crystals",
+        "joint-capsule",
+        "bone-ends",
+        "trabecular-bone",
+        "cartilage",
+        "synovial-fluid",
+        "synovial-membrane",
+        "sample-connector",
+        "cartilage-deposits",
+        "synovial-deposits"
+      ],
+      "focus_regions": {
+        "bone": {
+          "left": 80,
+          "top": 28,
+          "width": 180,
+          "height": 210
+        },
+        "cartilage": {
+          "left": 60,
+          "top": 193,
+          "width": 220,
+          "height": 154
+        },
+        "synovium": {
+          "left": 28,
+          "top": 134,
+          "width": 285,
+          "height": 270
+        },
+        "fluid": {
+          "left": 60,
+          "top": 222,
+          "width": 225,
+          "height": 110
+        },
+        "capsule": {
+          "left": 28,
+          "top": 28,
+          "width": 285,
+          "height": 504
+        },
+        "crystal": {
+          "left": 296,
+          "top": 52,
+          "width": 236,
+          "height": 236
+        }
+      },
+      "labels": {
+        "bone": {
+          "text": "Xương",
+          "region": "bone",
+          "x": 330,
+          "y": 310,
+          "width": 180,
+          "height": 34,
+          "anchor": [
+            170,
+            170
+          ]
+        },
+        "cartilage": {
+          "text": "Sụn khớp",
+          "region": "cartilage",
+          "x": 330,
+          "y": 352,
+          "width": 180,
+          "height": 34,
+          "anchor": [
+            166,
+            242
+          ]
+        },
+        "synovium": {
+          "text": "Màng hoạt dịch",
+          "region": "synovium",
+          "x": 330,
+          "y": 394,
+          "width": 180,
+          "height": 34,
+          "anchor": [
+            278,
+            320
+          ]
+        },
+        "fluid": {
+          "text": "Dịch khớp",
+          "region": "fluid",
+          "x": 330,
+          "y": 436,
+          "width": 180,
+          "height": 34,
+          "anchor": [
+            185,
+            270
+          ]
+        },
+        "capsule": {
+          "text": "Bao khớp",
+          "region": "capsule",
+          "x": 330,
+          "y": 478,
+          "width": 180,
+          "height": 34,
+          "anchor": [
+            285,
+            360
+          ]
+        },
+        "crystal": {
+          "text": "Tinh thể urat",
+          "region": "crystal",
+          "x": 330,
+          "y": 8,
+          "width": 180,
+          "height": 34,
+          "anchor": [
+            415,
+            155
+          ]
+        }
+      }
     },
     "immune_cell_alarm": {
       "file": "InflammationSignal.tsx",
-      "layers": ["sample-window", "resident-cell", "crystal-cue", "alarm-signal", "recruited-cells", "synovial-membrane", "subsynovial-tissue", "tissue-fibres", "capillary", "inflammasome", "multilobed-nuclei"]
+      "layers": [
+        "sample-window",
+        "resident-cell",
+        "crystal-cue",
+        "alarm-signal",
+        "recruited-cells",
+        "synovial-membrane",
+        "subsynovial-tissue",
+        "tissue-fibres",
+        "capillary",
+        "inflammasome",
+        "multilobed-nuclei"
+      ],
+      "focus_regions": {
+        "macrophage": {
+          "left": 64,
+          "top": 86,
+          "width": 220,
+          "height": 205
+        },
+        "nlrp3": {
+          "left": 174,
+          "top": 171,
+          "width": 66,
+          "height": 66
+        },
+        "il1b": {
+          "left": 252,
+          "top": 188,
+          "width": 150,
+          "height": 165
+        },
+        "vessel": {
+          "left": 44,
+          "top": 390,
+          "width": 472,
+          "height": 100
+        },
+        "neutrophil": {
+          "left": 128,
+          "top": 215,
+          "width": 330,
+          "height": 230
+        },
+        "synovium": {
+          "left": 28,
+          "top": 263,
+          "width": 504,
+          "height": 70
+        }
+      },
+      "labels": {
+        "macrophage": {
+          "text": "Đại thực bào",
+          "region": "macrophage",
+          "x": 34,
+          "y": 36,
+          "width": 180,
+          "height": 34,
+          "anchor": [
+            120,
+            135
+          ]
+        },
+        "nlrp3": {
+          "text": "NLRP3",
+          "region": "nlrp3",
+          "x": 346,
+          "y": 82,
+          "width": 172,
+          "height": 34,
+          "anchor": [
+            206,
+            201
+          ]
+        },
+        "il1b": {
+          "text": "IL-1β",
+          "region": "il1b",
+          "x": 346,
+          "y": 138,
+          "width": 172,
+          "height": 34,
+          "anchor": [
+            301,
+            260
+          ]
+        },
+        "neutrophil": {
+          "text": "BC trung tính",
+          "region": "neutrophil",
+          "x": 346,
+          "y": 194,
+          "width": 172,
+          "height": 34,
+          "anchor": [
+            334,
+            308
+          ]
+        },
+        "vessel": {
+          "text": "Mạch máu",
+          "region": "vessel",
+          "x": 346,
+          "y": 492,
+          "width": 172,
+          "height": 34,
+          "anchor": [
+            416,
+            435
+          ]
+        }
+      }
     },
     "artery_cross_section": {
       "file": "ArterySection.tsx",
@@ -16,7 +254,28 @@
         "media",
         "intima",
         "lumen"
-      ]
+      ],
+      "focus_regions": {
+        "overview": {
+          "left": 0,
+          "top": 0,
+          "width": 560,
+          "height": 560
+        },
+        "lumen": {
+          "left": 150,
+          "top": 150,
+          "width": 260,
+          "height": 260
+        },
+        "wall": {
+          "left": 60,
+          "top": 90,
+          "width": 180,
+          "height": 350
+        }
+      },
+      "labels": {}
     },
     "hepatic_cell_and_tissue_lipid_balance": {
       "file": "HepaticCell.tsx",
@@ -30,15 +289,91 @@
         "injury-and-immune-signals",
         "stellate-cell",
         "extracellular-matrix"
-      ]
+      ],
+      "focus_regions": {
+        "overview": {
+          "left": 0,
+          "top": 0,
+          "width": 560,
+          "height": 560
+        },
+        "hepatocyte": {
+          "left": 65,
+          "top": 65,
+          "width": 430,
+          "height": 430
+        },
+        "lipid": {
+          "left": 275,
+          "top": 170,
+          "width": 180,
+          "height": 230
+        }
+      },
+      "labels": {}
     },
     "liver_lobule": {
       "file": "LiverLobule.tsx",
-      "layers": ["lobule-boundary", "central-vein", "portal-triads", "hepatocyte-cords", "sinusoids", "inflammation", "portal-fibrosis"]
+      "layers": [
+        "lobule-boundary",
+        "central-vein",
+        "portal-triads",
+        "hepatocyte-cords",
+        "sinusoids",
+        "inflammation",
+        "portal-fibrosis"
+      ],
+      "focus_regions": {
+        "overview": {
+          "left": 0,
+          "top": 0,
+          "width": 560,
+          "height": 560
+        },
+        "central_vein": {
+          "left": 205,
+          "top": 205,
+          "width": 150,
+          "height": 150
+        },
+        "portal_triad": {
+          "left": 410,
+          "top": 132,
+          "width": 100,
+          "height": 100
+        }
+      },
+      "labels": {}
     },
     "liver_organ": {
       "file": "LiverOrgan.tsx",
-      "layers": ["liver-silhouette", "right-lobe", "left-lobe", "falciform-ligament"]
+      "layers": [
+        "liver-silhouette",
+        "right-lobe",
+        "left-lobe",
+        "falciform-ligament"
+      ],
+      "focus_regions": {
+        "overview": {
+          "left": 0,
+          "top": 0,
+          "width": 560,
+          "height": 560
+        },
+        "right_lobe": {
+          "left": 30,
+          "top": 50,
+          "width": 290,
+          "height": 460
+        },
+        "left_lobe": {
+          "left": 285,
+          "top": 90,
+          "width": 250,
+          "height": 270
+        }
+      },
+      "labels": {}
     },
     "heart": {
       "file": "Heart.tsx",
@@ -50,7 +385,231 @@
         "ventricles",
         "septum",
         "pulmonary-trunk"
-      ]
+      ],
+      "focus_regions": {
+        "overview": {
+          "left": 80,
+          "top": 10,
+          "width": 520,
+          "height": 520
+        },
+        "ventricle": {
+          "left": 300,
+          "top": 250,
+          "width": 230,
+          "height": 260
+        },
+        "aortic_arch": {
+          "left": 160,
+          "top": 30,
+          "width": 190,
+          "height": 220
+        }
+      },
+      "labels": {}
+    },
+    "gout_foot_overview": {
+      "file": "GoutFootOverview.tsx",
+      "layers": [
+        "foot-silhouette",
+        "foot-bones",
+        "mtp1-highlight",
+        "inflammatory-halo"
+      ],
+      "focus_regions": {
+        "foot": {
+          "left": 30,
+          "top": 48,
+          "width": 500,
+          "height": 464
+        },
+        "mtp1": {
+          "left": 300,
+          "top": 326,
+          "width": 190,
+          "height": 170
+        }
+      },
+      "labels": {
+        "mtp1": {
+          "text": "Khớp MTP1",
+          "region": "mtp1",
+          "x": 306,
+          "y": 72,
+          "width": 206,
+          "height": 36,
+          "anchor": [
+            402,
+            405
+          ]
+        },
+        "bone": {
+          "text": "Xương bàn chân",
+          "region": "foot",
+          "x": 42,
+          "y": 72,
+          "width": 218,
+          "height": 36,
+          "anchor": [
+            258,
+            349
+          ]
+        }
+      }
+    },
+    "urate_crystal_close_up": {
+      "file": "UrateCrystalCloseUp.tsx",
+      "layers": [
+        "sample-window",
+        "dissolved-urate",
+        "crystal-seeds",
+        "needle-crystals"
+      ],
+      "focus_regions": {
+        "fluid": {
+          "left": 28,
+          "top": 28,
+          "width": 504,
+          "height": 504
+        },
+        "seed": {
+          "left": 215,
+          "top": 215,
+          "width": 130,
+          "height": 130
+        },
+        "crystal": {
+          "left": 100,
+          "top": 170,
+          "width": 370,
+          "height": 240
+        }
+      },
+      "labels": {
+        "dissolved": {
+          "text": "Urat hòa tan",
+          "region": "fluid",
+          "x": 45,
+          "y": 48,
+          "width": 200,
+          "height": 36,
+          "anchor": [
+            132,
+            170
+          ]
+        },
+        "seed": {
+          "text": "Mầm tinh thể",
+          "region": "seed",
+          "x": 310,
+          "y": 48,
+          "width": 200,
+          "height": 36,
+          "anchor": [
+            280,
+            280
+          ]
+        },
+        "crystal": {
+          "text": "Tinh thể urat dạng kim",
+          "region": "crystal",
+          "x": 132,
+          "y": 474,
+          "width": 296,
+          "height": 36,
+          "anchor": [
+            360,
+            320
+          ]
+        }
+      }
+    },
+    "urate_deposition": {
+      "file": "UrateDeposition.tsx",
+      "layers": [
+        "joint-fluid",
+        "synovium",
+        "cartilage",
+        "bone",
+        "surface-deposits",
+        "membrane-deposits"
+      ],
+      "focus_regions": {
+        "cartilage": {
+          "left": 28,
+          "top": 250,
+          "width": 504,
+          "height": 180
+        },
+        "synovium": {
+          "left": 28,
+          "top": 100,
+          "width": 115,
+          "height": 400
+        },
+        "crystal": {
+          "left": 205,
+          "top": 210,
+          "width": 260,
+          "height": 140
+        },
+        "fluid": {
+          "left": 148,
+          "top": 55,
+          "width": 355,
+          "height": 240
+        }
+      },
+      "labels": {
+        "cartilage": {
+          "text": "Sụn khớp",
+          "region": "cartilage",
+          "x": 304,
+          "y": 466,
+          "width": 202,
+          "height": 36,
+          "anchor": [
+            380,
+            370
+          ]
+        },
+        "synovium": {
+          "text": "Màng hoạt dịch",
+          "region": "synovium",
+          "x": 40,
+          "y": 40,
+          "width": 220,
+          "height": 36,
+          "anchor": [
+            88,
+            233
+          ]
+        },
+        "crystal": {
+          "text": "Lắng đọng urat",
+          "region": "crystal",
+          "x": 288,
+          "y": 40,
+          "width": 222,
+          "height": 36,
+          "anchor": [
+            350,
+            297
+          ]
+        },
+        "fluid": {
+          "text": "Dịch khớp",
+          "region": "fluid",
+          "x": 40,
+          "y": 466,
+          "width": 202,
+          "height": 36,
+          "anchor": [
+            240,
+            175
+          ]
+        }
+      }
     }
   }
 }

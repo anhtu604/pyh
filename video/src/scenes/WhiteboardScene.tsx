@@ -51,6 +51,8 @@ export const WhiteboardScene: React.FC<WhiteboardSceneProps> = ({scene}) => {
     extrapolateRight: 'clamp',
   });
   const visualAssets = scene.visual_assets ?? [];
+  const hasIllustration = visualAssets.some(asset => asset.role === 'whiteboard');
+  const textBox = hasIllustration ? layout.illustrationText : layout.whiteboardText;
   const pieces = textEntrances(scene);
 
   return (
@@ -75,10 +77,10 @@ export const WhiteboardScene: React.FC<WhiteboardSceneProps> = ({scene}) => {
         style={{
           color: '#202124',
           fontFamily: FONT_FAMILY,
-          fontSize: whiteboardFontSize(scene.on_screen_text, layout.whiteboardText.width,
-            layout.whiteboardText.height, layout.narration.fontSize),
+          fontSize: whiteboardFontSize(scene.on_screen_text, textBox.width,
+            textBox.height, layout.narration.fontSize),
           fontWeight: 800,
-          ...layout.whiteboardText,
+          ...textBox,
           lineHeight: 1.15,
           position: 'absolute',
           textAlign: 'center',

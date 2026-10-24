@@ -449,8 +449,8 @@ def _m65_golden_board(revision: Path) -> dict:
     highlight = board["scenes"][0]["evidence_highlight"]
     board["visual_budget_profile"] = "m6_5_v1"
     for scene in board["scenes"]:
-        scene.pop("anatomy", None)
-        scene.pop("evidence_highlight", None)
+        for field in ("anatomy", "beats", "evidence_highlight"):
+            scene.pop(field, None)
         scene["visual"] = "whiteboard"
         scene["on_screen_text"] = "Synthetic illustration."
         if scene["id"] == "S03":

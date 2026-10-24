@@ -17,14 +17,17 @@ def mechanism_scenes(count):
             for i in range(count)]
 
 
-def test_long_video_requires_two_subjects_from_six_mechanism_scenes():
+def test_long_video_requires_four_subjects_and_clip_requires_two():
     scenes = mechanism_scenes(6)
-    with pytest.raises(ValidationError, match="at least 2 anatomy.subject.*liver_lobule"):
+    with pytest.raises(ValidationError, match="at least 4 anatomy.subject.*liver_lobule"):
         Storyboard(title="Synthetic", format_profile="youtube_long", scenes=scenes)
-    scenes[-1]["anatomy"]["subject"] = "liver_lobule"
+    for scene, subject in zip(scenes[-3:], ("liver_lobule", "liver_organ", "artery_cross_section"), strict=True):
+        scene["anatomy"]["subject"] = subject
     Storyboard(title="Synthetic", format_profile="youtube_long", scenes=scenes)
-    Storyboard(title="Synthetic", format_profile="youtube_long", scenes=scenes[:5])
-    Storyboard(title="Synthetic", scenes=mechanism_scenes(6))
+    Storyboard(title="Synthetic", format_profile="youtube_long", scenes=scenes[:3])
+    with pytest.raises(ValidationError, match="at least 2 anatomy.subject"):
+        Storyboard(title="Synthetic", scenes=mechanism_scenes(6))
+    Storyboard(title="Synthetic", scenes=scenes)
 
 
 @pytest.mark.parametrize("text", [None, "", "   "])

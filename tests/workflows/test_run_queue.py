@@ -48,6 +48,38 @@ def _log_file(log_dir: Path, name: str = "fake-codex.log") -> Path:
     return log_path
 
 
+def test_run_reviews_visuals_after_produce_before_video_gate(tmp_path):
+    entry = _entry()
+    add_to_queue(tmp_path, entry)
+    project = tmp_path / 'projects' / entry.slug
+    project.mkdir(parents=True)
+    state = {'value': WorkflowState.MEDICALLY_APPROVED, 'pending': False, 'reviewed': False}
+    calls = []
+
+    def produce(_project):
+        calls.append('produce')
+        state['value'] = WorkflowState.AWAITING_VIDEO_REVIEW if state['reviewed'] else WorkflowState.PRODUCTION_IN_PROGRESS
+        state['pending'] = not state['reviewed']
+
+    def invoke(agents, prompt, *, cwd, log_dir):
+        assert 'visual-review.yaml' in prompt
+        assert state['value'] == WorkflowState.PRODUCTION_IN_PROGRESS
+        calls.append('visual_review')
+        state['reviewed'] = True
+        return AgentResult('codex', True, False, _log_file(log_dir))
+
+    deps = RunDeps(
+        create_project=lambda *_: project, read_state=lambda _: state['value'],
+        reject_note=lambda _: None, python_steps={'produce': produce},
+        changed_code_paths=lambda _: [], invoke=invoke,
+        visual_review_pending=lambda _: state['pending'],
+    )
+    result = run_queue(tmp_path, deps)
+    assert calls == ['produce', 'visual_review', 'produce']
+    assert result.at_gate == [entry.slug]
+    assert not result.blocked
+
+
 def test_run_stops_at_medical_gate(tmp_path: Path) -> None:
     entry = _entry("tang-huyet-ap")
     add_to_queue(tmp_path, entry)

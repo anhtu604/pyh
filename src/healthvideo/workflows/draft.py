@@ -78,6 +78,9 @@ def _validate(
         raise ValueError(f"script review error ({errors[0].code}): {errors[0].message}")
     validate_visual_budget(storyboard, assets)
     validate_anatomy_subjects(storyboard)
+    from healthvideo.render.beats import draft_visual_rhythm_qa
+
+    draft_visual_rhythm_qa(storyboard.scenes)
     validate_hook_outro(script, storyboard, require_brand=True, allow_line_references=True)
     resolve_citations(
         script,

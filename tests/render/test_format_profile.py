@@ -9,6 +9,7 @@ from healthvideo.render.input import RenderInput, build_render_input
 def _scene(scene_id: str, start: int, frames: int, chapter: str | None) -> Scene:
     return Scene(
         id=scene_id, start_frame=start, duration_frames=frames,
+        words=tuple({"text": f"word{i}", "start_frame": i, "end_frame": min(frames, i+30)} for i in range(0, frames, 150)),
         narration="Nội dung", visual="whiteboard", on_screen_text="Synthetic illustration.", chapter_id=chapter,
     )
 

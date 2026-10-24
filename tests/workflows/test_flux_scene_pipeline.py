@@ -37,6 +37,8 @@ def fake_flux(tmp_path, monkeypatch):
     monkeypatch.setattr(produce, "generate_illustration", partial(
         generate_illustration, runner=model_runner, cache_dir=tmp_path / "flux-cache",
     ))
+    from tests.workflows.test_produce_illustrations import fake_contact_sheet
+    fake_contact_sheet.__wrapped__(monkeypatch)
     return png
 
 
@@ -105,4 +107,4 @@ def test_flux_recipe_reaches_scene_renderer_with_identical_bytes_and_provenance(
     render_manifest = json.loads((revision / "renders/render-manifest.json").read_text(encoding="utf-8"))
     assert render_manifest["asset_sha256"][recipe["path"]] == digest
     assert render_manifest["generated_visual_sha256"][recipe["path"]] == digest
-    assert read_yaml(project / "project.yaml")["state"] == "awaiting_video_review"
+    assert read_yaml(project / "project.yaml")["state"] == "production_in_progress"

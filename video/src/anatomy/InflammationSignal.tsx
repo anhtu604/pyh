@@ -2,6 +2,7 @@ import React from 'react';
 import {useCurrentFrame, useVideoConfig} from 'remotion';
 import type {OrganProps} from './ArterySection';
 import {anatomyColors as c, brand} from './palette';
+import {DiagramAnnotations, ProcessArrow, type DiagramLabels} from './annotations';
 
 // Tissue sample boundary contains all vessel, cell and signal motion.
 export const CONTENT_BOX = {left: 28, top: 28, width: 504, height: 504};
@@ -16,7 +17,7 @@ export const signalGeometry = (state: OrganProps['state'], severity: number, fra
 /** Synovial lining with subsynovial microvasculature, not to scale. Activated
  * disease presupposes priming as well as activation; crystal presence alone
  * does not imply an acute flare. Normal is a clean, resting reference. */
-export const InflammationSignal: React.FC<OrganProps> = ({state, severity, cueProgress}) => {
+export const InflammationSignal: React.FC<OrganProps> = ({state, severity, cueProgress, visibleLabels}) => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
   const g = signalGeometry(state, severity, frame, fps);
@@ -88,5 +89,10 @@ export const InflammationSignal: React.FC<OrganProps> = ({state, severity, cuePr
         </g>;
       })}
     </g>
+    <ProcessArrow d="M270 222 L318 270 L314 254 M318 270 L302 266" visible={alarm > 0}/><ProcessArrow d="M445 403 L445 354 L435 367 M445 354 L455 367" visible={g.recruited > 0}/>
+    <DiagramAnnotations labels={LABELS} visibleLabels={visibleLabels}/>
   </svg>;
 };
+
+export const FOCUS_REGIONS = {"macrophage": {"left": 64, "top": 86, "width": 220, "height": 205}, "nlrp3": {"left": 174, "top": 171, "width": 66, "height": 66}, "il1b": {"left": 252, "top": 188, "width": 150, "height": 165}, "vessel": {"left": 44, "top": 390, "width": 472, "height": 100}, "neutrophil": {"left": 128, "top": 215, "width": 330, "height": 230}, "synovium": {"left": 28, "top": 263, "width": 504, "height": 70}};
+export const LABELS: DiagramLabels = {"macrophage": {"text": "Đại thực bào", "region": "macrophage", "x": 34, "y": 36, "width": 180, "height": 34, "anchor": [120, 135]}, "nlrp3": {"text": "NLRP3", "region": "nlrp3", "x": 346, "y": 82, "width": 172, "height": 34, "anchor": [206, 201]}, "il1b": {"text": "IL-1β", "region": "il1b", "x": 346, "y": 138, "width": 172, "height": 34, "anchor": [301, 260]}, "neutrophil": {"text": "BC trung tính", "region": "neutrophil", "x": 346, "y": 194, "width": 172, "height": 34, "anchor": [334, 308]}, "vessel": {"text": "Mạch máu", "region": "vessel", "x": 346, "y": 492, "width": 172, "height": 34, "anchor": [416, 435]}};

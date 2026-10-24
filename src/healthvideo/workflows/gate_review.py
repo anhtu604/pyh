@@ -190,6 +190,34 @@ def video_reviewed_paths(revision_root: Path) -> dict[str, Path]:
         "renders/render-manifest.json": renders / "render-manifest.json",
         "renders/video.mp4": renders / "video.mp4",
     }
+    visual_index = revision_root / "reviews/visual/candidates.yaml"
+    if visual_index.is_file():
+        for relative in ("reviews/visual/candidates.yaml", "reviews/visual-review.yaml"):
+            paths[relative] = revision_root / relative
+        visual = read_yaml(visual_index)
+        for asset in visual.get("assets", []):
+            for candidate in asset.get("candidates", []):
+                relative = candidate["path"]
+                target = revision_root / relative
+                if not target.resolve().is_relative_to(revision_root.resolve()):
+                    raise ValueError("Visual review candidate path escapes revision")
+                paths[relative] = target
+        sheets = visual.get('contact_sheets') or ([visual['contact_sheet']] if visual.get('contact_sheet') else [])
+        final_path = revision_root / 'reviews/visual/final-contact-sheets.yaml'
+        if final_path.is_file():
+            paths['reviews/visual/final-contact-sheets.yaml'] = final_path
+            final = read_yaml(final_path)
+            if final.get('render_sha256') != sha256_file(renders / 'video.mp4'):
+                raise ValueError('Final visual contact sheets do not match current render')
+            sheets = [*sheets, *final.get('sheets', [])]
+        for sheet in sheets:
+            relative = sheet["path"]
+            target = revision_root / relative
+            if not target.resolve().is_relative_to(revision_root.resolve()):
+                raise ValueError("Visual review contact sheet escapes revision")
+            if not target.is_file() or sha256_file(target) != sheet['sha256']:
+                raise ValueError('Visual review contact sheet changed')
+            paths[relative] = target
     manifest_path = renders / "render-manifest.json"
     if manifest_path.is_file():
         clips = json.loads(manifest_path.read_text(encoding="utf-8")).get("clips", {})

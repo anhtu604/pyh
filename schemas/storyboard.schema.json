@@ -408,6 +408,14 @@
           "title": "Annotations",
           "type": "array"
         },
+        "beats": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SceneBeat"
+          },
+          "title": "Beats",
+          "type": "array"
+        },
         "chapter_id": {
           "anyOf": [
             {
@@ -640,6 +648,80 @@
         "motion"
       ],
       "title": "SceneAnatomy",
+      "type": "object"
+    },
+    "SceneBeat": {
+      "additionalProperties": false,
+      "description": "A scene-local visual change anchored to narration or elapsed seconds.",
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Action"
+        },
+        "at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "At"
+        },
+        "focus": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Focus"
+        },
+        "labels": {
+          "default": [],
+          "items": {
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "maxItems": 6,
+          "title": "Labels",
+          "type": "array"
+        },
+        "start_frame": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Start Frame"
+        }
+      },
+      "required": [
+        "at"
+      ],
+      "title": "SceneBeat",
       "type": "object"
     },
     "SceneSFX": {

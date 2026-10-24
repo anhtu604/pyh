@@ -101,6 +101,17 @@ from healthvideo.workflows.visual_assets import (
     BRAND_PROFILE_PATH,
     recover_chart_asset_binding,
 )
+from healthvideo.workflows.visual_review import (
+    CANDIDATES,
+    apply_visual_fallbacks,
+    ensure_candidates,
+    prepare_contact_sheet,
+    review_complete,
+    visual_identity,
+)
+from healthvideo.workflows.visual_review import (
+    REPORT as VISUAL_REVIEW_REPORT,
+)
 
 Runner = Callable[[list[str]], int]
 AUTHOR_PROFILE_PATH = (
@@ -132,6 +143,7 @@ def _prepare_illustrations(
     spec = FORMAT_SPECS[storyboard.format_profile]
     references = {PurePosixPath(ref.path).as_posix() for scene in storyboard.scenes for ref in scene.visual_assets}
     rights = []
+    candidates = ensure_candidates(root, storyboard, manifest, generate=generate_illustration) if generate else {}
     for asset in manifest.assets:
         if asset.kind is not AssetKind.ILLUSTRATION or asset.path not in references:
             continue
@@ -147,6 +159,9 @@ def _prepare_illustrations(
                 }
             except (OSError, ValueError):
                 needs_generation = True
+        if candidates:
+            # Selection is a derived production choice, never a change to the reviewed recipe.
+            needs_generation = False
         # The shared resolver has already checked path/symlink safety and label policy.
         if needs_generation:
             if not generate:
@@ -158,7 +173,7 @@ def _prepare_illustrations(
         digest = sha256_file(path)
         if asset.sha256 is not None and asset.sha256 != digest:
             raise ValueError(f"Generated illustration sha256 mismatch: {asset.path}")
-        if needs_generation and asset.sha256 is None:
+        if (needs_generation or candidates) and asset.sha256 is None:
             _write_json_atomic(receipt, {"recipe_sha256": recipe_hash, "sha256": digest})
         rights.append(LicenseEntry(
             path=asset.path, source="generated:flux2-klein-4b", creator=asset.creator,
@@ -202,6 +217,15 @@ def _produce_v2(
 
     recover_chart_asset_binding(layout.project_dir)
     _ensure_v2_medical_approval_current(layout.artifact_root)
+    # Repeated direct `produce` calls cannot skip or implicitly accept visual review.
+    visual_index = layout.artifact_root / CANDIDATES
+    visual_report = layout.artifact_root / VISUAL_REVIEW_REPORT
+    if visual_index.is_file() and not review_complete(layout.artifact_root):
+        pending = read_yaml(visual_index)
+        unprocessed = visual_report.is_file() and pending.get('review_sha256') != sha256_file(visual_report)
+        if pending.get('contact_sheet') and not unprocessed and (layout.artifact_root / 'renders' / OUTPUT_NAME).is_file():
+            visual_identity(layout.artifact_root)
+            return layout.artifact_root / 'renders' / OUTPUT_NAME
     script = Script.model_validate(
         read_yaml(layout.artifact_root / "script" / "script.yaml")
     )
@@ -266,6 +290,7 @@ def _produce_v2(
             "music": music_settings,
             "alignment": alignment_identity(),
             "sfx": sfx_identity(storyboard, layout.artifact_root),
+            "visual_review": visual_identity(layout.artifact_root),
             **(
                 {"clip_plan": read_yaml(layout.artifact_root / CLIP_PLAN_ARTIFACT),
                  "clip_brand": clip_brand.model_dump(mode="json")}
@@ -298,6 +323,7 @@ def _produce_v2(
             visual_budget_qa = visual_budget_report.model_dump(mode="json")
             final_frame = storyboard.scenes[-1].start_frame + storyboard.scenes[-1].duration_frames
             storyboard = apply_alignment(storyboard, _read_alignment(renders_dir, script))
+            storyboard = apply_visual_fallbacks(layout.artifact_root, storyboard)
             expected_input = build_render_input(
                 storyboard, audio_file="audio/narration.wav"
             ).model_dump(mode="json")
@@ -341,6 +367,10 @@ def _produce_v2(
     if dry_run:
         return output
     if cache_valid:
+        if not review_complete(layout.artifact_root):
+            prepare_contact_sheet(layout.artifact_root)
+        elif (layout.artifact_root / CANDIDATES).is_file():
+            prepare_contact_sheet(layout.artifact_root, final=True)
         render_optional_thumbnail(layout.artifact_root, runner=runner)
         _promote_v2_video_qa_if_needed(
             layout.artifact_root,
@@ -351,7 +381,7 @@ def _produce_v2(
         )
         write_yaml_atomic(
             layout.project_dir / "project.yaml",
-            _completed_v2_project(project, input_hash).model_dump(mode="json"),
+            _production_project(layout, project, input_hash).model_dump(mode="json"),
         )
         return output
 
@@ -456,6 +486,7 @@ def _produce_v2(
         _write_json_atomic(staging_dir / "scene-timing.json", timing_record)
         visual_budget_report = validate_visual_budget(storyboard, asset_manifest)
         visual_budget_qa = visual_budget_report.model_dump(mode="json")
+        storyboard = apply_visual_fallbacks(layout.artifact_root, storyboard)
         render_input = build_render_input(
             storyboard, audio_file="audio/narration.wav"
         )
@@ -505,6 +536,7 @@ def _produce_v2(
             staging_dir / V2_RENDER_MANIFEST_NAME,
             {
                 "input_hash": input_hash,
+                "visual_review": visual_identity(layout.artifact_root),
                 "output": OUTPUT_NAME,
                 "provider": provider_name,
                 "asset_sha256": dict(asset_hashes),
@@ -567,6 +599,10 @@ def _produce_v2(
             expected_visual_budget=visual_budget_qa,
         )
         _promote_run(staging_dir, renders_dir)
+        if not review_complete(layout.artifact_root):
+            prepare_contact_sheet(layout.artifact_root)
+        elif (layout.artifact_root / CANDIDATES).is_file():
+            prepare_contact_sheet(layout.artifact_root, final=True)
         render_optional_thumbnail(layout.artifact_root, runner=runner)
         _promote_v2_video_qa_if_needed(
             layout.artifact_root,
@@ -577,7 +613,7 @@ def _produce_v2(
         )
         write_yaml_atomic(
             layout.project_dir / "project.yaml",
-            _completed_v2_project(project, input_hash).model_dump(mode="json"),
+            _production_project(layout, project, input_hash).model_dump(mode="json"),
         )
     except Exception:
         shutil.rmtree(staging_dir, ignore_errors=True)
@@ -933,6 +969,21 @@ def _completed_v2_project(
     hashes = dict(complete.artifact_hashes)
     hashes[PRODUCTION_ARTIFACT] = input_hash
     return complete.model_copy(update={"artifact_hashes": hashes})
+
+
+def _production_project(layout: ProjectLayout, project: ProjectManifestV2, input_hash: str) -> ProjectManifestV2:
+    if review_complete(layout.artifact_root):
+        return _completed_v2_project(project, input_hash)
+    # No approval transition: Python rendered candidates and now awaits agent judgement.
+    producing = project
+    if project.state is WorkflowState.MEDICALLY_APPROVED:
+        producing = transition_v2(project, WorkflowState.PRODUCTION_IN_PROGRESS,
+                                  TransitionContext(active_revision=project.active_revision,
+                                                    current_input_hash=input_hash,
+                                                    validated_artifacts=frozenset({MEDICAL_APPROVAL_ARTIFACT})))
+    return producing.model_copy(update={'artifact_hashes': {
+        **producing.artifact_hashes, PRODUCTION_ARTIFACT: input_hash,
+    }})
 
 
 def _provider_name(tts: TTSProvider) -> str:

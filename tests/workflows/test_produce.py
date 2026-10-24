@@ -134,7 +134,7 @@ def _m65_project(tmp_path: Path) -> Path:
             "id": "S01",
             "start_frame": 0,
             "duration_frames": whiteboard_frames,
-            "narration": "Whiteboard synthetic.",
+            "narration": "Synthetic whiteboard narration advances visible captions throughout this deliberately long fixture scene for cache validation.",
             "script_line_id": "L01",
             "claim_id": "C01",
             "source_marker": "[1]",

@@ -285,8 +285,9 @@ def create_long_form_project_fixture(root: Path) -> Path:
         if index < 5:
             scene.update({
                 "visual": "process_animation",
-                "anatomy": {"subject": "artery_cross_section", "state": "normal",
+                "anatomy": {"subject": ("artery_cross_section", "heart", "liver_organ", "liver_lobule")[index-1], "state": "normal",
                             "severity": 0, "motion": "Illustrative test motion"},
+                "beats": [{"at": 0, "focus": "overview"}, {"at": 5, "focus": None}],
             })
         if index in claims:
             scene.update({"claim_id": claims[index], "source_marker": "[1]"})
@@ -507,8 +508,9 @@ def complete_explain_first_fixture(revision: Path) -> None:
         if 0 < index < len(board["scenes"]) - 1:
             scene["visual"] = "comparison"
             scene.pop("evidence_highlight", None)
-            scene["anatomy"] = {"subject": "artery_cross_section", "state": "normal",
+            scene["anatomy"] = {"subject": "heart" if index == 2 else "artery_cross_section", "state": "normal",
                                 "motion": "Illustrative test motion"}
+            scene["beats"] = [{"at": 0, "focus": "overview"}, {"at": 1, "focus": None}]
     script["lines"].append({"id": "OUTRO", "text": OUTRO_TEXT,
         "purpose": "outro", "delivery": {"intent": "thank"}})
     board["scenes"].append({"id": "OUTRO", "start_frame": 0,
