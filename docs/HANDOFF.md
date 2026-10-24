@@ -10,6 +10,7 @@ Biến video **gout** (`projects/gout-tinh-the-urat`) thành **video chuẩn m�
 - `d913c25` Văn phong tự nhiên: `prompts/draft.md` + `prompts/style_examples.vi.md`; lint `domain/script_style.py` (chặn tự tả hình/giọng thuyết trình/rào đón lặp) → `reviews/style-lint.json` + mục "Văn phong" trong gói duyệt; từ điển phát âm + QA phát âm; `produce --tts` mặc định `silent`.
 - `43a4e88` Giọng nhân bản của bác sĩ: `tts/vibi.py` (`VibiTTS`), `profiles/voice.yaml` = `provider: vibi_minimax`, `model_id: speech-2.8-hd`, voice `1d90e9bd-a67b-4d63-a415-032eb9ce91b5` ("lanhvcl"). `--tts auto` chọn vibi khi có `VIBI_API_KEY`. `healthvideo doctor` báo credit.
 - `99ffece` Lý do `review reopen` nay tới agent `revise_medical` (`reject_note` đọc cả `*-reopened.yaml`).
+- 2026-10-24 15:08 bác sĩ đã chạy `review reopen` (project ở `needs_medical_revision` → resume `research_in_progress`). Xưởng 15:09 bị chặn: Codex hết quota (tới 18:51), `agy` headless tự từ chối lệnh shell → "agent không làm đổi trạng thái". Đã sửa: `agy` chạy với `--dangerously-skip-permissions` (`fix: let headless agy run shell tools`).
 
 ## Tài liệu tham chiếu
 - Kịch bản mẫu bác sĩ đã duyệt văn phong ("ok làm đi"): `cache/review/gout-kich-ban-v2.md` (21 dòng, claim M01–M08, mục ⚑ giữ như đã viết, danh sách 6 ý mở rộng để đạt ~10 phút).
@@ -17,9 +18,8 @@ Biến video **gout** (`projects/gout-tinh-the-urat`) thành **video chuẩn m�
 - API vibi: `api-docs/` (header `xi-api-key` + **bắt buộc** `User-Agent`; TTS bất đồng bộ: POST → poll `/v1/history/{id}` → tải `result.audio_url`).
 
 ## Việc tiếp theo
-1. **Bác sĩ** chạy (PowerShell, tự gõ PIN):
+1. ~~Bác sĩ chạy `review reopen`~~ (đã xong 15:08). **Bác sĩ chỉ cần bật lại xưởng** từ cửa sổ PowerShell của mình:
    ```
-   .\.venv\Scripts\healthvideo.exe review reopen projects\gout-tinh-the-urat --gate medical --reviewer Tu --changed script/script.yaml --resume-to research_in_progress --reason "Làm lại thành video chuẩn: viết lại theo văn phong và nội dung cache/review/gout-kich-ban-v2.md (mục cờ giữ như đã viết); bổ sung claim có nguồn cho thực bào tinh thể và 6 ý mở rộng (ngón chân cái, nguồn và thải urat, tăng urat không triệu chứng, cơn tự hết, hạt tophi, rượu bia và nước ngọt) để đạt khoảng 10 phút."
    .\.venv\Scripts\healthvideo.exe xuong --background
    ```
    Xưởng nền phải do bác sĩ bật từ cửa sổ của mình (bật từ shell của agent sẽ chết khi phiên agent kết thúc).

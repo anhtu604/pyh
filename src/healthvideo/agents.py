@@ -32,6 +32,10 @@ DEFAULT_AGENTS: tuple[AgentCli, ...] = (
             "{prompt}",
             "--mode",
             "accept-edits",
+            # Headless mode cannot prompt; without this, shell tools are
+            # auto-denied and the agent silently does nothing. Parity with
+            # Codex's bypass flag; approval gates still need the TTY PIN.
+            "--dangerously-skip-permissions",
             "--print-timeout",
             "0s",
             "--model",
@@ -48,6 +52,8 @@ QUOTA_PATTERNS: tuple[str, ...] = (
     "resource_exhausted",
     "429",
 )
+
+PERMISSION_DENIED_PATTERNS: tuple[str, ...] = ("auto-denied",)
 
 
 @dataclass(frozen=True)
@@ -107,8 +113,10 @@ def invoke(
 
     output = f"{completed.stdout or ''}{completed.stderr or ''}"
     log_path.write_text(output, encoding="utf-8")
-    ok = completed.returncode == 0
     lower_output = output.lower()
+    ok = completed.returncode == 0 and not any(
+        pattern in lower_output for pattern in PERMISSION_DENIED_PATTERNS
+    )
     quota_exhausted = (not ok) and any(
         pattern.lower() in lower_output for pattern in QUOTA_PATTERNS
     )

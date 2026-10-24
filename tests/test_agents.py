@@ -128,6 +128,30 @@ def test_prompt_substituted_for_agy(tmp_path: Path) -> None:
     assert captured["kwargs"]["input"] is None
 
 
+def test_agy_runs_headless_without_permission_prompts() -> None:
+    assert "--dangerously-skip-permissions" in DEFAULT_AGENTS[1].argv
+
+
+def test_permission_auto_denied_is_failure_not_quota(tmp_path: Path) -> None:
+    def fake_runner(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        return _completed(
+            returncode=0,
+            stdout='jetski: no output produced - a tool required the "command" '
+            "permission that headless mode cannot prompt for, so it was auto-denied.",
+        )
+
+    result = invoke(
+        DEFAULT_AGENTS[1],
+        "prompt",
+        cwd=tmp_path,
+        log_dir=tmp_path / "logs",
+        runner=fake_runner,
+    )
+
+    assert result.ok is False
+    assert result.quota_exhausted is False
+
+
 def test_env_has_no_pin_material(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
