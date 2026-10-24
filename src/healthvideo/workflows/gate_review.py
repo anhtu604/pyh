@@ -53,6 +53,7 @@ from healthvideo.workflows.long_form import (
     OUTLINE_ARTIFACT,
     load_clip_scenes,
 )
+from healthvideo.workflows.standards import remember
 from healthvideo.workflows.visual_assets import recover_chart_asset_binding
 
 MEDICAL_APPROVAL_ARTIFACT = "reviews/medical-approval.yaml"
@@ -421,6 +422,8 @@ def approve_gate(
     )
     changed = transition_v2(project, _GATE_APPROVED_STATE[kind], context)
     write_yaml_atomic(project_dir / "project.yaml", changed.model_dump(mode="json"))
+    remember(project_dir, gate=kind.value, revision=project.active_revision,
+             kind="approve_note", text=note, reviewer=reviewer, at=now)
     return record
 
 
@@ -518,6 +521,8 @@ def reject_gate(
 
     write_yaml_once(rejection_path, record.model_dump(mode="json"))
     write_yaml_atomic(project_dir / "project.yaml", changed.model_dump(mode="json"))
+    remember(project_dir, gate=kind.value, revision=project.active_revision,
+             kind="reject", text=reason, reviewer=reviewer, at=now)
     return record
 
 
@@ -641,4 +646,6 @@ def reopen_gate(
         os.replace(revision_root / _GATE_APPROVAL_ARTIFACT[gate], destination)
     write_yaml_once(record_path, record.model_dump(mode="json"))
     write_yaml_atomic(project_dir / "project.yaml", updated.model_dump(mode="json"))
+    remember(project_dir, gate=kind.value, revision=project.active_revision,
+             kind="reopen", text=reason, reviewer=reviewer, at=now)
     return record

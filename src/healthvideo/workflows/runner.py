@@ -21,6 +21,7 @@ from healthvideo.storage.files import (
     write_yaml_atomic,
 )
 from healthvideo.storage.queue import load_queue
+from healthvideo.workflows.standards import prompt_block
 from healthvideo.workflows.visual_review import review_pending
 
 StepKind = Literal[
@@ -262,6 +263,9 @@ def run_queue(
                         deps.reject_note(project_dir) or ""
                     )
                 prompt = render_prompt(step, **prompt_fields)
+                standards_block = prompt_block(root)
+                if standards_block:
+                    prompt = f"{prompt.rstrip()}\n\n{standards_block}"
                 before = deps.code_snapshot(root) if deps.code_snapshot is not None else None
                 try:
                     result = deps.invoke(

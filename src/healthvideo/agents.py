@@ -8,6 +8,8 @@ from pathlib import Path
 
 from healthvideo.env import child_env
 
+RUNNING_MARKER = ".agent-running"
+
 
 @dataclass(frozen=True)
 class AgentCli:
@@ -90,6 +92,8 @@ def invoke(
     log_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%f")
     log_path = log_dir / f"{timestamp}-{agent.name}.log"
+    marker = log_dir / RUNNING_MARKER
+    marker.write_text(f"{agent.name}\n{datetime.now(UTC).isoformat()}\n", encoding="utf-8")
 
     try:
         completed = runner(
@@ -110,6 +114,8 @@ def invoke(
             quota_exhausted=False,
             log_path=log_path,
         )
+    finally:
+        marker.unlink(missing_ok=True)
 
     output = f"{completed.stdout or ''}{completed.stderr or ''}"
     log_path.write_text(output, encoding="utf-8")

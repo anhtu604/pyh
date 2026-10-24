@@ -67,6 +67,27 @@ def open_packet(path: Path) -> None:
         webbrowser.open(path.resolve().as_uri())
 
 
+def write_review_packet(root: Path, project_dir: Path, project: ProjectManifestV2) -> Path:
+    """Render the current gate's review packet into cache/review and return its path."""
+    from html import escape
+
+    from healthvideo.storage.files import write_text_atomic
+    from healthvideo.workflows.review_html import (
+        render_medical_packet,
+        render_video_packet,
+    )
+
+    gate = GateKind(GATES[project.state])
+    revision = project_dir / 'revisions' / project.active_revision
+    render = render_medical_packet if gate is GateKind.MEDICAL else render_video_packet
+    html = render(revision)
+    base = (revision / 'reviews').resolve().as_uri() + '/'
+    html = html.replace('<head>', f'<head><base href="{escape(base, quote=True)}">', 1)
+    packet = root / 'cache/review' / f'{project_dir.name}-{gate.value}.html'
+    write_text_atomic(packet, html)
+    return packet
+
+
 def notify_windows(title: str, gate: str, *, runner=None, platform=None) -> None:
     """Use static PowerShell code and JSON stdin, so titles cannot execute code."""
     message = f'{gate}\nChạy: healthvideo duyet'

@@ -627,6 +627,37 @@ def test_revise_step_gets_reject_note(tmp_path: Path) -> None:
     assert report.at_gate == [entry.slug]
 
 
+def test_agent_prompt_carries_doctor_standards(tmp_path: Path) -> None:
+    from healthvideo.workflows import standards
+
+    entry = _entry("benh-gut")
+    add_to_queue(tmp_path, entry)
+    (tmp_path / "projects" / entry.slug).mkdir(parents=True, exist_ok=True)
+    standards.record(tmp_path, slug="khac", gate="medical", revision="001", kind="reject",
+                     text="Cắt đuôi giải thích ở mọi dòng.")
+    states = {entry.slug: WorkflowState.NEEDS_MEDICAL_REVISION}
+    captured: list[str] = []
+
+    def fake_invoke(agents: Any, prompt: str, *, cwd: Path, log_dir: Path) -> AgentResult:
+        captured.append(prompt)
+        states[log_dir.name] = WorkflowState.AWAITING_MEDICAL_REVIEW
+        return AgentResult(agent="codex", ok=True, quota_exhausted=False, log_path=_log_file(log_dir))
+
+    deps = RunDeps(
+        create_project=lambda root, item: root / "projects" / item.slug,
+        read_state=lambda p: states[p.name],
+        reject_note=lambda _p: None,
+        python_steps={},
+        changed_code_paths=lambda _root: [],
+        invoke=fake_invoke,
+    )
+    run_queue(tmp_path, deps)
+
+    assert len(captured) == 1
+    assert "Chuẩn của bác sĩ" in captured[0]
+    assert "Cắt đuôi giải thích ở mọi dòng." in captured[0]
+
+
 def test_packaged_topic_is_not_reported_at_gate(tmp_path: Path) -> None:
     add_to_queue(tmp_path, _entry("da-dong-goi"))
     (tmp_path / "projects" / "da-dong-goi").mkdir(parents=True)

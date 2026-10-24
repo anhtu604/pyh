@@ -540,9 +540,8 @@ def _nonempty_prompt(label: str) -> str:
 @app.command()
 def duyet(root: Root = Path('.')) -> None:
     """Đọc gói duyệt, chọn A/R/B và nhập PIN trực tiếp trong TTY."""
-    from html import escape
 
-    from healthvideo.storage.files import write_text_atomic, write_yaml_atomic
+    from healthvideo.storage.files import write_yaml_atomic
 
     try:
         pending = [(p, m) for p, m in factory.projects(root) if m.state in factory.GATES]
@@ -556,11 +555,7 @@ def duyet(root: Root = Path('.')) -> None:
             for project_dir, project in pending:
                 gate = GateKind(factory.GATES[project.state])
                 revision = project_dir / 'revisions' / project.active_revision
-                packet = root / 'cache/review' / f'{project_dir.name}-{gate.value}.html'
-                html = _RENDER_PACKET[gate](revision)
-                base = (revision / 'reviews').resolve().as_uri() + '/'
-                html = html.replace('<head>', f'<head><base href="{escape(base, quote=True)}">', 1)
-                write_text_atomic(packet, html)
+                packet = factory.write_review_packet(root, project_dir, project)
                 factory.open_packet(packet)
                 typer.echo(f'Chủ đề: {factory.project_title(project_dir, project)}')
                 typer.echo(f'Cổng: {gate.value} — revision {project.active_revision}')
@@ -643,6 +638,26 @@ def xuong(
     except factory.FactoryAlreadyRunning as error:
         typer.echo(str(error))
     except (OSError, TypeError, ValueError, RuntimeError) as error:
+        _echo_error(error)
+        raise typer.Exit(code=1) from error
+
+
+@app.command('app')
+def app_command(
+    root: Root = Path('.'),
+    port: Annotated[int, typer.Option('--port', min=1024, max=65535)] = 8765,
+    shortcut: Annotated[bool, typer.Option('--shortcut', help='Tạo biểu tượng "Xưởng video" trên Desktop')] = False,
+    no_browser: Annotated[bool, typer.Option('--no-browser')] = False,
+) -> None:
+    """Mở app điều khiển xưởng trong trình duyệt (chỉ trên máy này; không tự duyệt)."""
+    from healthvideo.workflows import dashboard
+
+    try:
+        if shortcut:
+            typer.echo(f'Đã tạo lối tắt: {dashboard.install_shortcut(root)}')
+            return
+        dashboard.serve(root, port=port, open_browser=not no_browser, echo=typer.echo)
+    except (OSError, RuntimeError) as error:
         _echo_error(error)
         raise typer.Exit(code=1) from error
 

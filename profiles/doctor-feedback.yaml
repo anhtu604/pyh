@@ -1,0 +1,35 @@
+version: 1
+entries:
+- at: '2026-10-24T15:08:24+07:00'
+  slug: gout-tinh-the-urat
+  gate: video
+  revision: '001'
+  kind: comment
+  reviewer: Tu
+  text: 'Nhận xét bản video gout đầu tiên (ghi lại từ docs/HANDOFF.md): đọc sai "gút/u-rát";
+    ảnh mở đầu không liên quan; chữ đè lên ảnh; hình quá đơn giản và đứng lâu; giọng
+    đều đều; kịch bản "nghe AI".'
+  items: []
+- at: '2026-10-24T15:08:24+07:00'
+  slug: gout-tinh-the-urat
+  gate: medical
+  revision: '001'
+  kind: reopen
+  reviewer: Tu
+  text: 'Làm lại thành video chuẩn: viết lại toàn bộ theo văn phong và nội dung cache/review/gout-kich-ban-v2.md
+    (các mục cờ giữ như đã viết); bổ sung claim có nguồn cho thực bào tinh thể và
+    6 ý mở rộng (ngón chân cái, nguồn và thải urat, tăng urat không triệu chứng, cơn
+    tự hết, hạt tophi, rượu bia và nước ngọt) để đạt khoảng 10 phút.'
+  items: []
+- at: '2026-10-24T21:11:16+07:00'
+  slug: gout-tinh-the-urat
+  gate: medical
+  revision: '001'
+  kind: reject
+  reviewer: Tu
+  text: 'Nội dung đúng, giữ cấu trúc. Sửa: (1) M11 đổi nguồn sang NIAMS kèm câu trích,
+    bỏ NKF; M16 thêm câu trích NIAMS; M10 trích đủ câu "particularly the 1st metatarsophalangeal
+    joint"; N27 sửa claim và bỏ nhắc NKF. (2) Cắt đuôi giải thích, rào đón ở N07,
+    N09, N10, N13, N19, N22, N23, N27 cho gọn như bản v2; "không phải…" tối đa 2 lần
+    cả bài. Giữ nguyên các dòng khác.'
+  items: []
