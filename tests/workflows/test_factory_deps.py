@@ -222,3 +222,15 @@ def test_changed_code_paths_reports_removed_untracked(tmp_path: Path) -> None:
     before = code_snapshot(tmp_path)
     path.unlink()
     assert changed_code_paths(tmp_path, before) == [Path("removed.py")]
+
+
+def test_reject_note_reads_latest_reopen(tmp_path: Path) -> None:
+    deps = default_run_deps(tmp_path)
+    project_dir = create_v2_project_fixture(tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW)
+    reject_gate(
+        project_dir, GateKind.MEDICAL, reviewer="BS An", reason="Lý do từ chối cũ.",
+        resume_state=WorkflowState.DRAFT_READY, now=datetime(2026, 10, 22, 8, 0, tzinfo=UTC),
+    )
+    write_yaml_atomic(project_dir / "revisions/001/reviews/medical/99991231T000000000000-reopened.yaml",
+                      {"reason": "Viết lại theo văn phong mới."})
+    assert deps.reject_note(project_dir) == "Viết lại theo văn phong mới."

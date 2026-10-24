@@ -188,8 +188,9 @@ def reject_note(project_dir: Path) -> str | None:
 
     if not gate_dir.is_dir():
         return None
+    # A medical reopen carries the doctor's rework reason just like a rejection.
     rejected_files = sorted(
-        gate_dir.glob("*-rejected*.yaml"),
+        [*gate_dir.glob("*-rejected*.yaml"), *gate_dir.glob("*-reopened*.yaml")],
         key=lambda path: path.name,
     )
     if not rejected_files:

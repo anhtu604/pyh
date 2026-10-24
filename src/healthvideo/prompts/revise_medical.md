@@ -9,7 +9,7 @@
 - Ghi chú từ chối cổng y khoa: `{reject_note}`
 
 ## Việc cần làm
-1. Đọc kỹ ghi chú từ chối `{reject_note}` và file `*-rejected.yaml` mới nhất trong thư mục `reviews/medical/` của revision hiện hành để xác định toàn bộ điểm bị bác sĩ yêu cầu sửa.
+1. Đọc kỹ ghi chú từ chối `{reject_note}` và file `*-rejected.yaml` hoặc `*-reopened.yaml` mới nhất trong thư mục `reviews/medical/` của revision hiện hành để xác định toàn bộ điểm bị bác sĩ yêu cầu sửa.
 2. Sửa đúng những chỗ bị chỉ ra trong hồ sơ bằng chứng, `explainer.yaml`, `script.yaml`, `storyboard.yaml`, `asset-manifest.yaml`, `outline.yaml` hoặc `clip-plan.yaml`. Nếu cần bổ sung hoặc thay nguồn bằng chứng, dùng lại các lệnh của bước `research` (`evidence-search`, `evidence-screen`, `build-ledger`). Nếu sửa lời thoại, chạy lại skill `humanizer` trên phần lời thoại.
 3. Không tranh luận với ghi chú của bác sĩ và không thêm trải nghiệm bác sĩ ngoài `{doctor_note}` hay `{reject_note}`. Nếu ghi chú yêu cầu khẳng định điều không có bằng chứng xác minh, ghi rõ vào `{project}/blocked-reason.md` và dừng ngay.
 4. Trước khi nộp, chạy `healthvideo step resume {project} --gate medical --to draft_ready`; nếu cần nghiên cứu lại, dùng `--to research_in_progress` rồi dựng lại ledger. Khi đã sửa xong và khớp bằng chứng, chạy `healthvideo step draft {project} --script <script.yaml> --storyboard <storyboard.yaml> --assets <asset-manifest.yaml>` tới khi hết lỗi, rồi nộp lại cổng y khoa bằng `healthvideo step submit-medical {project}`.
