@@ -15,7 +15,7 @@ Biến video **gout** (`projects/gout-tinh-the-urat`) thành **video chuẩn m�
 ## Tài liệu tham chiếu
 - Kịch bản mẫu bác sĩ đã duyệt văn phong ("ok làm đi"): `cache/review/gout-kich-ban-v2.md` (21 dòng, claim M01–M08, mục ⚑ giữ như đã viết, danh sách 6 ý mở rộng để đạt ~10 phút).
 - Nghe thử giọng nhân bản: `cache/voice-test/clone/index.html` (hd vs turbo). Whisper nghe "u-rát" thành "u-zát" (có thể do giọng Bắc) — **chờ bác sĩ xác nhận**, và chờ chọn hd/turbo.
-- API vibi: `api-docs/` (header `xi-api-key` + **bắt buộc** `User-Agent`; TTS bất đồng bộ: POST → poll `/v1/history/{id}` → tải `result.audio_url`).
+- API vibi: `docs/reference/vibi-api/` (header `xi-api-key` + **bắt buộc** `User-Agent`; TTS bất đồng bộ: POST → poll `/v1/history/{id}` → tải `result.audio_url`).
 
 ## Việc tiếp theo
 1. ~~Bác sĩ chạy `review reopen`~~ (đã xong 15:08). **Bác sĩ chỉ cần bật lại xưởng** từ cửa sổ PowerShell của mình:
@@ -26,7 +26,7 @@ Biến video **gout** (`projects/gout-tinh-the-urat`) thành **video chuẩn m�
 2. Theo dõi `topics/logs/xuong.log`; nếu dừng thì đọc `projects/gout-tinh-the-urat/blocked-reason.md` / `blocked.txt`.
 3. Tới cổng y khoa → bác sĩ chạy `.\.venv\Scripts\healthvideo.exe duyet` (một phím + PIN). Tới cổng video cũng vậy.
 4. Sau khi bác sĩ duyệt gout: mã hóa chuẩn đó thành QA (vd. luật thẻ nguồn không dồn cuối video) rồi mới mở hàng đợi chủ đề.
-5. Việc nhỏ treo: chuyển `api-docs/` → `docs/reference/vibi-api/`; dọn các worktree cũ trong `.claude/worktrees/` (đã merge hết vào master; thư mục `agy-vibi` có thể còn sót, xóa tay được).
+5. ~~Việc nhỏ treo~~: đã chuyển `api-docs/` → `docs/reference/vibi-api/` và dọn `.claude/worktrees/` (giữ các nhánh git). Còn `.worktrees/m1-workflow-kernel` chưa đụng.
 
 ## Quy tắc bắt buộc (ngoài AGENTS.md)
 - **PIN chỉ bác sĩ gõ trong TTY của mình.** Agent không bao giờ nhận PIN qua chat/tham số/biến môi trường/file, không tự duyệt cổng, không xuất bản.
