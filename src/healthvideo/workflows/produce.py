@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import shutil
 from collections.abc import Callable, Mapping
 from pathlib import Path, PurePosixPath
@@ -120,6 +121,33 @@ AUTHOR_PROFILE_PATH = (
 V2_RENDER_MANIFEST_NAME = "render-manifest.json"
 V2_VIDEO_QA_ARTIFACT = "reviews/video-qa.json"
 CHAPTER_CACHE_DIRECTORY = "renders-cache"
+
+
+def _synthesize_cached_line(
+    tts: TTSProvider, request: TTSRequest, output: Path, *, cache_dir: Path,
+) -> None:
+    """Retain paid line requests even when a later render fails."""
+    if provider_identity(tts)["provider"] != "elevenlabs":
+        tts.synthesize(request, output)
+        return
+    key = canonical_json_hash({"request": request.model_dump(mode="json"),
+                               "provider": provider_identity(tts)})
+    cached = cache_dir / f"{key}.wav"
+    receipt = cached.with_suffix(".json")
+    try:
+        if read_yaml(receipt).get("sha256") == sha256_file(cached):
+            inspect_wav(cached, require_signal=getattr(tts, "require_signal", False))
+            shutil.copyfile(cached, output)
+            return
+    except (OSError, ValueError, AttributeError):
+        pass
+    tts.synthesize(request, output)
+    inspect_wav(output, require_signal=getattr(tts, "require_signal", False))
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    temporary = cached.with_suffix(".tmp")
+    shutil.copyfile(output, temporary)
+    os.replace(temporary, cached)
+    _write_json_atomic(receipt, {"sha256": sha256_file(cached)})
 
 
 def _music_mood(root: Path) -> str:
@@ -395,6 +423,13 @@ def _produce_v2(
         staged_audio = staging_dir / "audio" / "narration.wav"
         line_wavs: dict[str, Path] = {}
         line_ms: dict[str, int] = {}
+        spoken_scripts: dict[str, str] = {}
+        usage_provider = getattr(tts, "inner", tts)
+        usage_setter = getattr(usage_provider, "set_usage_path", None)
+        if callable(usage_setter):
+            usage_setter(layout.artifact_root / "audio/tts-usage.json")
+        elif hasattr(usage_provider, "usage_path"):
+            usage_provider.usage_path = layout.artifact_root / "audio/tts-usage.json"
         if len({line.id for line in script.lines}) != len(script.lines):
             raise ValueError("Script line IDs must be unique for production timing")
         for line in script.lines:
@@ -403,24 +438,41 @@ def _produce_v2(
                 raise ValueError(f"Unsafe script line id: {line.id}")
             line_audio = staging_dir / "audio" / "lines" / f"{line.id}.wav"
             line_audio.parent.mkdir(parents=True, exist_ok=True)
-            tts.synthesize(
-                TTSRequest(
-                    text=apply_pronunciation(line.text, pronunciation),
-                    language=script.language,
-                    delivery_beats=(line.delivery.model_dump(mode="json"),),
-                ),
-                line_audio,
+            sent_text = apply_pronunciation(
+                line.tts_text(expressive=provider_name == "elevenlabs"), pronunciation,
+            )
+            # Lexicon hyphens mark syllables, whereas Whisper returns separate
+            # words (u-rát -> u / rát). They are not omitted or extra speech.
+            spoken_scripts[line.id] = " ".join(
+                re.sub(r"\[[^\]]*\]", "", sent_text).replace("-", " ").split()
+            )
+            _synthesize_cached_line(
+                tts, TTSRequest(text=sent_text, language=script.language,
+                                delivery_beats=line.delivery_beats()),
+                line_audio, cache_dir=layout.project_dir / "cache/tts",
             )
             line_wavs[line.id] = line_audio
             line_ms[line.id] = inspect_wav(
                 line_audio, require_signal=getattr(tts, "require_signal", False)
             ).duration_ms
+        usage_path = layout.artifact_root / "audio/tts-usage.json"
+        if provider_name == "elevenlabs" and usage_path.is_file():
+            shutil.copyfile(usage_path, staging_dir / "audio/tts-usage.json")
         alignment = align_lines(
             line_wavs, {line.id: line.text for line in script.lines},
             out_dir=staging_dir / "audio/alignment",
         )
+        # Caption anchors remain canonical. QA compares the actual spoken forms;
+        # align_lines reuses raw Whisper transcripts for the same WAV bytes.
+        qa_alignment = alignment
+        if spoken_scripts != {line.id: line.text for line in script.lines}:
+            qa_alignment = align_lines(
+                line_wavs, spoken_scripts,
+                out_dir=staging_dir / "audio/pronunciation-alignment",
+            )
         pronunciation_report = pronunciation_qa(
-            alignment, terms=[entry.written for entry in pronunciation.entries],
+            qa_alignment, terms=[term for entry in pronunciation.entries
+                                 for term in (entry.written, entry.spoken.replace("-", " "))],
         )
         pronunciation_report["input_hash"] = input_hash
         _write_json_atomic(staging_dir / "pronunciation-qa.json", pronunciation_report)
@@ -464,6 +516,15 @@ def _produce_v2(
                 path.relative_to(staging_dir).as_posix(): sha256_file(path)
                 for path in (voice_audio, staged_audio)
             }
+        if provider_name == "elevenlabs":
+            generated_rights.append(LicenseEntry(
+                path="audio/narration.wav", source="generated:elevenlabs",
+                creator=f"ElevenLabs voice {provider_identity_data.get('voice_id', 'unknown')}",
+                license="ElevenLabs subscription commercial rights (operator responsibility)",
+                rights_basis=(f"Model {provider_identity_data.get('model_id', 'eleven_v3')}; "
+                              "the operator must ensure their subscription and voice rights permit commercial use."),
+                revision=project.active_revision, sha256=sha256_file(staged_audio),
+            ))
         if sfx_events:
             for entry in sfx_rights(sfx_events, project.active_revision):
                 target = staging_dir / entry.path
@@ -479,6 +540,9 @@ def _produce_v2(
             write_yaml_atomic(ledger_path, rights.model_dump(mode="json"))
             ledger_hash = sha256_file(ledger_path)
             if music_settings is not None or sfx_events:
+                generated_audio_hashes["license-ledger.yaml"] = ledger_hash
+            if provider_name == "elevenlabs":
+                generated_audio_hashes["audio/narration.wav"] = sha256_file(staged_audio)
                 generated_audio_hashes["license-ledger.yaml"] = ledger_hash
             if illustration_rights:
                 generated_visual_hashes = {entry.path: entry.sha256 for entry in illustration_rights}
@@ -545,7 +609,8 @@ def _produce_v2(
                 "alignment_sha256": {
                     path.relative_to(staging_dir).as_posix(): sha256_file(path)
                     for path in [staging_dir / "pronunciation-qa.json",
-                                 *(staging_dir / "audio/alignment").glob("*.json")]
+                                 *(staging_dir / "audio/alignment").glob("*.json"),
+                                 *(staging_dir / "audio/pronunciation-alignment").glob("*.json")]
                 },
                 "line_audio_sha256": {
                     path.relative_to(staging_dir).as_posix(): sha256_file(path)
@@ -577,9 +642,15 @@ def _produce_v2(
             staging_dir / "video-qa.json",
             {
                 "schema_version": "2.0",
-                "status": "render_complete",
+                "status": "failed" if pronunciation_report.get("blocked") else "render_complete",
                 "input_hash": input_hash,
                 "checks": {"output_exists": True},
+                "pronunciation": {
+                    "passed": not pronunciation_report.get("blocked", False),
+                    "blocking_count": sum(flag.get("severity") == "block"
+                                          for flag in pronunciation_report["flags"]),
+                    "report_sha256": sha256_file(staging_dir / "pronunciation-qa.json"),
+                },
                 **timing_qa,
                 **(
                     {"visual_budget": visual_budget_qa}
@@ -709,6 +780,14 @@ def _v2_run_is_valid(
     } != dict(music_settings):
         return False
     generated_hashes = manifest.get("generated_audio_sha256", {})
+    if provider_name == "elevenlabs" and (
+        not isinstance(generated_hashes, dict)
+        or not {"audio/narration.wav", "license-ledger.yaml"}.issubset(generated_hashes)
+        or not all((run_dir / relative).is_file()
+                   and sha256_file(run_dir / relative) == digest
+                   for relative, digest in generated_hashes.items())
+    ):
+        return False
     generated_visual_hashes = manifest.get("generated_visual_sha256", {})
     if not isinstance(generated_visual_hashes, dict) or not all(
         (run_dir / relative).is_file() and sha256_file(run_dir / relative) == digest

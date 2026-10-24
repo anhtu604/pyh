@@ -9,7 +9,8 @@ from pathlib import Path
 def child_env() -> dict[str, str]:
     """Agents do not need notification credentials, tokens, secrets or approval PINs."""
     return {key: value for key, value in os.environ.items()
-            if not any(word in key.upper() for word in ('TELEGRAM_', 'TOKEN', 'SECRET', 'PIN'))}
+            if not any(word in key.upper()
+                       for word in ('TELEGRAM_', 'TOKEN', 'SECRET', 'PIN', 'API_KEY'))}
 
 
 def _parse_value(raw_value: str) -> str:

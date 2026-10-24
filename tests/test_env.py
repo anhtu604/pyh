@@ -12,6 +12,18 @@ from healthvideo.cli import app
 from healthvideo.env import load_dotenv
 
 
+def test_child_env_strips_api_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    from healthvideo.env import child_env
+
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "not-for-agent")
+    monkeypatch.setenv("service_api_key_extra", "also-private")
+    monkeypatch.setenv("VISIBLE_SETTING", "safe")
+    child = child_env()
+    assert "ELEVENLABS_API_KEY" not in child
+    assert "service_api_key_extra" not in child
+    assert child["VISIBLE_SETTING"] == "safe"
+
+
 def test_load_dotenv_sets_missing_only(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

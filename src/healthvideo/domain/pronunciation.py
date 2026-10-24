@@ -11,6 +11,7 @@ class PronunciationEntry(BaseModel):
     written: str
     spoken: str
     note: str = ""
+    needs_doctor_review: bool = False
 
     @field_validator("written", "spoken")
     @classmethod

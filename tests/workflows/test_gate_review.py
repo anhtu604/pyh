@@ -327,9 +327,108 @@ def test_approve_video_hashes_render_manifest_and_mp4(tmp_path: Path) -> None:
         "renders/render-manifest.json",
         "renders/video.mp4",
         "posts/posts.yaml",
+        "reviews/video-qa.json",
     }
     manifest = ProjectManifestV2.model_validate(read_yaml(project_dir / "project.yaml"))
     assert manifest.state is WorkflowState.VIDEO_APPROVED
+
+
+def test_term_mismatch_blocks_video_gate(tmp_path):
+    import json
+
+    project = create_v2_project_fixture(tmp_path)
+    advance_v2_project_to_video_review(project, now=NOW)
+    revision = project / 'revisions/001'
+    (revision / 'reviews/pronunciation-qa.json').write_text(json.dumps({
+        'flags': [{'severity': 'block', 'script_word': 'gút'}],
+    }), encoding='utf-8')
+    with pytest.raises(ValueError, match='pronunciation'):
+        approve_gate(project, GateKind.VIDEO, reviewer=REVIEWER, now=NOW)
+    assert not (revision / 'reviews/video-approval.yaml').exists()
+
+
+def test_doctor_accept_pronunciation_override_needs_pin(tmp_path):
+    import json
+
+    from healthvideo.approver_pin import set_pin
+    from healthvideo.storage.files import canonical_json_hash
+
+    project = create_v2_project_fixture(tmp_path)
+    advance_v2_project_to_video_review(project, now=NOW)
+    revision = project / 'revisions/001'
+    report = {'flags': [{'severity': 'block', 'script_word': 'gút'}]}
+    (revision / 'reviews/pronunciation-qa.json').write_text(json.dumps(report), encoding='utf-8')
+    pin_file = tmp_path / 'pin.json'
+    set_pin('123456', path=pin_file)
+    for pin in (None, 'wrong'):
+        with pytest.raises(ValueError, match='PIN'):
+            approve_gate(project, GateKind.VIDEO, reviewer=REVIEWER, now=NOW,
+                         accept_pronunciation=True, pronunciation_pin=pin, pin_file=pin_file)
+    record = approve_gate(project, GateKind.VIDEO, reviewer=REVIEWER, now=NOW,
+                          accept_pronunciation=True, pronunciation_pin='123456', pin_file=pin_file)
+    assert record.pronunciation_acceptance == canonical_json_hash(report)
+    assert 'reviews/pronunciation-qa.json' in record.artifact_hashes
+
+
+def test_pronunciation_acceptance_cannot_override_other_video_qa_failure(tmp_path):
+    import json
+
+    project = create_v2_project_fixture(tmp_path)
+    advance_v2_project_to_video_review(project, now=NOW)
+    revision = project / 'revisions/001'
+    (revision / 'reviews/video-qa.json').write_text(json.dumps({
+        'status': 'failed', 'checks': {'output_exists': False},
+        'pronunciation': {'passed': False},
+    }), encoding='utf-8')
+    with pytest.raises(ValueError, match='QA'):
+        approve_gate(project, GateKind.VIDEO, reviewer=REVIEWER, now=NOW,
+                     accept_pronunciation=True)
+
+
+def test_pronunciation_acceptance_refuses_changed_render_report(tmp_path):
+    import json
+
+    project = create_v2_project_fixture(tmp_path)
+    advance_v2_project_to_video_review(project, now=NOW)
+    revision = project / 'revisions/001'
+    (revision / 'reviews/pronunciation-qa.json').write_text(json.dumps({'flags': []}), encoding='utf-8')
+    (revision / 'reviews/video-qa.json').write_text(json.dumps({
+        'status': 'failed', 'checks': {'output_exists': True},
+        'pronunciation': {'passed': False, 'report_sha256': '0' * 64},
+    }), encoding='utf-8')
+    with pytest.raises(ValueError, match='hash'):
+        approve_gate(project, GateKind.VIDEO, reviewer=REVIEWER, now=NOW,
+                     accept_pronunciation=True)
+
+
+@pytest.mark.parametrize('broken', ['pronunciation_missing', 'both_missing', 'qa_missing', 'stale_report', 'stale_input'])
+def test_modern_render_requires_bound_pronunciation_reports(tmp_path, broken):
+    import json
+
+    from healthvideo.storage.files import sha256_file
+
+    project = create_v2_project_fixture(tmp_path)
+    advance_v2_project_to_video_review(project, now=NOW)
+    revision = project / 'revisions/001'
+    pronunciation = revision / 'reviews/pronunciation-qa.json'
+    video_qa = revision / 'reviews/video-qa.json'
+    pronunciation.write_text(json.dumps({'flags': [], 'input_hash': 'current'}), encoding='utf-8')
+    manifest = revision / 'renders/render-manifest.json'
+    manifest.write_text(json.dumps({
+        'input_hash': 'current',
+        'alignment_sha256': {'pronunciation-qa.json': sha256_file(pronunciation)},
+    }), encoding='utf-8')
+    video_qa.write_text(json.dumps({'status': 'render_complete', 'input_hash': 'current'}), encoding='utf-8')
+    if broken in {'pronunciation_missing', 'both_missing'}:
+        pronunciation.unlink()
+    if broken in {'qa_missing', 'both_missing'}:
+        video_qa.unlink()
+    if broken == 'stale_report':
+        pronunciation.write_text(json.dumps({'flags': [], 'input_hash': 'other'}), encoding='utf-8')
+    if broken == 'stale_input':
+        video_qa.write_text(json.dumps({'status': 'render_complete', 'input_hash': 'other'}), encoding='utf-8')
+    with pytest.raises(ValueError, match='QA'):
+        approve_gate(project, GateKind.VIDEO, reviewer=REVIEWER, now=NOW)
 
 
 def test_reject_video_with_semantic_issue_must_resume_to_draft_ready_with_that_reason_class(

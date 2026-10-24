@@ -79,7 +79,35 @@ def test_pronunciation_qa_flags_term_mismatch():
     assert flag['script_word'] == 'URAT'
     assert flag['heard'] == 'u rát'
     assert flag['priority'] == 'term'
+    assert flag['severity'] == 'block'
+    assert report['blocked'] is True
     assert 'pronunciation.vi.yaml' in flag['suggestion']
+
+
+def test_only_vietnamese_tone_mismatch_warns():
+    tone = pronunciation_qa({'LN01': map_words('mỡ', words('mô'), duration=1)})
+    assert tone['flags'][0]['severity'] == 'warn'
+    missing = pronunciation_qa({'LN01': map_words('mỡ', [], duration=1)})
+    assert missing['flags'][0]['severity'] == 'block'
+    term = pronunciation_qa({'LN01': map_words('gút', words('gót'), duration=1)}, terms=['gút'])
+    assert term['flags'][0]['severity'] == 'block'
+
+
+@pytest.mark.parametrize(('script', 'heard'), [('ma', 'má'), ('tim', 'tím'), ('mai', 'mái')])
+def test_unaccented_vietnamese_tone_mismatch_warns(script, heard):
+    report = pronunciation_qa({'LN01': map_words(script, words(heard), duration=1)})
+    assert report['flags'][0]['severity'] == 'warn'
+    assert report['blocked'] is False
+
+
+def test_dictionary_term_with_tone_only_mismatch_still_blocks():
+    report = pronunciation_qa({'LN01': map_words('urat', words('urát'), duration=1)}, terms=['urat'])
+    assert report['flags'][0]['severity'] == 'block'
+
+
+def test_english_word_mismatch_still_blocks():
+    report = pronunciation_qa({'LN01': map_words('pain', words('pen'), duration=1)})
+    assert report['flags'][0]['severity'] == 'block'
 
 
 def test_pronunciation_insertions_keep_real_audio_time():

@@ -74,7 +74,19 @@
           "title": "Claim Id"
         },
         "delivery": {
-          "$ref": "#/$defs/Delivery"
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/Delivery"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Delivery"
         },
         "explainer_layer_id": {
           "anyOf": [
@@ -125,8 +137,7 @@
       },
       "required": [
         "id",
-        "text",
-        "delivery"
+        "text"
       ],
       "title": "ScriptLine",
       "type": "object"

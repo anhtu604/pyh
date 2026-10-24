@@ -18,6 +18,7 @@ from healthvideo.domain.evidence import EvidenceClaim, SourceRecord
 from healthvideo.domain.outline import Outline
 from healthvideo.domain.posts import PostSet
 from healthvideo.domain.script import Script
+from healthvideo.domain.script_style import lint_script_style
 from healthvideo.domain.storyboard import Storyboard
 from healthvideo.domain.visual_budget import calculate_visual_budget
 from healthvideo.render.timing import restore_timed_storyboard
@@ -150,6 +151,26 @@ def _render_long_form_section(revision_root: Path, storyboard: Storyboard) -> st
     )
 
 
+def _render_style_section(revision_root: Path, script: Script) -> str:
+    lint_path = revision_root / "reviews" / "style-lint.json"
+    if lint_path.is_file():
+        raw = read_yaml(lint_path)
+        items = raw.get("issues", []) if isinstance(raw, dict) else []
+    else:
+        items = [issue.to_dict() for issue in lint_script_style(script)]
+    if not items:
+        return "<section><h2>Văn phong</h2><p>Không có cảnh báo văn phong.</p></section>"
+    rows = "".join(
+        f"<li>[{escape(str(item.get('severity', 'warn')))}] "
+        f"<strong>{escape(str(item.get('line_id', '')))}</strong> "
+        f"({escape(str(item.get('rule', '')))}): "
+        f"{escape(str(item.get('excerpt', '')))}</li>"
+        for item in items
+        if isinstance(item, dict)
+    )
+    return f"<section><h2>Văn phong</h2><ul>{rows}</ul></section>"
+
+
 def render_medical_packet(revision_root: Path) -> str:
     ledger = read_yaml(revision_root / "evidence" / "ledger.yaml")
     sources = {
@@ -244,6 +265,7 @@ def render_medical_packet(revision_root: Path) -> str:
         read_yaml(revision_root / "assets" / "asset-manifest.yaml")
     )
     visual_budget_section = _render_visual_budget_section(storyboard, asset_manifest)
+    style_section = _render_style_section(revision_root, script)
     hook_outro_section = ""
     if script.format_profile == "hook_outro_v1":
         final = storyboard.scenes[-1]
@@ -292,6 +314,7 @@ def render_medical_packet(revision_root: Path) -> str:
         )
         + note_paragraph
         + visual_budget_section
+        + style_section
         + hook_outro_section
         + _render_long_form_section(revision_root, storyboard)
         + "</body></html>"
@@ -475,9 +498,20 @@ def _render_visual_review_section(root: Path) -> str:
 
 
 def _render_pronunciation_section(revision_root: Path, storyboard: Storyboard) -> str:
+    from healthvideo.tts import pronunciation as pronunciation_module
+
+    lexicon = pronunciation_module.load_pronunciation_lexicon(
+        pronunciation_module.PRONUNCIATION_PROFILE_PATH
+    )
+    review_terms = ''.join(
+        f'<li>{escape(entry.written)} → {escape(entry.spoken)}: {escape(entry.note)}</li>'
+        for entry in lexicon.entries if getattr(entry, 'needs_doctor_review', False)
+    )
+    dictionary_section = ('<section><h2>Phát âm cần bác sĩ kiểm tra</h2><ul>'
+                          + review_terms + '</ul></section>') if review_terms else ''
     path = revision_root / "reviews/pronunciation-qa.json"
     if not path.is_file():
-        return '<section><h2>Có thể đọc sai</h2><p>Chưa có căn chữ Whisper; dùng phụ đề ước lượng.</p></section>'
+        return dictionary_section + '<section><h2>Có thể đọc sai</h2><p>Chưa có căn chữ Whisper; dùng phụ đề ước lượng.</p></section>'
     report = read_yaml(path)
     origins = {}
     for scene in storyboard.scenes:
@@ -492,14 +526,16 @@ def _render_pronunciation_section(revision_root: Path, storyboard: Storyboard) -
             f'<td>{escape(flag["heard"] or "(không nghe được)")}</td>'
             f'<td>{start:.2f}–{end:.2f} giây (dòng); '
             f'<a href="../renders/video.mp4#t={video_start:.3f}">{video_start:.2f} giây video</a></td>'
-            f'<td>{escape(flag["priority"])}</td><td><audio controls preload="none" '
+            f'<td>{escape(flag["priority"])} / {escape(flag.get("severity", "warn"))}</td><td><audio controls preload="none" '
             f'src="{escape(audio_path, quote=True)}"></audio></td>'
             f'<td>{escape(flag["suggestion"])}</td></tr>'
         )
     ratios = "".join(f'<li>{escape(line["line"])}: {line["match_ratio"]:.1%}</li>'
                      for line in report.get("lines", []))
-    return ('<section><h2>Có thể đọc sai</h2>'
-            '<p>Gợi ý từ ASR, cần bác sĩ nghe lại; không tự sửa lời thoại.</p>'
+    return (dictionary_section + '<section><h2>Có thể đọc sai</h2>'
+            '<p>Gợi ý từ ASR, cần bác sĩ nghe lại; không tự sửa lời thoại. '
+            'Mục block chặn duyệt; bác sĩ chọn P trong duyet sau khi đã nghe, chấp nhận '
+            'và nhập PIN, hoặc sửa từ điển rồi render lại.</p>'
             f'<p>Trạng thái: {escape(report.get("status", "unavailable"))}</p><ul>{ratios}</ul>'
             '<table border="1"><tr><th>Dòng</th><th>Kịch bản</th><th>Nghe được</th>'
             '<th>Mốc nghe lại</th><th>Ưu tiên</th><th>Audio</th><th>Gợi ý</th></tr>'

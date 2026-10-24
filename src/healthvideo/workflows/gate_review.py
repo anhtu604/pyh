@@ -7,6 +7,7 @@ import os
 from datetime import datetime
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
+from healthvideo.approver_pin import verify_pin
 from healthvideo.assets import referenced_storyboard_assets
 from healthvideo.domain.asset_manifest import (
     AssetKind,
@@ -218,6 +219,10 @@ def video_reviewed_paths(revision_root: Path) -> dict[str, Path]:
             if not target.is_file() or sha256_file(target) != sheet['sha256']:
                 raise ValueError('Visual review contact sheet changed')
             paths[relative] = target
+    for name in ('video-qa.json', 'pronunciation-qa.json'):
+        path = revision_root / 'reviews' / name
+        if path.is_file():
+            paths[f'reviews/{name}'] = path
     manifest_path = renders / "render-manifest.json"
     if manifest_path.is_file():
         clips = json.loads(manifest_path.read_text(encoding="utf-8")).get("clips", {})
@@ -278,11 +283,14 @@ def _revision_root(project_dir: Path, project: ProjectManifestV2) -> Path:
 
 
 def approve_gate(
-    project_dir: Path, kind: GateKind, *, reviewer: str, note: str = "", now: datetime
+    project_dir: Path, kind: GateKind, *, reviewer: str, note: str = "", now: datetime,
+    accept_pronunciation: bool = False, pronunciation_pin: str | None = None,
+    pin_file: Path | None = None,
 ) -> GateApprovalRecord:
     """Approve `kind`'s gate: validate, hash, write the record once, advance state."""
     project = _load_project(project_dir)
     revision_root = _revision_root(project_dir, project)
+    pronunciation_acceptance = None
     approval_path = revision_root / _GATE_APPROVAL_ARTIFACT[kind]
     if approval_path.is_file():
         raise FileExistsError(
@@ -369,6 +377,10 @@ def approve_gate(
         )
 
     if kind is GateKind.VIDEO:
+        pronunciation_acceptance = _check_video_qa(
+            revision_root, accept_pronunciation=accept_pronunciation,
+            pronunciation_pin=pronunciation_pin, pin_file=pin_file,
+        )
         posts_path = revision_root / POSTS_ARTIFACT
         if not posts_path.is_file():
             raise _MissingPostsError(
@@ -398,6 +410,7 @@ def approve_gate(
         reviewed_at=now,
         artifact_hashes=artifact_hashes,
         note=note,
+        pronunciation_acceptance=pronunciation_acceptance,
     )
     write_yaml_once(approval_path, record.model_dump(mode="json"))
 
@@ -409,6 +422,48 @@ def approve_gate(
     changed = transition_v2(project, _GATE_APPROVED_STATE[kind], context)
     write_yaml_atomic(project_dir / "project.yaml", changed.model_dump(mode="json"))
     return record
+
+
+def _check_video_qa(revision_root: Path, *, accept_pronunciation: bool,
+                    pronunciation_pin: str | None, pin_file: Path | None) -> str | None:
+    """A doctor's listening decision covers only the exact pronunciation report."""
+    qa_path = revision_root / 'reviews/video-qa.json'
+    report_path = revision_root / 'reviews/pronunciation-qa.json'
+    qa = read_yaml(qa_path) if qa_path.is_file() else {}
+    pronunciation = read_yaml(report_path) if report_path.is_file() else {}
+    manifest_path = revision_root / 'renders/render-manifest.json'
+    manifest = read_yaml(manifest_path) if manifest_path.is_file() else {}
+    alignment_hashes = manifest.get('alignment_sha256', {})
+    if 'pronunciation-qa.json' in alignment_hashes:
+        if not qa_path.is_file() or not report_path.is_file():
+            raise ValueError('video QA requires the rendered pronunciation and video QA reports')
+        if sha256_file(report_path) != alignment_hashes['pronunciation-qa.json']:
+            raise ValueError('pronunciation QA report hash does not match render manifest')
+        if manifest.get('input_hash') is not None and qa.get('input_hash') != manifest['input_hash']:
+            raise ValueError('video QA input_hash does not match render manifest')
+    blocked = any(flag.get('severity') == 'block' for flag in pronunciation.get('flags', []))
+    pronunciation_qa = qa.get('pronunciation', {})
+    blocked = blocked or pronunciation_qa.get('passed') is False
+    if qa:
+        failed_checks = [key for key, passed in qa.get('checks', {}).items()
+                         if passed is False]
+        other_failed = any(isinstance(value, dict) and value.get('passed') is False
+                           for key, value in qa.items() if key != 'pronunciation')
+        if (failed_checks or other_failed or qa.get('errors')
+                or (qa.get('status') in {'failed', 'error'} and not blocked)):
+            raise ValueError('video gate refuses failed video QA')
+        expected = pronunciation_qa.get('report_sha256')
+        if expected and (not report_path.is_file() or sha256_file(report_path) != expected):
+            raise ValueError('video pronunciation QA report hash does not match render')
+    if not blocked:
+        return None
+    if not accept_pronunciation:
+        raise ValueError('video gate refuses blocking pronunciation QA; bác sĩ cần đã nghe, chấp nhận')
+    if not pronunciation_pin or not verify_pin(pronunciation_pin, path=pin_file):
+        raise ValueError('pronunciation acceptance requires correct doctor PIN')
+    if not report_path.is_file():
+        raise ValueError('pronunciation acceptance requires the pronunciation QA report')
+    return canonical_json_hash(pronunciation)
 
 
 def reject_gate(

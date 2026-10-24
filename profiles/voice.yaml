@@ -1,0 +1,15 @@
+# Public starter voice; run tools/voice/sample.py and set the doctor's chosen voice_id.
+voice_id: JBFqnCBsd6RMkjVDRZzb
+settings:
+  stability: 0.5
+  similarity_boost: 0.75
+  style: 0.3
+  speed: 1.0
+allowed_tags:
+  - sarcastic
+  - curious
+  - excited
+  - chuckles
+  - sighs
+  - whispers
+  - pause

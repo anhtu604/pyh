@@ -46,10 +46,11 @@ def main():
             with wave.open(str(path), 'wb') as audio:
                 audio.setparams((2, 2, 48000, 0, 'NONE', 'not compressed'))
                 audio.writeframes(data.tobytes())
-            items.append(dict(id=name, file=path.name, source_url='https://kenney.nl/assets/interface-sounds',
-                              license='CC0-1.0', author='Kenney',
-                              sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
-                              mood='calm, soft, restrained', original_file=f'Audio/{original}.ogg'))
+            items.append({'id': name, 'file': path.name,
+                          'source_url': 'https://kenney.nl/assets/interface-sounds',
+                          'license': 'CC0-1.0', 'author': 'Kenney',
+                          'sha256': hashlib.sha256(path.read_bytes()).hexdigest(),
+                          'mood': 'calm, soft, restrained', 'original_file': f'Audio/{original}.ogg'})
             print(name, original, path.stat().st_size, round(len(data) / 2 / 48000, 3))
         shutil.copyfile(src / 'License.txt', out / 'LICENSE-Kenney.txt')
     (out / 'catalog.yaml').write_text(yaml.safe_dump(items, sort_keys=False), encoding='utf-8')

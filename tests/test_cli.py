@@ -577,6 +577,32 @@ def test_cli_evidence_ingest(tmp_path: Path) -> None:
     assert (rev_dir / "evidence" / "included-sources.yaml").is_file()
 
 
+@pytest.mark.parametrize(
+    'options,expected',
+    [([], []), (['--tts', 'auto'], ['auto']), (['--tts', 'elevenlabs'], ['elevenlabs'])],
+)
+def test_cli_produce_defaults_to_silent_provider(tmp_path, monkeypatch, options, expected):
+    from healthvideo import cli
+    from healthvideo.workflows import factory_deps
+
+    selected = []
+    provider = SilentTTS()
+    def build(**kwargs):
+        selected.append(kwargs['tts'])
+        return provider
+    monkeypatch.setattr(factory_deps, 'build_tts_provider', build, raising=False)
+    def render(project, selected_provider, runner, **kwargs):
+        if expected:
+            assert selected_provider is provider
+        else:
+            assert isinstance(selected_provider, SilentTTS)
+        return tmp_path / 'video.mp4'
+    monkeypatch.setattr(cli, 'produce_project', render)
+    result = runner.invoke(app, ['produce', str(tmp_path), *options])
+    assert result.exit_code == 0, result.output
+    assert selected == expected
+
+
 def test_produce_vieneu_requires_voice_and_builds_normalized_command_provider(tmp_path) -> None:
     from healthvideo.cli import build_vieneu_tts
 

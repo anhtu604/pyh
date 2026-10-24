@@ -81,6 +81,18 @@ def draft(
     except (OSError, TypeError, ValueError) as error:
         typer.echo(str(error))
         raise typer.Exit(code=1) from error
+    style_path = (
+        project_dir / "revisions" / changed.active_revision / "reviews/style-lint.json"
+    )
+    if style_path.is_file():
+        style_data = read_yaml(style_path)
+        issues = style_data.get("issues", []) if isinstance(style_data, dict) else []
+        for item in issues:
+            if isinstance(item, dict) and item.get("severity") == "warn":
+                typer.echo(
+                    f"warn [{item.get('line_id')}] ({item.get('rule')}): "
+                    f"{item.get('excerpt')}"
+                )
     typer.echo(changed.state.value)
 
 

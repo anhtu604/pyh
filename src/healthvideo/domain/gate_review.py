@@ -27,6 +27,7 @@ class GateApprovalRecord(BaseModel):
     reviewed_at: datetime
     artifact_hashes: dict[str, str]
     note: str = ""
+    pronunciation_acceptance: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
     @field_validator("reviewer")
     @classmethod

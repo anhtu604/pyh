@@ -31,6 +31,22 @@ def test_video_packet_shows_visual_review(tmp_path):
     assert 'title overlaps &lt;img&gt;' in html
 
 
+def test_video_packet_lists_pronunciations_needing_doctor_review(tmp_path, monkeypatch):
+    from healthvideo.tts import pronunciation
+
+    profile = tmp_path / 'pronunciation.vi.yaml'
+    write_yaml_atomic(profile, {
+        'schema_version': '1.0', 'language': 'vi', 'version': 'test',
+        'entries': [{'written': 'NLRP3', 'spoken': 'en-en-rờ-pê ba',
+                     'needs_doctor_review': True, 'note': 'Bác sĩ nghe lại'}],
+    })
+    monkeypatch.setattr(pronunciation, 'PRONUNCIATION_PROFILE_PATH', profile)
+    project = create_v2_project_fixture(tmp_path / 'projects')
+    html = render_video_packet(project / 'revisions/001')
+    assert 'Phát âm cần bác sĩ kiểm tra' in html
+    assert 'NLRP3' in html and 'en-en-rờ-pê ba' in html
+
+
 @pytest.mark.parametrize("with_explainer", [False, True])
 def test_mechanism_packet_groups_claims_sources_and_all_referencing_layers(
     tmp_path: Path, with_explainer: bool,

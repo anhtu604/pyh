@@ -3,6 +3,11 @@
     "PronunciationEntry": {
       "additionalProperties": false,
       "properties": {
+        "needs_doctor_review": {
+          "default": false,
+          "title": "Needs Doctor Review",
+          "type": "boolean"
+        },
         "note": {
           "default": "",
           "title": "Note",

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
 from tempfile import mkdtemp
@@ -15,6 +16,7 @@ from healthvideo.domain.evidence import EvidenceClaim
 from healthvideo.domain.hook_outro import validate_hook_outro
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.script import Script
+from healthvideo.domain.script_style import StyleIssue, lint_script_style
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
 from healthvideo.domain.storyboard import Storyboard, validate_anatomy_subjects
 from healthvideo.domain.visual_budget import validate_visual_budget
@@ -24,6 +26,7 @@ from healthvideo.storage.files import (
     canonical_json_hash,
     read_yaml,
     replace_directory_atomic,
+    write_text_atomic,
     write_yaml_atomic,
 )
 from healthvideo.workflows.citations import resolve_citations
@@ -43,7 +46,8 @@ def _validate(
     assets: AssetManifest,
     *,
     project: ProjectManifestV2,
-) -> None:
+) -> list[StyleIssue]:
+    _ = project
     ledger = read_yaml(revision / "evidence/ledger.yaml")
     if not script.lines or not storyboard.scenes:
         raise ValueError("draft requires nonempty script lines and storyboard scenes")
@@ -76,6 +80,14 @@ def _validate(
     errors = [issue for issue in issues if issue.severity == "error"]
     if errors:
         raise ValueError(f"script review error ({errors[0].code}): {errors[0].message}")
+    style_issues = lint_script_style(script)
+    style_blocks = [issue for issue in style_issues if issue.severity == "block"]
+    if style_blocks:
+        details = "; ".join(
+            f"{issue.line_id} ({issue.rule}): {issue.excerpt}"
+            for issue in style_blocks
+        )
+        raise ValueError(f"script style block: {details}")
     validate_visual_budget(storyboard, assets)
     validate_anatomy_subjects(storyboard)
     from healthvideo.render.beats import draft_visual_rhythm_qa
@@ -90,6 +102,7 @@ def _validate(
     )
     validate_asset_manifest(revision, assets)
     referenced_storyboard_assets(revision, storyboard, assets)
+    return style_issues
 
 
 def submit_draft(
@@ -117,7 +130,16 @@ def submit_draft(
         write_yaml_atomic(
             staging / "assets/asset-manifest.yaml", assets.model_dump(mode="json")
         )
-        _validate(staging, script, storyboard, assets, project=project)
+        style_issues = _validate(staging, script, storyboard, assets, project=project)
+        write_text_atomic(
+            staging / "reviews/style-lint.json",
+            json.dumps(
+                {"issues": [issue.to_dict() for issue in style_issues]},
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+        )
         script_data = read_yaml(staging / "script/script.yaml")
         context = TransitionContext(
             active_revision=project.active_revision,

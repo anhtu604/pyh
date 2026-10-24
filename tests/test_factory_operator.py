@@ -38,6 +38,33 @@ def test_duyet_approve_flow(operator):
     assert '<base href="file:' in packet.read_text(encoding='utf-8')
 
 
+@pytest.mark.parametrize('pin,accepted', [('wrong', False), ('918273', True)])
+def test_duyet_pronunciation_acceptance_requires_pin(operator, monkeypatch, pin, accepted):
+    import json
+
+    from tests.helpers import advance_v2_project_to_video_review
+
+    project = operator[1]
+    # The helper creates normal approval/render artifacts from the draft fixture.
+    data = read_yaml(project / 'project.yaml')
+    data['state'] = 'draft_ready'
+    write_yaml_atomic(project / 'project.yaml', data)
+    advance_v2_project_to_video_review(project, now=datetime.now(UTC))
+    revision = project / 'revisions/001'
+    (revision / 'reviews/pronunciation-qa.json').write_text(json.dumps({
+        'flags': [{'line': 'LN01', 'script_word': 'gút', 'heard': 'gao',
+                   'start': 0, 'end': 1, 'priority': 'term',
+                   'severity': 'block', 'suggestion': 'Nghe lại'}],
+    }), encoding='utf-8')
+    monkeypatch.setattr(cli.getpass, 'getpass', lambda _: pin)
+    result = invoke(operator, 'Doctor\nP\nĐã nghe, chấp nhận\n')
+    approval = revision / 'reviews/video-approval.yaml'
+    assert approval.exists() is accepted, result.output
+    assert (result.exit_code == 0) is accepted, result.output
+    if accepted:
+        assert read_yaml(approval)['pronunciation_acceptance']
+
+
 def test_duyet_reject_default_resume_medical(operator):
     result = invoke(operator, 'Doctor\nR\nCần sửa\n\n')
     assert result.exit_code == 0, result.output

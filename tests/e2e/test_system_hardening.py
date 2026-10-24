@@ -52,7 +52,10 @@ def test_golden_v2_crosses_process_boundaries_to_a_package(
         # Seed the synthetic doctor's domain approval; successful interactive CLI
         # PIN verification is covered by test_cli, without any production bypass.
         approve_gate(project, gate, reviewer="doctor", now=ENTERED_AT)
-        _assert_cli_ok(following, project)
+        # Offline fixtures explicitly select silence now that production defaults
+        # to the configured ElevenLabs/VieNeu channel voice.
+        options = ("--tts", "silent") if following == "produce" else ()
+        _assert_cli_ok(following, project, *options)
 
     scenes = json.loads((revision / "renders/render-input.json").read_text(encoding="utf-8"))[
         "scenes"

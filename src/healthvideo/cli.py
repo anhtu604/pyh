@@ -44,7 +44,7 @@ from healthvideo.tts.base import TTSProvider
 from healthvideo.tts.command import CommandTTS
 from healthvideo.tts.normalize import NormalizedTTS
 from healthvideo.tts.silent import SilentTTS
-from healthvideo.workflows import factory
+from healthvideo.workflows import factory, factory_deps
 from healthvideo.workflows.doctor import (
     check_environment,
     has_mandatory_failure,
@@ -317,7 +317,7 @@ def produce(
     project_dir: Annotated[
         Path, typer.Argument(help="Thư mục dự án đã duyệt kịch bản")
     ],
-    tts: Annotated[str, typer.Option("--tts", help="Nhà cung cấp TTS: silent | vieneu")] = "silent",
+    tts: Annotated[str, typer.Option("--tts", help="Nhà cung cấp TTS: silent | auto | elevenlabs | vieneu")] = "silent",
     voice: Annotated[
         str | None, typer.Option("--voice", help="Preset voice VieNeu do bác sĩ chọn")
     ] = None,
@@ -334,8 +334,16 @@ def produce(
     no_music: Annotated[bool, typer.Option("--no-music", help="Disable background music")] = False,
 ) -> None:
     """Tạo video từ script/storyboard đã duyệt y khoa."""
-    if tts == "silent":
-        provider: TTSProvider = SilentTTS()
+    if tts in {'auto', 'elevenlabs'}:
+        try:
+            provider: TTSProvider = factory_deps.build_tts_provider(
+                tts=tts, voice=voice, tts_python=tts_python, precision=precision,
+            )
+        except (OSError, ValueError) as error:
+            typer.echo(str(error))
+            raise typer.Exit(code=1) from error
+    elif tts == "silent":
+        provider = SilentTTS()
     elif tts == "vieneu":
         if not voice:
             typer.echo("--tts vieneu cần --voice <preset> do bác sĩ chọn")
@@ -573,13 +581,21 @@ def duyet(root: Root = Path('.')) -> None:
                     warnings.extend(key for key, ok in report.get('checks', {}).items() if ok is False)
                     typer.echo(f'QA: {warnings or report.get("status", "chưa có báo cáo")}')
                 typer.echo(f'Gói duyệt: {packet}')
-                action = typer.prompt('[A] Duyệt  [R] Từ chối  [B] Bỏ qua', type=click.Choice(['A', 'R', 'B'], case_sensitive=False)).upper()
+                choices = ['A', 'R', 'B']
+                prompt = '[A] Duyệt  [R] Từ chối  [B] Bỏ qua'
+                if gate is GateKind.VIDEO:
+                    choices.append('P')
+                    prompt += '  [P] Đã nghe, chấp nhận phát âm và duyệt'
+                action = typer.prompt(prompt, type=click.Choice(choices, case_sensitive=False)).upper()
                 if action == 'B':
                     continue
-                if action == 'A':
+                if action in {'A', 'P'}:
                     note = typer.prompt('Ghi chú (Enter để bỏ qua)', default='', show_default=False)
-                    _require_approval_pin()
+                    approval_pin = _require_approval_pin()
                     approve_gate(project_dir, gate, reviewer=reviewer, note=note,
+                                 accept_pronunciation=action == 'P',
+                                 pronunciation_pin=approval_pin if action == 'P' else None,
+                                 pin_file=pin_path(),
                                  now=datetime.now().astimezone())
                     typer.echo(f'Đã duyệt {gate.value}.')
                 else:
@@ -747,14 +763,16 @@ def _require_tty() -> None:
         raise typer.Exit(code=1)
 
 
-def _require_approval_pin() -> None:
+def _require_approval_pin() -> str:
     _require_tty()
     try:
         path = pin_path()
         if not path.is_file():
             raise PinError("Chưa đặt PIN; chạy healthvideo review set-pin trong terminal.")
-        if not verify_pin(getpass.getpass("PIN duyệt: "), path=path):
+        pin = getpass.getpass("PIN duyệt: ")
+        if not verify_pin(pin, path=path):
             raise PinError("PIN không đúng.")
+        return pin
     except (OSError, EOFError, PinError) as error:
         _echo_error(error)
         raise typer.Exit(code=1) from error

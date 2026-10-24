@@ -64,8 +64,24 @@ def check_environment(run: RunCommand) -> list[CheckResult]:
         *_flux_checks(),
         _projects_check(REPO_ROOT),
         _telegram_check(),
+        _elevenlabs_check(),
     ]
     return results
+
+
+def _elevenlabs_check() -> CheckResult:
+    from healthvideo.tts.elevenlabs import ElevenLabsError, subscription
+
+    key = os.environ.get("ELEVENLABS_API_KEY", "").strip()
+    remedy = "Set ELEVENLABS_API_KEY in .env and choose a voice in profiles/voice.yaml."
+    if not key:
+        return CheckResult("elevenlabs", False, "missing API key", "recommended", remedy)
+    try:
+        data = subscription(api_key=key)
+        remaining = max(0, int(data["character_limit"]) - int(data["character_count"]))
+    except (ElevenLabsError, KeyError, TypeError, ValueError):
+        return CheckResult("elevenlabs", False, "subscription check failed", "recommended", remedy)
+    return CheckResult("elevenlabs", True, f"{remaining} characters remaining", "recommended", remedy)
 
 
 def _telegram_check() -> CheckResult:

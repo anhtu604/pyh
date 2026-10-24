@@ -26,6 +26,15 @@ SFX (tùy chọn): mỗi cảnh tối đa 2 mục `sfx: [{{id: tick, at: start, 
 `at` là `start`, giây trong cảnh hoặc từ khóa lời đọc; volume 0.15–0.4. Dùng nhẹ, tránh âm báo động/giật gân.
 Mặc định có `whoosh-soft` mở chương và `chime-soft` vào `source_card`; đặt `sfx_defaults: false` ở storyboard để tắt.
 
+## Giọng văn và cách đọc
+- Nói như người thật kể cho bạn bè, xưng "mình", gọi người xem là "bạn"; câu ngắn, câu dài xen nhau; có từ đệm tự nhiên ("có điều", "mà", "thôi", "đấy", "nhé") nhưng không lạm dụng.
+- Xéo xắt nhẹ với **hiểu lầm**, không bao giờ với người bệnh. Nội dung y khoa và giới hạn bằng chứng giữ nguyên chuẩn mực.
+- **Không** tự bình luận về hình ("màn hình", "ô vuông", "chấm", "ký hiệu", "hình mô phỏng", "màu xanh là…"): hình tự nói, lời chỉ kể chuyện.
+- Giới hạn bằng chứng (thí nghiệm ngoài cơ thể, động vật…) gom vào 1–2 câu ở chương nguồn, không rải khắp nơi.
+- Không giọng thuyết trình: không "Video này…", "Ta sẽ xem…", "Hãy cùng…", "khám phá", "hành trình", "Điều cần giữ lại là…", "Câu ngắn để nhớ là…".
+- Không ẩn dụ rồi tự giải thích rằng đó chỉ là ẩn dụ. Xem 2 cặp ví dụ "Bản cũ → Bản mới" trong `src/healthvideo/prompts/style_examples.vi.md`.
+- Mỗi dòng có `delivery` là nguyên văn `text` kèm 1–3 thẻ từ `allowed_tags` trong `profiles/voice.yaml` (ví dụ `[curious]`, `[sarcastic]`, `[pause]`) đặt đúng chỗ, không lạm dụng. Bỏ thẻ phải trùng `text`; phụ đề luôn dùng `text`. Nhịp bằng chứng/giới hạn nên dùng sắc thái tò mò hoặc ngắt nghỉ, không châm biếm.
+
 ## Lệnh được dùng
 - `healthvideo step draft {project} --script <path> --storyboard <path> --assets <path>`
 - `healthvideo step submit-medical {project}`

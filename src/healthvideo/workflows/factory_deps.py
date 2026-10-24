@@ -6,6 +6,7 @@ import hashlib
 import os
 import re
 import subprocess
+import warnings
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
@@ -18,6 +19,11 @@ from healthvideo.storage.files import read_yaml
 from healthvideo.storage.project_layout import resolve_project_layout
 from healthvideo.tts.base import TTSProvider
 from healthvideo.tts.command import CommandTTS
+from healthvideo.tts.elevenlabs import (
+    VOICE_PROFILE_PATH,
+    ElevenLabsTTS,
+    load_voice_profile,
+)
 from healthvideo.tts.normalize import NormalizedTTS
 from healthvideo.tts.silent import SilentTTS
 from healthvideo.workflows.create_project_v2 import create_project_v2
@@ -69,16 +75,27 @@ def _run_render_argv(argv: list[str]) -> int:
     return subprocess.run(resolved, check=False, shell=False).returncode
 
 
-def build_default_producer(
+def build_tts_provider(
     *,
-    tts: str = "silent",
+    tts: str = "auto",
     voice: str | None = None,
     tts_python: Path = DEFAULT_TTS_PYTHON,
     precision: str = "fp32",
-) -> Callable[[Path], None]:
-    """Build the default producer callable matching CLI ``produce`` defaults."""
-    if tts == "silent":
-        provider: TTSProvider = SilentTTS()
+) -> TTSProvider:
+    """Select the channel provider, preserving explicit local and silent modes."""
+    if tts in {"auto", "elevenlabs"}:
+        if os.environ.get("ELEVENLABS_API_KEY", "").strip() and VOICE_PROFILE_PATH.is_file():
+            provider: TTSProvider = NormalizedTTS(ElevenLabsTTS(load_voice_profile(VOICE_PROFILE_PATH)))
+        else:
+            warnings.warn(
+                "ElevenLabs unavailable: configure ELEVENLABS_API_KEY and profiles/voice.yaml; using VieNeu.",
+                RuntimeWarning, stacklevel=2,
+            )
+            provider = _build_vieneu_tts(
+                python=tts_python, voice=voice or FACTORY_VOICE, precision=precision,
+            )
+    elif tts == "silent":
+        provider = SilentTTS()
     elif tts == "vieneu":
         if not voice:
             msg = "--tts vieneu cần --voice <preset> do bác sĩ chọn"
@@ -89,6 +106,20 @@ def build_default_producer(
     else:
         msg = f"Unsupported TTS provider: {tts}"
         raise ValueError(msg)
+    return provider
+
+
+def build_default_producer(
+    *,
+    tts: str = "auto",
+    voice: str | None = None,
+    tts_python: Path = DEFAULT_TTS_PYTHON,
+    precision: str = "fp32",
+) -> Callable[[Path], None]:
+    """Build the default producer callable matching CLI ``produce`` defaults."""
+    provider = build_tts_provider(
+        tts=tts, voice=voice, tts_python=tts_python, precision=precision,
+    )
 
     def _produce(project_dir: Path) -> None:
         produce_project(project_dir, provider, _run_render_argv, dry_run=False)
@@ -100,9 +131,9 @@ FACTORY_VOICE = "Thái Sơn"  # giọng kênh đã chốt qua nghe mù (VieNeu)
 
 
 def _produce_with_channel_voice(project_dir: Path) -> None:
-    """Build the VieNeu producer on demand so a missing TTS venv blocks one topic, not the run."""
+    """Select the configured channel voice on demand."""
     tts_python = Path(os.environ.get("HEALTHVIDEO_TTS_PYTHON", str(DEFAULT_TTS_PYTHON)))
-    build_default_producer(tts="vieneu", voice=FACTORY_VOICE, tts_python=tts_python)(project_dir)
+    build_default_producer(tts="auto", voice=FACTORY_VOICE, tts_python=tts_python)(project_dir)
 
 
 def create_project(root: Path, entry: QueueEntry) -> Path:

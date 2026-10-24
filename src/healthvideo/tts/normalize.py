@@ -38,6 +38,11 @@ class NormalizedTTS:
         identity["runtime_id"] = f"{identity.get('runtime_id', 'default')}-loudnorm"
         return identity
 
+    def set_usage_path(self, path: Path) -> None:
+        setter = getattr(self.inner, "set_usage_path", None)
+        if callable(setter):
+            setter(path)
+
     def synthesize(self, request: TTSRequest, output: Path) -> TTSResult:
         output.parent.mkdir(parents=True, exist_ok=True)
         with TemporaryDirectory(prefix=".loudnorm-", dir=output.parent) as temporary:

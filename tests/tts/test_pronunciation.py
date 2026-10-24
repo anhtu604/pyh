@@ -4,6 +4,19 @@ from healthvideo.domain.pronunciation import PronunciationLexicon
 from healthvideo.tts.pronunciation import apply_pronunciation, pronunciation_hash
 
 
+def test_repository_lexicon_has_medical_terms_and_review_flags() -> None:
+    from healthvideo.tts.pronunciation import (
+        PRONUNCIATION_PROFILE_PATH,
+        load_pronunciation_lexicon,
+    )
+
+    lexicon = load_pronunciation_lexicon(PRONUNCIATION_PROFILE_PATH)
+    assert apply_pronunciation("Gout và monosodium urat, acid uric.", lexicon) == (
+        "gút và mô-nô-sô-đi-um u-rát, a-xít u-ríc."
+    )
+    assert any(entry.needs_doctor_review for entry in lexicon.entries)
+
+
 def test_literal_longest_complete_occurrence() -> None:
     lexicon = PronunciationLexicon(
         schema_version="1.0", language="vi", version="test-1",

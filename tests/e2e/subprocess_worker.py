@@ -28,6 +28,9 @@ def _cli(arguments: list[str]) -> None:
     from healthvideo.workflows import produce
 
     produce.generate_music = _forbidden
+    # Silent fixture WAVs have no pronunciation to assess; keep the process
+    # boundary test independent of any installed Whisper runtime/model.
+    produce.align_lines = lambda *args, **kwargs: {}
     if arguments and arguments[0] == "produce":
         arguments = [*arguments, "--no-music"]
     cli.resolve_pnpm_argv = lambda args: [sys.executable, str(WORKER), "render", *args]

@@ -187,12 +187,27 @@ def pronunciation_qa(alignment: Mapping[str, list[dict]], *, terms: Sequence[str
             priority = ('term' if normalize_word(text) in term_words or
                         re.search(r'[A-Z]{2,}', text) or re.fullmatch(r'[A-Za-z][A-Za-z0-9-]{2,}[.,;:!?]?', text)
                         else 'normal')
+            heard = word.get('extra_heard') or word['heard']
+            def without_accents(value: str) -> str:
+                return ''.join(c for c in unicodedata.normalize('NFD', normalize_word(value))
+                               if not unicodedata.combining(c)).replace('đ', 'd')
+            # Only a plausible accent confusion in an ordinary Vietnamese word is
+            # advisory. Missing speech, inserted speech and changed terms block.
+            tone_only = (normalize_word(text) not in term_words
+                         and not re.search(r'[A-Z]{2,}', text)
+                         and not word.get('extra_heard')
+                         and bool(heard) and without_accents(text) == without_accents(heard)
+                         and (normalize_word(text) != without_accents(text)
+                              or normalize_word(heard) != without_accents(heard)))
+            if tone_only:
+                priority = 'normal'
             flags.append({'line': line, 'script_word': text,
-                          'heard': word.get('extra_heard') or word['heard'],
+                          'heard': heard, 'severity': 'warn' if tone_only else 'block',
                           'start': word.get('extra_start', word['start']),
                           'end': word.get('extra_end', word['end']), 'priority': priority,
                           'suggestion': f'Nghe lại; nếu cần, thêm {text!r} vào pronunciation.vi.yaml.'})
     flags.sort(key=lambda flag: flag['priority'] != 'term')
     return {'schema_version': '1.0', 'model_id': MODEL_ID, 'lines': lines, 'flags': flags,
+            'blocked': any(flag['severity'] == 'block' for flag in flags),
             'status': 'aligned' if alignment else 'unavailable',
             'note': 'ASR có thể nghe sai; bác sĩ nghe lại trước khi quyết định. Không tự sửa kịch bản.'}

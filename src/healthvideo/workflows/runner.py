@@ -92,6 +92,11 @@ def render_prompt(step: str, **fields: str) -> str:
         value = fields.get(name)
         replacement = value if value is not None else "(không có)"
         text = text.replace(f"{{{name}}}", replacement)
+    if step in {"draft", "revise_medical"}:
+        examples_path = PROMPTS_DIR / "style_examples.vi.md"
+        if examples_path.is_file():
+            examples = examples_path.read_text(encoding="utf-8").strip()
+            text = f"{text.rstrip()}\n\n{examples}\n"
     rules_block = "\n".join(f"- {rule}" for rule in HARD_RULES)
     return f"{text.rstrip()}\n\n## Quy tắc cứng\n{rules_block}\n"
 
