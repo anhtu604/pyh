@@ -1,6 +1,6 @@
 # Hoàn thiện xưởng trước, sản xuất sau
 
-Ngày: 2026-10-25. Trạng thái: đề xuất chờ bác sĩ duyệt.
+Ngày: 2026-10-25. Trạng thái: bác sĩ đã duyệt trong chat ngày 2026-10-25.
 
 ## 1. Ý định và quyết định của người dùng
 
