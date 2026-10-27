@@ -728,13 +728,16 @@ _SHORTCUT_SCRIPT = """
 [Console]::InputEncoding = [System.Text.Encoding]::UTF8
 $p = [Console]::In.ReadToEnd() | ConvertFrom-Json
 $shell = New-Object -ComObject WScript.Shell
-$link = $shell.CreateShortcut($p.path)
+# WScript.Shell saves through the ANSI code page ("Xưởng" -> "Xu?ng"); save ASCII, rename after.
+$tmp = Join-Path (Split-Path -LiteralPath $p.path) 'pyh-shortcut.tmp.lnk'
+$link = $shell.CreateShortcut($tmp)
 $link.TargetPath = $p.target
 $link.Arguments = $p.arguments
 $link.WorkingDirectory = $p.cwd
 $link.Description = $p.description
 if ($p.icon) { $link.IconLocation = $p.icon }
 $link.Save()
+Move-Item -LiteralPath $tmp -Destination $p.path -Force
 """
 
 
