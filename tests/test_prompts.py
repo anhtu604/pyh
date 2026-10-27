@@ -68,3 +68,11 @@ def test_prompt_length_limit(step: str) -> None:
     raw = (PROMPTS_DIR / f"{step}.md").read_text(encoding="utf-8")
     lines = raw.splitlines()
     assert len(lines) <= 60, f"{step}.md has {len(lines)} lines (limit 60)"
+
+
+def test_draft_and_revise_prompts_reference_image_prompting_and_moving_hook() -> None:
+    draft = (PROMPTS_DIR / "draft.md").read_text(encoding="utf-8")
+    revise_prod = (PROMPTS_DIR / "revise_production.md").read_text(encoding="utf-8")
+    assert "docs/reference/image-prompting.md" in draft
+    assert "không mở bằng ảnh tĩnh đứng yên" in draft
+    assert "docs/reference/image-prompting.md" in revise_prod

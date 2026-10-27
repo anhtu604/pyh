@@ -1,0 +1,25 @@
+poses:
+  - id: point_up
+    label: "Chỉ tay lên (ý chính)"
+    change: "Change only the pose: the same character stands facing the camera squarely from head to feet and raises the right hand to point straight up with the index finger at head height, left arm relaxed at the side, smiling warmly."
+    seed: 101
+  - id: thinking
+    label: "Suy nghĩ tay chống cằm"
+    change: "Change only the pose: the same character stands facing the camera squarely from head to feet with the right hand resting under the chin in a thoughtful posture, left arm supporting the right elbow, eyes looking slightly upward with a curious expression."
+    seed: 102
+  - id: surprised
+    label: "Ngạc nhiên"
+    change: "Change only the pose: the same character stands facing the camera squarely from head to feet with both hands raised open near the cheeks, eyebrows lifted high and mouth open in a gentle surprised expression."
+    seed: 103
+  - id: thumbs_up
+    label: "Giơ ngón cái"
+    change: "Change only the pose: the same character stands facing the camera squarely from head to feet and gives a clear thumbs-up gesture with the right hand at chest height, left arm relaxed at the side, cheerful confident smile."
+    seed: 104
+  - id: blank_board
+    label: "Cầm bảng trắng trống"
+    change: "Change only the pose: the same character stands facing the camera squarely from head to feet holding a small plain blank white rectangular sign board at chest level with both hands, completely empty white surface without any marks, friendly smile."
+    seed: 105
+  - id: myth_bust
+    label: "Lắc đầu xua tay (sai lầm phổ biến)"
+    change: "Change only the pose: the same character stands facing the camera squarely from head to feet and raises the right hand at shoulder height with the index finger pointing up, wagging it in a clear 'no, no' gesture, left arm relaxed at the side, eyebrows slightly furrowed with a calm corrective expression."
+    seed: 107

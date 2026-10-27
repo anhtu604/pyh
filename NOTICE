@@ -22,3 +22,11 @@ Ported shot cards (rewritten in TypeScript/React for medical explainer scenes):
 - transition/circle-match-iris -> video/src/motion/CircleMatchIris.tsx
 - transition/wipe-transitions -> video/src/motion/WipeTransitions.tsx
 - camera/crash-zoom-punch -> video/src/motion/CrashZoomPunch.tsx
+
+This repository also adapts image-prompting rules, moving-hook principles, and
+anchor-reference pose workflow concepts (`docs/reference/image-prompting.md`,
+`tools/flux/mascot_poses.py`) from `shuohao-skills`:
+
+  Project: shuohao-skills
+  Copyright eternityspring
+  License: Apache License, Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0)

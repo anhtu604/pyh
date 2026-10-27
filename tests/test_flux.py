@@ -165,3 +165,114 @@ def test_exported_manifest_schema_keeps_existing_hash_required():
     assert not list(validator.iter_errors({'assets': [pending]}))
     for payload in [dict(pending, kind='background'), dict(pending, prompt=None), dict(pending, seed=None)]:
         assert list(validator.iter_errors({'assets': [payload]}))
+
+
+def test_illustration_refs_hash_and_runner_flags(tmp_path):
+    import hashlib
+
+    from healthvideo.visuals import flux
+
+    ref1 = tmp_path / 'ref1.png'
+    ref2 = tmp_path / 'ref2.png'
+    ref3 = tmp_path / 'ref3.png'
+    Image.new('RGBA', (64, 64), (255, 0, 0, 128)).save(ref1)
+    Image.new('RGB', (64, 64), (0, 255, 0)).save(ref2)
+    Image.new('RGB', (64, 64), (0, 0, 255)).save(ref3)
+
+    legacy_expected = hashlib.sha256(json.dumps(
+        ['park', 64, 32, 42, flux.MODEL_ID], ensure_ascii=False, separators=(',', ':')
+    ).encode('utf-8')).hexdigest()
+    assert flux.illustration_recipe_hash('park', 64, 32, 42) == legacy_expected
+    hash_with_ref1 = flux.illustration_recipe_hash('park', 64, 32, 42, refs=(ref1,))
+    assert hash_with_ref1 != legacy_expected
+
+    calls = []
+
+    def runner(argv, **kwargs):
+        calls.append(argv)
+        size = tuple(int(argv[argv.index(flag) + 1]) for flag in ('--width', '--height'))
+        Image.new('RGB', size, 'teal').save(Path(argv[argv.index('--out') + 1]))
+        return CompletedProcess(argv, 0, '{}', '')
+
+    cache = tmp_path / 'cache'
+    out = tmp_path / 'out.png'
+    flux.generate_illustration('park', out=out, width=64, height=32, seed=42,
+                               refs=(ref1, ref2), runner=runner, cache_dir=cache)
+    assert len(calls) == 1
+    ref_indices = [i for i, token in enumerate(calls[0]) if token == '--ref']
+    assert [Path(calls[0][i + 1]) for i in ref_indices] == [ref1, ref2]
+
+    # Cache hit when refs are unchanged.
+    flux.generate_illustration('park', out=out, width=64, height=32, seed=42,
+                               refs=(ref1, ref2), runner=runner, cache_dir=cache)
+    assert len(calls) == 1
+
+    # Mutating reference image bytes changes recipe hash and invalidates cache.
+    Image.new('RGBA', (64, 64), (10, 20, 30, 255)).save(ref1)
+    flux.generate_illustration('park', out=out, width=64, height=32, seed=42,
+                               refs=(ref1, ref2), runner=runner, cache_dir=cache)
+    assert len(calls) == 2
+
+    with pytest.raises(ValueError, match='at most 2'):
+        flux.generate_illustration('park', out=out, width=64, height=32, seed=42,
+                                   refs=(ref1, ref2, ref3), runner=runner, cache_dir=cache)
+    with pytest.raises(ValueError, match='existing'):
+        flux.generate_illustration('park', out=out, width=64, height=32, seed=42,
+                                   refs=(tmp_path / 'missing.png',), runner=runner, cache_dir=cache)
+
+
+def test_mascot_poses_manifest_staleness_and_only(tmp_path):
+    from tools.flux.mascot_poses import (
+        DEFAULT_POSES_FILE,
+        build_pose_prompt,
+        generate_mascot_poses,
+        load_pose_specs,
+    )
+
+    specs = load_pose_specs(DEFAULT_POSES_FILE)
+    assert len(specs) == 6
+    sample_prompt = build_pose_prompt(specs[0]['change'])
+    assert sample_prompt.startswith('Change only the pose:')
+    assert 'Keep exactly the same character as the reference: face, glasses, hair, coat colors, badge' in sample_prompt
+
+    anchor = tmp_path / 'anchor.png'
+    Image.new('RGBA', (64, 96), (24, 166, 166, 255)).save(anchor)
+    out_dir = tmp_path / 'mascot-poses'
+    calls = []
+
+    def fake_generate(prompt, *, out, width, height, seed, refs=()):
+        calls.append((out.stem, seed, tuple(refs)))
+        out.parent.mkdir(parents=True, exist_ok=True)
+        Image.new('RGB', (width, height), (seed % 255, 100, 150)).save(out)
+        return out
+
+    manifest1 = generate_mascot_poses(anchor=anchor, out_dir=out_dir, width=64, height=96, generate=fake_generate)
+    assert len(calls) == 6
+    assert (out_dir / 'manifest.json').is_file()
+    assert (out_dir / 'sheet.png').is_file()
+    assert all(not entry['stale'] for entry in manifest1['poses'].values())
+    first_hash = manifest1['anchor_sha256']
+
+    # Changing anchor marks existing poses stale without deleting them or regenerating unless requested.
+    Image.new('RGBA', (64, 96), (18, 48, 74, 255)).save(anchor)
+    manifest2 = generate_mascot_poses(anchor=anchor, out_dir=out_dir, width=64, height=96, generate=fake_generate)
+    assert len(calls) == 6
+    assert manifest2['anchor_sha256'] != first_hash
+    assert all(entry['stale'] is True for entry in manifest2['poses'].values())
+    assert all((out_dir / f"{spec['id']}.png").is_file() for spec in specs)
+
+    # Running with --only regenerates just that one pose and refreshes its stale flag to False.
+    manifest3 = generate_mascot_poses(
+        anchor=anchor, out_dir=out_dir, only='point_up', width=64, height=96, generate=fake_generate
+    )
+    assert len(calls) == 7
+    assert calls[-1][0] == 'point_up'
+    assert manifest3['poses']['point_up']['stale'] is False
+    assert manifest3['poses']['point_up']['anchor_sha256'] == manifest3['anchor_sha256']
+    assert all(
+        manifest3['poses'][spec['id']]['stale'] is True
+        for spec in specs if spec['id'] != 'point_up'
+    )
+
+    with pytest.raises(ValueError, match='Unknown pose id'):
+        generate_mascot_poses(anchor=anchor, out_dir=out_dir, only='nonexistent', generate=fake_generate)

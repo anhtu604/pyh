@@ -13,6 +13,7 @@ from PIL import Image
 from healthvideo.audio.music import shared_repo_root
 
 FLUX_PYTHON_ENV = "HEALTHVIDEO_FLUX_PYTHON"
+MAX_REFS = 2
 MODEL_ID = "black-forest-labs/FLUX.2-klein-4B"
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -80,9 +81,17 @@ def _sha256(path: Path) -> str:
         return hashlib.file_digest(source, "sha256").hexdigest()
 
 
-def illustration_recipe_hash(prompt: str, width: int, height: int, seed: int) -> str:
+def illustration_recipe_hash(
+    prompt: str, width: int, height: int, seed: int, refs: tuple[Path, ...] = (),
+) -> str:
+    ref_paths = tuple(Path(ref) for ref in refs)
+    if len(ref_paths) > MAX_REFS or any(not ref.is_file() for ref in ref_paths):
+        raise ValueError(f"FLUX supports at most {MAX_REFS} existing reference PNGs")
+    payload: list[object] = [prompt, width, height, seed, MODEL_ID]
+    if ref_paths:
+        payload.append([_sha256(ref) for ref in ref_paths])
     return hashlib.sha256(json.dumps(
-        [prompt, width, height, seed, MODEL_ID], ensure_ascii=False, separators=(",", ":")
+        payload, ensure_ascii=False, separators=(",", ":")
     ).encode("utf-8")).hexdigest()
 
 
@@ -97,13 +106,14 @@ def validate_illustration_png(path: Path, width: int, height: int) -> None:
 
 def generate_illustration(
     prompt: str, *, out: Path, width: int, height: int, seed: int,
-    runner=subprocess.run, cache_dir: Path | None = None,
+    refs: tuple[Path, ...] = (), runner=subprocess.run, cache_dir: Path | None = None,
 ) -> Path:
-    """Cache verified PNG bytes by the exact prompt, dimensions, seed and model ID."""
+    """Cache verified PNG bytes by the exact prompt, dimensions, seed, refs and model ID."""
     if (not prompt.strip() or any(type(value) is not int or value <= 0 for value in (width, height))
             or type(seed) is not int or not 0 <= seed < 2**63):
         raise ValueError("Illustration needs a nonempty prompt, positive integer dimensions and a seed in [0, 2**63)")
-    key = illustration_recipe_hash(prompt, width, height, seed)
+    ref_paths = tuple(Path(ref) for ref in refs)
+    key = illustration_recipe_hash(prompt, width, height, seed, refs=ref_paths)
     cache = cache_dir if cache_dir is not None else shared_repo_root() / "cache/flux"
     cache.mkdir(parents=True, exist_ok=True)
     cached, metadata = cache / f"{key}.png", cache / f"{key}.json"
@@ -122,6 +132,8 @@ def generate_illustration(
                 "--prompt", prompt, "--width", str(width), "--height", str(height),
                 "--seed", str(seed), "--out", str(generated),
             ]
+            for ref in ref_paths:
+                argv.extend(["--ref", str(ref)])
             try:
                 result = runner(argv, shell=False, check=False, capture_output=True, text=True,
                                 encoding="utf-8", errors="replace")
