@@ -131,6 +131,18 @@ def test_acceptance_section_and_button_gate(app):
     assert status == 200
     assert 'Nghiệm thu xưởng'.encode() in page
     assert b'id="factory-acceptance"' in page
+    for snippet in (
+        'Bước 1 · Tạo mẫu',
+        'Bước 2 · Xem mẫu',
+        'Bước 3 · Góp ý &amp; chấp nhận',
+        'Tạo và chạy mẫu',
+        'Chi tiết kỹ thuật',
+        'Xưởng đã nghiệm thu đủ 4 chuẩn',
+        'Cần nghiệm thu đủ 4 giai đoạn trước',
+        'friendlyError(',
+        'Xem nhật ký đầy đủ',
+    ):
+        assert snippet.encode('utf-8') in page
     status, data = request(app, '/api/status')
     assert status == 200, data
     assert data['factory']['can_start'] is False

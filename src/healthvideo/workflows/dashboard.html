@@ -10,16 +10,16 @@
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#070b14; --bg2:#0c1324; --panel:rgba(18,27,48,.62); --panel-solid:#121b30;
-  --line:rgba(148,173,255,.12); --line-strong:rgba(148,173,255,.24);
-  --text:#e8eeff; --muted:#8e9cc2; --faint:#5d6a8f;
+  --bg:#070b14; --bg2:#0c1324; --panel:rgba(18,27,48,.74); --panel-solid:#121b30;
+  --line:rgba(148,173,255,.18); --line-strong:rgba(148,173,255,.34);
+  --text:#f0f4ff; --muted:#b8c7ec; --faint:#96a8d6;
   --teal:hsl(168 78% 52%); --teal-d:hsl(168 70% 38%);
-  --violet:hsl(258 90% 70%); --amber:hsl(38 96% 60%); --rose:hsl(350 88% 64%); --sky:hsl(204 95% 62%);
+  --violet:hsl(258 90% 72%); --amber:hsl(38 96% 62%); --rose:hsl(350 88% 66%); --sky:hsl(204 95% 66%);
   --radius:18px; --ease:cubic-bezier(.22,1,.36,1);
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{min-height:100%}
-body{font-family:'Be Vietnam Pro',system-ui,sans-serif;color:var(--text);background:var(--bg);
+body{font-family:'Be Vietnam Pro',system-ui,sans-serif;font-size:15.5px;line-height:1.6;color:var(--text);background:var(--bg);
   -webkit-font-smoothing:antialiased;overflow-x:hidden}
 body::before{content:"";position:fixed;inset:-20%;z-index:-2;
   background:
@@ -32,17 +32,17 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;opacity:.05;pointer-eve
   background-size:44px 44px;mask-image:radial-gradient(ellipse at center,#000 30%,transparent 75%)}
 @keyframes drift{to{transform:translate3d(-3%,2%,0) scale(1.06)}}
 
-.wrap{max-width:1180px;margin:0 auto;padding:28px 28px 60px}
+.wrap{max-width:1200px;margin:0 auto;padding:28px 28px 64px}
 header{display:flex;align-items:center;gap:18px;justify-content:space-between;flex-wrap:wrap;margin-bottom:26px}
 .brand{display:flex;align-items:center;gap:14px}
-.mark{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;
+.mark{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;
   background:linear-gradient(135deg,var(--teal),var(--violet));box-shadow:0 10px 30px -8px hsl(168 80% 45% / .6)}
 .mark svg{width:26px;height:26px}
-h1{font-size:22px;font-weight:800;letter-spacing:-.02em}
-.sub{color:var(--muted);font-size:13px;margin-top:2px}
+h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.sub{color:var(--muted);font-size:15px;margin-top:3px;line-height:1.5}
 .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 
-.pill{display:inline-flex;align-items:center;gap:9px;padding:9px 14px;border-radius:999px;font-size:13px;font-weight:600;
+.pill{display:inline-flex;align-items:center;gap:9px;min-height:42px;padding:9px 16px;border-radius:999px;font-size:14.5px;font-weight:600;
   background:var(--panel);border:1px solid var(--line);backdrop-filter:blur(14px)}
 .dot{width:9px;height:9px;border-radius:50%;background:var(--faint);position:relative}
 .on .dot{background:var(--teal)}
@@ -50,100 +50,116 @@ h1{font-size:22px;font-weight:800;letter-spacing:-.02em}
 @keyframes ping{0%{transform:scale(.5);opacity:.9}100%{transform:scale(1.6);opacity:0}}
 
 button{font:inherit;cursor:pointer;border:0;color:inherit}
-.btn{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:12px;font-size:14px;font-weight:600;
-  background:rgba(255,255,255,.05);border:1px solid var(--line-strong);transition:transform .25s var(--ease),background .25s,border-color .25s,box-shadow .25s}
-.btn:hover{transform:translateY(-1px);background:rgba(255,255,255,.09);border-color:rgba(148,173,255,.4)}
-.btn:active{transform:translateY(0) scale(.98)}
-.btn:disabled{opacity:.45;pointer-events:none}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:42px;padding:10px 18px;border-radius:12px;font-size:15px;font-weight:600;
+  background:rgba(255,255,255,.06);border:1px solid var(--line-strong);transition:transform .25s var(--ease),background .25s,border-color .25s,box-shadow .25s}
+.btn:hover:not(:disabled){transform:translateY(-1px);background:rgba(255,255,255,.11);border-color:rgba(148,173,255,.45)}
+.btn:active:not(:disabled){transform:translateY(0) scale(.98)}
+.btn:disabled,.btn.primary:disabled{background:rgba(148,173,255,.08);color:var(--faint);border-color:var(--line);box-shadow:none;opacity:.72;cursor:not-allowed;transform:none}
 .btn.primary{background:linear-gradient(135deg,var(--teal),var(--teal-d));border-color:transparent;color:#03140f;box-shadow:0 10px 28px -10px hsl(168 80% 45% / .8)}
-.btn.primary:hover{box-shadow:0 14px 34px -10px hsl(168 80% 50% / .95)}
-.btn.danger:hover{border-color:var(--rose);color:var(--rose)}
+.btn.primary:hover:not(:disabled){box-shadow:0 14px 34px -10px hsl(168 80% 50% / .95)}
+.btn.danger:hover:not(:disabled){border-color:var(--rose);color:var(--rose)}
 .btn.ghost{background:transparent}
-.btn svg{width:16px;height:16px}
+.btn svg{width:17px;height:17px}
+.btn-link{background:none;border:0;color:var(--sky);font-size:15px;font-weight:600;min-height:40px;padding:6px 10px;border-radius:10px;text-decoration:underline;text-underline-offset:3px}
+.btn-link:hover:not(:disabled){color:var(--text);background:rgba(255,255,255,.06)}
+.btn-link:disabled{color:var(--faint);cursor:not-allowed;text-decoration:none}
+
+.start-group{display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap}
+.start-hint{display:inline-flex;align-items:center;gap:6px;font-size:14px;font-weight:600;color:var(--amber);
+  background:hsl(38 96% 60% / .12);border:1px solid hsl(38 96% 60% / .35);padding:8px 13px;border-radius:10px;
+  text-decoration:none;cursor:pointer;min-height:40px;transition:background .2s,border-color .2s}
+.start-hint:hover{background:hsl(38 96% 60% / .2);border-color:var(--amber);color:#ffe7bd}
 
 .glass{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);backdrop-filter:blur(18px);
   box-shadow:0 20px 50px -30px rgba(0,0,0,.8)}
 
-.hero{display:none;position:relative;overflow:hidden;padding:22px 24px;margin-bottom:22px;border-radius:var(--radius);
+.hero{display:none;position:relative;overflow:hidden;padding:22px 24px;margin-bottom:24px;border-radius:var(--radius);
   background:linear-gradient(120deg,hsl(38 96% 55% / .16),hsl(350 88% 60% / .10));border:1px solid hsl(38 96% 60% / .35);
   align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;animation:rise .6s var(--ease)}
 .hero.show{display:flex}
 .hero::before{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 30%,rgba(255,255,255,.08) 50%,transparent 70%);
   transform:translateX(-100%);animation:sheen 3.6s var(--ease) infinite}
 @keyframes sheen{60%,100%{transform:translateX(100%)}}
-.hero h2{font-size:18px;font-weight:700}
-.hero p{color:#f5dcb4;font-size:13.5px;margin-top:4px;max-width:640px}
+.hero h2{font-size:19px;font-weight:700}
+.hero p{color:#f5dcb4;font-size:15px;margin-top:4px;max-width:660px}
 .btn.warn{background:linear-gradient(135deg,var(--amber),hsl(24 95% 55%));color:#1d1102;border-color:transparent;
-  box-shadow:0 12px 30px -10px hsl(38 96% 55% / .8);padding:12px 20px;font-size:15px}
+  box-shadow:0 12px 30px -10px hsl(38 96% 55% / .8);padding:12px 20px;font-size:15.5px}
 
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px}
-.stat{padding:16px 18px;animation:rise .5s var(--ease) both}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+.stat{padding:18px 20px;animation:rise .5s var(--ease) both}
 .stat:nth-child(2){animation-delay:.05s}.stat:nth-child(3){animation-delay:.1s}.stat:nth-child(4){animation-delay:.15s}
-.stat .k{color:var(--muted);font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:.08em}
+.stat .k{color:var(--muted);font-size:13.5px;font-weight:600;text-transform:uppercase;letter-spacing:.08em}
 .stat .v{font-size:26px;font-weight:800;margin-top:6px;letter-spacing:-.02em;display:flex;align-items:center;gap:10px}
-.stat .v small{font-size:13px;font-weight:500;color:var(--muted)}
+.stat .v small{font-size:14px;font-weight:500;color:var(--muted)}
 @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 
-.grid{display:grid;grid-template-columns:1.55fr 1fr;gap:18px;align-items:start}
-.section-title{font-size:13px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.1em;margin:4px 4px 12px}
+.grid{display:grid;grid-template-columns:1.5fr 1fr;gap:22px;align-items:start}
+.section-title{font-size:14px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin:4px 4px 12px}
 
-.card{padding:20px 22px;margin-bottom:14px;transition:border-color .3s,transform .3s var(--ease);animation:rise .5s var(--ease) both}
-.card:hover{border-color:var(--line-strong);transform:translateY(-2px)}
+.card{padding:22px 24px;margin-bottom:18px;transition:border-color .3s,transform .3s var(--ease);animation:rise .5s var(--ease) both}
+.card:hover{border-color:var(--line-strong)}
 .card.gate{border-color:hsl(38 96% 60% / .45);box-shadow:0 0 0 1px hsl(38 96% 60% / .15),0 20px 50px -30px hsl(38 96% 50% / .6)}
 .card.blocked{border-color:hsl(350 88% 64% / .45)}
 .card-top{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}
-.card h3{font-size:16.5px;font-weight:700;line-height:1.35}
-.meta{color:var(--faint);font-size:12px;margin-top:4px;font-family:'JetBrains Mono',monospace}
-.chip{flex-shrink:0;padding:6px 11px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap;
-  background:hsl(204 95% 62% / .12);color:var(--sky);border:1px solid hsl(204 95% 62% / .25)}
-.chip.gate{background:hsl(38 96% 60% / .14);color:var(--amber);border-color:hsl(38 96% 60% / .35)}
-.chip.done{background:hsl(168 78% 52% / .12);color:var(--teal);border-color:hsl(168 78% 52% / .3)}
-.chip.bad{background:hsl(350 88% 64% / .12);color:var(--rose);border-color:hsl(350 88% 64% / .3)}
-.chip.work{background:hsl(258 90% 70% / .14);color:var(--violet);border-color:hsl(258 90% 70% / .3)}
+.card h3{font-size:18px;font-weight:700;line-height:1.35}
+.meta{color:var(--faint);font-size:13.5px;margin-top:4px;font-family:'JetBrains Mono',monospace}
+.chip{flex-shrink:0;padding:6px 12px;border-radius:999px;font-size:13px;font-weight:600;white-space:nowrap;
+  background:hsl(204 95% 62% / .14);color:var(--sky);border:1px solid hsl(204 95% 62% / .3)}
+.chip.gate{background:hsl(38 96% 60% / .16);color:var(--amber);border-color:hsl(38 96% 60% / .4)}
+.chip.done{background:hsl(168 78% 52% / .15);color:var(--teal);border-color:hsl(168 78% 52% / .4)}
+.chip.bad{background:hsl(350 88% 64% / .15);color:var(--rose);border-color:hsl(350 88% 64% / .4)}
+.chip.work{background:hsl(258 90% 70% / .16);color:var(--violet);border-color:hsl(258 90% 70% / .38)}
+.chip.pending{background:rgba(148,173,255,.09);color:var(--muted);border-color:var(--line-strong)}
 
-.steps{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin:18px 0 6px}
+.steps{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin:18px 0 8px}
 .step{position:relative}
-.bar{height:6px;border-radius:99px;background:rgba(255,255,255,.07);overflow:hidden}
+.bar{height:7px;border-radius:99px;background:rgba(255,255,255,.09);overflow:hidden}
 .step.done .bar{background:linear-gradient(90deg,var(--teal-d),var(--teal))}
-.step.cur .bar{background:rgba(255,255,255,.08)}
+.step.cur .bar{background:rgba(255,255,255,.1)}
 .step.cur .bar::after{content:"";display:block;height:100%;width:45%;border-radius:99px;
   background:linear-gradient(90deg,var(--violet),var(--sky));animation:load 1.6s var(--ease) infinite}
 .step.cur.wait .bar::after{background:linear-gradient(90deg,var(--amber),hsl(24 95% 60%));width:100%;animation:breathe 1.8s ease-in-out infinite}
 .step.cur.bad .bar::after{background:var(--rose);width:100%;animation:none}
 @keyframes load{0%{transform:translateX(-110%)}100%{transform:translateX(240%)}}
 @keyframes breathe{50%{opacity:.45}}
-.step span{display:block;font-size:11px;color:var(--faint);margin-top:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.step span{display:block;font-size:13px;color:var(--faint);margin-top:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .step.done span{color:var(--muted)}
-.step.cur span{color:var(--text);font-weight:600}
+.step.cur span{color:var(--text);font-weight:700}
 
-.note{margin-top:14px;padding:12px 14px;border-radius:12px;font-size:13px;line-height:1.55;white-space:pre-wrap;word-break:break-word;
-  background:hsl(350 88% 64% / .08);border:1px solid hsl(350 88% 64% / .25);color:#ffd2da;max-height:160px;overflow:auto}
-.actions{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
-.actions .btn{padding:8px 13px;font-size:13px}
+.note{margin-top:14px;padding:14px 16px;border-radius:12px;font-size:15px;line-height:1.55;word-break:break-word;
+  background:hsl(350 88% 64% / .11);border:1px solid hsl(350 88% 64% / .35);color:#ffe4ea}
+.note-msg{font-weight:600;color:#fff0f3}
+.note-raw{margin-top:8px;font-size:13.5px;color:var(--muted)}
+.note-raw summary{cursor:pointer;font-weight:600;color:var(--muted);user-select:none}
+.note-raw summary:hover{color:var(--text)}
+.note-raw code{display:block;margin-top:6px;padding:10px 12px;border-radius:8px;background:rgba(0,0,0,.32);font-family:'JetBrains Mono',monospace;font-size:13px;white-space:pre-wrap;color:#ffd2da;max-height:150px;overflow:auto}
+.actions{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;align-items:center}
+.actions .btn{min-height:40px;padding:9px 16px;font-size:14.5px}
 
-.side .glass{padding:18px 20px;margin-bottom:16px}
+.side .glass{padding:20px 22px;margin-bottom:18px}
 .agent{display:flex;align-items:center;gap:12px}
-.orb{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:rgba(255,255,255,.05);border:1px solid var(--line)}
+.orb{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:rgba(255,255,255,.05);border:1px solid var(--line)}
 .agent.busy .orb{background:linear-gradient(135deg,hsl(258 90% 70% / .3),hsl(204 95% 62% / .25));border-color:hsl(258 90% 70% / .4)}
 .spin{width:18px;height:18px;border-radius:50%;border:2px solid rgba(255,255,255,.15);border-top-color:var(--violet);animation:rot .9s linear infinite}
 @keyframes rot{to{transform:rotate(360deg)}}
-.agent b{font-size:14.5px}.agent p{color:var(--muted);font-size:12.5px;margin-top:2px}
+.agent b{font-size:16px}.agent p{color:var(--muted);font-size:14.5px;margin-top:2px}
 
-.log{font-family:'JetBrains Mono',monospace;font-size:11.5px;line-height:1.65;color:#b9c6ea;max-height:380px;overflow:auto;
-  padding:4px 2px;mask-image:linear-gradient(to bottom,transparent,#000 24px)}
-.log div{padding:3px 0;border-bottom:1px dashed rgba(148,173,255,.07)}
+.log-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.log{font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.65;color:#d6e1fa;max-height:380px;overflow:auto;
+  padding:4px 2px}
+.log div{padding:6px 0;border-bottom:1px dashed rgba(148,173,255,.12)}
 .log .t{color:var(--faint);margin-right:8px}
-.log .warn{color:var(--amber)}.log .err{color:var(--rose)}
-.empty{color:var(--faint);font-size:13px;text-align:center;padding:30px 0}
-.help li{color:var(--muted);font-size:13px;line-height:1.6;margin-left:18px}
+.log .warn{color:var(--amber)}.log .err{color:#ffa6b6}
+.empty{color:var(--muted);font-size:15px;text-align:center;padding:30px 0}
+.help li{color:var(--muted);font-size:15px;line-height:1.65;margin-left:18px;margin-bottom:6px}
 .help li b{color:var(--text)}
 
-.toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,30px);opacity:0;z-index:9;padding:12px 18px;border-radius:14px;
-  background:var(--panel-solid);border:1px solid var(--line-strong);box-shadow:0 20px 50px -20px #000;font-size:14px;
-  transition:all .4s var(--ease);max-width:min(92vw,560px)}
+.toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,30px);opacity:0;z-index:9;padding:13px 20px;border-radius:14px;
+  background:var(--panel-solid);border:1px solid var(--line-strong);box-shadow:0 20px 50px -20px #000;font-size:15px;
+  transition:all .4s var(--ease);max-width:min(92vw,580px)}
 .toast.show{transform:translate(-50%,0);opacity:1}
 .toast.err{border-color:hsl(350 88% 64% / .5)}
-.offline{display:none;margin-bottom:16px;padding:12px 16px;border-radius:12px;background:hsl(350 88% 64% / .1);border:1px solid hsl(350 88% 64% / .35);font-size:13.5px}
+.offline{display:none;margin-bottom:18px;padding:14px 18px;border-radius:12px;background:hsl(350 88% 64% / .12);border:1px solid hsl(350 88% 64% / .4);font-size:15px}
 .offline.show{display:block}
 
 @media (max-width:900px){.grid{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}}
@@ -152,36 +168,36 @@ button{font:inherit;cursor:pointer;border:0;color:inherit}
   background:rgba(3,6,14,.66);backdrop-filter:blur(6px)}
 .backdrop.show{display:grid;animation:fade .25s ease}
 @keyframes fade{from{opacity:0}}
-.modal{width:min(620px,100%);max-height:92vh;overflow:auto;padding:26px 26px 22px;border-radius:22px;
+.modal{width:min(640px,100%);max-height:92vh;overflow:auto;padding:26px 26px 22px;border-radius:22px;
   background:linear-gradient(180deg,#141e37,#0f172b);border:1px solid var(--line-strong);box-shadow:0 40px 90px -30px #000;
   animation:pop .35s var(--ease)}
 @keyframes pop{from{opacity:0;transform:translateY(14px) scale(.98)}}
-.modal h2{font-size:19px;font-weight:800;letter-spacing:-.01em}
+.modal h2{font-size:20px;font-weight:800;letter-spacing:-.01em}
 .modal .meta{margin-top:6px}
 .packet-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:18px 0;padding:14px 16px;border-radius:14px;
   background:rgba(255,255,255,.04);border:1px solid var(--line)}
-.packet-row p{font-size:13px;color:var(--muted)}
+.packet-row p{font-size:14.5px;color:var(--muted)}
 .packet-row.seen{border-color:hsl(168 78% 52% / .35)}
 .packet-row.seen p{color:var(--teal)}
 .choices{display:grid;gap:10px;margin:6px 0 16px}
 .choice{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:14px;cursor:pointer;
   border:1px solid var(--line);background:rgba(255,255,255,.03);transition:all .2s var(--ease)}
 .choice:hover{border-color:var(--line-strong)}
-.choice input{margin-top:3px;accent-color:var(--teal)}
-.choice b{font-size:14.5px;display:block}
-.choice span{font-size:12.5px;color:var(--muted)}
+.choice input{margin-top:4px;accent-color:var(--teal)}
+.choice b{font-size:15.5px;display:block}
+.choice span{font-size:14px;color:var(--muted)}
 .choice:has(input:checked){border-color:hsl(168 78% 52% / .55);background:hsl(168 78% 52% / .07)}
 .choice.rej:has(input:checked){border-color:hsl(350 88% 64% / .55);background:hsl(350 88% 64% / .07)}
 .choice.rej input{accent-color:var(--rose)}
-label.f{display:block;font-size:12.5px;color:var(--muted);font-weight:600;margin:14px 0 6px}
-.inp{width:100%;font:inherit;font-size:14px;color:var(--text);padding:11px 13px;border-radius:12px;
-  background:rgba(0,0,0,.25);border:1px solid var(--line-strong);outline:none;transition:border-color .2s,box-shadow .2s}
+label.f{display:block;font-size:14.5px;color:var(--muted);font-weight:600;margin:14px 0 6px}
+.inp{width:100%;font:inherit;font-size:15px;min-height:42px;color:var(--text);padding:10px 14px;border-radius:12px;
+  background:rgba(4,8,18,.55);border:1px solid var(--line-strong);outline:none;transition:border-color .2s,box-shadow .2s}
 .inp:focus{border-color:var(--teal);box-shadow:0 0 0 3px hsl(168 78% 52% / .18)}
-textarea.inp{min-height:120px;resize:vertical;line-height:1.55}
-.pin{letter-spacing:.4em;font-family:'JetBrains Mono',monospace;font-size:18px;max-width:220px}
+textarea.inp{min-height:110px;resize:vertical;line-height:1.6}
+.pin{letter-spacing:.35em;font-family:'JetBrains Mono',monospace;font-size:18px;max-width:220px}
 .modal-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:22px;flex-wrap:wrap}
-.modal-foot small{color:var(--faint);font-size:12px;max-width:300px}
-.err-box{display:none;margin-top:14px;padding:10px 13px;border-radius:12px;font-size:13px;background:hsl(350 88% 64% / .1);border:1px solid hsl(350 88% 64% / .35);color:#ffd2da}
+.modal-foot small{color:var(--muted);font-size:13.5px;max-width:320px}
+.err-box{display:none;margin-top:14px;padding:12px 14px;border-radius:12px;font-size:14.5px;background:hsl(350 88% 64% / .12);border:1px solid hsl(350 88% 64% / .38);color:#ffd2da}
 .err-box.show{display:block}
 .btn.rose{background:linear-gradient(135deg,var(--rose),hsl(340 80% 52%));border-color:transparent;color:#fff}
 
@@ -189,82 +205,136 @@ textarea.inp{min-height:120px;resize:vertical;line-height:1.55}
 .view{position:fixed;inset:0;z-index:7;display:none;flex-direction:column;background:linear-gradient(180deg,#0a1020,#070b14 40%)}
 .view.show{display:flex;animation:fade .25s ease}
 .vbar{display:flex;align-items:center;gap:14px;padding:16px 28px;border-bottom:1px solid var(--line);background:rgba(10,16,32,.85);backdrop-filter:blur(16px);flex-wrap:wrap}
-.vbar h2{font-size:18px;font-weight:800;letter-spacing:-.01em}
+.vbar h2{font-size:19px;font-weight:800;letter-spacing:-.01em}
 .vbar .meta{margin-top:2px}
 .vbar .grow{flex:1;min-width:200px}
 .tabs{display:flex;gap:6px;padding:12px 28px 0;border-bottom:1px solid var(--line);overflow-x:auto}
-.tab{padding:10px 16px;border-radius:12px 12px 0 0;font-size:14px;font-weight:600;color:var(--muted);background:transparent;
+.tab{min-height:42px;padding:10px 16px;border-radius:12px 12px 0 0;font-size:15px;font-weight:600;color:var(--muted);background:transparent;
   border:1px solid transparent;border-bottom:0;white-space:nowrap;transition:color .2s,background .2s}
 .tab:hover{color:var(--text)}
 .tab.on{color:var(--text);background:var(--panel);border-color:var(--line)}
-.tab .n{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:99px;font-size:11px;background:rgba(255,255,255,.08);color:var(--muted)}
+.tab .n{display:inline-block;margin-left:6px;padding:2px 8px;border-radius:99px;font-size:12px;background:rgba(255,255,255,.1);color:var(--muted)}
 .tab .n.hot{background:hsl(38 96% 60% / .2);color:var(--amber)}
 .vbody{flex:1;overflow:auto;padding:22px 28px 120px}
 .vinner{max-width:1080px;margin:0 auto}
 .vfoot{position:absolute;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;
   padding:14px 28px;background:rgba(10,16,32,.92);border-top:1px solid var(--line-strong);backdrop-filter:blur(16px)}
-.vfoot p{font-size:13.5px;color:var(--muted)}
+.vfoot p{font-size:15px;color:var(--muted)}
 .vfoot p b{color:var(--amber)}
-.row{display:grid;grid-template-columns:62px 1fr auto;gap:14px;padding:14px 16px;border-radius:14px;margin-bottom:8px;
-  background:rgba(255,255,255,.025);border:1px solid var(--line);transition:border-color .2s,background .2s}
-.row:hover{border-color:var(--line-strong);background:rgba(255,255,255,.04)}
+.row{display:grid;grid-template-columns:68px 1fr auto;gap:14px;padding:14px 16px;border-radius:14px;margin-bottom:10px;
+  background:rgba(255,255,255,.03);border:1px solid var(--line);transition:border-color .2s,background .2s}
+.row:hover{border-color:var(--line-strong);background:rgba(255,255,255,.045)}
 .row.has-c{border-color:hsl(38 96% 60% / .45);background:hsl(38 96% 60% / .05)}
-.rid{font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--violet);font-weight:500;padding-top:2px}
-.rtext{font-size:15.5px;line-height:1.65}
+.rid{font-family:'JetBrains Mono',monospace;font-size:13.5px;color:var(--violet);font-weight:600;padding-top:2px}
+.rtext{font-size:16px;line-height:1.65}
 .rmeta{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
-.tag{font-size:11.5px;padding:2px 8px;border-radius:99px;background:rgba(255,255,255,.06);color:var(--muted);font-family:'JetBrains Mono',monospace}
-.tag.claim{background:hsl(204 95% 62% / .12);color:var(--sky);cursor:pointer}
-.cbtn{align-self:start;padding:6px 10px;border-radius:10px;font-size:12.5px;font-weight:600;color:var(--muted);
-  background:transparent;border:1px solid var(--line);transition:all .2s}
+.tag{font-size:12.5px;padding:3px 9px;border-radius:99px;background:rgba(255,255,255,.08);color:var(--muted);font-family:'JetBrains Mono',monospace}
+.tag.claim{background:hsl(204 95% 62% / .14);color:var(--sky);cursor:pointer}
+.cbtn{align-self:start;min-height:40px;padding:8px 14px;border-radius:10px;font-size:14px;font-weight:600;color:var(--muted);
+  background:transparent;border:1px solid var(--line-strong);transition:all .2s}
 .cbtn:hover{color:var(--amber);border-color:hsl(38 96% 60% / .5)}
 .row.has-c .cbtn{color:var(--amber);border-color:hsl(38 96% 60% / .5)}
 .cbox{grid-column:2 / 4;display:none}
 .cbox.open{display:block;animation:rise .25s var(--ease)}
-.cbox textarea{min-height:70px;font-size:14px}
+.cbox textarea{min-height:76px;font-size:15px}
 .cbox .cact{display:flex;gap:8px;justify-content:flex-end;margin-top:8px}
-.cbox .cact .btn{padding:7px 12px;font-size:13px}
-.ctext{grid-column:2 / 4;font-size:13.5px;color:#ffe2b0;padding:8px 12px;border-radius:10px;background:hsl(38 96% 60% / .08);white-space:pre-wrap}
+.cbox .cact .btn{min-height:40px;padding:8px 14px;font-size:14px}
+.ctext{grid-column:2 / 4;font-size:14.5px;color:#ffe2b0;padding:10px 14px;border-radius:10px;background:hsl(38 96% 60% / .09);white-space:pre-wrap}
 .claim-card{padding:18px 20px;border-radius:16px;margin-bottom:12px;background:rgba(255,255,255,.03);border:1px solid var(--line)}
 .claim-card.has-c{border-color:hsl(38 96% 60% / .45)}
 .claim-card.flash{animation:flash 1.4s ease}
 @keyframes flash{30%{border-color:var(--sky);box-shadow:0 0 0 3px hsl(204 95% 62% / .25)}}
 .claim-head{display:flex;gap:10px;align-items:baseline;justify-content:space-between}
-.claim-card h4{font-size:15.5px;font-weight:600;line-height:1.55}
-blockquote{margin-top:10px;padding:10px 14px;border-left:3px solid var(--teal);background:hsl(168 78% 52% / .06);border-radius:0 10px 10px 0;
-  font-size:13.5px;line-height:1.6;color:#cfeee6;font-style:italic}
-blockquote cite{display:block;margin-top:6px;font-style:normal;font-size:12px;color:var(--muted);font-family:'JetBrains Mono',monospace}
+.claim-card h4{font-size:16px;font-weight:600;line-height:1.55}
+blockquote{margin-top:10px;padding:12px 16px;border-left:3px solid var(--teal);background:hsl(168 78% 52% / .07);border-radius:0 10px 10px 0;
+  font-size:14.5px;line-height:1.65;color:#d6f5ed;font-style:italic}
+blockquote cite{display:block;margin-top:6px;font-style:normal;font-size:13px;color:var(--muted);font-family:'JetBrains Mono',monospace}
 .src a{color:var(--sky);text-decoration:none}.src a:hover{text-decoration:underline}
-.src{font-size:13px;color:var(--muted);line-height:1.6;margin-top:8px}
-.warnbox{padding:12px 16px;border-radius:12px;margin-bottom:16px;font-size:13.5px;line-height:1.55;background:hsl(38 96% 60% / .1);border:1px solid hsl(38 96% 60% / .35);color:#ffe2b0}
+.src{font-size:14px;color:var(--muted);line-height:1.6;margin-top:8px}
+.warnbox{padding:13px 16px;border-radius:12px;margin-bottom:16px;font-size:14.5px;line-height:1.6;background:hsl(38 96% 60% / .11);border:1px solid hsl(38 96% 60% / .38);color:#ffe2b0}
 .media{display:grid;gap:16px}
-.media figure{padding:14px;border-radius:16px;background:rgba(255,255,255,.03);border:1px solid var(--line)}
-.media figcaption{font-size:13px;color:var(--muted);margin-bottom:10px;font-weight:600}
+.media figure{padding:18px 20px;border-radius:16px;background:rgba(255,255,255,.035);border:1px solid var(--line)}
+.media figcaption{font-size:15px;color:var(--muted);margin-bottom:12px;font-weight:700}
 .media video{width:100%;max-height:62vh;border-radius:12px;background:#000}
 .media audio{width:100%}
-#factory-acceptance>summary{cursor:pointer;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-#factory-acceptance>summary::before{content:'▸';color:var(--teal)}
-#factory-acceptance[open]>summary::before{content:'▾'}
-#factory-acceptance>summary h2{margin:0}
-#factory-acceptance .fa-text{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;line-height:1.7}
-#factory-acceptance .fa-line{padding:12px 0;border-bottom:1px solid var(--line);line-height:1.6}
-#factory-acceptance .fa-line small{display:block;color:var(--muted)}
-#factory-acceptance .fa-hash{font-size:12px;color:var(--muted);overflow-wrap:anywhere;margin-top:10px}
-#fa-events{color:var(--muted);font-size:13px;line-height:1.8;padding-left:22px}
-#fa-status{color:var(--teal);font-family:inherit}
+
+/* ---------- 3-step factory acceptance wizard ---------- */
+#factory-acceptance{margin-bottom:24px;border-color:rgba(148,173,255,.26)}
+#factory-acceptance.all-done{padding:14px 20px;background:linear-gradient(120deg,hsl(168 78% 42% / .18),rgba(18,27,48,.75));border-color:hsl(168 78% 52% / .45)}
+.fa-done-banner{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.fa-done-banner[hidden]{display:none}
+.fa-done-text{display:flex;align-items:center;gap:12px;font-size:16px;color:var(--text)}
+.fa-check{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--teal);color:#03140f;font-weight:800;font-size:16px}
+.fa-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px}
+.fa-head h2{font-size:21px;font-weight:800;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.fa-stepper{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+.fa-stage-btn{display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:14px 16px;border-radius:14px;text-align:left;
+  background:rgba(255,255,255,.035);border:1.5px solid var(--line);transition:all .2s var(--ease);min-height:84px}
+.fa-stage-btn:hover:not(:disabled){border-color:var(--line-strong);background:rgba(255,255,255,.06);transform:translateY(-1px)}
+.fa-stage-btn.active{border-color:var(--teal);background:hsl(168 78% 52% / .09);box-shadow:0 0 0 2px hsl(168 78% 52% / .18)}
+.fa-stage-btn.accepted:not(.active){border-color:hsl(168 78% 52% / .35);background:hsl(168 78% 52% / .04)}
+.fa-stage-top{display:flex;align-items:center;justify-content:space-between;width:100%;gap:8px}
+.fa-stage-num{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:8px;font-size:14px;font-weight:800;
+  background:rgba(255,255,255,.09);color:var(--text)}
+.fa-stage-btn.active .fa-stage-num{background:var(--teal);color:#03140f}
+.fa-stage-btn.accepted .fa-stage-num{background:hsl(168 78% 52% / .25);color:var(--teal)}
+.fa-stage-name{font-size:15.5px;font-weight:700;color:var(--text);line-height:1.35}
+.fa-steps{display:grid;gap:16px}
+.fa-step{padding:20px 22px;border-radius:16px;background:rgba(9,14,28,.55);border:1.5px solid var(--line);transition:all .25s var(--ease)}
+.fa-step.active{border-color:hsl(168 78% 52% / .5);background:rgba(14,23,44,.78);box-shadow:0 12px 32px -20px rgba(0,0,0,.7)}
+.fa-step.done{border-color:hsl(168 78% 52% / .28);background:rgba(12,20,38,.5)}
+.fa-step.pending{opacity:.52;background:rgba(8,12,24,.35)}
+.fa-step.pending .fa-step-body{display:none}
+.fa-step.pending .fa-step-hint{display:block}
+.fa-step-hint{display:none;margin-top:8px;font-size:14.5px;color:var(--muted)}
+.fa-step-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.fa-step-title{display:flex;align-items:center;gap:12px}
+.fa-step-badge{display:inline-grid;place-items:center;width:32px;height:32px;border-radius:10px;font-size:15px;font-weight:800;
+  background:rgba(255,255,255,.1);color:var(--text);flex-shrink:0}
+.fa-step.active .fa-step-badge{background:var(--teal);color:#03140f}
+.fa-step.done .fa-step-badge{background:hsl(168 78% 52% / .22);color:var(--teal)}
+.fa-step-head h3{font-size:17.5px;font-weight:700}
+.fa-step-body{margin-top:16px}
+.fa-step1-main{display:grid;grid-template-columns:1fr auto;gap:14px;align-items:end}
+.fa-step1-main label{display:grid;gap:6px;font-size:14.5px;font-weight:600;color:var(--muted)}
+.fa-step1-sub{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:12px}
+.fa-trials-wrap{display:inline-flex;align-items:center;gap:8px;font-size:14px;color:var(--muted)}
+.fa-trials-wrap select{width:auto;min-width:240px}
+#factory-acceptance .fa-text{white-space:pre-wrap;overflow-wrap:anywhere;font-family:'Be Vietnam Pro',system-ui,sans-serif;font-size:16.5px;line-height:1.75;color:var(--text)}
+#factory-acceptance .fa-line{padding:14px 0;border-bottom:1px solid var(--line);font-size:16.5px;line-height:1.7}
+#factory-acceptance .fa-line:last-child{border-bottom:0;padding-bottom:2px}
+#factory-acceptance .fa-line strong{color:var(--teal);font-size:15.5px}
+#factory-acceptance .fa-line small{display:block;color:var(--muted);font-size:14.5px;margin-top:4px}
+.fa-tech{margin-top:16px;padding:12px 16px;border-radius:12px;background:rgba(255,255,255,.025);border:1px solid var(--line);font-size:14px;color:var(--muted)}
+.fa-tech summary{cursor:pointer;font-weight:600;color:var(--muted);user-select:none}
+.fa-tech summary:hover{color:var(--text)}
+.fa-tech-body{margin-top:12px;display:grid;gap:12px}
+.fa-tech-file{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:8px 10px;border-radius:8px;background:rgba(0,0,0,.22);font-family:'JetBrains Mono',monospace;font-size:12.5px}
+#fa-events{color:var(--muted);font-size:13.5px;line-height:1.8;padding-left:22px}
+#fa-status{font-family:inherit}
 #fa-evidence a{text-decoration:none}
+.fa-field{display:grid;gap:6px;font-size:15px;font-weight:600;color:var(--muted);margin-bottom:14px}
+.fa-accept-row{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-top:12px}
+.fa-pin-label{display:grid;gap:6px;font-size:15px;font-weight:600;color:var(--muted)}
+.fa-accept-cta{display:flex;flex-direction:column;gap:6px;padding-top:28px}
+.fa-lock-reason{font-size:14px;font-weight:600;color:var(--amber);min-height:22px}
+#fa-result{margin-top:12px;font-size:15px;font-weight:600;color:var(--teal)}
+#fa-result.err{color:var(--rose)}
+
+@media (max-width:860px){.fa-stepper{grid-template-columns:repeat(2,1fr)}.fa-step1-main{grid-template-columns:1fr}.fa-accept-cta{padding-top:4px}}
 .clips{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
 .clips video{max-height:180px}
-pre.md{white-space:pre-wrap;word-break:break-word;font-family:'Be Vietnam Pro',sans-serif;font-size:14px;line-height:1.7;color:#d5def7;
+pre.md{white-space:pre-wrap;word-break:break-word;font-family:'Be Vietnam Pro',sans-serif;font-size:15px;line-height:1.7;color:#dce5fc;
   padding:18px 20px;border-radius:16px;background:rgba(255,255,255,.03);border:1px solid var(--line)}
 .fb{padding:14px 16px;border-radius:14px;margin-bottom:10px;background:rgba(255,255,255,.03);border:1px solid var(--line)}
-.fb-head{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--faint);font-family:'JetBrains Mono',monospace;margin-bottom:8px}
+.fb-head{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:13px;color:var(--faint);font-family:'JetBrains Mono',monospace;margin-bottom:8px}
 .fb-head .chip{font-family:'Be Vietnam Pro',sans-serif}
-.fb-text{white-space:pre-wrap;font-size:14px;line-height:1.65}
-.fb ul{margin:8px 0 0 18px;font-size:13.5px;line-height:1.6;color:#d5def7}
+.fb-text{white-space:pre-wrap;font-size:15px;line-height:1.65}
+.fb ul{margin:8px 0 0 18px;font-size:14.5px;line-height:1.6;color:#d5def7}
 .add-std{display:flex;gap:10px;align-items:flex-start;margin-bottom:20px}
 .add-std textarea{min-height:64px}
-.lead{color:var(--muted);font-size:14px;line-height:1.6;margin-bottom:16px;max-width:760px}
-.draft-note{display:none;margin:4px 0 12px;padding:10px 13px;border-radius:12px;font-size:13px;background:hsl(38 96% 60% / .1);border:1px solid hsl(38 96% 60% / .35);color:#ffe2b0}
+.lead{color:var(--muted);font-size:15.5px;line-height:1.65;margin-bottom:6px;max-width:820px}
+.draft-note{display:none;margin:4px 0 12px;padding:10px 13px;border-radius:12px;font-size:14px;background:hsl(38 96% 60% / .1);border:1px solid hsl(38 96% 60% / .35);color:#ffe2b0}
 .draft-note.show{display:block}
 @media (max-width:700px){.row{grid-template-columns:1fr}.cbox,.ctext{grid-column:1}}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
@@ -286,9 +356,12 @@ pre.md{white-space:pre-wrap;word-break:break-word;font-family:'Be Vietnam Pro',s
     </div>
     <div class="controls">
       <span class="pill" id="factory-pill"><span class="dot"></span><span id="factory-text">Đang kiểm tra…</span></span>
-      <button class="btn primary" id="btn-start" type="button">
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>Bật xưởng</button>
-      <button class="btn danger" id="btn-stop" type="button">
+      <span class="start-group">
+        <button class="btn primary" id="btn-start" type="button" disabled title="Cần nghiệm thu đủ 4 giai đoạn trước">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>Bật xưởng</button>
+        <a href="#factory-acceptance" class="start-hint" id="start-gate-hint">Cần nghiệm thu đủ 4 giai đoạn trước ↓</a>
+      </span>
+      <button class="btn danger" id="btn-stop" type="button" style="display:none">
         <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>Dừng xưởng</button>
       <button class="btn" id="btn-standards" type="button" title="Mọi góp ý của bác sĩ, agent áp dụng cho mọi chủ đề">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M9 8h7M9 12h5"/></svg>
@@ -309,35 +382,121 @@ pre.md{white-space:pre-wrap;word-break:break-word;font-family:'Be Vietnam Pro',s
       Duyệt ngay</button>
   </section>
 
-  <details class="glass card" id="factory-acceptance" aria-labelledby="fa-title" open>
-    <summary><h2 id="fa-title">Nghiệm thu xưởng</h2><span class="tag">TEST · ngoại tuyến</span><span class="meta">Bấm để mở / thu gọn</span></summary>
-    <p class="lead">Xem mẫu, góp ý rồi chấp nhận chuẩn từng giai đoạn 1 → 4. Đây là chuẩn cấu hình;
-      hai cổng duyệt y khoa và video của sản phẩm vẫn bắt buộc.</p>
-    <div class="actions">
-      <label>Giai đoạn <select class="inp" id="fa-stage">
-        <option value="1">1 · Chủ đề → kịch bản</option><option value="2">2 · Hình → giọng</option>
-        <option value="3">3 · Dựng → QA</option><option value="4">4 · Bài đăng → đóng gói</option>
-      </select></label>
-      <label>Chủ đề TEST <input class="inp" id="fa-topic" maxlength="500" value="TEST — Hình tròn chuyển động"></label>
-      <button class="btn" id="fa-create" type="button">Tạo mẫu TEST</button>
-      <button class="btn" id="fa-reload" type="button">Tải lại mẫu</button>
+  <section class="glass card" id="factory-acceptance" aria-labelledby="fa-title">
+    <div class="fa-done-banner" id="fa-done-banner" hidden>
+      <div class="fa-done-text">
+        <span class="fa-check" aria-hidden="true">✓</span>
+        <span><b>Xưởng đã nghiệm thu đủ 4 chuẩn</b> · Bác sĩ có thể bấm <b>Bật xưởng</b> ở góc trên để chạy sản xuất.</span>
+      </div>
+      <button class="btn" id="fa-review-again" type="button">Xem lại</button>
     </div>
-    <p id="fa-progress" role="status"></p>
-    <label>Mẫu đã lưu <select class="inp" id="fa-trials"><option value="">Chọn mẫu TEST</option></select></label>
-    <p><span id="fa-status" class="tag" role="status">Chưa chọn mẫu</span></p>
-    <div id="fa-evidence" class="media" style="margin:16px 0"></div>
-    <ol id="fa-events" aria-label="Lịch sử mẫu thử"></ol>
-    <button class="btn" id="fa-run" type="button" disabled>Chạy mẫu ngoại tuyến · 0 yêu cầu trả phí</button>
-    <label style="display:block;margin:16px 0">Góp ý / chuẩn nháp cho mẫu này
-      <textarea class="inp" id="fa-draft" maxlength="8000" rows="4"></textarea></label>
-    <label id="fa-reviewer-box" hidden>Tên bác sĩ duyệt <input class="inp" id="fa-reviewer" maxlength="200" autocomplete="name"></label>
-    <div class="actions" style="margin-top:12px">
-      <button class="btn" id="fa-save" type="button" disabled>Lưu nháp góp ý</button>
-      <label>PIN bác sĩ <input class="inp" id="fa-pin" type="password" autocomplete="off" maxlength="200" style="width:150px"></label>
-      <button class="btn primary" id="fa-accept" type="button" disabled>Chấp nhận chuẩn</button>
+
+    <div id="fa-wizard">
+      <div class="fa-head">
+        <div>
+          <h2 id="fa-title">Nghiệm thu xưởng <span class="tag">TEST · ngoại tuyến</span></h2>
+          <p class="lead">Làm theo 3 bước dưới đây cho từng giai đoạn (1 → 4) để chốt chuẩn cấu hình trước khi bật xưởng. Hai cổng duyệt y khoa và video của sản phẩm thật vẫn bắt buộc.</p>
+        </div>
+        <button class="btn ghost" id="fa-collapse-done" type="button" hidden>Thu gọn</button>
+      </div>
+
+      <select class="inp" id="fa-stage" hidden aria-label="Giai đoạn nghiệm thu">
+        <option value="1">1 · Chủ đề → kịch bản</option>
+        <option value="2">2 · Hình → giọng</option>
+        <option value="3">3 · Dựng → QA</option>
+        <option value="4">4 · Bài đăng → đóng gói</option>
+      </select>
+      <div id="fa-progress" class="fa-stepper" role="tablist" aria-label="Tiến độ 4 giai đoạn nghiệm thu"></div>
+
+      <div class="fa-steps">
+        <!-- Bước 1 -->
+        <div class="fa-step active" id="fa-step-1">
+          <div class="fa-step-head">
+            <div class="fa-step-title">
+              <span class="fa-step-badge">1</span>
+              <div>
+                <h3>Bước 1 · Tạo mẫu</h3>
+                <p class="sub">Tạo và chạy mẫu thử ngoại tuyến (0 yêu cầu trả phí) cho giai đoạn đang chọn.</p>
+              </div>
+            </div>
+            <span class="chip done" id="fa-step1-chip" hidden>✓ Đã tạo mẫu</span>
+          </div>
+          <div class="fa-step-body">
+            <div class="fa-step1-main">
+              <label>Chủ đề TEST <input class="inp" id="fa-topic" maxlength="500" value="TEST — Hình tròn chuyển động"></label>
+              <button class="btn primary" id="fa-create" type="button">Tạo và chạy mẫu</button>
+            </div>
+            <div class="fa-step1-sub">
+              <button class="btn-link" id="fa-reload" type="button">↻ Tải lại mẫu</button>
+              <label class="fa-trials-wrap" id="fa-trials-wrap" hidden>Mẫu cũ <select class="inp" id="fa-trials"><option value="">Chọn mẫu TEST</option></select></label>
+              <button class="btn" id="fa-run" type="button" hidden disabled>Chạy mẫu ngoại tuyến · 0 yêu cầu trả phí</button>
+              <span class="fa-lock-reason" id="fa-run-reason" hidden></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bước 2 -->
+        <div class="fa-step pending" id="fa-step-2">
+          <div class="fa-step-head">
+            <div class="fa-step-title">
+              <span class="fa-step-badge">2</span>
+              <div>
+                <h3>Bước 2 · Xem mẫu</h3>
+                <p class="sub">Đọc nội dung mẫu hoặc xem hình/video vừa dựng ở kích thước lớn, dễ đọc.</p>
+              </div>
+            </div>
+            <span id="fa-status" class="chip pending" role="status">Chưa có mẫu</span>
+          </div>
+          <p class="fa-step-hint">Hãy bấm <b>“Tạo và chạy mẫu”</b> ở Bước 1 trước để mở nội dung mẫu.</p>
+          <div class="fa-step-body">
+            <div id="fa-evidence" class="media"></div>
+            <details class="fa-tech" id="fa-tech">
+              <summary>Chi tiết kỹ thuật</summary>
+              <div class="fa-tech-body">
+                <div id="fa-tech-files"></div>
+                <ol id="fa-events" aria-label="Lịch sử mẫu thử"></ol>
+              </div>
+            </details>
+          </div>
+        </div>
+
+        <!-- Bước 3 -->
+        <div class="fa-step pending" id="fa-step-3">
+          <div class="fa-step-head">
+            <div class="fa-step-title">
+              <span class="fa-step-badge">3</span>
+              <div>
+                <h3>Bước 3 · Góp ý &amp; chấp nhận</h3>
+                <p class="sub">Ghi chuẩn mong muốn cho giai đoạn này, nhập PIN bác sĩ rồi bấm Chấp nhận.</p>
+              </div>
+            </div>
+          </div>
+          <p class="fa-step-hint">Sau khi xem mẫu ở Bước 2, bác sĩ ghi góp ý và nhập PIN tại đây.</p>
+          <div class="fa-step-body">
+            <label class="fa-field">Góp ý / chuẩn cho giai đoạn này
+              <textarea class="inp" id="fa-draft" maxlength="8000" rows="3" placeholder="Ví dụ: Kịch bản đi thẳng vào cơ chế, câu ngắn dễ nghe, không dùng thuật ngữ rối…"></textarea>
+            </label>
+            <label class="fa-field" id="fa-reviewer-box" hidden>Tên bác sĩ duyệt
+              <input class="inp" id="fa-reviewer" maxlength="200" autocomplete="name" placeholder="Nhập tên bác sĩ duyệt">
+            </label>
+            <div class="fa-accept-row">
+              <label class="fa-pin-label">PIN bác sĩ
+                <input class="inp pin" id="fa-pin" type="password" inputmode="numeric" autocomplete="off" maxlength="200">
+              </label>
+              <div class="fa-accept-cta">
+                <div style="display:flex;gap:10px;flex-wrap:wrap">
+                  <button class="btn primary" id="fa-accept" type="button" disabled>Chấp nhận chuẩn v1</button>
+                  <button class="btn ghost" id="fa-save" type="button" disabled>Lưu nháp góp ý</button>
+                </div>
+                <p class="fa-lock-reason" id="fa-accept-reason" role="status">Hãy tạo và chạy mẫu trước</p>
+              </div>
+            </div>
+            <p id="fa-result" role="status" aria-live="polite"></p>
+          </div>
+        </div>
+      </div>
     </div>
-    <p id="fa-result" role="status" aria-live="polite"></p>
-  </details>
+  </section>
 
   <section class="stats">
     <div class="glass stat"><div class="k">Xưởng</div><div class="v" id="s-factory">—</div></div>
@@ -412,14 +571,14 @@ pre.md{white-space:pre-wrap;word-break:break-word;font-family:'Be Vietnam Pro',s
   </section>
   <style>
     .ops-form{display:grid;gap:14px;margin-top:18px}.ops-form[hidden]{display:none}
-    .ops-form label,.ops-filters label{display:grid;gap:6px;font-size:13px;color:var(--muted)}
+    .ops-form label,.ops-filters label{display:grid;gap:6px;font-size:14.5px;font-weight:600;color:var(--muted)}
     .ops-form label:has(input[type=checkbox]){display:flex;align-items:center}
     .ops-form button{justify-self:start}.ops-filters{display:grid;grid-template-columns:1fr 1fr 2fr;gap:14px;margin:18px 0}
     .ops-assets{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;margin-top:18px}
     .ops-asset{border:1px solid var(--line-strong);border-radius:12px;overflow:hidden;padding:12px;min-width:0}
     .ops-asset img{width:100%;height:170px;object-fit:contain;background:var(--bg2);border-radius:8px}
-    .ops-asset p{font-size:12px;margin:8px 0;overflow-wrap:anywhere}.ops-asset .controls{gap:6px}
-    .ops-asset .btn{font-size:12px;padding:7px 9px}.ops-asset details{font-size:12px;color:var(--muted);margin:10px 0}
+    .ops-asset p{font-size:13.5px;margin:8px 0;overflow-wrap:anywhere}.ops-asset .controls{gap:6px}
+    .ops-asset .btn{font-size:13.5px;min-height:40px;padding:7px 11px}.ops-asset details{font-size:13.5px;color:var(--muted);margin:10px 0}
     @media(max-width:650px){.ops-filters{grid-template-columns:1fr}.ops-assets{grid-template-columns:1fr}}
   </style>
   <div class="grid" id="ops-overview">
@@ -436,18 +595,21 @@ pre.md{white-space:pre-wrap;word-break:break-word;font-family:'Be Vietnam Pro',s
         </div>
       </div>
       <div class="glass">
-        <div class="section-title" style="margin:0 0 8px">Nhật ký xưởng</div>
+        <div class="log-head">
+          <div class="section-title" style="margin:0">Nhật ký xưởng</div>
+          <button class="btn-link" id="btn-log-toggle" type="button">Xem nhật ký đầy đủ</button>
+        </div>
         <div class="log" id="log"><div class="empty">Chưa có nhật ký.</div></div>
       </div>
       <div class="glass help">
         <div class="section-title" style="margin:0 0 8px">Cách dùng</div>
         <ul>
-          <li><b>Bật xưởng</b> một lần; xưởng tự chạy ngầm tới khi cần bác sĩ.</li>
-          <li>Bấm <b>Xem sản phẩm</b> ở mỗi chủ đề để xem kịch bản, nội dung y khoa, video.</li>
-          <li>Bấm <b>Góp ý</b> cạnh từng dòng; khi xong bấm <b>Quyết định</b> và gõ PIN.</li>
-          <li>Mọi góp ý được lưu ở <b>Chuẩn đã ghi nhớ</b>; agent áp dụng cho mọi video sau.</li>
-          <li>Thẻ <b>đỏ</b> là bị chặn: đọc lý do trong thẻ.</li>
-          <li>Đóng tab trình duyệt không làm dừng xưởng.</li>
+          <li><b>Lần đầu</b>: làm 3 bước ở mục <b>Nghiệm thu xưởng</b> (Tạo mẫu → Xem mẫu → Góp ý &amp; nhập PIN) cho đủ 4 giai đoạn.</li>
+          <li>Khi đủ 4 chuẩn, bấm <b>Bật xưởng</b> một lần; xưởng tự chạy ngầm tới khi cần bác sĩ duyệt (đóng tab không dừng xưởng).</li>
+          <li>Bấm <b>Xem sản phẩm</b> ở mỗi chủ đề để đọc kịch bản, kiểm tra nguồn y khoa và xem video.</li>
+          <li>Bấm <b>Góp ý</b> cạnh từng dòng; khi xong bấm <b>Quyết định · PIN</b> để duyệt hoặc yêu cầu sửa.</li>
+          <li>Mọi góp ý được lưu vào <b>Chuẩn đã ghi nhớ</b> để agent áp dụng cho các video sau.</li>
+          <li>Thẻ <b>đỏ</b> là chủ đề tạm dừng: xem lý do tiếng Việt ngay trên thẻ hoặc mở <b>Chi tiết lỗi</b>.</li>
         </ul>
       </div>
     </aside>
@@ -528,9 +690,39 @@ pre.md{white-space:pre-wrap;word-break:break-word;font-family:'Be Vietnam Pro',s
 <script>
 const TOKEN = '__TOKEN__';
 const $ = (id) => document.getElementById(id);
-let state = null, busy = false;
+let state = null, busy = false, logFull = false;
+
+const STEP_VI = {
+  create:'tạo dự án', research:'nghiên cứu', draft:'viết kịch bản',
+  posts:'soạn bài đăng', produce:'sản xuất video', visual_review:'chọn hình minh họa',
+  revise_medical:'sửa theo góp ý y khoa', revise_production:'sửa sản xuất video', package:'đóng gói'
+};
+const FA_STAGE_NAMES = {
+  1:'Chủ đề → kịch bản', 2:'Hình → giọng đọc', 3:'Dựng video → QA', 4:'Bài đăng → đóng gói'
+};
 
 function esc(s){return String(s ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function friendlyError(text){
+  const s=String(text??'').trim();
+  if(!s) return '';
+  let m=s.match(/visual budget failed:\s*chart_crop=(\d+)\/(\d+)\s*frames outside\s*(\d+)-(\d+)%/i);
+  if(m){
+    const v=+m[2]?+m[1]*100/+m[2]:NaN, lo=+m[3], hi=+m[4];
+    // keep enough decimals that an out-of-range value never prints as the bound itself
+    const pct=Number.isNaN(v)?'?':v.toFixed([lo,hi].includes(+v.toFixed(1))?2:1);
+    const side=v>hi?'cao hơn':'thấp hơn';
+    return `Tỷ lệ cảnh biểu đồ đang là ${pct}%, ${side} mức cho phép ${lo}–${hi}%. Cần sửa storyboard.`;
+  }
+  m=s.match(/Scene\s+([A-Za-z0-9_-]+):\s*beat at\s+[\d.]+\s+outside timed scene/i);
+  if(m) return `Cảnh ${m[1]} có nhịp nằm ngoài thời lượng cảnh.`;
+  if(/paging file is too small/i.test(s)) return 'Máy thiếu bộ nhớ ảo khi chạy nhạc nền (ACE-Step).';
+  m=s.match(/(?:bước\s+|step\s+|ở bước\s+)([a-z_]+)|^([a-z_]+)\s+lỗi:/i);
+  if(m){const k=(m[1]||m[2]).toLowerCase(); return `Bước ${STEP_VI[k]||k} gặp lỗi.`}
+  if(/vượt số bước/i.test(s)) return 'Chủ đề vượt quá số bước tự động tối đa.';
+  if(/không làm đổi trạng thái/i.test(s)) return 'Agent chạy xong nhưng chưa chuyển sang bước kế tiếp.';
+  if(/Error:|Exception:|lỗi:|bị chặn:/i.test(s)) return 'Bước xử lý gặp lỗi.';
+  return s;
+}
 function toast(msg, err=false){
   const t=$('toast'); t.textContent=msg; t.className='toast show'+(err?' err':'');
   clearTimeout(t._h); t._h=setTimeout(()=>t.className='toast',4200);
@@ -572,37 +764,82 @@ function renderProjects(d){
     const acts=[];
     const q=encodeURIComponent(p.slug);
     if(p.gate){
-      acts.push(`<button class="btn warn" data-product="${esc(p.slug)}" style="padding:8px 13px;font-size:13px">Nghiệm thu · quyết định</button>`);
+      acts.push(`<button class="btn warn" data-product="${esc(p.slug)}">Nghiệm thu · quyết định</button>`);
     } else {
       acts.push(`<button class="btn" data-product="${esc(p.slug)}">Xem sản phẩm</button>`);
     }
     if(p.comments) acts.push(`<span class="tag" style="align-self:center;color:var(--amber)">${p.comments} góp ý nháp</span>`);
     acts.push(`<button class="btn ghost" data-act="/api/project/${q}/folder">Mở thư mục</button>`);
+    const noteHtml=p.blocked?`<div class="note"><div class="note-msg">${esc(friendlyError(p.blocked))}</div><details class="note-raw"><summary>Chi tiết lỗi</summary><code>${esc(p.blocked)}</code></details></div>`:'';
     return `<article class="glass card ${p.gate?'gate':''} ${cls==='bad'?'blocked':''}" style="animation-delay:${i*.05}s">
       <div class="card-top"><div><h3>${esc(p.title)}</h3>
         <div class="meta">${esc(p.slug)} · rev ${esc(p.revision)} · ${esc(ago(p.updated_at))}</div></div>
         <span class="chip ${cls}">${esc(p.state_label)}</span></div>
       <div class="steps">${steps}</div>
-      ${p.blocked?`<div class="note">${esc(p.blocked)}</div>`:''}
+      ${noteHtml}
       <div class="actions">${acts.join('')}</div></article>`}).join('');
   box.querySelectorAll('[data-act]').forEach(b=>b.onclick=()=>act(b.dataset.act));
   box.querySelectorAll('[data-product]').forEach(b=>b.onclick=()=>openProduct(b.dataset.product));
 }
+function isTracebackLine(l){
+  const t=String(l||'');
+  if(/^\d{4}-\d\d-\d\d\s+\d\d:\d\d/.test(t)) return false;
+  if(/^[\s>|]*(Traceback\b|File\s+"|raise\s+|\^+|~+)/.test(t)) return true;
+  if(/^\s{2,}/.test(t)) return true;
+  if(/^\s*[A-Za-z_][\w.]*\([^)]*$/.test(t)) return true;
+  return false;
+}
+function formatLogText(msg){
+  if(logFull) return msg;
+  const bm=msg.match(/^(.*?:\s*bị chặn:\s*)(.+)$/i);
+  if(bm) return bm[1]+friendlyError(bm[2]);
+  if(/Error:|Exception:|lỗi:|paging file|visual budget|outside timed scene/i.test(msg)) return friendlyError(msg);
+  return msg;
+}
 function renderLog(lines){
   const el=$('log'); const atBottom=el.scrollHeight-el.scrollTop-el.clientHeight<30;
-  if(!lines.length){el.innerHTML='<div class="empty">Chưa có nhật ký.</div>';return}
-  el.innerHTML=lines.map(l=>{
+  const src=Array.isArray(lines)?lines:[];
+  const filtered=logFull?src:src.filter(l=>!isTracebackLine(l));
+  if(!filtered.length){el.innerHTML='<div class="empty">Chưa có nhật ký.</div>';return}
+  const seen=new Set();
+  el.innerHTML=filtered.map(l=>{
     const m=l.match(/^(\d{4}-\d\d-\d\d (\d\d:\d\d):\d\d),\d+ (\w+) (.*)$/);
-    if(!m) return `<div>${esc(l)}</div>`;
+    if(!m){
+      const text=formatLogText(l);
+      if(!logFull&&seen.has(text)) return '';  // traceback residue repeats the same friendly line
+      seen.add(text);
+      const isErr=/Error:|Exception:|lỗi:|bị chặn/i.test(l);
+      return `<div class="${isErr?'err':''}">${esc(text)}</div>`;
+    }
     const lv=m[3]==='WARNING'?'warn':(m[3]==='ERROR'?'err':'');
-    return `<div class="${lv}"><span class="t">${esc(m[1].slice(5,10))} ${esc(m[2])}</span>${esc(m[4])}</div>`}).join('');
+    return `<div class="${lv}"><span class="t">${esc(m[1].slice(5,10))} ${esc(m[2])}</span>${esc(formatLogText(m[4]))}</div>`}).join('');
   if(atBottom) el.scrollTop=el.scrollHeight;
 }
+$('btn-log-toggle').onclick=()=>{
+  logFull=!logFull;
+  $('btn-log-toggle').textContent=logFull?'Thu gọn nhật ký':'Xem nhật ký đầy đủ';
+  renderLog(state?state.log:[]);
+};
+function syncStartGate(){
+  const on=Boolean(state?.factory?.running);
+  const stdReady=[1,2,3,4].every(s=>Boolean(faStandards[s]));
+  const canStart=Boolean(state?.factory?.can_start) && stdReady;
+  $('btn-start').style.display=on?'none':'';
+  $('btn-stop').style.display=on?'':'none';
+  $('btn-start').disabled=busy||!canStart;
+  $('btn-start').title=canStart?'Bật xưởng sản xuất':'Cần nghiệm thu đủ 4 giai đoạn trước';
+  $('start-gate-hint').style.display=(!on&&!canStart)?'':'none';
+}
+$('start-gate-hint').onclick=(e)=>{
+  e.preventDefault();
+  faReviewing=true;
+  faSyncCollapse();
+  $('factory-acceptance').scrollIntoView({behavior:'smooth',block:'start'});
+};
 function render(d){
   const on=d.factory.running;
   $('factory-pill').classList.toggle('on',on);
   $('factory-text').textContent=on?`Xưởng đang chạy · PID ${d.factory.pid}`:'Xưởng đang tắt';
-  $('btn-start').style.display=on?'none':''; $('btn-stop').style.display=on?'':'none';
   $('s-factory').innerHTML=on?'<span style="color:var(--teal)">Đang chạy</span>':'<span style="color:var(--muted)">Tắt</span>';
   $('s-waiting').innerHTML=d.waiting?`<span style="color:var(--amber)">${d.waiting}</span><small>video</small>`:'0';
   $('s-projects').textContent=d.projects.length;
@@ -617,6 +854,7 @@ function render(d){
   renderProjects(d); renderLog(d.log);
   $('std-count').textContent=d.standards??0;
   document.title=(d.waiting?`(${d.waiting}) `:'')+'Xưởng video · Protect Your Health';
+  syncStartGate();
 }
 async function refresh(){
   try{
@@ -624,9 +862,8 @@ async function refresh(){
     if(!r.ok) throw new Error(d.error||r.status);
     $('offline').classList.remove('show'); state=d; render(d);
     if(!busy) document.querySelectorAll('main button, header button').forEach(b=>b.disabled=false);
-    $('btn-start').disabled=busy||!d.factory.can_start;
-    $('btn-start').title=d.factory.can_start?'Bật xưởng sản xuất':'Cần chấp nhận đủ 4 chuẩn trong Nghiệm thu xưởng';
     $('fa-reviewer-box').hidden=!!d.reviewer;
+    syncStartGate();
     faButtons();
   }catch(e){$('offline').classList.add('show')}
 }
@@ -659,7 +896,7 @@ function cmtRow(target,dm){
 }
 function generalRow(dm){
   return `<div class="row ${dm.chung?'has-c':''}" id="gen-row" style="${dm.chung?'':'display:none'}"><div class="rid">chung</div>
-    <div class="rtext" style="font-size:14px;color:var(--muted)">Góp ý chung cho cả sản phẩm (văn phong, nhịp, hình ảnh…).</div>${cbtn('chung',dm)}${cmtRow('chung',dm)}</div>`;
+    <div class="rtext" style="font-size:15px;color:var(--muted)">Góp ý chung cho cả sản phẩm (văn phong, nhịp, hình ảnh…).</div>${cbtn('chung',dm)}${cmtRow('chung',dm)}</div>`;
 }
 function tabScript(b,dm){
   if(!b.lines.length) return '<div class="glass empty">Chưa có kịch bản ở revision này.</div>';
@@ -699,7 +936,7 @@ function tabVideo(b,dm){
   const main=b.media.filter(m=>!isClip(m)), clips=b.media.filter(isClip);
   if(b.media.length) h+=`<div class="media">${main.map(fig).join('')}${clips.length?`<div class="clips">${clips.map(fig).join('')}</div>`:''}</div>`;
   h+=`<div class="row ${dm.video?'has-c':''}" style="margin-top:16px"><div class="rid">video</div>
-    <div class="rtext" style="font-size:14px;color:var(--muted)">Góp ý về hình, giọng, nhịp, phát âm — ghi mốc thời gian nếu được (ví dụ 0:42).</div>${cbtn('video',dm)}${cmtRow('video',dm)}</div>`;
+    <div class="rtext" style="font-size:15px;color:var(--muted)">Góp ý về hình, giọng, nhịp, phát âm — ghi mốc thời gian nếu được (ví dụ 0:42).</div>${cbtn('video',dm)}${cmtRow('video',dm)}</div>`;
   return h;
 }
 function tabNotes(b){return b.notes?`<pre class="md">${esc(b.notes)}</pre>`:'<div class="glass empty">Agent chưa để ghi chú cho revision này.</div>'}
@@ -840,9 +1077,10 @@ $('btn-start').onclick=()=>act('/api/factory/start');
 $('btn-stop').onclick=()=>act('/api/factory/stop', state&&state.agents.length?'Agent đang làm việc. Dừng xưởng bây giờ sẽ cắt ngang bước hiện tại. Vẫn dừng?':'Dừng xưởng nền?');
 $('btn-review').onclick=()=>{const p=state&&state.projects.find(x=>x.gate);if(p) openProduct(p.slug)};
 $('btn-quit').onclick=()=>act('/api/app/quit','Tắt app? Xưởng nền vẫn chạy nếu đang bật.');
-/* ---------- isolated factory acceptance (never product decisions) ---------- */
-let faBundle=null, faStandards={}, faBusy=false, faInitial=true;
-const FA_STATUS={created:'Mới tạo',ready:'Sẵn sàng xem',failed:'Dựng mẫu chưa thành công',stale:'Mẫu đã thay đổi · cần tạo lại'};
+
+/* ---------- isolated factory acceptance (3-step wizard, never product decisions) ---------- */
+let faBundle=null, faStandards={}, faBusy=false, faReviewing=false;
+const FA_STATUS={created:'Mới tạo · chưa chạy',ready:'Sẵn sàng xem',failed:'Dựng mẫu chưa thành công',stale:'Mẫu đã thay đổi · cần tạo lại'};
 async function faGet(path){
   const r=await fetch(path,{cache:'no-store'}), data=await r.json();
   if(!r.ok) throw new Error(data.error||r.status); return data;
@@ -852,104 +1090,188 @@ async function faPost(action,body){
     'Content-Type':'application/json'},body:JSON.stringify(body)}), data=await r.json();
   if(!r.ok) throw new Error(data.error||r.status); return data.message;
 }
+function faAllAccepted(){return [1,2,3,4].every(s=>Boolean(faStandards[s]))}
+function faSyncCollapse(){
+  const allDone=faAllAccepted();
+  const collapsed=allDone && !faReviewing;
+  $('factory-acceptance').classList.toggle('all-done',collapsed);
+  $('fa-done-banner').hidden=!collapsed;
+  $('fa-wizard').hidden=collapsed;
+  $('fa-collapse-done').hidden=!(allDone && faReviewing);
+}
+$('fa-review-again').onclick=()=>{faReviewing=true;faSyncCollapse()};
+$('fa-collapse-done').onclick=()=>{faReviewing=false;faSyncCollapse()};
+function faRenderStepper(){
+  const curStage=Number($('fa-stage').value);
+  const box=$('fa-progress');
+  box.innerHTML=[1,2,3,4].map(s=>{
+    const acc=faStandards[s];
+    const active=s===curStage;
+    return `<button type="button" class="fa-stage-btn ${active?'active':''} ${acc?'accepted':''}" data-stage="${s}" role="tab" aria-selected="${active}">
+      <div class="fa-stage-top">
+        <span class="fa-stage-num">${s}</span>
+        <span class="chip ${acc?'done':'pending'}">${acc?`Đã chấp nhận · v${acc.version}`:'Chưa'}</span>
+      </div>
+      <span class="fa-stage-name">${esc(FA_STAGE_NAMES[s])}</span>
+    </button>`;
+  }).join('');
+  box.querySelectorAll('[data-stage]').forEach(btn=>btn.onclick=()=>{
+    if(faBusy) return;
+    $('fa-stage').value=btn.dataset.stage;
+    faAction(()=>faLoad());
+  });
+}
 function faButtons(){
-  const b=faBundle, ready=b&&b.status==='ready', stage=Number($('fa-stage').value);
-  const ordered=Array.from({length:stage-1},(_,i)=>i+1).every(s=>faStandards[s]);
-  $('fa-create').disabled=faBusy; $('fa-stage').disabled=faBusy; $('fa-trials').disabled=faBusy;
-  $('fa-reload').disabled=faBusy; $('fa-run').disabled=faBusy||!b||b.status==='stale';
-  $('fa-save').disabled=faBusy||!ready;
-  $('fa-accept').disabled=faBusy||!ready||!ordered||!b.draft.text||$('fa-draft').value!==b.draft.text;
+  const b=faBundle, ready=Boolean(b&&b.status==='ready'), stage=Number($('fa-stage').value);
+  const missingPrev=[1,2,3,4].find(s=>s<stage && !faStandards[s]);
+  const ordered=!missingPrev;
+  const draftText=$('fa-draft').value.trim();
+  const pinText=$('fa-pin').value.trim();
+  const needReviewer=!$('fa-reviewer-box').hidden && !$('fa-reviewer').value.trim();
+  $('fa-create').disabled=faBusy;
+  $('fa-stage').disabled=faBusy;
+  $('fa-trials').disabled=faBusy;
+  $('fa-reload').disabled=faBusy;
+  $('fa-run').hidden=!b || ready;
+  $('fa-run').disabled=faBusy||!b||b.status==='stale';
+  $('fa-run-reason').hidden=Boolean(b && b.status!=='stale');
+  $('fa-run-reason').textContent=!b?'Hãy tạo mẫu trước':(b.status==='stale'?'Mẫu đã cũ, hãy bấm Tạo và chạy mẫu':'');
+  $('fa-save').disabled=faBusy||!ready||!draftText;
   $('fa-accept').textContent=`Chấp nhận chuẩn v${(faStandards[stage]?.version||0)+1}`;
+
+  let lockReason='';
+  if(faBusy) lockReason='Đang xử lý mẫu TEST…';
+  else if(!ready) lockReason='Hãy tạo và chạy mẫu trước';
+  else if(!ordered) lockReason=`Cần chấp nhận giai đoạn ${missingPrev} trước (theo thứ tự 1 → 4)`;
+  else if(!draftText) lockReason='Hãy nhập góp ý / chuẩn cho giai đoạn này';
+  else if(needReviewer) lockReason='Nhập tên bác sĩ duyệt và PIN';
+  else if(!pinText) lockReason='Nhập PIN';
+
+  $('fa-accept').disabled=Boolean(lockReason);
+  $('fa-accept-reason').textContent=lockReason;
+  $('fa-accept-reason').hidden=!lockReason;
+
+  $('fa-step1-chip').hidden=!ready;
+  $('fa-step-1').className='fa-step '+(ready?'done':'active');
+  $('fa-step-2').className='fa-step '+(ready?'active':'pending');
+  $('fa-step-3').className='fa-step '+(ready?'active':'pending');
+  $('fa-status').className='chip '+(ready?'done':(b?.status==='failed'?'bad':'pending'));
+  document.querySelectorAll('#fa-progress button').forEach(btn=>btn.disabled=faBusy);
 }
 async function faShow(id){
   faBundle=id?await faGet(`/api/trials/${encodeURIComponent(id)}/bundle`):null;
   const b=faBundle;
   $('fa-draft').value=b?.draft?.text||'';
   $('fa-run').textContent=b?.status==='failed'?'Thử lại mẫu ngoại tuyến · 0 yêu cầu trả phí':'Chạy mẫu ngoại tuyến · 0 yêu cầu trả phí';
-  $('fa-status').textContent=b?(FA_STATUS[b.status]||'Chưa rõ trạng thái'):'Chưa chọn mẫu';
+  $('fa-status').textContent=b?(FA_STATUS[b.status]||'Chưa rõ trạng thái'):'Chưa có mẫu';
   $('fa-events').replaceChildren();
-  const history=b?.timeline||b?.events.map(e=>({text:e==='created'?'Đã tạo mẫu TEST.':e==='offline-run'?'Đã dựng mẫu ngoại tuyến.':'Dựng mẫu chưa thành công.'}))||[];
+  const history=b?.timeline||b?.events?.map(e=>({text:e==='created'?'Đã tạo mẫu TEST.':e==='offline-run'?'Đã dựng mẫu ngoại tuyến.':'Dựng mẫu chưa thành công.'}))||[];
   for(const event of history){
     const li=document.createElement('li');
     li.textContent=(event.at?new Date(event.at).toLocaleString('vi-VN')+' · ':'')+event.text;
     $('fa-events').append(li);
   }
-  const box=$('fa-evidence'); box.replaceChildren();
-  if(b&&b.status==='ready') for(const o of b.outputs){
-    const url=`/api/trials/${encodeURIComponent(b.id)}/media/${o.path.split('/').map(encodeURIComponent).join('/')}`;
-    const fig=document.createElement('figure'); let el;
-    if(/\.mp4$/.test(o.path)){el=document.createElement('video');el.controls=true;el.preload='metadata';el.style.maxHeight='360px'}
-    else if(/\.wav$/.test(o.path)){el=document.createElement('audio');el.controls=true;el.preload='metadata'}
-    else if(/\.png$/.test(o.path)){el=document.createElement('img');el.alt='Mẫu TEST phi y khoa';el.style.maxWidth='100%'}
-    else if(o.path==='script.yaml'){
-      el=document.createElement('div');
-      const script=b.previews?.[o.path];
-      for(const line of script?.lines||[]){
-        const row=document.createElement('div'); row.className='fa-line';
-        const label=document.createElement('strong'); label.textContent=line.id+' · ';
-        row.append(label,document.createTextNode(line.text));
-        const scene=script.scenes.find(s=>s.script_line===line.id);
-        if(scene){const note=document.createElement('small');note.textContent='Hình minh họa: '+scene.visual;row.append(note)}
-        el.append(row);
-      }
-    }
-    else if(o.path==='qa.json'){
-      const qa=JSON.parse(b.previews?.[o.path]||'{}');
-      el=document.createElement('pre');el.className='fa-text';
-      el.textContent=`Mẫu TEST · ${qa.renderer}\nThời lượng: ${qa.duration_seconds} giây · ${qa.fps} khung hình/giây\nĐịnh dạng: ${qa.formats.join(', ')}\nPhụ đề:\n${qa.captions.join('\n')}`;
-    }
-    else if(b.previews?.[o.path]){el=document.createElement('pre');el.className='fa-text';el.textContent=b.previews[o.path]}
-    else {el=document.createElement('div')}
-    if(['VIDEO','AUDIO','IMG'].includes(el.tagName)) el.src=url;
+  const box=$('fa-evidence'), techFiles=$('fa-tech-files');
+  box.replaceChildren(); techFiles.replaceChildren();
+  if(b&&b.status==='ready'){
     const labels={'sample.txt':'Giới thiệu mẫu','script.yaml':'Kịch bản mẫu · từng dòng',
       'illustration.png':'Hình minh họa TEST','tone.wav':'Nghe âm thanh mẫu · âm đơn, không phải giọng đọc',
       'wide.mp4':'Video ngang','vertical.mp4':'Video dọc','qa.json':'Thông tin kiểm tra video',
       'thumbnail.png':'Ảnh bìa mẫu','captions.txt':'Nội dung bài đăng mẫu','sample-hashes.json':'Chi tiết tệp mẫu'};
-    const caption=document.createElement('figcaption');caption.textContent=labels[o.path]||'Tệp mẫu';
-    const detail=document.createElement('details');detail.className='fa-hash';
-    const summary=document.createElement('summary');summary.textContent='Chi tiết tệp · SHA-256 '+o.sha256.slice(0,12)+'…';
-    const hash=document.createElement('p');hash.textContent='SHA-256: '+o.sha256;
-    const link=document.createElement('a');link.className='btn';link.textContent='Mở tệp mẫu';link.href=url;link.target='_blank';link.rel='noopener';
-    detail.append(summary,hash,link);fig.append(caption,el,detail);box.append(fig);
+    for(const o of b.outputs){
+      const url=`/api/trials/${encodeURIComponent(b.id)}/media/${o.path.split('/').map(encodeURIComponent).join('/')}`;
+      const tf=document.createElement('div'); tf.className='fa-tech-file';
+      const tspan=document.createElement('span'); tspan.textContent=`${o.path} · SHA-256: ${o.sha256}`;
+      const link=document.createElement('a'); link.className='btn-link'; link.textContent='Mở tệp mẫu'; link.href=url; link.target='_blank'; link.rel='noopener';
+      tf.append(tspan,link); techFiles.append(tf);
+
+      if(o.path==='sample-hashes.json') continue;
+      const fig=document.createElement('figure'); let el;
+      if(/\.mp4$/.test(o.path)){el=document.createElement('video');el.controls=true;el.preload='metadata';el.style.maxHeight='380px'}
+      else if(/\.wav$/.test(o.path)){el=document.createElement('audio');el.controls=true;el.preload='metadata'}
+      else if(/\.png$/.test(o.path)){el=document.createElement('img');el.alt='Mẫu TEST phi y khoa';el.style.maxWidth='100%';el.style.borderRadius='10px'}
+      else if(o.path==='script.yaml'){
+        el=document.createElement('div');
+        const script=b.previews?.[o.path];
+        for(const line of script?.lines||[]){
+          const row=document.createElement('div'); row.className='fa-line';
+          const label=document.createElement('strong'); label.textContent=line.id+' · ';
+          row.append(label,document.createTextNode(line.text));
+          const scene=script.scenes.find(s=>s.script_line===line.id);
+          if(scene){const note=document.createElement('small');note.textContent='Hình minh họa: '+scene.visual;row.append(note)}
+          el.append(row);
+        }
+      }
+      else if(o.path==='qa.json'){
+        const qa=JSON.parse(b.previews?.[o.path]||'{}');
+        el=document.createElement('pre');el.className='fa-text';
+        el.textContent=`Mẫu TEST · ${qa.renderer}\nThời lượng: ${qa.duration_seconds} giây · ${qa.fps} khung hình/giây\nĐịnh dạng: ${(qa.formats||[]).join(', ')}\nPhụ đề:\n${(qa.captions||[]).join('\n')}`;
+      }
+      else if(b.previews?.[o.path]){el=document.createElement('pre');el.className='fa-text';el.textContent=b.previews[o.path]}
+      else {el=document.createElement('div')}
+      if(['VIDEO','AUDIO','IMG'].includes(el.tagName)) el.src=url;
+      const caption=document.createElement('figcaption');caption.textContent=labels[o.path]||'Tệp mẫu';
+      fig.append(caption,el); box.append(fig);
+    }
   }
+  $('fa-tech').hidden=!b;
   faButtons();
 }
 async function faLoad(selected){
   const [list, standards]=await Promise.all([faGet('/api/trials'),faGet('/api/standards/accepted')]);
   faStandards=standards.accepted;
-  if(faInitial){$('factory-acceptance').open=[1,2,3,4].some(s=>!faStandards[s]);faInitial=false}
-  $('fa-progress').textContent=[1,2,3,4].map(s=>`${s}: ${faStandards[s]?'đã chấp nhận v'+faStandards[s].version:'chưa chấp nhận'}`).join(' · ');
+  faSyncCollapse();
+  faRenderStepper();
+  syncStartGate();
   const stage=Number($('fa-stage').value), items=list.trials.filter(t=>t.stage===stage);
+  $('fa-trials-wrap').hidden=items.length<=1;
   $('fa-trials').innerHTML='<option value="">Chọn mẫu TEST</option>'+items.map(t=>
     `<option value="${esc(t.id)}">${esc(t.topic)} · ${esc(FA_STATUS[t.status]||'Chưa rõ trạng thái')} · ${esc(t.id.slice(0,8))}</option>`).join('');
   const id=items.some(t=>t.id===selected)?selected:(items.at(-1)?.id||'');
   $('fa-trials').value=id; await faShow(id);
 }
-async function faAction(fn){
-  if(faBusy) return; faBusy=true; faButtons(); $('fa-result').textContent='Đang xử lý mẫu TEST…';
-  try{await fn();$('fa-result').textContent='Đã lưu kết quả TEST.';await refresh()}
-  catch(e){$('fa-result').textContent=e.message}
+async function faAction(fn, doneMsg='Đã lưu kết quả TEST.'){
+  if(faBusy) return; faBusy=true; faButtons();
+  $('fa-result').className=''; $('fa-result').textContent='Đang xử lý mẫu TEST…';
+  try{await fn();$('fa-result').className='';$('fa-result').textContent=doneMsg;await refresh()}
+  catch(e){$('fa-result').className='err';$('fa-result').textContent=e.message}
   finally{faBusy=false;faButtons()}
 }
 $('fa-create').onclick=()=>faAction(async()=>{
-  const b=await faPost('create',{stage:Number($('fa-stage').value),topic:$('fa-topic').value});await faLoad(b.id);
-});
+  const created=await faPost('create',{stage:Number($('fa-stage').value),topic:$('fa-topic').value});
+  await faPost('run',{trial_id:created.id});
+  await faLoad(created.id);
+},'Đã tạo và chạy mẫu TEST — mời bác sĩ xem mẫu ở Bước 2.');
 $('fa-run').onclick=()=>faAction(async()=>{const id=faBundle.id;await faPost('run',{trial_id:id});await faLoad(id)});
 $('fa-save').onclick=()=>faAction(async()=>{
   await faPost('standard-draft',{trial_id:faBundle.id,stage:faBundle.stage,text:$('fa-draft').value});await faShow(faBundle.id);
-});
+},'Đã lưu nháp góp ý.');
 $('fa-accept').onclick=()=>faAction(async()=>{
-  const b=faBundle;
+  let b=faBundle;
+  const text=$('fa-draft').value.trim();
   const pin=$('fa-pin').value; $('fa-pin').value='';
-  await faPost('accept',{trial_id:b.id,stage:b.stage,text:$('fa-draft').value,pin,
+  if(text && text!==(b.draft?.text||'')){
+    await faPost('standard-draft',{trial_id:b.id,stage:b.stage,text});
+    b=await faGet(`/api/trials/${encodeURIComponent(b.id)}/bundle`);
+    faBundle=b;
+  }
+  await faPost('accept',{trial_id:b.id,stage:b.stage,text:b.draft?.text||text,pin,
     expected_input_hash:b.input_hash,expected_version:faStandards[b.stage]?.version||0,
-    expected_standards_hash:b.standards_hash,reviewer:$('fa-reviewer').value});await faLoad(b.id);
-});
-$('fa-reload').onclick=()=>faAction(()=>faLoad(faBundle?.id));
+    expected_standards_hash:b.standards_hash,reviewer:$('fa-reviewer').value});
+  await faLoad(b.id);
+  const nextStage=[1,2,3,4].find(s=>!faStandards[s]);
+  if(nextStage){
+    $('fa-stage').value=String(nextStage);
+    await faLoad();
+  }
+},'Đã chấp nhận chuẩn giai đoạn.');
+$('fa-reload').onclick=()=>faAction(()=>faLoad(faBundle?.id),'Đã tải lại mẫu.');
 $('fa-stage').onchange=()=>faAction(()=>faLoad());
 $('fa-trials').onchange=()=>faAction(()=>faShow($('fa-trials').value));
 $('fa-draft').oninput=faButtons;
-faLoad().catch(e=>$('fa-result').textContent=e.message);
+$('fa-pin').oninput=faButtons;
+$('fa-reviewer').oninput=faButtons;
+faLoad().catch(e=>{$('fa-result').className='err';$('fa-result').textContent=e.message});
 refresh(); setInterval(refresh,3000);
 </script>
 <script>
@@ -972,8 +1294,8 @@ async function opsPreview(){
   opsCurrent=null; const slug=$('ops-project').value;
   if(!slug){$('ops-preview').textContent='Chọn dự án để xem bước tiếp theo và cache.';return}
   opsCurrent=await opsGet(`/api/project/${encodeURIComponent(slug)}/operations`);
-  const d=opsCurrent,c=d.cache;
-  $('ops-preview').textContent=`Revision ${d.revision} · Bước: ${d.next_step||'chờ duyệt / hoàn tất'}\nCổng: ${d.gate||'—'}\n${c.lines} dòng đọc · ${c.files} file cache hiện có\nTối đa ${c.max_requests} yêu cầu TTS cho một lượt. ${c.note}\n${d.blocked||d.retry_status.reason||''}${d.retry_status.retry_after?'\nThử lại sau (retry_after): '+d.retry_status.retry_after:''}`;
+  const d=opsCurrent,c=d.cache,rawErr=d.blocked||d.retry_status.reason||'';
+  $('ops-preview').textContent=`Revision ${d.revision} · Bước: ${STEP_VI[d.next_step]||d.next_step||'chờ duyệt / hoàn tất'}\nCổng: ${d.gate||'—'}\n${c.lines} dòng đọc · ${c.files} file cache hiện có\nTối đa ${c.max_requests} yêu cầu TTS cho một lượt. ${c.note}${rawErr?'\nLỗi: '+friendlyError(rawErr)+'\nChi tiết: '+rawErr:''}${d.retry_status.retry_after?'\nThử lại sau (retry_after): '+d.retry_status.retry_after:''}`;
 }
 $('ops-tabs').querySelectorAll('[data-ops-tab]').forEach(button=>button.onclick=async()=>{
   opsTab=button.dataset.opsTab;
