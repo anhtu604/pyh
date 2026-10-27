@@ -2,6 +2,7 @@ from hashlib import sha256
 
 import pytest
 
+from healthvideo.domain.brand import MascotPose
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from tests.brand_artwork import png_bytes
 
@@ -68,7 +69,7 @@ def artwork_brand(tmp_path, monkeypatch):
 
     data = read_yaml(brand.Path("profiles/brand.vi.yaml"))
     artwork = {}
-    for pose in ("welcome", "explain", "caution"):
+    for pose in [item.value for item in MascotPose]:
         path = f"assets/brand/mascot/{pose}.png"
         target = tmp_path / path
         target.parent.mkdir(parents=True, exist_ok=True)

@@ -163,7 +163,13 @@
       "enum": [
         "welcome",
         "explain",
-        "caution"
+        "caution",
+        "point_up",
+        "thinking",
+        "surprised",
+        "thumbs_up",
+        "blank_board",
+        "myth_bust"
       ],
       "title": "MascotPose",
       "type": "string"

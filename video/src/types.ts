@@ -10,7 +10,7 @@ export const VisualAssetRefSchema = z
   .object({
     path: safeRelativePath,
     role: z.enum(['whiteboard', 'mascot', 'brand', 'chart']),
-    pose: z.enum(['welcome', 'explain', 'caution']).nullable().optional(),
+    pose: z.enum(['welcome', 'explain', 'caution', 'point_up', 'thinking', 'surprised', 'thumbs_up', 'blank_board', 'myth_bust']).nullable().optional(),
   })
   .superRefine((asset, context) => {
     if (asset.role === 'mascot' && !asset.pose) {

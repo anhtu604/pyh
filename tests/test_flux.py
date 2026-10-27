@@ -276,3 +276,25 @@ def test_mascot_poses_manifest_staleness_and_only(tmp_path):
 
     with pytest.raises(ValueError, match='Unknown pose id'):
         generate_mascot_poses(anchor=anchor, out_dir=out_dir, only='nonexistent', generate=fake_generate)
+
+
+def test_cutout_pose_clears_background_and_named_holes_only(tmp_path):
+    from PIL import Image, ImageDraw
+
+    from tools.flux.mascot_poses import cutout_pose
+
+    image = Image.new("RGB", (100, 100), "white")
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((20, 20, 80, 80), fill="#12304A")
+    draw.rectangle((30, 30, 45, 70), fill="white")  # gap trapped between "arm" and "body"
+    draw.rectangle((55, 30, 70, 70), fill="white")  # blank board: must stay opaque
+    path = tmp_path / "pose.png"
+    image.save(path)
+
+    figure = cutout_pose(path, holes=((35, 50),), figure_height=61)
+    alpha = figure.getchannel("A")
+    assert figure.size == (61, 61)  # cropped to the figure, background gone
+    assert alpha.getpixel((17, 30)) == 0
+    assert alpha.getpixel((44, 30)) == 255
+    with pytest.raises(ValueError, match="Hole seed"):
+        cutout_pose(path, holes=((25, 25),))

@@ -17,6 +17,12 @@ class MascotPose(StrEnum):
     WELCOME = "welcome"
     EXPLAIN = "explain"
     CAUTION = "caution"
+    POINT_UP = "point_up"
+    THINKING = "thinking"
+    SURPRISED = "surprised"
+    THUMBS_UP = "thumbs_up"
+    BLANK_BOARD = "blank_board"
+    MYTH_BUST = "myth_bust"
 
 
 class LogoVariant(StrEnum):
@@ -97,16 +103,12 @@ class MascotIdentity(BaseModel):
 
     @model_validator(mode="after")
     def _exact_pose_set(self) -> "MascotIdentity":
-        expected = (
-            MascotPose.WELCOME,
-            MascotPose.EXPLAIN,
-            MascotPose.CAUTION,
-        )
+        expected = tuple(MascotPose)
         if self.poses != expected:
-            raise ValueError("mascot poses must be welcome, explain, caution")
+            raise ValueError(f"mascot poses must be {', '.join(expected)}")
         if self.artwork is not None:
             if set(self.artwork) != set(expected):
-                raise ValueError("mascot artwork requires all three poses")
+                raise ValueError("mascot artwork requires all poses")
             dimensions = {item.png_dimensions() for item in self.artwork.values()}
             if len(dimensions) != 1:
                 raise ValueError("mascot artwork must have the same dimensions")

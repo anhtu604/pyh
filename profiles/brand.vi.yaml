@@ -18,10 +18,22 @@ mascot:
     - welcome
     - explain
     - caution
+    - point_up
+    - thinking
+    - surprised
+    - thumbs_up
+    - blank_board
+    - myth_bust
   artwork:
-    welcome: {path: assets/brand/mascot/welcome.png, sha256: "bb6eca968b72557592eaf0e702d0a9d4a8e8afa186162d00c21abed0ff090f25"}
-    explain: {path: assets/brand/mascot/explain.png, sha256: "f3bd15c0454e5cdbde817c32968ba570d6946024533f88862aa102671558c090"}
-    caution: {path: assets/brand/mascot/caution.png, sha256: "ef045849d5904dae8e584729e61448e7b710d3988adaae16818e7ab1bdce2830"}
+    welcome: {path: assets/brand/mascot/welcome.png, sha256: "43012ce82cd3a392daf8d2473a3b3e36d4605be6e9166586402e493b09849ef7"}
+    explain: {path: assets/brand/mascot/explain.png, sha256: "156edb47bae626e527597a09b3ab0ee7d26773181a90f24475f0fefca830075a"}
+    caution: {path: assets/brand/mascot/caution.png, sha256: "76e6e2ee49e0c4817dddcaa448dc6248be07eb62b24f562c40f882514ae1173f"}
+    point_up: {path: assets/brand/mascot/point_up.png, sha256: "0bf0eed765f5c44140eecd7c1733922a63cad87e98a71a77ae19c04892f3b352"}
+    thinking: {path: assets/brand/mascot/thinking.png, sha256: "6bc8948feb018334f7c09e9922ecbc7c03006227990b69fddd9fbc8872279ae1"}
+    surprised: {path: assets/brand/mascot/surprised.png, sha256: "00e28c112bcbcaef7fc4a2db4350f8824a52e8e2f0c090c030ab8af672bd0391"}
+    thumbs_up: {path: assets/brand/mascot/thumbs_up.png, sha256: "147f9995f416fe79de394d2b78f75b858ddf63d44323a546e8713397dbf70e14"}
+    blank_board: {path: assets/brand/mascot/blank_board.png, sha256: "5bfa76642794b97458948208601c3445912af31fa42820f55f2131ccd6e73125"}
+    myth_bust: {path: assets/brand/mascot/myth_bust.png, sha256: "5b40174a96384f9bdae66360197925974d71a3cd3634785e2aa9c21a6fe11f37"}
 
 cta:
   youtube_full_video: "Xem bản đầy đủ trên YouTube"

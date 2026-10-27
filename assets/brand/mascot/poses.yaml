@@ -3,6 +3,7 @@ poses:
     label: "Chỉ tay lên (ý chính)"
     change: "Change only the pose: the same character stands facing the camera squarely from head to feet and raises the right hand to point straight up with the index finger at head height, left arm relaxed at the side, smiling warmly."
     seed: 101
+    holes: [[221, 236]]  # gap between the raised arm and the head
   - id: thinking
     label: "Suy nghĩ tay chống cằm"
     change: "Change only the pose: the same character stands facing the camera squarely from head to feet with the right hand resting under the chin in a thoughtful posture, left arm supporting the right elbow, eyes looking slightly upward with a curious expression."
@@ -15,6 +16,7 @@ poses:
     label: "Giơ ngón cái"
     change: "Change only the pose: the same character stands facing the camera squarely from head to feet and gives a clear thumbs-up gesture with the right hand at chest height, left arm relaxed at the side, cheerful confident smile."
     seed: 104
+    holes: [[381, 801]]  # gap between the legs
   - id: blank_board
     label: "Cầm bảng trắng trống"
     change: "Change only the pose: the same character stands facing the camera squarely from head to feet holding a small plain blank white rectangular sign board at chest level with both hands, completely empty white surface without any marks, friendly smile."

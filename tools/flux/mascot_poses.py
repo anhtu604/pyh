@@ -6,7 +6,7 @@ import json
 import sys
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "src"))
@@ -59,6 +59,7 @@ def load_pose_specs(poses_file: Path = DEFAULT_POSES_FILE) -> list[dict]:
             "label": str(item.get("label", pose_id)).strip(),
             "change": change,
             "seed": seed,
+            "holes": tuple(tuple(point) for point in item.get("holes") or ()),
         })
     return specs
 
@@ -180,8 +181,65 @@ def generate_mascot_poses(
     return manifest
 
 
+SOURCE_DIR = REPO_ROOT / "assets/brand/mascot/source"
+SOURCE_FIGURE_HEIGHT = 1277  # figure height of the original welcome/explain/caution sources
+
+
+def cutout_pose(
+    path: Path, holes: tuple[tuple[int, int], ...] = (), figure_height: int = SOURCE_FIGURE_HEIGHT,
+) -> Image.Image:
+    """Turn a white-background candidate into an unoutlined RGBA source like the originals.
+
+    Only near-white pixels connected to the image border become transparent, so the cream
+    shirt and a blank board inside the figure stay opaque.
+    """
+    with Image.open(path) as raw:
+        rgb = _paste_rgba_on_white(raw)
+    mask = rgb.convert("L").point(lambda value: 255 if value >= 236 else 0)
+    for seed in ((0, 0), (mask.width - 1, 0), (0, mask.height - 1), (mask.width - 1, mask.height - 1)):
+        if mask.getpixel(seed) == 255:
+            ImageDraw.floodfill(mask, seed, 128)
+    # background trapped between an arm/leg and the body looks like the shirt, glasses or a
+    # blank board to a threshold, so each pose names its gaps explicitly (candidate pixels)
+    for seed in holes:
+        if mask.getpixel(tuple(seed)) != 255:
+            raise ValueError(f"Hole seed {seed} is not on enclosed background in {path}")
+        ImageDraw.floodfill(mask, tuple(seed), 128)
+    # erode 2 px so the antialiased light fringe never sits on top of the baked outline
+    alpha = mask.point(lambda value: 0 if value == 128 else 255).filter(ImageFilter.MinFilter(5))
+    figure = rgb.convert("RGBA")
+    figure.putalpha(alpha)
+    bbox = alpha.getbbox()
+    if bbox is None:
+        raise ValueError(f"Pose candidate has no figure: {path}")
+    figure = figure.crop(bbox)
+    scale = figure_height / figure.height
+    return figure.resize((round(figure.width * scale), figure_height), Image.Resampling.LANCZOS)
+
+
+def promote_poses(
+    out_dir: Path = DEFAULT_OUT_DIR, source_dir: Path = SOURCE_DIR, poses_file: Path = DEFAULT_POSES_FILE,
+) -> list[Path]:
+    """Copy every non-stale candidate into the brand source folder for build_mascot_artwork."""
+    manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+    stale = [pose_id for pose_id, entry in manifest["poses"].items() if entry.get("stale")]
+    if stale:
+        raise ValueError(f"Regenerate stale poses before promoting: {', '.join(stale)}")
+    specs = {spec["id"]: spec for spec in load_pose_specs(poses_file)}
+    source_dir.mkdir(parents=True, exist_ok=True)
+    written = []
+    for pose_id in manifest["poses"]:
+        target = source_dir / f"{pose_id}.png"
+        holes = specs[pose_id]["holes"] if pose_id in specs else ()
+        cutout_pose(out_dir / f"{pose_id}.png", holes).save(target, optimize=False, compress_level=9)
+        written.append(target)
+    return written
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--promote", action="store_true",
+                        help="Write reviewed candidates to assets/brand/mascot/source/ instead of generating")
     parser.add_argument("--anchor", type=Path, default=DEFAULT_ANCHOR)
     parser.add_argument("--poses-file", type=Path, default=DEFAULT_POSES_FILE)
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
@@ -190,6 +248,10 @@ def main() -> int:
     parser.add_argument("--height", type=int, default=1024)
     args = parser.parse_args()
     try:
+        if args.promote:
+            for path in promote_poses(args.out_dir, poses_file=args.poses_file):
+                print(path.as_posix())
+            return 0
         manifest = generate_mascot_poses(
             anchor=args.anchor,
             poses_file=args.poses_file,

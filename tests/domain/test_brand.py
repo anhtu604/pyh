@@ -35,11 +35,7 @@ def test_brand_profile_has_approved_pyh_tokens(brand_profile_path) -> None:
     brand = load_brand_profile(brand_profile_path)
     assert brand.canvas == BrandCanvas(width=1080, height=1920, fps=30)
     assert brand.colors.model_dump() == valid_brand_data()["colors"]
-    assert brand.mascot.poses == (
-        MascotPose.WELCOME,
-        MascotPose.EXPLAIN,
-        MascotPose.CAUTION,
-    )
+    assert brand.mascot.poses == tuple(MascotPose)
 
 
 @pytest.mark.parametrize("color", ["12304A", "#xyzxyz", "#12304AFF"])
@@ -86,7 +82,7 @@ def test_palette_matches_profile(brand_profile_path) -> None:
 
 
 @pytest.mark.parametrize("problem, message", [
-    ("missing_pose", "three poses"),
+    ("missing_pose", "all poses"),
     ("hash", "SHA-256"),
     ("signature", "PNG"),
     ("rgb", "RGBA"),

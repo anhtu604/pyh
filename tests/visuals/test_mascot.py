@@ -29,7 +29,7 @@ def test_mascot_pose_is_safe_and_deterministic(brand, pose: MascotPose) -> None:
 
 def test_mascot_poses_differ_but_share_rig(brand) -> None:
     outputs = {pose: render_mascot(brand, pose) for pose in MascotPose}
-    assert len(set(outputs.values())) == 3
+    assert len(set(outputs.values())) == len(MascotPose)
     for pose, svg in outputs.items():
         assert f'mascot-pose-{pose.value}'.encode() in svg
 

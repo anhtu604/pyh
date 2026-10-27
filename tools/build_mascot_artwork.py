@@ -12,7 +12,6 @@ import yaml
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageOps
 
 ROOT = Path(__file__).resolve().parents[1]
-POSES = ("welcome", "explain", "caution")
 
 
 def _disk_dilation(alpha: Image.Image, radius: int) -> Image.Image:
@@ -65,7 +64,7 @@ def main() -> None:
     colours = profile["colors"]
     directory = ROOT / "assets/brand/mascot"
     figures = {}
-    for pose in POSES:
+    for pose in profile["mascot"]["poses"]:
         with Image.open(directory / "source" / f"{pose}.png") as source:
             figures[pose] = outline_figure(source, colours["night"], colours["off_white"])
     size = (max(768, *(im.width for im in figures.values())),

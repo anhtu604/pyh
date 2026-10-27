@@ -23,7 +23,7 @@ _ARMS = {
 def render_mascot(brand: BrandProfile, pose: MascotPose) -> bytes:
     """Render one fixed reaction pose without accepting content fields."""
     colors = brand.colors
-    arms = _ARMS[pose]
+    arms = _ARMS.get(pose, _ARMS[MascotPose.EXPLAIN])
     return (
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 900" role="img" '
         f'aria-label="PYH guide placeholder {pose.value}">\n'
