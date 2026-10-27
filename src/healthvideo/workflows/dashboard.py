@@ -21,7 +21,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import URLError
-from urllib.parse import unquote
+from urllib.parse import parse_qs, unquote, urlsplit
 from urllib.request import urlopen
 
 from healthvideo.agents import RUNNING_MARKER
@@ -30,7 +30,13 @@ from healthvideo.domain.gate_review import GateKind
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.env import child_env
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
-from healthvideo.workflows import factory, standards
+from healthvideo.workflows import (
+    dashboard_operations,
+    factory,
+    factory_standards,
+    factory_trials,
+    standards,
+)
 from healthvideo.workflows.gate_review import approve_gate, reject_gate
 
 APP_ID = 'healthvideo-dashboard'
@@ -148,7 +154,8 @@ def snapshot(root: Path, *, agents: Callable[[], list[str]] | None = None) -> di
     pid = factory.running_pid(root)
     return {
         'app': APP_ID,
-        'factory': {'running': pid is not None, 'pid': pid},
+        'factory': {'running': pid is not None, 'pid': pid,
+                    'can_start': set(factory_standards.accepted_standards(root)) == {1, 2, 3, 4}},
         'agents': agents() if agents is not None else running_agents(root),
         'stages': list(STAGES),
         'projects': items,
@@ -245,7 +252,8 @@ def media_file(project_dir: Path, project: ProjectManifestV2, rel: str) -> Path:
     """Resolve a render file inside the active revision's renders dir, or raise LookupError."""
     renders = (project_dir / 'revisions' / project.active_revision / 'renders').resolve()
     target = (renders / rel).resolve()
-    if renders not in target.parents or target.suffix.lower() not in MEDIA_TYPES or not target.is_file():
+    if (not renders.is_relative_to(project_dir.resolve()) or renders not in target.parents
+            or target.suffix.lower() not in MEDIA_TYPES or not target.is_file()):
         raise LookupError('Không có file này')
     return target
 
@@ -333,7 +341,8 @@ def decide(root: Path, project_dir: Path, body: dict, *, limiter: PinLimiter,
     clear_draft(root, project_dir.name)
     if draft or reason:
         message += ' Góp ý đã được ghi nhớ làm chuẩn.'
-    if factory.running_pid(root) is None:
+    if (factory.running_pid(root) is None
+            and set(factory_standards.accepted_standards(root)) == {1, 2, 3, 4}):
         factory.start_background(root)
         message += ' Đã bật xưởng để chạy tiếp.'
     return message
@@ -410,6 +419,13 @@ class _Handler(BaseHTTPRequestHandler):
         path = unquote(self.path.split('?', 1)[0])
         parts = [p for p in path.split('/') if p]
         try:
+            extra = dashboard_operations.get_route(self.server, parts, parse_qs(urlsplit(self.path).query))
+            if extra is not None:
+                if isinstance(extra, bytes):
+                    self._send(HTTPStatus.OK, extra, 'image/png')
+                else:
+                    self._json(extra)
+                return
             if path in {'/', '/index.html'}:
                 html = HTML_PATH.read_text(encoding='utf-8').replace('__TOKEN__', self.server.token)
                 self._send(HTTPStatus.OK, html.encode('utf-8'), 'text/html; charset=utf-8')
@@ -419,6 +435,8 @@ class _Handler(BaseHTTPRequestHandler):
                 self._json(snapshot(self.server.root, agents=self.server.agents))
             elif path == '/api/standards':
                 self._json({'entries': standards.load(self.server.root)[::-1]})
+            elif parts[:2] == ['api', 'trials'] or path == '/api/standards/accepted':
+                self._trial_get(parts)
             elif len(parts) == 4 and parts[:2] == ['api', 'project'] and parts[3] == 'bundle':
                 project_dir, project = self.server.project_dir(parts[2])
                 self._json(review_bundle(self.server.root, project_dir, project))
@@ -474,6 +492,45 @@ class _Handler(BaseHTTPRequestHandler):
             except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
                 return
 
+    def _trial_get(self, parts: list[str]) -> None:
+        root = self.server.root
+        if parts == ['api', 'standards', 'accepted']:
+            self._json({'accepted': factory_standards.accepted_standards(root),
+                        'standards_hash': factory_standards.standards_hash(root)})
+        elif len(parts) == 2:
+            self._json({'trials': factory_trials.list_trials(root), 'mode': 'TEST',
+                        'real_service': False, 'quota': 1})
+        elif len(parts) == 4 and parts[3] == 'bundle':
+            bundle = factory_trials.trial_bundle(root, parts[2])
+            bundle['standards_hash'] = factory_standards.standards_hash(root)
+            bundle['accepted'] = factory_standards.accepted_standards(root)
+            bundle['previews'] = {}
+            if bundle['status'] == 'ready':
+                directory = factory_trials.trial_dir(root, parts[2])
+                for output in bundle['outputs']:
+                    name = output['path']
+                    if name in {'sample.txt', 'captions.txt', 'qa.json', 'script.yaml'}:
+                        target = directory / name
+                        bundle['previews'][name] = (read_yaml(target) if name == 'script.yaml'
+                                                    else target.read_text(encoding='utf-8'))
+            self._json(bundle)
+        elif len(parts) >= 5 and parts[3] == 'media':
+            bundle = factory_trials.trial_bundle(root, parts[2])
+            relative = '/'.join(parts[4:])
+            output = next((o for o in bundle['outputs'] if o['path'] == relative), None)
+            if output is None or bundle['status'] != 'ready':
+                raise LookupError('Không có media đã kiểm hash này.')
+            directory = factory_trials.trial_dir(root, parts[2]).resolve()
+            target = (directory / relative).resolve()
+            if not target.is_relative_to(directory):
+                raise LookupError('Media ngoài khu thử.')
+            if target.suffix.lower() in MEDIA_TYPES:
+                self._file(target)
+            else:
+                self._send(HTTPStatus.OK, target.read_bytes(), 'text/plain; charset=utf-8')
+        else:
+            raise LookupError('Không có route thử này.')
+
     def do_POST(self) -> None:
         if not self._host_ok() or not secrets.compare_digest(
                 self.headers.get('X-Dashboard-Token', ''), self.server.token):
@@ -482,7 +539,7 @@ class _Handler(BaseHTTPRequestHandler):
         parts = [p for p in self.path.split('/') if p]
         try:
             length = int(self.headers.get('Content-Length') or 0)
-            if length > MAX_BODY:
+            if length < 0 or length > MAX_BODY:
                 raise ValueError('Yêu cầu quá lớn.')
             raw = self.rfile.read(length) if length else b''
             body = json.loads(raw.decode('utf-8')) if raw else {}
@@ -519,12 +576,15 @@ class DashboardServer(ThreadingHTTPServer):
         return f'http://127.0.0.1:{self.server_address[1]}/'
 
     def project_dir(self, slug: str) -> tuple[Path, ProjectManifestV2]:
-        for path, project in factory.projects(self.root):
-            if path.name == slug:
-                return path, project
-        raise LookupError(f'Không có project {slug}')
+        layout = dashboard_operations.project_layout(self.root, slug)
+        return layout.project_dir, layout.manifest
 
-    def dispatch(self, parts: list[str], body: dict | None = None) -> str:
+    def dispatch(self, parts: list[str], body: dict | None = None) -> str | dict:
+        if len(parts) == 3 and parts[:2] == ['api', 'trials']:
+            return self.trial_action(parts[2], body or {})
+        extra = dashboard_operations.post_route(self, parts, body or {})
+        if extra is not None:
+            return extra
         if len(parts) == 3 and parts[0] == 'api' and parts[1] == 'standards':
             key = f'standards/{parts[2]}'
             if key in self.actions:
@@ -539,11 +599,50 @@ class DashboardServer(ThreadingHTTPServer):
                 return self.actions[key](parts[2], body or {})
         raise LookupError('Không có thao tác này')
 
+    def trial_action(self, action: str, body: dict) -> dict:
+        allowed = {
+            'create': {'stage', 'topic'}, 'run': {'trial_id', 'real_service'},
+            'standard-draft': {'trial_id', 'stage', 'text'},
+            'accept': {'trial_id', 'stage', 'text', 'expected_input_hash', 'expected_version',
+                       'reviewer', 'pin', 'expected_standards_hash'},
+        }
+        if action not in allowed:
+            raise LookupError('Không có thao tác thử này.')
+        if set(body) - allowed[action]:
+            raise ValueError('Field không được phép trong khu TEST.')
+        root = self.root
+        if action == 'create':
+            return factory_trials.create_trial(root, body.get('stage'), topic=body.get('topic', 'TEST — Hình tròn chuyển động'))
+        trial_id = str(body.get('trial_id', ''))
+        if action == 'run':
+            return factory_trials.run_trial(root, trial_id, real_service=body.get('real_service', False))
+        stage = body.get('stage')
+        if action == 'standard-draft':
+            return factory_standards.save_standard_draft(root, stage, body.get('text', ''), trial_id)
+        # All configuration decisions are serialized, including two browser tabs.
+        required = allowed['accept'] - {'reviewer', 'pin'}
+        if required - set(body):
+            raise ValueError('Thiếu bằng chứng/phiên bản/chuẩn đã xem; tải lại mẫu.')
+        reviewer = reviewer_name() or str(body.get('reviewer', '')).strip()
+        if not reviewer:
+            raise ValueError('Nhập tên bác sĩ duyệt.')
+        pin_file = pin_path()
+        if not pin_file.is_file():
+            raise ValueError('Chưa đặt PIN; chạy healthvideo review set-pin một lần.')
+        self.limiter.check(str(body.get('pin', '')), lambda value: verify_pin(value, path=pin_file))
+        return factory_standards.accept_standard(
+            root, stage, trial_id=trial_id, expected_input_hash=body['expected_input_hash'],
+            expected_version=body['expected_version'], reviewer=reviewer,
+            expected_text=body['text'], expected_standards_hash=body['expected_standards_hash'],
+            now=datetime.now().astimezone())
+
 
 def default_actions(server: DashboardServer) -> dict[str, Callable[..., str]]:
     root = server.root
 
     def start() -> str:
+        from healthvideo.workflows.factory_standards import require_accepted
+        require_accepted(root)
         return f'Xưởng đang chạy (PID {factory.start_background(root)}).'
 
     def stop() -> str:

@@ -79,6 +79,34 @@ def test_rejects_foreign_audio_host_and_unknown_tag(tmp_path):
     assert not any("evil" in c.full_url for c in calls)
     with pytest.raises(ValueError, match="unsupported audio tag"):
         _tts(opener).synthesize(TTSRequest(text="[shouts] Gút", language="vi"), tmp_path / "l.wav")
+    with pytest.raises(ValueError, match="speed"):
+        _tts(opener).synthesize(TTSRequest(text="Gút", language="vi", speed=2.5), tmp_path / "l.wav")
+
+
+@pytest.mark.parametrize("mode", ["silent", "unreadable"])
+def test_silent_or_unreadable_decoded_audio_is_retryable_vibi_error(tmp_path, mode):
+    opener, _ = _opener(["completed"])
+
+    def bad_decode(argv, **kwargs):
+        out = argv[-1]
+        if mode == "unreadable":
+            with open(out, "wb") as stream:
+                stream.write(b"not-a-wav")
+        else:
+            with wave.open(out, "wb") as audio:
+                audio.setnchannels(1)
+                audio.setsampwidth(2)
+                audio.setframerate(48000)
+                audio.writeframes(b"\x00\x00" * 4800)
+        return subprocess.CompletedProcess(argv, 0)
+
+    tts = VibiTTS(PROFILE, api_key="secret-key", opener=opener, runner=bad_decode, sleep=lambda s: None)
+    output = tmp_path / "bad.wav"
+    with pytest.raises(VibiError) as caught:
+        tts.synthesize(TTSRequest(text="Gút", language="vi"), output)
+    assert not isinstance(caught.value, ValueError)
+    assert "secret-key" not in str(caught.value)
+    assert not output.exists()
 
 
 def test_repo_profile_is_the_cloned_voice():

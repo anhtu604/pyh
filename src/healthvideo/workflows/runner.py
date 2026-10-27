@@ -21,6 +21,11 @@ from healthvideo.storage.files import (
     write_yaml_atomic,
 )
 from healthvideo.storage.queue import load_queue
+from healthvideo.workflows.production_retry import (
+    clear_retry,
+    record_failure,
+    retry_status,
+)
 from healthvideo.workflows.standards import prompt_block
 from healthvideo.workflows.visual_review import review_pending
 
@@ -238,6 +243,21 @@ def run_queue(
                         report.at_gate.append(entry.slug)
                 break
 
+            if step == "produce":
+                try:
+                    status = retry_status(root, project_dir, state)
+                except ValueError as exc:
+                    _mark_blocked(root, entry.slug, str(exc), report)
+                    break
+                if not status["allowed"]:
+                    _mark_blocked(
+                        root,
+                        entry.slug,
+                        f"bước produce lỗi: {status['reason']}",
+                        report,
+                    )
+                    break
+
             if step == "produce" and deps.visual_review_pending(project_dir):
                 step = "visual_review"
             elif step == "produce" and not deps.posts_ready(project_dir):
@@ -258,12 +278,12 @@ def run_queue(
                     "question": entry.question,
                     "doctor_note": entry.doctor_note or "",
                 }
-                if step.startswith("revise_") or step == 'draft':
+                if step.startswith("revise_") or step == "draft":
                     prompt_fields["reject_note"] = (
                         deps.reject_note(project_dir) or ""
                     )
                 prompt = render_prompt(step, **prompt_fields)
-                standards_block = prompt_block(root)
+                standards_block = prompt_block(root, slug=entry.slug)
                 if standards_block:
                     prompt = f"{prompt.rstrip()}\n\n{standards_block}"
                 before = deps.code_snapshot(root) if deps.code_snapshot is not None else None
@@ -294,14 +314,37 @@ def run_queue(
                     # Python validates the report, bounds regeneration and renders the
                     # chosen candidate/fallback before it can enter the physician gate.
                     try:
+                        status = retry_status(
+                            root, project_dir, deps.read_state(project_dir)
+                        )
+                    except ValueError as exc:
+                        _mark_blocked(root, entry.slug, str(exc), report)
+                        break
+                    if not status["allowed"]:
+                        _mark_blocked(
+                            root,
+                            entry.slug,
+                            f"visual_review lỗi: {status['reason']}",
+                            report,
+                        )
+                        break
+                    try:
                         deps.python_steps["produce"](project_dir)
                     except Exception as exc:  # noqa: BLE001
+                        record_failure(
+                            root, project_dir, deps.read_state(project_dir), exc
+                        )
                         _mark_blocked(root, entry.slug, f"visual_review lỗi: {exc}", report)
                         break
+                    clear_retry(root, entry.slug)
             elif step in deps.python_steps:
                 try:
                     deps.python_steps[step](project_dir)
                 except Exception as exc:  # noqa: BLE001 — one failing topic is blocked, the queue keeps going
+                    if step == "produce":
+                        record_failure(
+                            root, project_dir, deps.read_state(project_dir), exc
+                        )
                     _mark_blocked(
                         root,
                         entry.slug,
@@ -309,6 +352,8 @@ def run_queue(
                         report,
                     )
                     break
+                if step == "produce":
+                    clear_retry(root, entry.slug)
             else:
                 _mark_blocked(
                     root,

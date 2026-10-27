@@ -175,5 +175,9 @@ class ElevenLabsTTS:
                 raise ElevenLabsError("ffmpeg is required to decode ElevenLabs audio.") from None
             if result.returncode:
                 raise ElevenLabsError("ffmpeg could not decode ElevenLabs audio.")
-        report = inspect_wav(output, require_signal=self.require_signal)
+        try:
+            report = inspect_wav(output, require_signal=self.require_signal)
+        except ValueError as error:
+            output.unlink(missing_ok=True)
+            raise ElevenLabsError(f"ElevenLabs returned invalid audio: {error}") from None
         return TTSResult(provider=self.provider_name, audio_file=output, duration_ms=report.duration_ms)

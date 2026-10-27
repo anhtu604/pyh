@@ -127,7 +127,7 @@ def _synthesize_cached_line(
     tts: TTSProvider, request: TTSRequest, output: Path, *, cache_dir: Path,
 ) -> None:
     """Retain paid line requests even when a later render fails."""
-    if provider_identity(tts)["provider"] != "elevenlabs":
+    if provider_identity(tts)["provider"] not in {"elevenlabs", "vibi_minimax"}:
         tts.synthesize(request, output)
         return
     key = canonical_json_hash({"request": request.model_dump(mode="json"),
@@ -139,10 +139,14 @@ def _synthesize_cached_line(
             inspect_wav(cached, require_signal=getattr(tts, "require_signal", False))
             shutil.copyfile(cached, output)
             return
-    except (OSError, ValueError, AttributeError):
+    except (OSError, ValueError, TypeError, AttributeError):
         pass
     tts.synthesize(request, output)
-    inspect_wav(output, require_signal=getattr(tts, "require_signal", False))
+    try:
+        inspect_wav(output, require_signal=getattr(tts, "require_signal", False))
+    except ValueError as error:
+        output.unlink(missing_ok=True)
+        raise RuntimeError(f"TTS provider returned invalid audio: {error}") from None
     cache_dir.mkdir(parents=True, exist_ok=True)
     temporary = cached.with_suffix(".tmp")
     shutil.copyfile(output, temporary)
@@ -456,7 +460,7 @@ def _produce_v2(
                 line_audio, require_signal=getattr(tts, "require_signal", False)
             ).duration_ms
         usage_path = layout.artifact_root / "audio/tts-usage.json"
-        if provider_name == "elevenlabs" and usage_path.is_file():
+        if provider_name in {"elevenlabs", "vibi_minimax"} and usage_path.is_file():
             shutil.copyfile(usage_path, staging_dir / "audio/tts-usage.json")
         alignment = align_lines(
             line_wavs, {line.id: line.text for line in script.lines},

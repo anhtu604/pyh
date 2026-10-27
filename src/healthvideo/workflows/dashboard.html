@@ -241,6 +241,17 @@ blockquote cite{display:block;margin-top:6px;font-style:normal;font-size:12px;co
 .media figcaption{font-size:13px;color:var(--muted);margin-bottom:10px;font-weight:600}
 .media video{width:100%;max-height:62vh;border-radius:12px;background:#000}
 .media audio{width:100%}
+#factory-acceptance>summary{cursor:pointer;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+#factory-acceptance>summary::before{content:'▸';color:var(--teal)}
+#factory-acceptance[open]>summary::before{content:'▾'}
+#factory-acceptance>summary h2{margin:0}
+#factory-acceptance .fa-text{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;line-height:1.7}
+#factory-acceptance .fa-line{padding:12px 0;border-bottom:1px solid var(--line);line-height:1.6}
+#factory-acceptance .fa-line small{display:block;color:var(--muted)}
+#factory-acceptance .fa-hash{font-size:12px;color:var(--muted);overflow-wrap:anywhere;margin-top:10px}
+#fa-events{color:var(--muted);font-size:13px;line-height:1.8;padding-left:22px}
+#fa-status{color:var(--teal);font-family:inherit}
+#fa-evidence a{text-decoration:none}
 .clips{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
 .clips video{max-height:180px}
 pre.md{white-space:pre-wrap;word-break:break-word;font-family:'Be Vietnam Pro',sans-serif;font-size:14px;line-height:1.7;color:#d5def7;
@@ -298,6 +309,36 @@ pre.md{white-space:pre-wrap;word-break:break-word;font-family:'Be Vietnam Pro',s
       Duyệt ngay</button>
   </section>
 
+  <details class="glass card" id="factory-acceptance" aria-labelledby="fa-title" open>
+    <summary><h2 id="fa-title">Nghiệm thu xưởng</h2><span class="tag">TEST · ngoại tuyến</span><span class="meta">Bấm để mở / thu gọn</span></summary>
+    <p class="lead">Xem mẫu, góp ý rồi chấp nhận chuẩn từng giai đoạn 1 → 4. Đây là chuẩn cấu hình;
+      hai cổng duyệt y khoa và video của sản phẩm vẫn bắt buộc.</p>
+    <div class="actions">
+      <label>Giai đoạn <select class="inp" id="fa-stage">
+        <option value="1">1 · Chủ đề → kịch bản</option><option value="2">2 · Hình → giọng</option>
+        <option value="3">3 · Dựng → QA</option><option value="4">4 · Bài đăng → đóng gói</option>
+      </select></label>
+      <label>Chủ đề TEST <input class="inp" id="fa-topic" maxlength="500" value="TEST — Hình tròn chuyển động"></label>
+      <button class="btn" id="fa-create" type="button">Tạo mẫu TEST</button>
+      <button class="btn" id="fa-reload" type="button">Tải lại mẫu</button>
+    </div>
+    <p id="fa-progress" role="status"></p>
+    <label>Mẫu đã lưu <select class="inp" id="fa-trials"><option value="">Chọn mẫu TEST</option></select></label>
+    <p><span id="fa-status" class="tag" role="status">Chưa chọn mẫu</span></p>
+    <div id="fa-evidence" class="media" style="margin:16px 0"></div>
+    <ol id="fa-events" aria-label="Lịch sử mẫu thử"></ol>
+    <button class="btn" id="fa-run" type="button" disabled>Chạy mẫu ngoại tuyến · 0 yêu cầu trả phí</button>
+    <label style="display:block;margin:16px 0">Góp ý / chuẩn nháp cho mẫu này
+      <textarea class="inp" id="fa-draft" maxlength="8000" rows="4"></textarea></label>
+    <label id="fa-reviewer-box" hidden>Tên bác sĩ duyệt <input class="inp" id="fa-reviewer" maxlength="200" autocomplete="name"></label>
+    <div class="actions" style="margin-top:12px">
+      <button class="btn" id="fa-save" type="button" disabled>Lưu nháp góp ý</button>
+      <label>PIN bác sĩ <input class="inp" id="fa-pin" type="password" autocomplete="off" maxlength="200" style="width:150px"></label>
+      <button class="btn primary" id="fa-accept" type="button" disabled>Chấp nhận chuẩn</button>
+    </div>
+    <p id="fa-result" role="status" aria-live="polite"></p>
+  </details>
+
   <section class="stats">
     <div class="glass stat"><div class="k">Xưởng</div><div class="v" id="s-factory">—</div></div>
     <div class="glass stat"><div class="k">Chờ bác sĩ</div><div class="v" id="s-waiting">—</div></div>
@@ -305,7 +346,83 @@ pre.md{white-space:pre-wrap;word-break:break-word;font-family:'Be Vietnam Pro',s
     <div class="glass stat"><div class="k">Cập nhật</div><div class="v" id="s-time">—</div></div>
   </section>
 
-  <div class="grid">
+  <!-- Package C: queue and asset library; isolated from acceptance UI. -->
+  <nav class="controls" aria-label="Vận hành app" style="margin-bottom:18px" id="ops-tabs">
+    <button class="btn primary" type="button" data-ops-tab="overview" aria-pressed="true">Tổng quan</button>
+    <button class="btn" type="button" data-ops-tab="queue" aria-pressed="false">Hàng đợi</button>
+    <button class="btn" type="button" data-ops-tab="library" aria-pressed="false">Thư viện</button>
+  </nav>
+  <section id="ops-queue" hidden aria-label="Hàng đợi">
+    <div class="glass card">
+      <h2>Thêm chủ đề</h2>
+      <form id="ops-topic" class="ops-form">
+        <label>Tên chủ đề<input class="inp" name="title" required maxlength="200"></label>
+        <label>Mã chủ đề (chữ thường, số, dấu gạch ngang)<input class="inp" name="slug" required pattern="[a-z0-9-]{3,80}" maxlength="80"></label>
+        <label>Câu hỏi cần giải thích<textarea class="inp" name="question" required maxlength="2000"></textarea></label>
+        <label>Ghi chú của bác sĩ<textarea class="inp" name="doctor_note" maxlength="2000"></textarea></label>
+        <button class="btn primary" type="submit">Thêm vào hàng đợi</button>
+      </form>
+      <div id="ops-topic-list" class="ops-form" aria-live="polite"></div>
+    </div>
+    <div class="glass card">
+      <h2>Xử lý dự án</h2>
+      <label class="ops-form">Dự án<select class="inp" id="ops-project"><option value="">Chọn dự án</option></select></label>
+      <pre id="ops-preview" class="md" aria-live="polite">Chọn dự án để xem bước tiếp theo và cache trước khi thử lại.</pre>
+      <div class="controls"><button type="button" class="btn" id="ops-retry">Cho phép thử lại</button><button type="button" class="btn" id="ops-show-reopen">Mở lại cổng y khoa</button></div>
+      <p class="sub">Dừng xưởng trước khi xử lý. Sau khi cho phép thử lại, dùng nút Bật xưởng để chạy tiếp.</p>
+      <form id="ops-reopen" class="ops-form" hidden>
+        <label>Tên bác sĩ xác nhận<input class="inp" name="reviewer" required maxlength="120"></label>
+        <label>PIN bác sĩ<input class="inp" name="pin" type="password" inputmode="numeric" autocomplete="off" required></label>
+        <label>Lý do mở lại<textarea class="inp" name="reason" required maxlength="4000"></textarea></label>
+        <label>Tệp cần sửa (mỗi dòng một đường dẫn trong revision)<textarea class="inp" name="changed" required>storyboard/storyboard.yaml</textarea></label>
+        <label><input type="checkbox" name="confirmed" required> Tôi xác nhận mở lại cổng y khoa và duyệt lại trước sản xuất.</label>
+        <button class="btn danger" type="submit">Xác nhận mở lại</button>
+      </form>
+    </div>
+  </section>
+  <section id="ops-library" hidden aria-label="Thư viện ảnh">
+    <div class="glass card">
+      <h2>Thư viện ảnh</h2>
+      <div class="ops-filters">
+        <label>Dự án<select id="lib-project" class="inp"><option value="">Tất cả dự án</option></select></label>
+        <label>Loại<select id="lib-kind" class="inp"><option value="">Tất cả loại</option><option value="imported">Ảnh nhập</option><option value="flux">FLUX</option><option value="svg">SVG</option><option value="contact_sheet">Contact sheet</option><option value="thumbnail">Thumbnail</option><option value="image">Ảnh khác</option></select></label>
+        <label>Tìm theo prompt hoặc tên file<input id="lib-query" class="inp" type="search" maxlength="200"></label>
+      </div>
+      <p class="sub">SVG hiển thị thẻ file an toàn. Ảnh nhập chỉ dùng trang trí; hình cơ chế vẫn cần nguồn và duyệt y khoa.</p>
+      <div id="lib-grid" class="ops-assets" aria-live="polite"></div>
+    </div>
+    <div class="glass card">
+      <h2>Nhập ảnh có nguồn</h2>
+      <p class="sub">Chọn một dự án ở bộ lọc. Dùng ảnh đã xuất từ Muse hoặc ảnh raster có quyền sử dụng.</p>
+      <form id="lib-import" class="ops-form">
+        <div class="controls"><button class="btn" id="lib-select" type="button">Chọn file trên máy</button><span id="lib-selected" class="sub">Chưa chọn ảnh</span></div>
+        <label>Nguồn / công cụ tạo ảnh<input name="origin" class="inp" required maxlength="200" placeholder="Ví dụ: Muse AI"></label>
+        <label>Prompt tạo ảnh<textarea name="prompt" class="inp" required maxlength="4000"></textarea></label>
+        <label>Giấy phép / căn cứ quyền sử dụng<input name="license" class="inp" required maxlength="1000"></label>
+        <label>URL nguồn / điều khoản sử dụng<input name="source_url" class="inp" type="url" required maxlength="2000"></label>
+        <button class="btn primary" type="submit">Nhập ảnh vào thư viện</button>
+      </form>
+      <form id="lib-bind" class="ops-form" hidden>
+        <h3 id="lib-bind-title">Gắn ảnh vào cảnh</h3>
+        <label>Cảnh whiteboard<select id="lib-scene" class="inp" required></select></label>
+        <p class="sub">Nếu dự án đã duyệt, mở lại cổng y khoa ở Hàng đợi trước khi gắn ảnh.</p>
+        <button class="btn" type="submit">Gắn ảnh trang trí</button>
+      </form>
+    </div>
+  </section>
+  <style>
+    .ops-form{display:grid;gap:14px;margin-top:18px}.ops-form[hidden]{display:none}
+    .ops-form label,.ops-filters label{display:grid;gap:6px;font-size:13px;color:var(--muted)}
+    .ops-form label:has(input[type=checkbox]){display:flex;align-items:center}
+    .ops-form button{justify-self:start}.ops-filters{display:grid;grid-template-columns:1fr 1fr 2fr;gap:14px;margin:18px 0}
+    .ops-assets{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;margin-top:18px}
+    .ops-asset{border:1px solid var(--line-strong);border-radius:12px;overflow:hidden;padding:12px;min-width:0}
+    .ops-asset img{width:100%;height:170px;object-fit:contain;background:var(--bg2);border-radius:8px}
+    .ops-asset p{font-size:12px;margin:8px 0;overflow-wrap:anywhere}.ops-asset .controls{gap:6px}
+    .ops-asset .btn{font-size:12px;padding:7px 9px}.ops-asset details{font-size:12px;color:var(--muted);margin:10px 0}
+    @media(max-width:650px){.ops-filters{grid-template-columns:1fr}.ops-assets{grid-template-columns:1fr}}
+  </style>
+  <div class="grid" id="ops-overview">
     <main>
       <div class="section-title">Chủ đề trong xưởng</div>
       <div id="projects"><div class="glass empty">Đang tải…</div></div>
@@ -507,6 +624,10 @@ async function refresh(){
     if(!r.ok) throw new Error(d.error||r.status);
     $('offline').classList.remove('show'); state=d; render(d);
     if(!busy) document.querySelectorAll('main button, header button').forEach(b=>b.disabled=false);
+    $('btn-start').disabled=busy||!d.factory.can_start;
+    $('btn-start').title=d.factory.can_start?'Bật xưởng sản xuất':'Cần chấp nhận đủ 4 chuẩn trong Nghiệm thu xưởng';
+    $('fa-reviewer-box').hidden=!!d.reviewer;
+    faButtons();
   }catch(e){$('offline').classList.add('show')}
 }
 
@@ -719,7 +840,178 @@ $('btn-start').onclick=()=>act('/api/factory/start');
 $('btn-stop').onclick=()=>act('/api/factory/stop', state&&state.agents.length?'Agent đang làm việc. Dừng xưởng bây giờ sẽ cắt ngang bước hiện tại. Vẫn dừng?':'Dừng xưởng nền?');
 $('btn-review').onclick=()=>{const p=state&&state.projects.find(x=>x.gate);if(p) openProduct(p.slug)};
 $('btn-quit').onclick=()=>act('/api/app/quit','Tắt app? Xưởng nền vẫn chạy nếu đang bật.');
+/* ---------- isolated factory acceptance (never product decisions) ---------- */
+let faBundle=null, faStandards={}, faBusy=false, faInitial=true;
+const FA_STATUS={created:'Mới tạo',ready:'Sẵn sàng xem',failed:'Dựng mẫu chưa thành công',stale:'Mẫu đã thay đổi · cần tạo lại'};
+async function faGet(path){
+  const r=await fetch(path,{cache:'no-store'}), data=await r.json();
+  if(!r.ok) throw new Error(data.error||r.status); return data;
+}
+async function faPost(action,body){
+  const r=await fetch('/api/trials/'+action,{method:'POST',headers:{'X-Dashboard-Token':TOKEN,
+    'Content-Type':'application/json'},body:JSON.stringify(body)}), data=await r.json();
+  if(!r.ok) throw new Error(data.error||r.status); return data.message;
+}
+function faButtons(){
+  const b=faBundle, ready=b&&b.status==='ready', stage=Number($('fa-stage').value);
+  const ordered=Array.from({length:stage-1},(_,i)=>i+1).every(s=>faStandards[s]);
+  $('fa-create').disabled=faBusy; $('fa-stage').disabled=faBusy; $('fa-trials').disabled=faBusy;
+  $('fa-reload').disabled=faBusy; $('fa-run').disabled=faBusy||!b||b.status==='stale';
+  $('fa-save').disabled=faBusy||!ready;
+  $('fa-accept').disabled=faBusy||!ready||!ordered||!b.draft.text||$('fa-draft').value!==b.draft.text;
+  $('fa-accept').textContent=`Chấp nhận chuẩn v${(faStandards[stage]?.version||0)+1}`;
+}
+async function faShow(id){
+  faBundle=id?await faGet(`/api/trials/${encodeURIComponent(id)}/bundle`):null;
+  const b=faBundle;
+  $('fa-draft').value=b?.draft?.text||'';
+  $('fa-run').textContent=b?.status==='failed'?'Thử lại mẫu ngoại tuyến · 0 yêu cầu trả phí':'Chạy mẫu ngoại tuyến · 0 yêu cầu trả phí';
+  $('fa-status').textContent=b?(FA_STATUS[b.status]||'Chưa rõ trạng thái'):'Chưa chọn mẫu';
+  $('fa-events').replaceChildren();
+  const history=b?.timeline||b?.events.map(e=>({text:e==='created'?'Đã tạo mẫu TEST.':e==='offline-run'?'Đã dựng mẫu ngoại tuyến.':'Dựng mẫu chưa thành công.'}))||[];
+  for(const event of history){
+    const li=document.createElement('li');
+    li.textContent=(event.at?new Date(event.at).toLocaleString('vi-VN')+' · ':'')+event.text;
+    $('fa-events').append(li);
+  }
+  const box=$('fa-evidence'); box.replaceChildren();
+  if(b&&b.status==='ready') for(const o of b.outputs){
+    const url=`/api/trials/${encodeURIComponent(b.id)}/media/${o.path.split('/').map(encodeURIComponent).join('/')}`;
+    const fig=document.createElement('figure'); let el;
+    if(/\.mp4$/.test(o.path)){el=document.createElement('video');el.controls=true;el.preload='metadata';el.style.maxHeight='360px'}
+    else if(/\.wav$/.test(o.path)){el=document.createElement('audio');el.controls=true;el.preload='metadata'}
+    else if(/\.png$/.test(o.path)){el=document.createElement('img');el.alt='Mẫu TEST phi y khoa';el.style.maxWidth='100%'}
+    else if(o.path==='script.yaml'){
+      el=document.createElement('div');
+      const script=b.previews?.[o.path];
+      for(const line of script?.lines||[]){
+        const row=document.createElement('div'); row.className='fa-line';
+        const label=document.createElement('strong'); label.textContent=line.id+' · ';
+        row.append(label,document.createTextNode(line.text));
+        const scene=script.scenes.find(s=>s.script_line===line.id);
+        if(scene){const note=document.createElement('small');note.textContent='Hình minh họa: '+scene.visual;row.append(note)}
+        el.append(row);
+      }
+    }
+    else if(o.path==='qa.json'){
+      const qa=JSON.parse(b.previews?.[o.path]||'{}');
+      el=document.createElement('pre');el.className='fa-text';
+      el.textContent=`Mẫu TEST · ${qa.renderer}\nThời lượng: ${qa.duration_seconds} giây · ${qa.fps} khung hình/giây\nĐịnh dạng: ${qa.formats.join(', ')}\nPhụ đề:\n${qa.captions.join('\n')}`;
+    }
+    else if(b.previews?.[o.path]){el=document.createElement('pre');el.className='fa-text';el.textContent=b.previews[o.path]}
+    else {el=document.createElement('div')}
+    if(['VIDEO','AUDIO','IMG'].includes(el.tagName)) el.src=url;
+    const labels={'sample.txt':'Giới thiệu mẫu','script.yaml':'Kịch bản mẫu · từng dòng',
+      'illustration.png':'Hình minh họa TEST','tone.wav':'Nghe âm thanh mẫu · âm đơn, không phải giọng đọc',
+      'wide.mp4':'Video ngang','vertical.mp4':'Video dọc','qa.json':'Thông tin kiểm tra video',
+      'thumbnail.png':'Ảnh bìa mẫu','captions.txt':'Nội dung bài đăng mẫu','sample-hashes.json':'Chi tiết tệp mẫu'};
+    const caption=document.createElement('figcaption');caption.textContent=labels[o.path]||'Tệp mẫu';
+    const detail=document.createElement('details');detail.className='fa-hash';
+    const summary=document.createElement('summary');summary.textContent='Chi tiết tệp · SHA-256 '+o.sha256.slice(0,12)+'…';
+    const hash=document.createElement('p');hash.textContent='SHA-256: '+o.sha256;
+    const link=document.createElement('a');link.className='btn';link.textContent='Mở tệp mẫu';link.href=url;link.target='_blank';link.rel='noopener';
+    detail.append(summary,hash,link);fig.append(caption,el,detail);box.append(fig);
+  }
+  faButtons();
+}
+async function faLoad(selected){
+  const [list, standards]=await Promise.all([faGet('/api/trials'),faGet('/api/standards/accepted')]);
+  faStandards=standards.accepted;
+  if(faInitial){$('factory-acceptance').open=[1,2,3,4].some(s=>!faStandards[s]);faInitial=false}
+  $('fa-progress').textContent=[1,2,3,4].map(s=>`${s}: ${faStandards[s]?'đã chấp nhận v'+faStandards[s].version:'chưa chấp nhận'}`).join(' · ');
+  const stage=Number($('fa-stage').value), items=list.trials.filter(t=>t.stage===stage);
+  $('fa-trials').innerHTML='<option value="">Chọn mẫu TEST</option>'+items.map(t=>
+    `<option value="${esc(t.id)}">${esc(t.topic)} · ${esc(FA_STATUS[t.status]||'Chưa rõ trạng thái')} · ${esc(t.id.slice(0,8))}</option>`).join('');
+  const id=items.some(t=>t.id===selected)?selected:(items.at(-1)?.id||'');
+  $('fa-trials').value=id; await faShow(id);
+}
+async function faAction(fn){
+  if(faBusy) return; faBusy=true; faButtons(); $('fa-result').textContent='Đang xử lý mẫu TEST…';
+  try{await fn();$('fa-result').textContent='Đã lưu kết quả TEST.';await refresh()}
+  catch(e){$('fa-result').textContent=e.message}
+  finally{faBusy=false;faButtons()}
+}
+$('fa-create').onclick=()=>faAction(async()=>{
+  const b=await faPost('create',{stage:Number($('fa-stage').value),topic:$('fa-topic').value});await faLoad(b.id);
+});
+$('fa-run').onclick=()=>faAction(async()=>{const id=faBundle.id;await faPost('run',{trial_id:id});await faLoad(id)});
+$('fa-save').onclick=()=>faAction(async()=>{
+  await faPost('standard-draft',{trial_id:faBundle.id,stage:faBundle.stage,text:$('fa-draft').value});await faShow(faBundle.id);
+});
+$('fa-accept').onclick=()=>faAction(async()=>{
+  const b=faBundle;
+  const pin=$('fa-pin').value; $('fa-pin').value='';
+  await faPost('accept',{trial_id:b.id,stage:b.stage,text:$('fa-draft').value,pin,
+    expected_input_hash:b.input_hash,expected_version:faStandards[b.stage]?.version||0,
+    expected_standards_hash:b.standards_hash,reviewer:$('fa-reviewer').value});await faLoad(b.id);
+});
+$('fa-reload').onclick=()=>faAction(()=>faLoad(faBundle?.id));
+$('fa-stage').onchange=()=>faAction(()=>faLoad());
+$('fa-trials').onchange=()=>faAction(()=>faShow($('fa-trials').value));
+$('fa-draft').oninput=faButtons;
+faLoad().catch(e=>$('fa-result').textContent=e.message);
 refresh(); setInterval(refresh,3000);
+</script>
+<script>
+/* Package C: app operations; no worker is started by navigation or retry. */
+let opsCurrent=null, libSelection=null, libBinding=null, opsTab='overview';
+async function opsGet(url){const r=await fetch(url,{cache:'no-store'});const d=await r.json();if(!r.ok)throw Error(d.error||r.status);return d}
+async function opsLoadProjects(){
+  const d=await opsGet('/api/status');
+  for(const id of ['ops-project','lib-project']){
+    const el=$(id), selected=el.value;
+    el.innerHTML=`<option value="">${id==='lib-project'?'Tất cả dự án':'Chọn dự án'}</option>`+d.projects.map(p=>`<option value="${esc(p.slug)}">${esc(p.title)} · ${esc(p.slug)}</option>`).join('');
+    el.value=selected;
+  }
+}
+async function opsQueue(){
+  const d=await opsGet('/api/topics');
+  $('ops-topic-list').innerHTML=d.entries.length?d.entries.map(e=>`<div><b>${esc(e.title)}</b><div class="sub">${esc(e.slug)} · ${esc(e.question)}</div></div>`).join(''):'<p class="sub">Hàng đợi trống.</p>';
+}
+async function opsPreview(){
+  opsCurrent=null; const slug=$('ops-project').value;
+  if(!slug){$('ops-preview').textContent='Chọn dự án để xem bước tiếp theo và cache.';return}
+  opsCurrent=await opsGet(`/api/project/${encodeURIComponent(slug)}/operations`);
+  const d=opsCurrent,c=d.cache;
+  $('ops-preview').textContent=`Revision ${d.revision} · Bước: ${d.next_step||'chờ duyệt / hoàn tất'}\nCổng: ${d.gate||'—'}\n${c.lines} dòng đọc · ${c.files} file cache hiện có\nTối đa ${c.max_requests} yêu cầu TTS cho một lượt. ${c.note}\n${d.blocked||d.retry_status.reason||''}${d.retry_status.retry_after?'\nThử lại sau (retry_after): '+d.retry_status.retry_after:''}`;
+}
+$('ops-tabs').querySelectorAll('[data-ops-tab]').forEach(button=>button.onclick=async()=>{
+  opsTab=button.dataset.opsTab;
+  for(const tab of ['overview','queue','library']){$('ops-'+tab).hidden=tab!==opsTab;if(tab==='overview')$('ops-'+tab).style.display=tab===opsTab?'':'none'}
+  $('ops-tabs').querySelectorAll('button').forEach(b=>{b.classList.toggle('primary',b===button);b.setAttribute('aria-pressed',String(b===button))});
+  try{await opsLoadProjects();if(opsTab==='queue'){await opsQueue();await opsPreview()}if(opsTab==='library')await libLoad()}catch(e){toast(e.message,true)}
+});
+$('ops-topic').onsubmit=async e=>{e.preventDefault();try{await post('/api/topics/add',Object.fromEntries(new FormData(e.target)));e.target.reset();await opsQueue();toast('Đã thêm chủ đề vào hàng đợi.')}catch(ex){toast(ex.message,true)}};
+$('ops-project').onchange=()=>{ $('ops-reopen').hidden=true;opsPreview().catch(e=>toast(e.message,true))};
+$('ops-retry').onclick=async()=>{if(!opsCurrent)return;const d=opsCurrent;if(!confirm(`Thử lại bước ${d.next_step||'—'}? Tối đa ${d.cache.max_requests} yêu cầu TTS cho một lượt; cache chưa kiểm hash/giọng/provider.`))return;try{await post(`/api/project/${encodeURIComponent(d.slug)}/retry`,{expected_revision:d.revision});await opsPreview();toast('Đã cho phép thử lại. Bật xưởng khi sẵn sàng.')}catch(e){toast(e.message,true)}};
+$('ops-show-reopen').onclick=()=>{if(opsCurrent)$('ops-reopen').hidden=!$('ops-reopen').hidden};
+$('ops-reopen').onsubmit=async e=>{
+  e.preventDefault();if(!opsCurrent)return;const d=opsCurrent,f=new FormData(e.target);
+  try{await post(`/api/project/${encodeURIComponent(d.slug)}/reopen`,{expected_revision:d.revision,reviewer:f.get('reviewer'),pin:f.get('pin'),reason:f.get('reason'),changed:f.get('changed').split(/\r?\n/).map(s=>s.trim()).filter(Boolean),confirmed:f.get('confirmed')==='on'});e.target.reset();e.target.hidden=true;await opsPreview();toast('Đã mở lại cổng y khoa; cần nộp duyệt lại.');refresh()}catch(ex){toast(ex.message,true)}
+};
+async function libLoad(){
+  const q=new URLSearchParams({slug:$('lib-project').value,kind:$('lib-kind').value,query:$('lib-query').value});
+  const d=await opsGet('/api/library?'+q);
+  $('lib-grid').innerHTML=d.items.length?d.items.map(a=>`<article class="ops-asset"><img loading="lazy" alt="${esc(a.name)}" src="/media/${encodeURIComponent(a.slug)}/library/${encodeURIComponent(a.id)}"><p><b>${esc(a.kind)} · ${esc(a.name)}</b></p><p>${esc(a.slug)} · rev ${esc(a.revision)} · ${a.width?esc(a.width)+' × '+esc(a.height):'SVG'}</p><p>${esc(a.created_at)}</p><details><summary>Prompt và nguồn</summary><p>${esc(a.prompt||'Chưa ghi prompt')}</p><p>${esc(a.origin)} · ${esc(a.license)}</p><p>${esc((a.used_in||[]).join(', '))}</p></details><div class="controls">${a.kind==='svg'?'':`<button type="button" class="btn" data-open="${esc(a.id)}">Mở file</button>`}<button type="button" class="btn" data-folder="${esc(a.id)}">Thư mục</button>${a.asset_id?`<button type="button" class="btn" data-bind="${esc(a.id)}">Gắn vào cảnh</button>`:''}</div></article>`).join(''):'<p class="sub">Chưa có ảnh khớp bộ lọc.</p>';
+  $('lib-grid').querySelectorAll('[data-open],[data-folder]').forEach(b=>b.onclick=async()=>{try{await post('/api/library/open',{id:b.dataset.open||b.dataset.folder,folder:!!b.dataset.folder});toast('Đã mở trên máy.')}catch(e){toast(e.message,true)}});
+  $('lib-grid').querySelectorAll('[data-bind]').forEach(b=>b.onclick=async()=>{
+    const a=d.items.find(i=>i.id===b.dataset.bind);
+    try{const op=await opsGet(`/api/project/${encodeURIComponent(a.slug)}/operations`);libBinding=a;$('lib-scene').innerHTML=op.scenes.map(s=>`<option value="${esc(s.id)}">${esc(s.id)} · ${esc(s.label)}</option>`).join('');$('lib-bind-title').textContent='Gắn ảnh vào cảnh · '+a.slug;$('lib-bind').hidden=false;$('lib-bind').scrollIntoView({block:'center'})}catch(e){toast(e.message,true)}
+  });
+}
+$('lib-project').onchange=()=>{libSelection=null;$('lib-selected').textContent='Chưa chọn ảnh';libLoad().catch(e=>toast(e.message,true))};
+$('lib-kind').onchange=()=>libLoad().catch(e=>toast(e.message,true));
+let libSearchTimer;$('lib-query').oninput=()=>{clearTimeout(libSearchTimer);libSearchTimer=setTimeout(()=>libLoad().catch(e=>toast(e.message,true)),250)};
+$('lib-select').onclick=async()=>{
+  const slug=$('lib-project').value;if(!slug){toast('Chọn một dự án trước khi nhập ảnh.',true);return}
+  try{const op=await opsGet(`/api/project/${encodeURIComponent(slug)}/operations`);const r=await post('/api/library/select',{slug,expected_revision:op.revision});libSelection=r.cancelled?null:{...r,slug};$('lib-selected').textContent=libSelection?r.name:'Đã hủy chọn ảnh'}catch(e){toast(e.message,true)}
+};
+$('lib-import').onsubmit=async e=>{
+  e.preventDefault();if(!libSelection){toast('Chọn ảnh trên máy trước.',true);return}
+  const selected=libSelection;libSelection=null;
+  try{await post('/api/library/import',{...Object.fromEntries(new FormData(e.target)),slug:selected.slug,expected_revision:selected.revision,selection_id:selected.selection_id});$('lib-selected').textContent='Đã nhập ảnh';await libLoad();toast('Đã nhập ảnh và giữ nguồn/giấy phép.')}catch(ex){$('lib-selected').textContent='Chọn lại ảnh để thử lại';toast(ex.message,true)}
+};
+$('lib-bind').onsubmit=async e=>{e.preventDefault();if(!libBinding)return;try{await post('/api/library/bind',{slug:libBinding.slug,asset_id:libBinding.asset_id,expected_revision:libBinding.revision,scene_id:$('lib-scene').value});e.target.hidden=true;await libLoad();toast('Đã gắn ảnh; cần nộp duyệt y khoa.')}catch(ex){toast(ex.message,true)}};
 </script>
 </body>
 </html>

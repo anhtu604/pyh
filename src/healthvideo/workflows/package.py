@@ -139,6 +139,13 @@ def _package_v2(layout: ProjectLayout) -> Path:
         shutil.copy2(video, staging_dir / OUTPUT_NAME)
         shutil.copy2(render_input_path, staging_dir / RENDER_INPUT_NAME)
         shutil.copy2(posts_path, staging_dir / POSTS_YAML_NAME)
+        standards_snapshot = layout.artifact_root / 'workflow/standards.yaml'
+        if standards_snapshot.is_file():
+            target = staging_dir / 'workflow/standards.yaml'
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(standards_snapshot, target)
+            _require_approved_hash(video_approval, 'workflow/standards.yaml',
+                                   canonical_json_hash(read_yaml(target)), staged=True)
         if render_manifest.get('sfx'):
             for name in ('sfx.json', 'license-ledger.yaml'):
                 target = staging_dir / 'audio' / name
@@ -502,6 +509,8 @@ def _manifest_json(
             "video": _approval_binding(video_approval),
         },
         "payload_sha256": {
+            **({'workflow/standards.yaml': sha256_file(staging_dir / 'workflow/standards.yaml')}
+               if (staging_dir / 'workflow/standards.yaml').is_file() else {}),
             **{path.relative_to(staging_dir).as_posix(): sha256_file(path)
                for path in sorted((staging_dir / 'audio').glob('*')) if path.is_file()},
             **{

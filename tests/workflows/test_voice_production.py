@@ -25,12 +25,13 @@ def voice_project(tmp_path, *, delivery=False):
     return project, revision, script
 
 
-def test_line_cache_survives_failed_render_and_changes_with_settings(tmp_path):
+@pytest.mark.parametrize('provider', ['elevenlabs', 'vibi_minimax'])
+def test_line_cache_survives_failed_render_and_changes_with_settings(tmp_path, provider):
     project, _, _ = voice_project(tmp_path)
     calls = []
 
     class Paid(SilentTTS):
-        provider_name = 'elevenlabs'
+        provider_name = provider
         settings = 'settings-1'
 
         def cache_identity(self):
@@ -123,3 +124,121 @@ def test_blocking_pronunciation_renders_but_fails_video_qa(tmp_path, monkeypatch
     assert produce.produce_project(
         project, SilentTTS(), lambda _: pytest.fail('render on retry'),
     ) == output
+
+
+@pytest.mark.parametrize('change', ['text', 'speed', 'language', 'voice_id', 'model_id', 'runtime_id', 'corrupt'])
+def test_vibi_line_cache_binds_request_and_voice_and_checks_bytes(tmp_path, change):
+    from healthvideo.storage.files import sha256_file
+
+    class Paid(SilentTTS):
+        provider_name = 'vibi_minimax'
+
+        def __init__(self):
+            self.calls = 0
+            self.identity = {'provider': self.provider_name, 'voice_id': 'clone-1',
+                             'model_id': 'speech-2.8-hd', 'runtime_id': 'settings-1'}
+
+        def cache_identity(self):
+            return self.identity
+
+        def synthesize(self, request, output):
+            self.calls += 1
+            return super().synthesize(request, output)
+
+    tts = Paid()
+    request = TTSRequest(text='Test narration', language='vi')
+    output = tmp_path / 'line.wav'
+    cache = tmp_path / 'cache'
+    produce._synthesize_cached_line(tts, request, output, cache_dir=cache)
+    original = sha256_file(output)
+    output.unlink()
+    produce._synthesize_cached_line(tts, request, output, cache_dir=cache)
+    assert tts.calls == 1 and sha256_file(output) == original
+    if change in ('text', 'speed', 'language'):
+        request = request.model_copy(update={change: {'text': 'Changed narration', 'speed': 1.1, 'language': 'en'}[change]})
+    elif change == 'corrupt':
+        next(cache.glob('*.wav')).write_bytes(b'broken')
+    else:
+        tts.identity[change] = 'changed'
+    produce._synthesize_cached_line(tts, request, output, cache_dir=cache)
+    assert tts.calls == 2
+
+
+def test_vibi_normalized_cache_rejects_bad_provider_audio_and_skips_duplicate_usage(tmp_path):
+    import io
+    import shutil
+    import subprocess
+    import wave
+
+    from healthvideo.tts.elevenlabs import VoiceProfile
+    from healthvideo.tts.normalize import NormalizedTTS
+    from healthvideo.tts.vibi import VibiError, VibiTTS
+
+    profile = VoiceProfile.model_validate({
+        'provider': 'vibi_minimax', 'model_id': 'speech-2.8-hd', 'voice_id': 'clone-1',
+        'settings': {'speed': 1.0, 'pitch': 0, 'vol': 1.0},
+    })
+    post_calls = []
+    mode = {'state': 'silent'}
+
+    def opener(request, *, timeout):
+        if request.get_method() == 'POST':
+            post_calls.append(request.full_url)
+            return io.BytesIO(b'{"id": "t1"}')
+        if '/v1/history/' in request.full_url:
+            return io.BytesIO(b'{"status": "completed", "result": {"audio_url": "https://api.vibi.pro/a.mp3"}}')
+        return io.BytesIO(b'mp3')
+
+    def decode_runner(argv, **kwargs):
+        out = argv[-1]
+        if mode['state'] == 'unreadable':
+            with open(out, 'wb') as f:
+                f.write(b'corrupt-wav')
+        else:
+            sample = b'\x00\x00' if mode['state'] == 'silent' else b'\x01\x00'
+            with wave.open(out, 'wb') as audio:
+                audio.setnchannels(1)
+                audio.setsampwidth(2)
+                audio.setframerate(48000)
+                audio.writeframes(sample * 4800)
+        return subprocess.CompletedProcess(argv, 0)
+
+    def loudnorm_runner(argv):
+        shutil.copyfile(argv[argv.index('-i') + 1], argv[-1])
+        return 0
+
+    usage = tmp_path / 'audio/tts-usage.json'
+    vibi = VibiTTS(profile, api_key='secret-key', opener=opener, runner=decode_runner,
+                   sleep=lambda _: None, usage_path=usage)
+    wrapped = NormalizedTTS(vibi, runner=loudnorm_runner)
+    cache = tmp_path / 'cache/tts'
+    output = tmp_path / 'out/line.wav'
+    output.parent.mkdir(parents=True, exist_ok=True)
+    req = TTSRequest(text='Gút cấp', language='vi')
+
+    with pytest.raises(ValueError, match='unsupported audio tag'):
+        produce._synthesize_cached_line(wrapped, TTSRequest(text='[shouts] Gút', language='vi'), output, cache_dir=cache)
+    assert post_calls == []
+
+    for bad_state in ('silent', 'unreadable'):
+        mode['state'] = bad_state
+        with pytest.raises(VibiError) as caught:
+            produce._synthesize_cached_line(wrapped, req, output, cache_dir=cache)
+        assert not isinstance(caught.value, ValueError)
+        assert not list(cache.glob('*'))
+
+    usage.unlink(missing_ok=True)
+    post_calls.clear()
+    mode['state'] = 'good'
+    produce._synthesize_cached_line(wrapped, req, output, cache_dir=cache)
+    assert len(post_calls) == 1
+    assert len(json.loads(usage.read_text(encoding='utf-8'))['requests']) == 1
+
+    output.unlink()
+    produce._synthesize_cached_line(wrapped, req, output, cache_dir=cache)
+    assert len(post_calls) == 1
+    assert len(json.loads(usage.read_text(encoding='utf-8'))['requests']) == 1
+
+    # Raw VibiTTS has a different runtime_id (without -loudnorm), so it misses the loudnorm cache.
+    produce._synthesize_cached_line(vibi, req, output, cache_dir=cache)
+    assert len(post_calls) == 2

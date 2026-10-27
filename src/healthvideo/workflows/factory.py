@@ -22,6 +22,7 @@ from healthvideo.storage.queue import load_queue
 from healthvideo.storage.revisions import create_revision
 from healthvideo.workflows.gate_review import resume_gate
 from healthvideo.workflows.package import package_project
+from healthvideo.workflows.production_retry import clear_retry
 from healthvideo.workflows.runner import RunDeps, run_queue
 
 GATES = {
@@ -289,6 +290,7 @@ def prepare_semantic_revisions(root: Path) -> None:
                         reason_code='semantic_issue', now=datetime.now(UTC))
         elif project.state is not WorkflowState.DRAFT_READY:
             raise ValueError(f'{path.name}: chưa hoàn tất nối lại kịch bản')
+        clear_retry(root, path.name)
         pending.unlink()
 
 
@@ -337,6 +339,7 @@ def run_factory(root: Path, deps: RunDeps, *, interval: float = 120, once: bool 
                         if project.state == WorkflowState.VIDEO_APPROVED:
                             try:
                                 package_project(path)
+                                clear_retry(root, path.name)
                                 event = 'đã đóng gói'
                             except (OSError, TypeError, ValueError) as error:
                                 event = f'bị chặn đóng gói: {error}'

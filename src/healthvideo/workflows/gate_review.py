@@ -163,6 +163,8 @@ def medical_reviewed_paths(revision_root: Path) -> dict[str, Path]:
         "assets/asset-manifest.yaml": revision_root / "assets" / "asset-manifest.yaml",
         "profiles/pronunciation.vi.yaml": pronunciation_module.PRONUNCIATION_PROFILE_PATH,
     }
+    if (revision_root / 'workflow/standards.yaml').is_file():
+        paths['workflow/standards.yaml'] = revision_root / 'workflow/standards.yaml'
     manifest_path = paths["assets/asset-manifest.yaml"]
     storyboard_path = paths["storyboard/storyboard.yaml"]
     if (
@@ -192,6 +194,11 @@ def video_reviewed_paths(revision_root: Path) -> dict[str, Path]:
         "renders/render-manifest.json": renders / "render-manifest.json",
         "renders/video.mp4": renders / "video.mp4",
     }
+    if (revision_root / 'workflow/standards.yaml').is_file():
+        paths['workflow/standards.yaml'] = revision_root / 'workflow/standards.yaml'
+    from healthvideo.workflows.review_frames import imported_reviewed_paths
+
+    paths.update(imported_reviewed_paths(revision_root))
     visual_index = revision_root / "reviews/visual/candidates.yaml"
     if visual_index.is_file():
         for relative in ("reviews/visual/candidates.yaml", "reviews/visual-review.yaml"):

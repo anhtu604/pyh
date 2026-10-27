@@ -136,3 +136,32 @@ def test_doctor_reports_subscription_remaining(monkeypatch):
     check = _elevenlabs_check()
     assert check.ok and check.required == "recommended"
     assert check.detected == "877 characters remaining"
+
+
+@pytest.mark.parametrize("mode", ["silent", "unreadable"])
+def test_elevenlabs_silent_or_unreadable_decoded_audio_is_provider_error(tmp_path, mode):
+    def bad_decode(argv, **kwargs):
+        out = argv[-1]
+        if mode == "unreadable":
+            with open(out, "wb") as stream:
+                stream.write(b"corrupt")
+        else:
+            with wave.open(out, "wb") as audio:
+                audio.setnchannels(1)
+                audio.setsampwidth(2)
+                audio.setframerate(48000)
+                audio.writeframes(b"\x00\x00" * 4800)
+        return subprocess.CompletedProcess(argv, 0)
+
+    provider = ElevenLabsTTS(
+        VoiceProfile(voice_id="test-voice"),
+        api_key="secret-key",
+        opener=lambda *a, **k: io.BytesIO(b"mp3"),
+        runner=bad_decode,
+    )
+    output = tmp_path / "bad.wav"
+    with pytest.raises(ElevenLabsError) as caught:
+        provider.synthesize(TTSRequest(text="Gút", language="vi"), output)
+    assert not isinstance(caught.value, ValueError)
+    assert "secret-key" not in str(caught.value)
+    assert not output.exists()

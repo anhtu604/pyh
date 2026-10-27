@@ -54,7 +54,10 @@ class NormalizedTTS:
                 raise RuntimeError(f"ffmpeg loudnorm failed with exit code {exit_code}")
             if not normalized.is_file():
                 raise FileNotFoundError("ffmpeg loudnorm did not write a WAV file")
-            report = inspect_wav(normalized, require_signal=self.require_signal)
+            try:
+                report = inspect_wav(normalized, require_signal=self.require_signal)
+            except ValueError as error:
+                raise RuntimeError(f"ffmpeg loudnorm produced invalid WAV: {error}") from None
             os.replace(normalized, output)
         return result.model_copy(
             update={"audio_file": output, "duration_ms": report.duration_ms}

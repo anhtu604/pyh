@@ -64,6 +64,28 @@ def test_normalized_runs_ffmpeg_on_staged_wav_and_fails_closed(tmp_path: Path) -
     assert not output2.exists()
 
 
+@pytest.mark.parametrize("mode", ["silent", "unreadable"])
+def test_normalized_invalid_output_raises_runtime_error_not_value_error(tmp_path: Path, mode: str) -> None:
+    def bad_runner(argv: list[str]) -> int:
+        out = Path(argv[-1])
+        if mode == "unreadable":
+            out.write_bytes(b"corrupt")
+        else:
+            with wave.open(str(out), "wb") as audio:
+                audio.setnchannels(1)
+                audio.setsampwidth(2)
+                audio.setframerate(48_000)
+                audio.writeframes(b"\x00\x00" * 4800)
+        return 0
+
+    wrapped = NormalizedTTS(_LoudTTS(), runner=bad_runner)
+    output = tmp_path / "audio" / "bad.wav"
+    with pytest.raises(RuntimeError) as caught:
+        wrapped.synthesize(TTSRequest(text="Xin chào", language="vi"), output)
+    assert not isinstance(caught.value, ValueError)
+    assert not output.exists()
+
+
 @pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not installed")
 def test_normalized_real_ffmpeg_outputs_48k_mono_pcm16(tmp_path: Path) -> None:
     from healthvideo.tts.audio_checks import inspect_wav

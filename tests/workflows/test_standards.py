@@ -33,7 +33,7 @@ def test_prompt_block_newest_first_within_budget(tmp_path, monkeypatch):
         standards.record(tmp_path, slug='a', gate='medical', revision='001', kind='reject',
                          text=f'góp ý số {index} ' + 'x' * 200)
     monkeypatch.setattr(standards, 'PROMPT_CHAR_BUDGET', 1500)
-    block = standards.prompt_block(tmp_path)
+    block = standards.prompt_block(tmp_path, slug='a')
     assert block.startswith('## Chuẩn của bác sĩ')
     assert block.index('góp ý số 29') < block.index('góp ý số 28')
     assert 'góp ý số 0 ' not in block

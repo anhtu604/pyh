@@ -2,7 +2,7 @@
 
 import subprocess
 from dataclasses import fields
-from datetime import date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -633,8 +633,10 @@ def test_agent_prompt_carries_doctor_standards(tmp_path: Path) -> None:
     entry = _entry("benh-gut")
     add_to_queue(tmp_path, entry)
     (tmp_path / "projects" / entry.slug).mkdir(parents=True, exist_ok=True)
-    standards.record(tmp_path, slug="khac", gate="medical", revision="001", kind="reject",
+    standards.record(tmp_path, slug="chung", gate="medical", revision="001", kind="reject",
                      text="Cắt đuôi giải thích ở mọi dòng.")
+    standards.record(tmp_path, slug="khac", gate="medical", revision="001", kind="reject",
+                     text="Góp ý riêng cho chủ đề khác.")
     states = {entry.slug: WorkflowState.NEEDS_MEDICAL_REVISION}
     captured: list[str] = []
 
@@ -656,6 +658,98 @@ def test_agent_prompt_carries_doctor_standards(tmp_path: Path) -> None:
     assert len(captured) == 1
     assert "Chuẩn của bác sĩ" in captured[0]
     assert "Cắt đuôi giải thích ở mọi dòng." in captured[0]
+    assert "Góp ý riêng cho chủ đề khác." not in captured[0]
+
+
+def test_agent_prompt_uses_pinned_v1_standards_and_filters_other_slug_feedback(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    from healthvideo.workflows import factory_standards, factory_trials, standards
+    from tests.helpers import create_v2_project_fixture
+
+    def fake_render(directory: Path) -> list[Path]:
+        sample = directory / "injected-render.txt"
+        sample.write_text("TEST renderer boundary", encoding="utf-8")
+        return [sample]
+
+    monkeypatch.setattr(factory_trials, "_render_samples", fake_render)
+
+    for stage in range(1, 5):
+        trial = factory_trials.create_trial(tmp_path, stage)
+        bundle = factory_trials.run_trial(tmp_path, trial["id"])
+        text = "Chuẩn kịch bản v1 đã pin cho project." if stage == 1 else f"Chuẩn stage {stage} v1"
+        factory_standards.save_standard_draft(tmp_path, stage, text, trial["id"])
+        factory_standards.accept_standard(
+            tmp_path,
+            stage,
+            trial_id=bundle["id"],
+            expected_input_hash=bundle["input_hash"],
+            expected_version=0,
+            reviewer="Bác sĩ",
+            now=datetime.now(UTC),
+        )
+
+    entry = _entry("muoi-va-huyet-ap-v2")
+    add_to_queue(tmp_path, entry)
+    project_dir = create_v2_project_fixture(tmp_path / "projects")
+    factory_standards.pin_standards(tmp_path, project_dir)
+
+    trial_v2 = factory_trials.create_trial(tmp_path, 1)
+    bundle_v2 = factory_trials.run_trial(tmp_path, trial_v2["id"])
+    factory_standards.save_standard_draft(
+        tmp_path, 1, "Chuẩn kịch bản v2 mới chấp nhận sau.", trial_v2["id"]
+    )
+    accepted_v2 = factory_standards.accept_standard(
+        tmp_path,
+        1,
+        trial_id=bundle_v2["id"],
+        expected_input_hash=bundle_v2["input_hash"],
+        expected_version=1,
+        reviewer="Bác sĩ",
+        now=datetime.now(UTC),
+    )
+    assert accepted_v2["version"] == 2
+
+    standards.record(
+        tmp_path,
+        slug=entry.slug,
+        gate="medical",
+        revision="001",
+        kind="comment",
+        text="Góp ý đúng của project.",
+    )
+    standards.record(
+        tmp_path,
+        slug="slug-khac",
+        gate="medical",
+        revision="001",
+        kind="comment",
+        text="Góp ý riêng của slug-khac không được lọt vào.",
+    )
+
+    states = {entry.slug: WorkflowState.NEEDS_MEDICAL_REVISION}
+    captured: list[str] = []
+
+    def fake_invoke(agents: Any, prompt: str, *, cwd: Path, log_dir: Path) -> AgentResult:
+        captured.append(prompt)
+        states[log_dir.name] = WorkflowState.AWAITING_MEDICAL_REVIEW
+        return AgentResult(agent="codex", ok=True, quota_exhausted=False, log_path=_log_file(log_dir))
+
+    deps = RunDeps(
+        create_project=lambda root, item: root / "projects" / item.slug,
+        read_state=lambda p: states[p.name],
+        reject_note=lambda _p: None,
+        python_steps={},
+        changed_code_paths=lambda _root: [],
+        invoke=fake_invoke,
+    )
+    run_queue(tmp_path, deps)
+
+    assert len(captured) == 1
+    assert "Giai đoạn 1 · v1: Chuẩn kịch bản v1 đã pin cho project." in captured[0]
+    assert "Chuẩn kịch bản v2 mới chấp nhận sau." not in captured[0]
+    assert "Góp ý đúng của project." in captured[0]
+    assert "Góp ý riêng của slug-khac không được lọt vào." not in captured[0]
 
 
 def test_packaged_topic_is_not_reported_at_gate(tmp_path: Path) -> None:
@@ -671,3 +765,146 @@ def test_packaged_topic_is_not_reported_at_gate(tmp_path: Path) -> None:
     )
     report = run_queue(tmp_path, deps)
     assert report.at_gate == [] and report.blocked == []
+
+
+def test_produce_validation_failure_waits_for_changed_inputs(tmp_path):
+    entry = _entry()
+    add_to_queue(tmp_path, entry)
+    project = tmp_path / 'projects' / entry.slug
+    project.mkdir(parents=True)
+    manifest = project / 'project.yaml'
+    manifest.write_text('revision: 001', encoding='utf-8')
+    calls = []
+
+    def produce(_):
+        calls.append('produce')
+        raise ValueError('visual budget failed: chart_crop')
+
+    deps = RunDeps(
+        create_project=lambda *_: project,
+        read_state=lambda _: WorkflowState.MEDICALLY_APPROVED,
+        reject_note=lambda _: None, python_steps={'produce': produce},
+        changed_code_paths=lambda _: [], visual_review_pending=lambda _: False,
+    )
+    for _ in range(3):
+        assert run_queue(tmp_path, deps).blocked == [entry.slug]
+    assert calls == ['produce']
+    retry_file = tmp_path / 'topics/logs' / entry.slug / 'production-retry.yaml'
+    assert retry_file.is_file()
+    assert read_yaml(retry_file)['kind'] == 'validation'
+    manifest.write_text('revision: 002', encoding='utf-8')
+    run_queue(tmp_path, deps)
+    assert calls == ['produce', 'produce']
+    profile = tmp_path / 'profiles/voice.yaml'
+    profile.parent.mkdir()
+    profile.write_text('model: changed', encoding='utf-8')
+    run_queue(tmp_path, deps)
+    assert len(calls) == 3
+    code = tmp_path / 'src/healthvideo/workflows/produce.py'
+    code.parent.mkdir(parents=True)
+    code.write_text('# fixed production validation', encoding='utf-8')
+    run_queue(tmp_path, deps)
+    assert len(calls) == 4
+    for relative in ('assets/illustration.png', 'reviews/visual-review.yaml',
+                     'reviews/visual/candidates.yaml', 'storyboard/storyboard.yaml'):
+        artifact = project / 'revisions/001' / relative
+        artifact.parent.mkdir(parents=True, exist_ok=True)
+        artifact.write_bytes(b'changed')
+        before = len(calls)
+        run_queue(tmp_path, deps)
+        assert len(calls) == before + 1
+        run_queue(tmp_path, deps)
+        assert len(calls) == before + 1
+
+
+def test_transient_produce_failure_bounds_retries_with_backoff_and_clears_on_success(
+    tmp_path, monkeypatch
+):
+    from healthvideo.workflows import production_retry
+
+    entry = _entry()
+    add_to_queue(tmp_path, entry)
+    project = tmp_path / 'projects' / entry.slug
+    project.mkdir(parents=True)
+    manifest = project / 'project.yaml'
+    manifest.write_text('revision: 001', encoding='utf-8')
+    clock = {'now': datetime(2026, 10, 25, 9, 0, 0, tzinfo=UTC)}
+    monkeypatch.setattr(production_retry, '_now', lambda: clock['now'])
+    state = {'value': WorkflowState.MEDICALLY_APPROVED, 'should_fail': True}
+    calls = []
+
+    def produce(_):
+        calls.append(clock['now'])
+        if state['should_fail']:
+            raise OSError('temporary network failure')
+        state['value'] = WorkflowState.AWAITING_VIDEO_REVIEW
+
+    deps = RunDeps(
+        create_project=lambda *_: project,
+        read_state=lambda _: state['value'],
+        reject_note=lambda _: None, python_steps={'produce': produce},
+        changed_code_paths=lambda _: [], visual_review_pending=lambda _: False,
+    )
+    retry_file = tmp_path / 'topics/logs' / entry.slug / 'production-retry.yaml'
+
+    # Attempt 1 fails -> backoff 120s
+    assert run_queue(tmp_path, deps).blocked == [entry.slug]
+    assert len(calls) == 1
+    assert read_yaml(retry_file)['attempts'] == 1
+
+    # Before 120s: held without calling produce
+    clock['now'] += timedelta(seconds=60)
+    assert run_queue(tmp_path, deps).blocked == [entry.slug]
+    assert len(calls) == 1
+
+    # At 120s: attempt 2 fails -> backoff 600s
+    clock['now'] += timedelta(seconds=60)
+    assert run_queue(tmp_path, deps).blocked == [entry.slug]
+    assert len(calls) == 2
+    assert read_yaml(retry_file)['attempts'] == 2
+
+    # Before 600s: held
+    clock['now'] += timedelta(seconds=599)
+    assert run_queue(tmp_path, deps).blocked == [entry.slug]
+    assert len(calls) == 2
+
+    # At 600s: attempt 3 fails -> permanently held for this fingerprint
+    clock['now'] += timedelta(seconds=1)
+    assert run_queue(tmp_path, deps).blocked == [entry.slug]
+    assert len(calls) == 3
+    assert read_yaml(retry_file)['attempts'] == 3
+    assert read_yaml(retry_file)['retry_after'] is None
+
+    # Even after hours/restart, attempt 4 is not made automatically
+    clock['now'] += timedelta(hours=5)
+    assert run_queue(tmp_path, deps).blocked == [entry.slug]
+    assert len(calls) == 3
+
+    # Input repair + successful produce clears retry record
+    state['should_fail'] = False
+    manifest.write_text('revision: 002', encoding='utf-8')
+    report = run_queue(tmp_path, deps)
+    assert len(calls) == 4
+    assert report.at_gate == [entry.slug]
+    assert not retry_file.exists()
+
+
+def test_corrupt_retry_file_blocks_without_calling_produce(tmp_path):
+    entry = _entry()
+    add_to_queue(tmp_path, entry)
+    project = tmp_path / 'projects' / entry.slug
+    project.mkdir(parents=True)
+    retry_file = tmp_path / 'topics/logs' / entry.slug / 'production-retry.yaml'
+    retry_file.parent.mkdir(parents=True, exist_ok=True)
+    retry_file.write_text(':::corrupt-yaml:::\n[', encoding='utf-8')
+    calls = []
+
+    deps = RunDeps(
+        create_project=lambda *_: project,
+        read_state=lambda _: WorkflowState.MEDICALLY_APPROVED,
+        reject_note=lambda _: None, python_steps={'produce': lambda _: calls.append('produce')},
+        changed_code_paths=lambda _: [], visual_review_pending=lambda _: False,
+    )
+    report = run_queue(tmp_path, deps)
+    assert report.blocked == [entry.slug]
+    assert calls == []

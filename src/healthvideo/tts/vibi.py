@@ -136,5 +136,9 @@ class VibiTTS(ElevenLabsTTS):
                 raise VibiError("ffmpeg is required to decode vibi audio.") from None
             if result.returncode:
                 raise VibiError("ffmpeg could not decode vibi audio.")
-        report = inspect_wav(output, require_signal=self.require_signal)
+        try:
+            report = inspect_wav(output, require_signal=self.require_signal)
+        except ValueError as error:
+            output.unlink(missing_ok=True)
+            raise VibiError(f"vibi returned invalid audio: {error}") from None
         return TTSResult(provider=self.provider_name, audio_file=output, duration_ms=report.duration_ms)
