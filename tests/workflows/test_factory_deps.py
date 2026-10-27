@@ -36,7 +36,18 @@ def _queue_entry(slug: str = "an-man-va-huyet-ap") -> QueueEntry:
     )
 
 
+def _accepted_factory_fixture(root: Path) -> None:
+    """Synthetic configuration only, in the test's temporary factory."""
+    write_yaml_atomic(root / 'profiles/factory-standards.yaml', {'version': 1, 'entries': [
+        {'id': f'test-{stage}', 'stage': stage, 'version': 1, 'text': 'TEST standard',
+         'reviewer': 'Fixture reviewer', 'accepted_at': '2026-10-27T00:00:00+00:00',
+         'trial_id': 'test', 'evidence_hash': '0' * 64, 'scope': 'channel'}
+        for stage in range(1, 5)
+    ]})
+
+
 def test_create_project_selects_card_from_queue_entry(tmp_path: Path) -> None:
+    _accepted_factory_fixture(tmp_path)
     deps = default_run_deps(tmp_path)
     entry = _queue_entry()
 
@@ -57,6 +68,7 @@ def test_create_project_selects_card_from_queue_entry(tmp_path: Path) -> None:
 
 
 def test_read_state(tmp_path: Path) -> None:
+    _accepted_factory_fixture(tmp_path)
     deps = default_run_deps(tmp_path)
     entry = _queue_entry("do-huyet-ap-tai-nha")
     project_dir = deps.create_project(tmp_path, entry)
@@ -184,6 +196,7 @@ def test_changed_code_paths_reports_new_and_modified(tmp_path: Path) -> None:
 
 
 def test_run_queue_snapshots_each_agent_step(tmp_path: Path) -> None:
+    _accepted_factory_fixture(tmp_path)
     _init_git_repo(tmp_path)
     (tmp_path / "preexisting.py").write_text("leave alone", encoding="utf-8")
     for slug in ("first-topic", "second-topic"):

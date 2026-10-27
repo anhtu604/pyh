@@ -90,20 +90,39 @@ def _entry_markdown(entry: dict) -> str:
     return '\n'.join(lines)
 
 
-def prompt_block(root: Path) -> str:
+def prompt_block(root: Path, *, slug: str | None = None) -> str:
     """Markdown block of standing standards, newest first, within a character budget."""
-    entries = load(root)
-    if not entries:
+    from healthvideo.workflows.factory_standards import accepted_standards
+
+    entries = [entry for entry in load(root) if entry.get('slug') == 'chung'
+               or (slug is not None and entry.get('slug') == slug)]
+    accepted = accepted_standards(root)
+    if slug is not None:
+        projects = (root / 'projects').resolve()
+        project = (projects / slug).resolve()
+        if project.parent != projects:
+            raise ValueError('Project slug ngoài thư mục projects.')
+        manifest = project / 'project.yaml'
+        if manifest.is_file():
+            revision = str(read_yaml(manifest)['active_revision'])
+            snapshot = (project / 'revisions' / revision / 'workflow/standards.yaml').resolve()
+            if not snapshot.is_relative_to(project):
+                raise ValueError('Standards snapshot ngoài project.')
+            if snapshot.is_file():
+                accepted = {entry['stage']: entry for entry in read_yaml(snapshot)['standards']}
+    if not entries and not accepted:
         return ''
     header = (
-        '## Chuẩn của bác sĩ (ghi nhớ từ mọi lần duyệt — bắt buộc)\n'
-        'Đây là các góp ý bác sĩ đã đưa ra. Coi mỗi góp ý là chuẩn lâu dài: rút ra nguyên tắc '
-        'chung (văn phong, cách trích nguồn, độ dài, cách nói, hình ảnh) và áp dụng cho mọi chủ đề, '
-        'không chỉ chủ đề được nêu. Không lặp lại lỗi đã bị góp ý. Góp ý gắn mã dòng/claim '
-        '(N07, M11…) là ví dụ cụ thể của nguyên tắc đó.\n'
+        '## Chuẩn của bác sĩ\n'
+        'Chuẩn đã nghiệm thu áp dụng toàn kênh. Góp ý chỉ áp dụng đúng chủ đề; '
+        'ghi chú chung áp dụng toàn kênh. Không suy rộng góp ý của chủ đề khác.\n'
     )
     body: list[str] = []
     used = len(header)
+    for stage, entry in sorted(accepted.items()):
+        chunk = f"- Giai đoạn {stage} · v{entry['version']}: {entry['text']}"
+        body.append(chunk)
+        used += len(chunk) + 1
     for entry in reversed(entries):
         chunk = _entry_markdown(entry)
         if used + len(chunk) > PROMPT_CHAR_BUDGET:

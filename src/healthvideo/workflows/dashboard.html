@@ -241,6 +241,17 @@ blockquote cite{display:block;margin-top:6px;font-style:normal;font-size:12px;co
 .media figcaption{font-size:13px;color:var(--muted);margin-bottom:10px;font-weight:600}
 .media video{width:100%;max-height:62vh;border-radius:12px;background:#000}
 .media audio{width:100%}
+#factory-acceptance>summary{cursor:pointer;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+#factory-acceptance>summary::before{content:'▸';color:var(--teal)}
+#factory-acceptance[open]>summary::before{content:'▾'}
+#factory-acceptance>summary h2{margin:0}
+#factory-acceptance .fa-text{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;line-height:1.7}
+#factory-acceptance .fa-line{padding:12px 0;border-bottom:1px solid var(--line);line-height:1.6}
+#factory-acceptance .fa-line small{display:block;color:var(--muted)}
+#factory-acceptance .fa-hash{font-size:12px;color:var(--muted);overflow-wrap:anywhere;margin-top:10px}
+#fa-events{color:var(--muted);font-size:13px;line-height:1.8;padding-left:22px}
+#fa-status{color:var(--teal);font-family:inherit}
+#fa-evidence a{text-decoration:none}
 .clips{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
 .clips video{max-height:180px}
 pre.md{white-space:pre-wrap;word-break:break-word;font-family:'Be Vietnam Pro',sans-serif;font-size:14px;line-height:1.7;color:#d5def7;
@@ -297,6 +308,36 @@ pre.md{white-space:pre-wrap;word-break:break-word;font-family:'Be Vietnam Pro',s
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><path d="M12 3l7 3v5c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6z"/></svg>
       Duyệt ngay</button>
   </section>
+
+  <details class="glass card" id="factory-acceptance" aria-labelledby="fa-title" open>
+    <summary><h2 id="fa-title">Nghiệm thu xưởng</h2><span class="tag">TEST · ngoại tuyến</span><span class="meta">Bấm để mở / thu gọn</span></summary>
+    <p class="lead">Xem mẫu, góp ý rồi chấp nhận chuẩn từng giai đoạn 1 → 4. Đây là chuẩn cấu hình;
+      hai cổng duyệt y khoa và video của sản phẩm vẫn bắt buộc.</p>
+    <div class="actions">
+      <label>Giai đoạn <select class="inp" id="fa-stage">
+        <option value="1">1 · Chủ đề → kịch bản</option><option value="2">2 · Hình → giọng</option>
+        <option value="3">3 · Dựng → QA</option><option value="4">4 · Bài đăng → đóng gói</option>
+      </select></label>
+      <label>Chủ đề TEST <input class="inp" id="fa-topic" maxlength="500" value="TEST — Hình tròn chuyển động"></label>
+      <button class="btn" id="fa-create" type="button">Tạo mẫu TEST</button>
+      <button class="btn" id="fa-reload" type="button">Tải lại mẫu</button>
+    </div>
+    <p id="fa-progress" role="status"></p>
+    <label>Mẫu đã lưu <select class="inp" id="fa-trials"><option value="">Chọn mẫu TEST</option></select></label>
+    <p><span id="fa-status" class="tag" role="status">Chưa chọn mẫu</span></p>
+    <div id="fa-evidence" class="media" style="margin:16px 0"></div>
+    <ol id="fa-events" aria-label="Lịch sử mẫu thử"></ol>
+    <button class="btn" id="fa-run" type="button" disabled>Chạy mẫu ngoại tuyến · 0 yêu cầu trả phí</button>
+    <label style="display:block;margin:16px 0">Góp ý / chuẩn nháp cho mẫu này
+      <textarea class="inp" id="fa-draft" maxlength="8000" rows="4"></textarea></label>
+    <label id="fa-reviewer-box" hidden>Tên bác sĩ duyệt <input class="inp" id="fa-reviewer" maxlength="200" autocomplete="name"></label>
+    <div class="actions" style="margin-top:12px">
+      <button class="btn" id="fa-save" type="button" disabled>Lưu nháp góp ý</button>
+      <label>PIN bác sĩ <input class="inp" id="fa-pin" type="password" autocomplete="off" maxlength="200" style="width:150px"></label>
+      <button class="btn primary" id="fa-accept" type="button" disabled>Chấp nhận chuẩn</button>
+    </div>
+    <p id="fa-result" role="status" aria-live="polite"></p>
+  </details>
 
   <section class="stats">
     <div class="glass stat"><div class="k">Xưởng</div><div class="v" id="s-factory">—</div></div>
@@ -507,6 +548,10 @@ async function refresh(){
     if(!r.ok) throw new Error(d.error||r.status);
     $('offline').classList.remove('show'); state=d; render(d);
     if(!busy) document.querySelectorAll('main button, header button').forEach(b=>b.disabled=false);
+    $('btn-start').disabled=busy||!d.factory.can_start;
+    $('btn-start').title=d.factory.can_start?'Bật xưởng sản xuất':'Cần chấp nhận đủ 4 chuẩn trong Nghiệm thu xưởng';
+    $('fa-reviewer-box').hidden=!!d.reviewer;
+    faButtons();
   }catch(e){$('offline').classList.add('show')}
 }
 
@@ -719,6 +764,116 @@ $('btn-start').onclick=()=>act('/api/factory/start');
 $('btn-stop').onclick=()=>act('/api/factory/stop', state&&state.agents.length?'Agent đang làm việc. Dừng xưởng bây giờ sẽ cắt ngang bước hiện tại. Vẫn dừng?':'Dừng xưởng nền?');
 $('btn-review').onclick=()=>{const p=state&&state.projects.find(x=>x.gate);if(p) openProduct(p.slug)};
 $('btn-quit').onclick=()=>act('/api/app/quit','Tắt app? Xưởng nền vẫn chạy nếu đang bật.');
+/* ---------- isolated factory acceptance (never product decisions) ---------- */
+let faBundle=null, faStandards={}, faBusy=false, faInitial=true;
+const FA_STATUS={created:'Mới tạo',ready:'Sẵn sàng xem',failed:'Dựng mẫu chưa thành công',stale:'Mẫu đã thay đổi · cần tạo lại'};
+async function faGet(path){
+  const r=await fetch(path,{cache:'no-store'}), data=await r.json();
+  if(!r.ok) throw new Error(data.error||r.status); return data;
+}
+async function faPost(action,body){
+  const r=await fetch('/api/trials/'+action,{method:'POST',headers:{'X-Dashboard-Token':TOKEN,
+    'Content-Type':'application/json'},body:JSON.stringify(body)}), data=await r.json();
+  if(!r.ok) throw new Error(data.error||r.status); return data.message;
+}
+function faButtons(){
+  const b=faBundle, ready=b&&b.status==='ready', stage=Number($('fa-stage').value);
+  const ordered=Array.from({length:stage-1},(_,i)=>i+1).every(s=>faStandards[s]);
+  $('fa-create').disabled=faBusy; $('fa-stage').disabled=faBusy; $('fa-trials').disabled=faBusy;
+  $('fa-reload').disabled=faBusy; $('fa-run').disabled=faBusy||!b||b.status==='stale';
+  $('fa-save').disabled=faBusy||!ready;
+  $('fa-accept').disabled=faBusy||!ready||!ordered||!b.draft.text||$('fa-draft').value!==b.draft.text;
+  $('fa-accept').textContent=`Chấp nhận chuẩn v${(faStandards[stage]?.version||0)+1}`;
+}
+async function faShow(id){
+  faBundle=id?await faGet(`/api/trials/${encodeURIComponent(id)}/bundle`):null;
+  const b=faBundle;
+  $('fa-draft').value=b?.draft?.text||'';
+  $('fa-run').textContent=b?.status==='failed'?'Thử lại mẫu ngoại tuyến · 0 yêu cầu trả phí':'Chạy mẫu ngoại tuyến · 0 yêu cầu trả phí';
+  $('fa-status').textContent=b?(FA_STATUS[b.status]||'Chưa rõ trạng thái'):'Chưa chọn mẫu';
+  $('fa-events').replaceChildren();
+  const history=b?.timeline||b?.events.map(e=>({text:e==='created'?'Đã tạo mẫu TEST.':e==='offline-run'?'Đã dựng mẫu ngoại tuyến.':'Dựng mẫu chưa thành công.'}))||[];
+  for(const event of history){
+    const li=document.createElement('li');
+    li.textContent=(event.at?new Date(event.at).toLocaleString('vi-VN')+' · ':'')+event.text;
+    $('fa-events').append(li);
+  }
+  const box=$('fa-evidence'); box.replaceChildren();
+  if(b&&b.status==='ready') for(const o of b.outputs){
+    const url=`/api/trials/${encodeURIComponent(b.id)}/media/${o.path.split('/').map(encodeURIComponent).join('/')}`;
+    const fig=document.createElement('figure'); let el;
+    if(/\.mp4$/.test(o.path)){el=document.createElement('video');el.controls=true;el.preload='metadata';el.style.maxHeight='360px'}
+    else if(/\.wav$/.test(o.path)){el=document.createElement('audio');el.controls=true;el.preload='metadata'}
+    else if(/\.png$/.test(o.path)){el=document.createElement('img');el.alt='Mẫu TEST phi y khoa';el.style.maxWidth='100%'}
+    else if(o.path==='script.yaml'){
+      el=document.createElement('div');
+      const script=b.previews?.[o.path];
+      for(const line of script?.lines||[]){
+        const row=document.createElement('div'); row.className='fa-line';
+        const label=document.createElement('strong'); label.textContent=line.id+' · ';
+        row.append(label,document.createTextNode(line.text));
+        const scene=script.scenes.find(s=>s.script_line===line.id);
+        if(scene){const note=document.createElement('small');note.textContent='Hình minh họa: '+scene.visual;row.append(note)}
+        el.append(row);
+      }
+    }
+    else if(o.path==='qa.json'){
+      const qa=JSON.parse(b.previews?.[o.path]||'{}');
+      el=document.createElement('pre');el.className='fa-text';
+      el.textContent=`Mẫu TEST · ${qa.renderer}\nThời lượng: ${qa.duration_seconds} giây · ${qa.fps} khung hình/giây\nĐịnh dạng: ${qa.formats.join(', ')}\nPhụ đề:\n${qa.captions.join('\n')}`;
+    }
+    else if(b.previews?.[o.path]){el=document.createElement('pre');el.className='fa-text';el.textContent=b.previews[o.path]}
+    else {el=document.createElement('div')}
+    if(['VIDEO','AUDIO','IMG'].includes(el.tagName)) el.src=url;
+    const labels={'sample.txt':'Giới thiệu mẫu','script.yaml':'Kịch bản mẫu · từng dòng',
+      'illustration.png':'Hình minh họa TEST','tone.wav':'Nghe âm thanh mẫu · âm đơn, không phải giọng đọc',
+      'wide.mp4':'Video ngang','vertical.mp4':'Video dọc','qa.json':'Thông tin kiểm tra video',
+      'thumbnail.png':'Ảnh bìa mẫu','captions.txt':'Nội dung bài đăng mẫu','sample-hashes.json':'Chi tiết tệp mẫu'};
+    const caption=document.createElement('figcaption');caption.textContent=labels[o.path]||'Tệp mẫu';
+    const detail=document.createElement('details');detail.className='fa-hash';
+    const summary=document.createElement('summary');summary.textContent='Chi tiết tệp · SHA-256 '+o.sha256.slice(0,12)+'…';
+    const hash=document.createElement('p');hash.textContent='SHA-256: '+o.sha256;
+    const link=document.createElement('a');link.className='btn';link.textContent='Mở tệp mẫu';link.href=url;link.target='_blank';link.rel='noopener';
+    detail.append(summary,hash,link);fig.append(caption,el,detail);box.append(fig);
+  }
+  faButtons();
+}
+async function faLoad(selected){
+  const [list, standards]=await Promise.all([faGet('/api/trials'),faGet('/api/standards/accepted')]);
+  faStandards=standards.accepted;
+  if(faInitial){$('factory-acceptance').open=[1,2,3,4].some(s=>!faStandards[s]);faInitial=false}
+  $('fa-progress').textContent=[1,2,3,4].map(s=>`${s}: ${faStandards[s]?'đã chấp nhận v'+faStandards[s].version:'chưa chấp nhận'}`).join(' · ');
+  const stage=Number($('fa-stage').value), items=list.trials.filter(t=>t.stage===stage);
+  $('fa-trials').innerHTML='<option value="">Chọn mẫu TEST</option>'+items.map(t=>
+    `<option value="${esc(t.id)}">${esc(t.topic)} · ${esc(FA_STATUS[t.status]||'Chưa rõ trạng thái')} · ${esc(t.id.slice(0,8))}</option>`).join('');
+  const id=items.some(t=>t.id===selected)?selected:(items.at(-1)?.id||'');
+  $('fa-trials').value=id; await faShow(id);
+}
+async function faAction(fn){
+  if(faBusy) return; faBusy=true; faButtons(); $('fa-result').textContent='Đang xử lý mẫu TEST…';
+  try{await fn();$('fa-result').textContent='Đã lưu kết quả TEST.';await refresh()}
+  catch(e){$('fa-result').textContent=e.message}
+  finally{faBusy=false;faButtons()}
+}
+$('fa-create').onclick=()=>faAction(async()=>{
+  const b=await faPost('create',{stage:Number($('fa-stage').value),topic:$('fa-topic').value});await faLoad(b.id);
+});
+$('fa-run').onclick=()=>faAction(async()=>{const id=faBundle.id;await faPost('run',{trial_id:id});await faLoad(id)});
+$('fa-save').onclick=()=>faAction(async()=>{
+  await faPost('standard-draft',{trial_id:faBundle.id,stage:faBundle.stage,text:$('fa-draft').value});await faShow(faBundle.id);
+});
+$('fa-accept').onclick=()=>faAction(async()=>{
+  const b=faBundle;
+  const pin=$('fa-pin').value; $('fa-pin').value='';
+  await faPost('accept',{trial_id:b.id,stage:b.stage,text:$('fa-draft').value,pin,
+    expected_input_hash:b.input_hash,expected_version:faStandards[b.stage]?.version||0,
+    expected_standards_hash:b.standards_hash,reviewer:$('fa-reviewer').value});await faLoad(b.id);
+});
+$('fa-reload').onclick=()=>faAction(()=>faLoad(faBundle?.id));
+$('fa-stage').onchange=()=>faAction(()=>faLoad());
+$('fa-trials').onchange=()=>faAction(()=>faShow($('fa-trials').value));
+$('fa-draft').oninput=faButtons;
+faLoad().catch(e=>$('fa-result').textContent=e.message);
 refresh(); setInterval(refresh,3000);
 </script>
 </body>

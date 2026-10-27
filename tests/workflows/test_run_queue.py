@@ -633,8 +633,10 @@ def test_agent_prompt_carries_doctor_standards(tmp_path: Path) -> None:
     entry = _entry("benh-gut")
     add_to_queue(tmp_path, entry)
     (tmp_path / "projects" / entry.slug).mkdir(parents=True, exist_ok=True)
-    standards.record(tmp_path, slug="khac", gate="medical", revision="001", kind="reject",
+    standards.record(tmp_path, slug="chung", gate="medical", revision="001", kind="reject",
                      text="Cắt đuôi giải thích ở mọi dòng.")
+    standards.record(tmp_path, slug="khac", gate="medical", revision="001", kind="reject",
+                     text="Góp ý riêng cho chủ đề khác.")
     states = {entry.slug: WorkflowState.NEEDS_MEDICAL_REVISION}
     captured: list[str] = []
 
@@ -656,6 +658,7 @@ def test_agent_prompt_carries_doctor_standards(tmp_path: Path) -> None:
     assert len(captured) == 1
     assert "Chuẩn của bác sĩ" in captured[0]
     assert "Cắt đuôi giải thích ở mọi dòng." in captured[0]
+    assert "Góp ý riêng cho chủ đề khác." not in captured[0]
 
 
 def test_packaged_topic_is_not_reported_at_gate(tmp_path: Path) -> None:
