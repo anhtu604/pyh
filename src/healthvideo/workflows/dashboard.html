@@ -973,7 +973,7 @@ async function opsPreview(){
   if(!slug){$('ops-preview').textContent='Chọn dự án để xem bước tiếp theo và cache.';return}
   opsCurrent=await opsGet(`/api/project/${encodeURIComponent(slug)}/operations`);
   const d=opsCurrent,c=d.cache;
-  $('ops-preview').textContent=`Revision ${d.revision} · Bước: ${d.next_step||'chờ duyệt / hoàn tất'}\nCổng: ${d.gate||'—'}\n${c.lines} dòng đọc · ${c.files} file cache hiện có\nTối đa ${c.max_requests} yêu cầu TTS cho một lượt. ${c.note}\n${d.blocked||d.retry_status.reason||''}`;
+  $('ops-preview').textContent=`Revision ${d.revision} · Bước: ${d.next_step||'chờ duyệt / hoàn tất'}\nCổng: ${d.gate||'—'}\n${c.lines} dòng đọc · ${c.files} file cache hiện có\nTối đa ${c.max_requests} yêu cầu TTS cho một lượt. ${c.note}\n${d.blocked||d.retry_status.reason||''}${d.retry_status.retry_after?'\nThử lại sau (retry_after): '+d.retry_status.retry_after:''}`;
 }
 $('ops-tabs').querySelectorAll('[data-ops-tab]').forEach(button=>button.onclick=async()=>{
   opsTab=button.dataset.opsTab;

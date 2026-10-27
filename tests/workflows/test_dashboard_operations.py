@@ -137,3 +137,92 @@ def test_reopen_refuses_reviews_junction_before_any_external_mutation(project):
 def test_project_traversal(tmp_path, slug):
     with pytest.raises((ValueError, LookupError)):
         ops.project_operations(tmp_path, slug)
+
+
+def test_real_production_retry_integration_with_app_routes(project, monkeypatch):
+    import json
+    import threading
+    from datetime import timedelta
+    from http.client import HTTPConnection
+
+    from healthvideo.domain.project_v2 import WorkflowState
+    from healthvideo.workflows import production_retry
+
+    root, project_dir = project
+    clock = {'now': datetime(2026, 10, 25, 10, 0, 0, tzinfo=UTC)}
+    monkeypatch.setattr(production_retry, '_now', lambda: clock['now'])
+
+    srv = dashboard.DashboardServer(root, 0, token='tok', agents=list)
+    thread = threading.Thread(target=srv.serve_forever, daemon=True)
+    thread.start()
+    port = srv.server_address[1]
+
+    def call(method: str, path: str, payload: dict | None = None) -> tuple[int, dict | str]:
+        conn = HTTPConnection('127.0.0.1', port, timeout=5)
+        headers = {'Host': f'127.0.0.1:{port}', 'X-Dashboard-Token': 'tok'}
+        body = None
+        if payload is not None:
+            headers['Content-Type'] = 'application/json'
+            body = json.dumps(payload).encode('utf-8')
+        conn.request(method, path, body=body, headers=headers)
+        resp = conn.getresponse()
+        raw = resp.read().decode('utf-8')
+        ctype = resp.getheader('Content-Type', '')
+        conn.close()
+        return resp.status, (json.loads(raw) if ctype.startswith('application/json') else raw)
+
+    try:
+        retry_file = root / 'topics/logs' / project_dir.name / 'production-retry.yaml'
+
+        # 1. Record real validation hold -> POST retry rejected while inputs unchanged
+        production_retry.record_failure(
+            root,
+            project_dir,
+            WorkflowState.MEDICALLY_APPROVED,
+            ValueError('visual budget failed: chart_crop'),
+        )
+        assert retry_file.is_file()
+        status, err = call('POST', f'/api/project/{project_dir.name}/retry', {'expected_revision': '001'})
+        assert status == 400
+        assert 'chart_crop' in err['error']
+        assert retry_file.is_file()
+
+        # 2. Repair storyboard (and re-approve medical gate so approval matches) -> fingerprint changes -> retry succeeds & deletes record
+        board_path = project_dir / 'revisions/001/storyboard/storyboard.yaml'
+        board_data = read_yaml(board_path)
+        board_data['scenes'][0]['expected_duration_seconds'] = 14
+        write_yaml_atomic(board_path, board_data)
+        (project_dir / 'revisions/001/reviews/medical-approval.yaml').unlink()
+        manifest_data = read_yaml(project_dir / 'project.yaml')
+        manifest_data['state'] = 'awaiting_medical_review'
+        write_yaml_atomic(project_dir / 'project.yaml', manifest_data)
+        approve_gate(project_dir, GateKind.MEDICAL, reviewer='Fixture doctor', now=clock['now'])
+
+        status, ok = call('POST', f'/api/project/{project_dir.name}/retry', {'expected_revision': '001'})
+        assert status == 200, ok
+        assert not retry_file.exists()
+        assert ok['message']['retry_status']['allowed'] is True
+        assert ok['message']['retry_status']['kind'] is None
+
+        # 3. Record transient hold in backoff window -> app operations & UI surface retry_after
+        production_retry.record_failure(
+            root,
+            project_dir,
+            WorkflowState.MEDICALLY_APPROVED,
+            RuntimeError('temporary provider timeout'),
+        )
+        assert retry_file.is_file()
+        clock['now'] += timedelta(seconds=30)
+        status, info = call('GET', f'/api/project/{project_dir.name}/operations')
+        assert status == 200
+        assert info['retry_status']['kind'] == 'transient'
+        assert info['retry_status']['allowed'] is False
+        expected_retry_after = (datetime(2026, 10, 25, 10, 0, 0, tzinfo=UTC) + timedelta(seconds=120)).isoformat()
+        assert info['retry_status']['retry_after'] == expected_retry_after
+
+        status, html = call('GET', '/')
+        assert status == 200
+        assert 'd.retry_status.retry_after' in html
+    finally:
+        srv.shutdown()
+        srv.server_close()

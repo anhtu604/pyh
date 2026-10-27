@@ -39,9 +39,9 @@ Kiểm tra môi trường bất kỳ lúc nào bằng:
 
 ## Vận hành hằng ngày
 
-1. Lần đầu: bác sĩ chạy `healthvideo review set-pin`, rồi `healthvideo xuong --background` để khởi động xưởng nền.
-2. Thêm chủ đề: `healthvideo topic discover --query "<từ khóa>"`, rồi `healthvideo topic add --slug <slug> --title "<tiêu đề>" --question "<câu hỏi>" [--note "<ghi chú>"]`.
-3. Khi có thông báo: `healthvideo duyet`. Đọc gói HTML tự mở, chọn **A** duyệt / **R** từ chối / **B** bỏ qua, nhập PIN cho quyết định. Ghi chú duyệt là tùy chọn; từ chối cần lý do và chọn nơi làm lại (Enter nhận mặc định). Tên bác sĩ chỉ hỏi lần đầu, lưu ngoài repo tại `~/.healthvideo/operator.yaml`; PIN chỉ nhập qua `getpass` trong TTY.
+1. Lần đầu: bác sĩ chạy `healthvideo review set-pin`, rồi mở app điều khiển `healthvideo app` (hoặc bấm đúp lối tắt Desktop **Xưởng video**). Trước khi chạy hàng đợi sản xuất A–Z lần đầu, bác sĩ nghiệm thu và chấp nhận chuẩn 4 giai đoạn (1 → 4) bằng mẫu `TEST` và PIN ngay trong mục **Nghiệm thu xưởng** của app, rồi bấm **Bật xưởng** (hoặc `healthvideo xuong --background`).
+2. Thêm chủ đề và xử lý lỗi: ngay trong tab **Hàng đợi** của `healthvideo app` (thêm chủ đề, xem bước kế tiếp + ước tính cache + `retry_after`, cho phép thử lại khi đã sửa đầu vào, mở lại cổng y khoa bằng PIN) và tab **Thư viện** (lọc/xem ảnh, nhập ảnh có nguồn như Muse AI và gắn vào cảnh `whiteboard`); hoặc qua CLI `healthvideo topic discover --query "<từ khóa>"`, `healthvideo topic add --slug <slug> --title "<tiêu đề>" --question "<câu hỏi>" [--note "<ghi chú>"]`.
+3. Khi có thông báo: xem sản phẩm (kịch bản, claim + câu trích, video/giọng), góp ý từng dòng và bấm **Quyết định · PIN** ngay trong `healthvideo app`, hoặc chạy `healthvideo duyet` trong terminal TTY (chọn **A** duyệt / **R** từ chối / **B** bỏ qua, nhập PIN). Tên bác sĩ lưu ngoài repo tại `~/.healthvideo/operator.yaml`; PIN chỉ kiểm tra cục bộ, không lưu.
 4. Xưởng tự chạy tiếp và đóng gói sau khi duyệt video. Lấy `revisions/<rev>/publish/` để đăng tay.
 
 `healthvideo status` cho biết PID xưởng và số project chờ bác sĩ. Dùng `healthvideo xuong --stop` để dừng, `healthvideo xuong` để chạy trong terminal (Ctrl+C dừng), hoặc `healthvideo xuong --once` để chạy một vòng. Chu kỳ mặc định 120 giây, đổi bằng `--interval`; hết quota cả hai agent thì chờ ít nhất 30 phút rồi thử lại. Log xoay vòng tại `topics/logs/xuong.log`. Các lệnh xưởng và duyệt nhận `--root` nếu chạy ngoài gốc repo.
@@ -50,6 +50,7 @@ Kiểm tra môi trường bất kỳ lúc nào bằng:
 
 Bộ lệnh công khai của `healthvideo` (xem chi tiết bằng `--help`):
 
+- `healthvideo app [--port 8765] [--no-browser] [--install-shortcut]` — mở bảng điều khiển local (`127.0.0.1`) để nghiệm thu 4 giai đoạn của xưởng, quản lý hàng đợi/thử lại/mở lại cổng, duyệt thư viện ảnh và quyết định hai cổng bằng PIN.
 - `healthvideo topic discover` — tìm tín hiệu chủ đề từ YouTube, Google Trends, Reddit và đếm bài PubMed.
 - `healthvideo topic add` — thêm một thẻ chủ đề mới vào hàng đợi `topics/queue.yaml` (chặn trùng slug).
 - `healthvideo topic list` — liệt kê các chủ đề trong hàng đợi cùng trạng thái dự án.
@@ -79,6 +80,8 @@ Ngoài ra, nhóm lệnh ẩn `healthvideo step ...` (`hidden=True`) dành riêng
 
 ## Tài liệu
 
+- [Spec hoàn thiện xưởng trước, nghiệm thu từng giai đoạn (2026-10-25)](docs/superpowers/specs/2026-10-25-factory-first-stage-acceptance-design.md) và [Kế hoạch triển khai (2026-10-25)](docs/superpowers/plans/2026-10-25-factory-first-stage-acceptance.md)
+- [Hướng dẫn nghiệm thu xưởng trong app](docs/factory-acceptance-guide.md) và [Ghi nhận kiểm chứng tích hợp Muse AI](docs/reference/muse-integration-findings.md)
 - [Spec tái cấu trúc xưởng video (2026-10-22)](docs/superpowers/specs/2026-10-22-video-factory-restructure-design.md)
 - [Kế hoạch triển khai tái cấu trúc xưởng video (2026-10-22)](docs/superpowers/plans/2026-10-22-video-factory-restructure.md)
 - [Spec nội dung explain-first (2026-10-18)](docs/superpowers/specs/2026-10-18-explain-first-content-design.md)
@@ -88,6 +91,7 @@ Ngoài ra, nhóm lệnh ẩn `healthvideo step ...` (`hidden=True`) dành riêng
 
 | Task | Deliverable | Status | Tests | Commit |
 | --- | --- | --- | --- | --- |
+| Gói E: tích hợp 4 gói + hoàn tất kế hoạch nghiệm thu xưởng (Task 1 + 9) | `runner.py` nối `prompt_block(root, slug=entry.slug)` để dùng snapshot chuẩn đã pin của project và lọc góp ý theo đúng `slug`; kiểm tích hợp `dashboard_operations.retry_project` ↔ `production_retry` thật và hiển thị `retry_after` trong UI; sửa `UrateDeposition.tsx` cho dịch khớp/sụn/xương lấp kín theo đường cong màng hoạt dịch (hết dải tối cắt thẳng); đồng bộ `docs/HANDOFF.md` (giữ nguyên phần Muse của người dùng, `needs_login`), duyệt spec 2026-10-25, hướng dẫn nghiệm thu và test E2E offline `test_factory_end_to_end.py` | complete — chờ bác sĩ nghiệm thu giai đoạn 1 trong app | pytest 1568 passed, 1 skipped; Ruff; vitest 183; typecheck | Chờ Claude review/commit |
 | Xưởng: dừng lỗi sản xuất xác định, giới hạn retry tạm thời | `workflows/production_retry.py` (`production_fingerprint`, `retry_status`, `record_failure`, `clear_retry`, `topics/logs/<slug>/production-retry.yaml`): `ValueError` dừng ngay tới khi sửa đầu vào (storyboard/asset/visual-review/voice/code); lỗi tạm thời (`OSError`/`RuntimeError`) thử lại tối đa 3 lần mỗi fingerprint với backoff 120 s rồi 600 s; bọc cả `produce` sau `visual_review`; xóa record khi thành công; chặn an toàn khi file retry YAML hỏng | complete | pytest full; Ruff; test_production_retry, test_run_queue, test_factory_operator | `fix: bound production retries and resume after input repairs` |
 | Xưởng: cache TTS trả phí theo dòng và phân loại audio lỗi | `_synthesize_cached_line` cache cả `vibi_minimax` (kèm `-loudnorm` runtime_id) với receipt ghi nguyên tử, kiểm SHA-256 + `inspect_wav`, giữ `audio/tts-usage.json` không nhân đôi request khi cache hit; WAV mới sinh hỏng/im lặng/không đọc được ở `VibiTTS`, `ElevenLabsTTS`, `NormalizedTTS` và `produce` chuyển thành `RuntimeError` đã làm sạch (không cache, không giữ ở `output`), giữ `ValueError` cho lỗi tốc độ/tag | complete | pytest full; Ruff; test_voice_production, test_vibi, test_elevenlabs, test_normalize, test_produce | `fix: reuse paid TTS lines and classify invalid provider audio` |
 | Nghiệm thu xưởng gói B — vòng sửa 1 | Chấp nhận chuẩn bằng PIN bác sĩ, dùng chung limiter với cổng; nội dung TEST tiếng Việt xem ngay trong trang, hash phụ, trạng thái/lịch sử và khu thu gọn; screenshot stage 1–2 | complete (chưa accept chuẩn thật) | pytest 1494 passed, 1 skipped; Ruff/diff/JS syntax; Chromium CDP; Vitest 182; typecheck | Không commit; chờ Claude review |

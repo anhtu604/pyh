@@ -283,7 +283,7 @@ def run_queue(
                         deps.reject_note(project_dir) or ""
                     )
                 prompt = render_prompt(step, **prompt_fields)
-                standards_block = prompt_block(root)
+                standards_block = prompt_block(root, slug=entry.slug)
                 if standards_block:
                     prompt = f"{prompt.rstrip()}\n\n{standards_block}"
                 before = deps.code_snapshot(root) if deps.code_snapshot is not None else None

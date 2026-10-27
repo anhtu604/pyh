@@ -661,6 +661,97 @@ def test_agent_prompt_carries_doctor_standards(tmp_path: Path) -> None:
     assert "Góp ý riêng cho chủ đề khác." not in captured[0]
 
 
+def test_agent_prompt_uses_pinned_v1_standards_and_filters_other_slug_feedback(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    from healthvideo.workflows import factory_standards, factory_trials, standards
+    from tests.helpers import create_v2_project_fixture
+
+    def fake_render(directory: Path) -> list[Path]:
+        sample = directory / "injected-render.txt"
+        sample.write_text("TEST renderer boundary", encoding="utf-8")
+        return [sample]
+
+    monkeypatch.setattr(factory_trials, "_render_samples", fake_render)
+
+    for stage in range(1, 5):
+        trial = factory_trials.create_trial(tmp_path, stage)
+        bundle = factory_trials.run_trial(tmp_path, trial["id"])
+        text = "Chuẩn kịch bản v1 đã pin cho project." if stage == 1 else f"Chuẩn stage {stage} v1"
+        factory_standards.save_standard_draft(tmp_path, stage, text, trial["id"])
+        factory_standards.accept_standard(
+            tmp_path,
+            stage,
+            trial_id=bundle["id"],
+            expected_input_hash=bundle["input_hash"],
+            expected_version=0,
+            reviewer="Bác sĩ",
+            now=datetime.now(UTC),
+        )
+
+    entry = _entry("muoi-va-huyet-ap-v2")
+    add_to_queue(tmp_path, entry)
+    project_dir = create_v2_project_fixture(tmp_path / "projects")
+    factory_standards.pin_standards(tmp_path, project_dir)
+
+    trial_v2 = factory_trials.create_trial(tmp_path, 1)
+    bundle_v2 = factory_trials.run_trial(tmp_path, trial_v2["id"])
+    factory_standards.save_standard_draft(
+        tmp_path, 1, "Chuẩn kịch bản v2 mới chấp nhận sau.", trial_v2["id"]
+    )
+    accepted_v2 = factory_standards.accept_standard(
+        tmp_path,
+        1,
+        trial_id=bundle_v2["id"],
+        expected_input_hash=bundle_v2["input_hash"],
+        expected_version=1,
+        reviewer="Bác sĩ",
+        now=datetime.now(UTC),
+    )
+    assert accepted_v2["version"] == 2
+
+    standards.record(
+        tmp_path,
+        slug=entry.slug,
+        gate="medical",
+        revision="001",
+        kind="comment",
+        text="Góp ý đúng của project.",
+    )
+    standards.record(
+        tmp_path,
+        slug="slug-khac",
+        gate="medical",
+        revision="001",
+        kind="comment",
+        text="Góp ý riêng của slug-khac không được lọt vào.",
+    )
+
+    states = {entry.slug: WorkflowState.NEEDS_MEDICAL_REVISION}
+    captured: list[str] = []
+
+    def fake_invoke(agents: Any, prompt: str, *, cwd: Path, log_dir: Path) -> AgentResult:
+        captured.append(prompt)
+        states[log_dir.name] = WorkflowState.AWAITING_MEDICAL_REVIEW
+        return AgentResult(agent="codex", ok=True, quota_exhausted=False, log_path=_log_file(log_dir))
+
+    deps = RunDeps(
+        create_project=lambda root, item: root / "projects" / item.slug,
+        read_state=lambda p: states[p.name],
+        reject_note=lambda _p: None,
+        python_steps={},
+        changed_code_paths=lambda _root: [],
+        invoke=fake_invoke,
+    )
+    run_queue(tmp_path, deps)
+
+    assert len(captured) == 1
+    assert "Giai đoạn 1 · v1: Chuẩn kịch bản v1 đã pin cho project." in captured[0]
+    assert "Chuẩn kịch bản v2 mới chấp nhận sau." not in captured[0]
+    assert "Góp ý đúng của project." in captured[0]
+    assert "Góp ý riêng của slug-khac không được lọt vào." not in captured[0]
+
+
 def test_packaged_topic_is_not_reported_at_gate(tmp_path: Path) -> None:
     add_to_queue(tmp_path, _entry("da-dong-goi"))
     (tmp_path / "projects" / "da-dong-goi").mkdir(parents=True)

@@ -42,20 +42,20 @@ export const UrateDeposition: React.FC<OrganProps> = ({state, severity, cueProgr
     {/* 1. Synovial joint fluid cavity (4 flat tones + calm mucin contour lines) */}
     <rect x="32" y="32" width="500" height="500" rx="30" fill={brand.night} opacity="0.22"/>
     <rect data-layer="joint-fluid" x="28" y="28" width="504" height="504" rx="30" fill={c.fluidDeep}/>
-    <rect x="34" y="34" width="492" height="340" rx="25" fill={c.fluidShade}/>
-    <path d="M84 34 H500 Q526 34 526 60 V320 Q306 270 84 328Z" fill={c.fluidMid}/>
-    <ellipse cx="320" cy="168" rx="176" ry="96" fill={c.vesselDeep} opacity="0.72"/>
-    <ellipse cx="332" cy="156" rx="116" ry="58" fill={c.fluidLight} opacity="0.48"/>
-    <path d="M114 112 Q248 88 382 114 T514 106 M112 184 Q256 158 396 186 T516 178 M110 254 Q264 226 412 252 T518 248"
+    <path d="M28 54 Q28 34 54 34 H501 Q526 34 526 59 V340 Q296 286 72 342 Q48 250 70 170 Q93 88 28 54Z" fill={c.fluidShade}/>
+    <path d="M28 54 Q28 34 54 34 H500 Q526 34 526 60 V320 Q300 270 78 325 Q54 252 75 170 Q98 88 28 54Z" fill={c.fluidMid}/>
+    <path d="M44 58 Q106 88 83 170 T86 312 Q302 266 518 308 V64 Q518 40 492 40 H64 Q40 40 44 58Z" fill={c.vesselDeep} opacity="0.72"/>
+    <path d="M68 70 Q116 96 94 170 T97 294 Q304 252 504 290 V78 Q504 52 478 52 H92 Q66 52 68 70Z" fill={c.fluidLight} opacity="0.48"/>
+    <path d="M88 112 Q238 88 382 114 T514 106 M82 184 Q236 158 396 186 T516 178 M86 254 Q244 226 412 252 T518 248"
       fill="none" stroke={c.cartilageLight} strokeWidth="0.75" opacity="0.4"/>
 
     {/* 2. Subchondral bone plate & cancellous trabeculae (4 flat tones + marrow cavities) */}
     <g data-layer="bone">
-      <path d="M96 415 Q303 357 532 405 V502 Q532 532 500 532 H96Z" fill={c.boneDeep}/>
-      <path d="M96 415 Q303 357 532 405 V492 Q314 446 96 496Z" fill={c.boneShade}/>
-      <path d="M96 415 Q303 357 532 405 V456 Q308 404 96 458Z" fill={c.boneMid}/>
-      <path d="M96 415 Q303 357 532 405 V429 Q304 374 96 431Z" fill={c.boneLight}/>
-      <path d="M96 416 Q303 358 532 406" fill="none" stroke={c.crystalLight} strokeWidth="0.9" opacity="0.85"/>
+      <path d="M68 415 Q303 357 532 405 V502 Q532 532 500 532 H68Z" fill={c.boneDeep}/>
+      <path d="M68 415 Q303 357 532 405 V492 Q314 446 68 496Z" fill={c.boneShade}/>
+      <path d="M68 415 Q303 357 532 405 V456 Q308 404 68 458Z" fill={c.boneMid}/>
+      <path d="M68 415 Q303 357 532 405 V429 Q304 374 68 431Z" fill={c.boneLight}/>
+      <path d="M74 416 Q303 358 532 406" fill="none" stroke={c.crystalLight} strokeWidth="0.9" opacity="0.85"/>
       {/* Trabecular marrow spaces & bony struts */}
       {marrowLacunae.map(([cx, cy, rx, ry], i) => <g key={i}>
         <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill={c.boneDeep} stroke={c.boneLight} strokeWidth="0.75"/>
@@ -67,17 +67,17 @@ export const UrateDeposition: React.FC<OrganProps> = ({state, severity, cueProgr
 
     {/* 3. Articular hyaline cartilage (4 histological zones + tidemark + chondrocytes + Benninghoff arcades) */}
     <g data-layer="cartilage">
-      <path d="M96 326 Q276 269 532 317 V402 Q303 354 96 412Z" fill={brand.night} opacity="0.2"/>
+      <path d="M74 326 Q276 269 532 317 V402 Q303 354 68 412Z" fill={brand.night} opacity="0.2"/>
       {/* Calcified zone & deep radial zone */}
-      <path d="M96 331 Q276 274 532 322 V405 Q303 357 96 415Z" fill={c.cartilageDeep}/>
+      <path d="M74 331 Q276 274 532 322 V405 Q303 357 68 415Z" fill={c.cartilageDeep}/>
       {/* Middle transitional zone */}
-      <path d="M96 331 Q276 274 532 322 V388 Q303 340 96 398Z" fill={c.cartilageShade}/>
+      <path d="M74 331 Q276 274 532 322 V388 Q303 340 68 398Z" fill={c.cartilageShade}/>
       {/* Upper transitional zone */}
-      <path d="M96 331 Q276 274 532 322 V366 Q303 318 96 376Z" fill={c.cartilageMid}/>
+      <path d="M74 331 Q276 274 532 322 V366 Q303 318 68 376Z" fill={c.cartilageMid}/>
       {/* Superficial tangential zone (lamina splendens) */}
-      <path d="M96 331 Q276 274 532 322 V345 Q282 292 96 350Z" fill={c.cartilageLight}/>
+      <path d="M74 331 Q276 274 532 322 V345 Q282 292 72 350Z" fill={c.cartilageLight}/>
       {/* Undulating tidemark between uncalcified and calcified cartilage */}
-      <path d="M98 396 Q200 368 302 362 T530 386" fill="none" stroke={c.boneLight} strokeWidth="0.9" strokeDasharray="4 2" opacity="0.8"/>
+      <path d="M76 396 Q200 368 302 362 T530 386" fill="none" stroke={c.boneLight} strokeWidth="0.9" strokeDasharray="4 2" opacity="0.8"/>
       {/* Benninghoff collagen arcade curves */}
       <g fill="none" stroke={c.cartilageLight} strokeWidth="0.7" opacity="0.45">
         {[130, 190, 250, 310, 370, 430, 490].map((x, i) =>
@@ -94,7 +94,7 @@ export const UrateDeposition: React.FC<OrganProps> = ({state, severity, cueProgr
         <ellipse cx={cx - 0.8} cy={cy - 0.5} rx="2.2" ry="1.5" fill={c.cartilageLight}/>
       </g>)}
       {/* Specular articular surface rim */}
-      <path d="M96 331 Q276 274 532 322" fill="none" stroke={c.crystalLight} strokeWidth="1.1" opacity="0.9"/>
+      <path d="M78 331 Q276 274 532 322" fill="none" stroke={c.crystalLight} strokeWidth="1.1" opacity="0.9"/>
     </g>
 
     {/* 4. Lateral synovial membrane reflection & villi (4 flat tones + capillaries + intimal synoviocytes) */}

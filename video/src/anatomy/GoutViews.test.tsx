@@ -53,6 +53,8 @@ it('deposits on tissue surfaces independently of an inflammatory alarm', () => {
   expect(after).toContain('data-crystal');
   expect(after).not.toContain('data-signal');
   expect(after).not.toContain('data-neutrophil');
+  expect(after).not.toContain('84 328Z');
+  expect(after).toContain('Q54 252 75 170 Q98 88 28 54Z');
 });
 
 it('enforces flat-shaded anatomical craft: no gradients/filters, >=45 shapes, and >=3 flat tones per primary structure', () => {
