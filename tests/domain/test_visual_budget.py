@@ -48,6 +48,8 @@ def storyboard(
         ("brand_outro", VisualCategory.WHITEBOARD_SVG),
         ("chart", VisualCategory.CHART_CROP),
         ("evidence_highlight", VisualCategory.CHART_CROP),
+        ("kinetic_term", VisualCategory.WHITEBOARD_SVG),
+        ("stat_gauge", VisualCategory.CHART_CROP),
     ],
 )
 def test_classifies_every_current_primary_visual(

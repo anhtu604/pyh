@@ -1,0 +1,24 @@
+Protect Your Health — Third-Party Notices
+
+This repository includes motion graphics components in `video/src/motion/`
+adapted and ported from `video-shotcraft`:
+
+  Project: video-shotcraft
+  Copyright 2026 Wei Yihao
+  License: Apache License, Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
+
+Ported shot cards (rewritten in TypeScript/React for medical explainer scenes):
+- typography/marker-underline-title -> video/src/motion/MarkerUnderlineTitle.tsx
+- typography/lead-word-zoom-assemble -> video/src/motion/LeadWordZoomAssemble.tsx
+- typography/outline-word-fill -> video/src/motion/OutlineWordFill.tsx
+- typography/title-demote-to-label -> video/src/motion/TitleDemoteToLabel.tsx
+- data/chart-live-moves -> video/src/motion/ChartLiveMoves.tsx
+- data/gauge-readout-moves -> video/src/motion/GaugeReadoutMoves.tsx
+- data/timeline-travel -> video/src/motion/TimelineTravel.tsx
+- data/before-after-slider-scrub -> video/src/motion/BeforeAfterSliderScrub.tsx
+- effects/scan-bracket-sweep -> video/src/motion/ScanBracketSweep.tsx
+- effects/scanline-annotate-focus -> video/src/motion/ScanlineAnnotateFocus.tsx
+- effects/spotlight-sweep-moves -> video/src/motion/SpotlightSweepMoves.tsx
+- transition/circle-match-iris -> video/src/motion/CircleMatchIris.tsx
+- transition/wipe-transitions -> video/src/motion/WipeTransitions.tsx
+- camera/crash-zoom-punch -> video/src/motion/CrashZoomPunch.tsx

@@ -1,9 +1,14 @@
 import React from 'react';
+// @ts-expect-error @types/react-dom is not installed
+import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, it, vi} from 'vitest';
 import {HealthVideo} from './HealthVideo';
 import {VisualAsset} from './components/VisualAsset';
+import {SceneMotionOverlay} from './motion/SceneMotionOverlay';
 import {ChartScene} from './scenes/ChartScene';
+import {KineticTermScene} from './scenes/KineticTermScene';
 import {OutroScene} from './scenes/OutroScene';
+import {StatGaugeScene} from './scenes/StatGaugeScene';
 import {WhiteboardScene} from './scenes/WhiteboardScene';
 import {SourceCardScene} from './scenes/SourceCardScene';
 import {parseRenderInput} from './types';
@@ -120,4 +125,75 @@ describe('HealthVideo visual asset layer', () => {
       .toHaveLength(1);
     expect(children.filter((child) => React.isValidElement(child) && child.type === VisualAsset))
       .toHaveLength(0);
-  });});
+  });
+  it('renders scenes with motion overlay, stat_gauge, and kinetic_term through HealthVideo', () => {
+    const props = parseRenderInput({
+      ...input('whiteboard'),
+      scenes: [
+        {
+          schema_version: '1.0',
+          id: 'S01',
+          start_frame: 0,
+          duration_frames: 90,
+          narration: 'Tăng acid uric máu kéo dài dễ dẫn tới lắng đọng urat.',
+          on_screen_text: 'Tăng acid uric máu',
+          visual: 'whiteboard',
+          motion: {
+            emphasis: 'marker-underline-title',
+            emphasis_text: 'tăng acid uric máu',
+            transition_in: 'circle-match-iris',
+          },
+          visual_assets: [],
+        },
+        {
+          schema_version: '1.0',
+          id: 'S02',
+          start_frame: 90,
+          duration_frames: 90,
+          narration: 'Ngưỡng bão hòa urat huyết thanh là 6,8 mg/dL.',
+          claim_id: 'C01',
+          source_marker: '[1]',
+          visual: 'stat_gauge',
+          stat_gauge: {
+            value: 6.8,
+            unit: 'mg/dL',
+            label: 'Ngưỡng bão hòa urat',
+            max_value: 12,
+            variant: 'gauge-readout-moves',
+          },
+          visual_assets: [],
+        },
+        {
+          schema_version: '1.0',
+          id: 'S03',
+          start_frame: 180,
+          duration_frames: 90,
+          narration: 'Gút cấp là cơn viêm khớp khởi phát đột ngột.',
+          visual: 'kinetic_term',
+          kinetic_term: {
+            term: 'GÚT CẤP',
+            definition: 'Cơn viêm khớp khởi phát đột ngột do tinh thể urat.',
+            variant: 'lead-word-zoom-assemble',
+          },
+          visual_assets: [],
+        },
+      ],
+    });
+    const root = renderVideo(props);
+    const sequences = React.Children.toArray(root.props.children).slice(1) as React.ReactElement<{
+      children: React.ReactNode;
+    }>[];
+    expect(sequences).toHaveLength(3);
+    const seq1Children = React.Children.toArray(sequences[0].props.children);
+    expect(seq1Children.some((c) => React.isValidElement(c) && c.type === SceneMotionOverlay)).toBe(true);
+    const seq2Children = React.Children.toArray(sequences[1].props.children);
+    expect(seq2Children.some((c) => React.isValidElement(c) && c.type === StatGaugeScene)).toBe(true);
+    const seq3Children = React.Children.toArray(sequences[2].props.children);
+    expect(seq3Children.some((c) => React.isValidElement(c) && c.type === KineticTermScene)).toBe(true);
+
+    const html = renderToStaticMarkup(<HealthVideo {...props} />);
+    expect(html).toContain('tăng acid uric máu');
+    expect(html).toContain('Ngưỡng bão hòa urat');
+    expect(html).toContain('Cơn viêm khớp khởi phát đột ngột do tinh thể urat.');
+  });
+});

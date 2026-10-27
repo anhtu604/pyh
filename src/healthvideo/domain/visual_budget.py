@@ -102,6 +102,8 @@ EXPLAIN_FIRST_VISUAL_BOUNDS: Mapping[VisualCategory, PercentRange] = MappingProx
 _VISUAL_CATEGORIES: dict[str, VisualCategory] = {
     "whiteboard": VisualCategory.WHITEBOARD_SVG,
     "brand_outro": VisualCategory.WHITEBOARD_SVG,
+    "kinetic_term": VisualCategory.WHITEBOARD_SVG,
+    "stat_gauge": VisualCategory.CHART_CROP,
     "chart": VisualCategory.CHART_CROP,
     "evidence_highlight": VisualCategory.CHART_CROP,
     "source_card": VisualCategory.CHART_CROP,

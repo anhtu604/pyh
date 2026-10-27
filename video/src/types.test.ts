@@ -105,6 +105,86 @@ describe('SceneSchema', () => {
       visual_assets: [{path: 'assets/chart.svg', role: 'chart', pose: 'explain'}],
     }).success).toBe(false);
   });
+
+  it('validates motion overlay emphasis_text against scene narration', () => {
+    const base = {
+      id: 'S04',
+      start_frame: 0,
+      duration_frames: 90,
+      narration: 'Tăng acid uric máu kéo dài gây lắng đọng tinh thể urat.',
+      visual: 'whiteboard',
+    };
+    expect(SceneSchema.safeParse({
+      ...base,
+      motion: {
+        emphasis: 'marker-underline-title',
+        emphasis_text: 'tăng acid uric máu',
+        transition_in: 'circle-match-iris',
+      },
+    }).success).toBe(true);
+    expect(SceneSchema.safeParse({
+      ...base,
+      motion: {
+        emphasis: 'marker-underline-title',
+        emphasis_text: 'suy thận mạn',
+      },
+    }).success).toBe(false);
+    expect(SceneSchema.safeParse({
+      ...base,
+      motion: {
+        emphasis_text: 'tăng acid uric',
+      },
+    }).success).toBe(false);
+  });
+
+  it('validates stat_gauge requires claim_id and payload, and kinetic_term requires payload', () => {
+    expect(SceneSchema.safeParse({
+      id: 'S05',
+      start_frame: 0,
+      duration_frames: 90,
+      narration: 'Ngưỡng bão hòa urat huyết thanh khoảng 6,8 mg/dL.',
+      claim_id: 'C01',
+      visual: 'stat_gauge',
+      stat_gauge: {value: 6.8, unit: 'mg/dL', label: 'Ngưỡng bão hòa urat'},
+    }).success).toBe(true);
+    expect(SceneSchema.safeParse({
+      id: 'S05',
+      start_frame: 0,
+      duration_frames: 90,
+      narration: 'Ngưỡng bão hòa urat huyết thanh khoảng 6,8 mg/dL.',
+      claim_id: 'C01',
+      visual: 'stat_gauge',
+      stat_gauge: {
+        value: 6.8,
+        unit: 'mg/dL',
+        label: 'Ngưỡng bão hòa urat',
+        variant: 'before-after-slider-scrub',
+      },
+    }).success).toBe(false);
+    expect(SceneSchema.safeParse({
+      id: 'S05',
+      start_frame: 0,
+      duration_frames: 90,
+      narration: 'Ngưỡng bão hòa urat huyết thanh khoảng 6,8 mg/dL.',
+      visual: 'stat_gauge',
+      stat_gauge: {value: 6.8, unit: 'mg/dL', label: 'Ngưỡng bão hòa urat'},
+    }).success).toBe(false);
+    expect(SceneSchema.safeParse({
+      id: 'S06',
+      start_frame: 0,
+      duration_frames: 90,
+      narration: 'Gút cấp là phản ứng viêm khớp do tinh thể urat.',
+      visual: 'kinetic_term',
+      kinetic_term: {term: 'GÚT CẤP', definition: 'Viêm khớp cấp tính do tinh thể muối urat.'},
+    }).success).toBe(true);
+    expect(SceneSchema.safeParse({
+      id: 'S06',
+      start_frame: 0,
+      duration_frames: 90,
+      narration: 'Gút cấp là phản ứng viêm khớp do tinh thể urat.',
+      visual: 'kinetic_term',
+    }).success).toBe(false);
+  });
 });
 
 describe('RenderInputSchema chart contract', () => {

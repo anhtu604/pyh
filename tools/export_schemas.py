@@ -90,6 +90,27 @@ def _annotate_storyboard_contract(schema: dict[str, object]) -> None:
             },
             "else": {"properties": {"anatomy": {"type": "null"}}},
         },
+        {
+            "if": {"properties": {"visual": {"const": "stat_gauge"}}, "required": ["visual"]},
+            "then": {
+                "required": ["claim_id", "stat_gauge"],
+                "properties": {
+                    "claim_id": {"type": "string", "pattern": r"\S"},
+                    "stat_gauge": {"$ref": "#/$defs/StatGauge"},
+                },
+            },
+            "else": {"properties": {"stat_gauge": {"type": "null"}}},
+        },
+        {
+            "if": {"properties": {"visual": {"const": "kinetic_term"}}, "required": ["visual"]},
+            "then": {
+                "required": ["kinetic_term"],
+                "properties": {
+                    "kinetic_term": {"$ref": "#/$defs/KineticTerm"},
+                },
+            },
+            "else": {"properties": {"kinetic_term": {"type": "null"}}},
+        },
     ]
 
 

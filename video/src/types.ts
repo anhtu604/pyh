@@ -110,6 +110,82 @@ export const BeatSchema = z.object({
 });
 export type SceneBeat = z.input<typeof BeatSchema>;
 
+const normalizeWord = (text: string): string =>
+  text.normalize('NFC').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+
+export const phraseInNarration = (phrase: string, narration: string): boolean => {
+  const nTokens = narration.split(/\s+/).map(normalizeWord).filter(Boolean);
+  const pTokens = phrase.split(/\s+/).map(normalizeWord).filter(Boolean);
+  if (pTokens.length === 0 || pTokens.length > nTokens.length) return false;
+  for (let i = 0; i <= nTokens.length - pTokens.length; i++) {
+    if (pTokens.every((tok, j) => nTokens[i + j] === tok)) return true;
+  }
+  return false;
+};
+
+export const MOTION_EMPHASIS_KINDS = [
+  'marker-underline-title',
+  'lead-word-zoom-assemble',
+  'outline-word-fill',
+  'title-demote-to-label',
+  'scan-bracket-sweep',
+  'scanline-annotate-focus',
+  'spotlight-sweep-moves',
+] as const;
+
+export const MOTION_TRANSITION_KINDS = [
+  'circle-match-iris',
+  'wipe-transitions',
+  'crash-zoom-punch',
+] as const;
+
+export const SceneMotionSchema = z
+  .object({
+    emphasis: z.enum(MOTION_EMPHASIS_KINDS).nullable().optional(),
+    emphasis_text: z.string().trim().min(1).nullable().optional(),
+    transition_in: z.enum(MOTION_TRANSITION_KINDS).nullable().optional(),
+  })
+  .superRefine((motion, context) => {
+    if (!motion.emphasis && !motion.transition_in) {
+      context.addIssue({
+        code: 'custom',
+        path: ['emphasis'],
+        message: 'motion requires emphasis or transition_in',
+      });
+    }
+    if (motion.emphasis_text && !motion.emphasis) {
+      context.addIssue({
+        code: 'custom',
+        path: ['emphasis_text'],
+        message: 'emphasis_text requires emphasis',
+      });
+    }
+  });
+export type SceneMotion = z.input<typeof SceneMotionSchema>;
+
+export const StatGaugeSchema = z.object({
+  value: z.union([
+    z.number().finite(),
+    z.string().trim().min(1).refine((v) => /\d/.test(v), 'stat_gauge string value must contain a digit'),
+  ]),
+  unit: z.string().trim().min(1),
+  label: z.string().trim().min(1),
+  max_value: z.number().positive().nullable().optional(),
+  variant: z
+    .enum(['gauge-readout-moves', 'chart-live-moves', 'timeline-travel'])
+    .default('gauge-readout-moves'),
+});
+export type StatGauge = z.input<typeof StatGaugeSchema>;
+
+export const KineticTermSchema = z.object({
+  term: z.string().trim().min(1),
+  definition: z.string().trim().min(1),
+  variant: z
+    .enum(['lead-word-zoom-assemble', 'outline-word-fill', 'marker-underline-title', 'title-demote-to-label'])
+    .default('lead-word-zoom-assemble'),
+});
+export type KineticTerm = z.input<typeof KineticTermSchema>;
+
 export const SceneSchema = z
   .object({
     schema_version: z.string().default('1.0'),
@@ -128,11 +204,14 @@ export const SceneSchema = z
     claim_id: z.string().nullable().optional(),
     chapter_id: z.string().regex(/^CH\d{2}$/).nullable().optional(),
     source_marker: z.string().regex(/\S/).nullable().optional(),
-    visual: z.enum(['whiteboard', 'chart', 'evidence_highlight', 'source_card', 'brand_outro', ...MECHANISM_VISUALS]),
+    visual: z.enum(['whiteboard', 'chart', 'evidence_highlight', 'source_card', 'brand_outro', 'stat_gauge', 'kinetic_term', ...MECHANISM_VISUALS]),
     anatomy: AnatomySchema.optional(),
     explainer_layer_id: z.string().optional(),
     evidence_highlight: EvidenceHighlightSchema.nullable().optional(),
     source_card: SourceCardSchema.nullable().optional(),
+    stat_gauge: StatGaugeSchema.nullable().optional(),
+    kinetic_term: KineticTermSchema.nullable().optional(),
+    motion: SceneMotionSchema.nullable().optional(),
     visual_assets: z.array(VisualAssetRefSchema).default([]),
   })
   .superRefine((scene, context) => {
@@ -183,6 +262,30 @@ export const SceneSchema = z
       }
     } else if (scene.source_card) {
       context.addIssue({code: 'custom', path: ['source_card'], message: 'source_card payload requires source_card visual'});
+    }
+    if (scene.visual === 'stat_gauge') {
+      if (!scene.claim_id?.trim()) {
+        context.addIssue({code: 'custom', path: ['claim_id'], message: 'stat_gauge requires claim_id'});
+      }
+      if (!scene.stat_gauge) {
+        context.addIssue({code: 'custom', path: ['stat_gauge'], message: 'stat_gauge requires stat_gauge metadata'});
+      }
+    } else if (scene.stat_gauge) {
+      context.addIssue({code: 'custom', path: ['stat_gauge'], message: 'stat_gauge payload requires stat_gauge visual'});
+    }
+    if (scene.visual === 'kinetic_term') {
+      if (!scene.kinetic_term) {
+        context.addIssue({code: 'custom', path: ['kinetic_term'], message: 'kinetic_term requires kinetic_term metadata'});
+      }
+    } else if (scene.kinetic_term) {
+      context.addIssue({code: 'custom', path: ['kinetic_term'], message: 'kinetic_term payload requires kinetic_term visual'});
+    }
+    if (scene.motion?.emphasis_text && !phraseInNarration(scene.motion.emphasis_text, scene.narration)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['motion', 'emphasis_text'],
+        message: 'motion.emphasis_text must be in narration',
+      });
     }
     if (scene.visual !== 'evidence_highlight') {
       return;

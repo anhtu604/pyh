@@ -12,6 +12,8 @@ import {AnatomyScene} from './AnatomyScene';
 import {ProcessScene} from './ProcessScene';
 import {ComparisonScene} from './ComparisonScene';
 import {TimelapseScene} from './TimelapseScene';
+import {StatGaugeScene} from './StatGaugeScene';
+import {KineticTermScene} from './KineticTermScene';
 
 vi.mock('remotion', () => ({
   AbsoluteFill: 'div', Img: 'img', staticFile: (path: string) => path,
@@ -23,6 +25,8 @@ const source = {source_id: 'R01', title: 'A documented study', journal: 'Journal
 const base: Scene = {id: 'S01', start_frame: 0, duration_frames: 90, narration: 'Lời đọc của cảnh.',
   visual: 'whiteboard', claim_id: 'C01', source_marker: '[1]',
   source_card: source,
+  stat_gauge: {value: 6.8, unit: 'mg/dL', label: 'Ngưỡng bão hòa urat'},
+  kinetic_term: {term: 'GÚT CẤP', definition: 'Viêm khớp cấp do tinh thể urat.'},
   evidence_highlight: {image: 'source.png', quote: 'Lời đọc của cảnh.', x: 0, y: 0, width: 0.5, height: 0.2},
   anatomy: {subject: 'heart', state: 'normal', severity: 0, motion: ''},
   visual_assets: [{path: 'chart.svg', role: 'chart'}]};
@@ -34,6 +38,7 @@ describe('spoken visual captions', () => {
     whiteboard: WhiteboardScene, chart: ChartScene, evidence_highlight: EvidenceHighlightScene,
     source_card: SourceCardScene, anatomy_animation: AnatomyScene,
     process_animation: ProcessScene, comparison: ComparisonScene, timelapse: TimelapseScene,
+    stat_gauge: StatGaugeScene, kinetic_term: KineticTermScene,
   } satisfies Record<Exclude<Scene['visual'], 'brand_outro'>, React.FC<{scene: Scene}>>;
   for (const [visual, component] of Object.entries(components)) {
     it(`${visual} keeps narration captions`, () => {
@@ -88,7 +93,7 @@ it.each(Object.values(LAYOUTS))('fits the full 90-character whiteboard summary i
 });
 
 it('requires source-card claim, marker, and payload and bounds on-screen text by Unicode characters', () => {
-  const valid = {...base, visual: 'source_card', evidence_highlight: undefined};
+  const valid = {...base, visual: 'source_card', stat_gauge: undefined, kinetic_term: undefined, evidence_highlight: undefined};
   expect(SceneSchema.safeParse(valid).success).toBe(true);
   for (const field of ['claim_id', 'source_marker', 'source_card']) expect(SceneSchema.safeParse({...valid, [field]: undefined}).success).toBe(false);
   expect(SceneSchema.safeParse({...valid, on_screen_text: '😀'.repeat(90)}).success).toBe(true);

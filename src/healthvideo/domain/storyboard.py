@@ -11,6 +11,84 @@ from healthvideo.domain.visual_budget import VisualBudgetOverride, VisualBudgetP
 from healthvideo.visuals.anatomy_library import load_library
 
 MECHANISM_VISUALS = ("anatomy_animation", "process_animation", "comparison", "timelapse")
+MotionEmphasis = Literal[
+    "marker-underline-title",
+    "lead-word-zoom-assemble",
+    "outline-word-fill",
+    "title-demote-to-label",
+    "scan-bracket-sweep",
+    "scanline-annotate-focus",
+    "spotlight-sweep-moves",
+]
+MotionTransition = Literal[
+    "circle-match-iris",
+    "wipe-transitions",
+    "crash-zoom-punch",
+]
+
+
+class SceneMotion(BaseModel):
+    """Optional shotcraft motion overlay and transition_in for a scene."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    emphasis: MotionEmphasis | None = Field(default=None, exclude_if=lambda v: v is None)
+    emphasis_text: Nonblank | None = Field(default=None, exclude_if=lambda v: v is None)
+    transition_in: MotionTransition | None = Field(default=None, exclude_if=lambda v: v is None)
+
+    @model_validator(mode="after")
+    def validate_motion(self) -> "SceneMotion":
+        if self.emphasis is None and self.transition_in is None:
+            raise ValueError("motion requires emphasis or transition_in")
+        if self.emphasis_text is not None and self.emphasis is None:
+            raise ValueError("motion.emphasis_text requires emphasis")
+        return self
+
+
+class StatGauge(BaseModel):
+    """Single claim-backed number + unit + label rendered via gauge or chart-live."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    value: float | int | Nonblank
+    unit: Nonblank
+    label: Nonblank
+    max_value: float | None = Field(default=None, gt=0, exclude_if=lambda v: v is None)
+    variant: Literal[
+        "gauge-readout-moves",
+        "chart-live-moves",
+        "timeline-travel",
+    ] = "gauge-readout-moves"
+
+    @field_validator("value")
+    @classmethod
+    def validate_value(cls, value: float | str) -> float | str:
+        import math
+
+        if isinstance(value, bool):
+            raise TypeError("stat_gauge value cannot be boolean")
+        if isinstance(value, (int, float)):
+            if not math.isfinite(value):
+                raise ValueError("stat_gauge value must be finite")
+            return value
+        if not any(ch.isdigit() for ch in value):
+            raise ValueError("stat_gauge string value must contain a number")
+        return value
+
+
+class KineticTerm(BaseModel):
+    """Medical term + short definition rendered via lead-word or outline-fill."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    term: Nonblank
+    definition: Nonblank
+    variant: Literal[
+        "lead-word-zoom-assemble",
+        "outline-word-fill",
+        "marker-underline-title",
+        "title-demote-to-label",
+    ] = "lead-word-zoom-assemble"
 
 
 class SourceCard(BaseModel):
@@ -269,11 +347,15 @@ class Scene(BaseModel):
     visual: Literal[
         "whiteboard", "chart", "evidence_highlight", "source_card", "brand_outro",
         "anatomy_animation", "process_animation", "comparison", "timelapse",
+        "stat_gauge", "kinetic_term",
     ]
     explainer_layer_id: str | None = Field(default=None, exclude_if=lambda v: v is None)
     anatomy: SceneAnatomy | None = Field(default=None, exclude_if=lambda v: v is None)
     evidence_highlight: EvidenceHighlight | None = None
     source_card: SourceCard | None = Field(default=None, exclude_if=lambda v: v is None)
+    stat_gauge: StatGauge | None = Field(default=None, exclude_if=lambda v: v is None)
+    kinetic_term: KineticTerm | None = Field(default=None, exclude_if=lambda v: v is None)
+    motion: SceneMotion | None = Field(default=None, exclude_if=lambda v: v is None)
     visual_assets: tuple[VisualAssetRef, ...] = ()
     labels: tuple[AssetTextLabel, ...] = Field(default=(), exclude_if=lambda value: not value)
     annotations: tuple[AssetTextLabel, ...] = Field(default=(), exclude_if=lambda value: not value)
@@ -299,6 +381,28 @@ class Scene(BaseModel):
             raise ValueError(f"Scene {self.id}: source_card requires claim, marker and ledger metadata")
         if self.visual != "source_card" and self.source_card is not None:
             raise ValueError(f"Scene {self.id}: source_card metadata requires source_card visual")
+        if self.visual == "stat_gauge" and (
+            self.stat_gauge is None or not self.claim_id or not self.claim_id.strip()
+        ):
+            raise ValueError(f"Scene {self.id}: stat_gauge requires claim_id and stat_gauge metadata")
+        if self.visual != "stat_gauge" and self.stat_gauge is not None:
+            raise ValueError(f"Scene {self.id}: stat_gauge metadata requires stat_gauge visual")
+        if self.visual == "kinetic_term" and self.kinetic_term is None:
+            raise ValueError(f"Scene {self.id}: kinetic_term requires kinetic_term metadata")
+        if self.visual != "kinetic_term" and self.kinetic_term is not None:
+            raise ValueError(f"Scene {self.id}: kinetic_term metadata requires kinetic_term visual")
+        if self.motion is not None and self.motion.emphasis_text is not None:
+            from healthvideo.audio.align import normalize_word
+
+            narration_tokens = [w for w in (normalize_word(t) for t in self.narration.split()) if w]
+            emphasis_tokens = [w for w in (normalize_word(t) for t in self.motion.emphasis_text.split()) if w]
+            if not emphasis_tokens or not any(
+                narration_tokens[i : i + len(emphasis_tokens)] == emphasis_tokens
+                for i in range(len(narration_tokens) - len(emphasis_tokens) + 1)
+            ):
+                raise ValueError(
+                    f"Scene {self.id}: motion.emphasis_text must be in narration: {self.motion.emphasis_text}"
+                )
         if self.visual != "evidence_highlight" and self.evidence_highlight is not None:
             raise ValueError(f"Scene {self.id}: highlight metadata requires evidence_highlight visual")
         if self.visual in MECHANISM_VISUALS and self.anatomy is None:

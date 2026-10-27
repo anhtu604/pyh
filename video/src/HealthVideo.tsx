@@ -6,6 +6,9 @@ import {ChartScene} from './scenes/ChartScene';
 import {YouTubeEndCard} from './scenes/YouTubeEndCard';
 import {OutroScene} from './scenes/OutroScene';
 import {WhiteboardScene} from './scenes/WhiteboardScene';
+import {StatGaugeScene} from './scenes/StatGaugeScene';
+import {KineticTermScene} from './scenes/KineticTermScene';
+import {SceneMotionOverlay} from './motion/SceneMotionOverlay';
 import {VisualAsset} from './components/VisualAsset';
 import {CAPTION_BACKGROUND_COLOR, CAPTION_TEXT_COLOR} from './components/Captions';
 import {LAYOUTS, LayoutContext} from './layout';
@@ -47,6 +50,10 @@ export const HealthVideo: React.FC<RenderInput> = (rawInput) => {
             <SourceCardScene scene={scene} />
           ) : scene.visual === 'chart' && scene.visual_assets.some((asset) => asset.role === 'chart') ? (
             <ChartScene scene={scene} />
+          ) : scene.visual === 'stat_gauge' ? (
+            <StatGaugeScene scene={scene} />
+          ) : scene.visual === 'kinetic_term' ? (
+            <KineticTermScene scene={scene} />
           ) : (
             <WhiteboardScene scene={scene} />
           )}
@@ -54,6 +61,7 @@ export const HealthVideo: React.FC<RenderInput> = (rawInput) => {
             !isMechanismVisual(scene.visual)).map((asset) => (
             <VisualAsset asset={asset} outro={scene.visual === 'brand_outro'} key={asset.path} />
           ))}
+          {scene.motion ? <SceneMotionOverlay motion={scene.motion} narration={scene.narration} /> : null}
         </Sequence>
       ))}
       {youtube_cta && (

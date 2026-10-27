@@ -250,6 +250,41 @@
         "y_plus_height": "y + height <= 1"
       }
     },
+    "KineticTerm": {
+      "additionalProperties": false,
+      "description": "Medical term + short definition rendered via lead-word or outline-fill.",
+      "properties": {
+        "definition": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Definition",
+          "type": "string"
+        },
+        "term": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Term",
+          "type": "string"
+        },
+        "variant": {
+          "default": "lead-word-zoom-assemble",
+          "enum": [
+            "lead-word-zoom-assemble",
+            "outline-word-fill",
+            "marker-underline-title",
+            "title-demote-to-label"
+          ],
+          "title": "Variant",
+          "type": "string"
+        }
+      },
+      "required": [
+        "term",
+        "definition"
+      ],
+      "title": "KineticTerm",
+      "type": "object"
+    },
     "MascotPose": {
       "enum": [
         "welcome",
@@ -360,6 +395,69 @@
               "anatomy"
             ]
           }
+        },
+        {
+          "else": {
+            "properties": {
+              "stat_gauge": {
+                "type": "null"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "visual": {
+                "const": "stat_gauge"
+              }
+            },
+            "required": [
+              "visual"
+            ]
+          },
+          "then": {
+            "properties": {
+              "claim_id": {
+                "pattern": "\\S",
+                "type": "string"
+              },
+              "stat_gauge": {
+                "$ref": "#/$defs/StatGauge"
+              }
+            },
+            "required": [
+              "claim_id",
+              "stat_gauge"
+            ]
+          }
+        },
+        {
+          "else": {
+            "properties": {
+              "kinetic_term": {
+                "type": "null"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "visual": {
+                "const": "kinetic_term"
+              }
+            },
+            "required": [
+              "visual"
+            ]
+          },
+          "then": {
+            "properties": {
+              "kinetic_term": {
+                "$ref": "#/$defs/KineticTerm"
+              }
+            },
+            "required": [
+              "kinetic_term"
+            ]
+          }
         }
       ],
       "properties": {
@@ -455,6 +553,17 @@
           "title": "Id",
           "type": "string"
         },
+        "kinetic_term": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KineticTerm"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "labels": {
           "default": [],
           "items": {
@@ -462,6 +571,17 @@
           },
           "title": "Labels",
           "type": "array"
+        },
+        "motion": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SceneMotion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "narration": {
           "title": "Narration",
@@ -535,6 +655,17 @@
           "title": "Start Frame",
           "type": "integer"
         },
+        "stat_gauge": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StatGauge"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "visual": {
           "enum": [
             "whiteboard",
@@ -545,7 +676,9 @@
             "anatomy_animation",
             "process_animation",
             "comparison",
-            "timelapse"
+            "timelapse",
+            "stat_gauge",
+            "kinetic_term"
           ],
           "title": "Visual",
           "type": "string"
@@ -698,6 +831,66 @@
       "title": "SceneBeat",
       "type": "object"
     },
+    "SceneMotion": {
+      "additionalProperties": false,
+      "description": "Optional shotcraft motion overlay and transition_in for a scene.",
+      "properties": {
+        "emphasis": {
+          "anyOf": [
+            {
+              "enum": [
+                "marker-underline-title",
+                "lead-word-zoom-assemble",
+                "outline-word-fill",
+                "title-demote-to-label",
+                "scan-bracket-sweep",
+                "scanline-annotate-focus",
+                "spotlight-sweep-moves"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Emphasis"
+        },
+        "emphasis_text": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Emphasis Text"
+        },
+        "transition_in": {
+          "anyOf": [
+            {
+              "enum": [
+                "circle-match-iris",
+                "wipe-transitions",
+                "crash-zoom-punch"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Transition In"
+        }
+      },
+      "title": "SceneMotion",
+      "type": "object"
+    },
     "SceneSFX": {
       "additionalProperties": false,
       "properties": {
@@ -801,6 +994,70 @@
         "interpretation"
       ],
       "title": "SourceCard",
+      "type": "object"
+    },
+    "StatGauge": {
+      "additionalProperties": false,
+      "description": "Single claim-backed number + unit + label rendered via gauge or chart-live.",
+      "properties": {
+        "label": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Label",
+          "type": "string"
+        },
+        "max_value": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Value"
+        },
+        "unit": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Unit",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            }
+          ],
+          "title": "Value"
+        },
+        "variant": {
+          "default": "gauge-readout-moves",
+          "enum": [
+            "gauge-readout-moves",
+            "chart-live-moves",
+            "timeline-travel"
+          ],
+          "title": "Variant",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "unit",
+        "label"
+      ],
+      "title": "StatGauge",
       "type": "object"
     },
     "TextEntrance": {

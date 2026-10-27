@@ -33,6 +33,10 @@ def resolve_citations(
         if (scene.on_screen_text and any(char.isdigit() for char in scene.on_screen_text)
                 and (scene.claim_id not in claims or not scene.source_marker)):
             raise ValueError(f"Scene {scene.id}: on_screen_text numbers require a ledger claim/source mapping")
+        if (scene.visual == "stat_gauge" or scene.stat_gauge is not None) and (
+            not scene.claim_id or scene.claim_id not in claims
+        ):
+            raise ValueError(f"Scene {scene.id}: stat_gauge requires a valid claim_id in ledger")
         if scene.source_card is not None:
             expected = SourceCard.from_ledger(ledger, scene.claim_id or "", scene.source_card.source_id)
             if scene.source_card != expected:
