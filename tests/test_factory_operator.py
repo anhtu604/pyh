@@ -347,3 +347,60 @@ def test_projects_skips_invalid_manifest(tmp_path, capsys):
     bad.write_text("schema_version: '2.0'\nslug: cu\ncontent_profile: legacy\n", encoding="utf-8")
     assert list(projects(tmp_path)) == []
     assert "Bỏ qua cu" in capsys.readouterr().err
+
+
+def test_xuong_holds_validation_failure_without_duplicate_notifications(tmp_path):
+    from healthvideo.domain.project_v2 import WorkflowState
+    from healthvideo.workflows.runner import RunDeps
+
+    project = create_v2_project_fixture(
+        tmp_path / "projects", state="awaiting_medical_review"
+    )
+    manifest = read_yaml(project / "project.yaml")
+    manifest["state"] = WorkflowState.MEDICALLY_APPROVED.value
+    write_yaml_atomic(project / "project.yaml", manifest)
+    write_yaml_atomic(
+        tmp_path / "topics/queue.yaml",
+        {
+            "version": 1,
+            "entries": [
+                {
+                    "slug": project.name,
+                    "title": "Gút cấp",
+                    "question": "Vì sao tinh thể urat gây viêm khớp?",
+                    "added": "2026-10-25",
+                }
+            ],
+        },
+    )
+    produce_calls = []
+    notifications = []
+    cycles = {"count": 0}
+
+    def fake_produce(_project_dir):
+        produce_calls.append("produce")
+        raise ValueError("visual budget failed: chart_crop")
+
+    deps = RunDeps(
+        create_project=lambda *_: project,
+        read_state=lambda _: WorkflowState.MEDICALLY_APPROVED,
+        reject_note=lambda _: None,
+        python_steps={"produce": fake_produce},
+        changed_code_paths=lambda _: [],
+        visual_review_pending=lambda _: False,
+    )
+
+    def sleep(_seconds):
+        cycles["count"] += 1
+        if cycles["count"] >= 3:
+            raise KeyboardInterrupt
+
+    factory.run_factory(
+        tmp_path,
+        deps,
+        sleep=sleep,
+        notify=lambda *a: notifications.append(a),
+        echo=lambda *_: None,
+    )
+    assert produce_calls == ["produce"]
+    assert len(notifications) == 1
