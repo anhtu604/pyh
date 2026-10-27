@@ -57,26 +57,6 @@ Chỉ là tư vấn, **chưa có code hay quyết định nào được chốt**
 - Không học: proxy, kích hoạt key, tạo hàng loạt không qua cổng duyệt.
 - Khi làm: worktree/nhánh riêng, test, một dòng trong bảng tiến độ README (xem quy tắc dưới).
 
-## Ý tưởng chưa làm (2026-10-25, tham khảo Muse AI / VanTrong08 AI Studio)
-Chỉ là tư vấn, **chưa có code hay quyết định nào được chốt**. Không làm trước khi bác sĩ duyệt gout.
-
-**Dùng Muse AI (tài khoản của người dùng) cho:**
-- Ảnh tham chiếu giữ nhân vật/mascot nhất quán; ảnh minh họa không chú thích (bối cảnh, ẩn dụ, thumbnail), tạo hàng loạt.
-- Tùy chọn: ảnh→video 5–8 s làm b-roll phá cảnh hình đứng lâu. **Cần bác sĩ đồng ý mở lại video AI** (spec §2, §4.2 đang loại Veo/AI clip).
-- Không dùng cho hình giải phẫu/cơ chế/số liệu (giữ SVG + Remotion). Không để tool tự ghép video cuối; không dùng tab "Codex AI" của tool.
-- Cách tích hợp tối thiểu: lấy prompt từ `clip_plan`/`asset_manifest` → tạo tay trên Muse → lưu vào `projects/<slug>/assets/muse/` (không commit) → ghi nguồn "Muse AI", ngày, prompt, giấy phép trong asset manifest → đưa vào contact sheet cổng video. Chưa viết code gọi tool.
-- Cần kiểm: điều khoản Muse về dùng thương mại trên kênh kiếm tiền; VanTrong08 là app bên thứ ba, đừng đưa API key/tài khoản vào repo.
-- Thử trước trên gout (ảnh mở đầu không liên quan bác sĩ đã chê).
-
-**Học từ giao diện VanTrong08 cho `healthvideo app`** (`workflows/dashboard.html`, `dashboard.py`):
-1. Tab **Thư viện** dạng lưới thumbnail theo project: nhãn loại, tên file, prompt, kích thước, giờ tạo, nút Mở file/Thư mục, lọc loại + project, tìm theo prompt (gom ảnh FLUX 3 ứng viên, hình SVG, contact sheet, thumbnail). Ưu tiên cao nhất.
-2. Thanh trạng thái trên cùng: xưởng chạy/dừng, agent hiện tại (Codex/agy), quota, credit vibi.
-3. Chia tab ngang (~4–5, không phải 10): Tổng quan, Hàng đợi, Duyệt, Thư viện, Cài đặt.
-4. Tab Ảnh tham chiếu (mascot, bảng nhân vật, palette) và trang Hướng dẫn ngắn trong app.
-5. Sheet nhân vật nhiều tư thế trên nền trắng để giữ nhất quán giữa các video.
-- Không học: proxy, kích hoạt key, tạo hàng loạt không qua cổng duyệt.
-- Khi làm: worktree/nhánh riêng, test, một dòng trong bảng tiến độ README (xem quy tắc dưới).
-
 ## Quy tắc bắt buộc (ngoài AGENTS.md)
 - **PIN chỉ bác sĩ gõ, trong TTY của mình hoặc trong app cục bộ** (`healthvideo app`, máy chủ chỉ nghe 127.0.0.1, kiểm PIN bằng `verify_pin`, không lưu/không log). Agent không bao giờ nhận PIN qua chat/tham số/biến môi trường/file, không tự duyệt cổng, không xuất bản.
 - Góp ý của bác sĩ là chuẩn lâu dài: không xóa/sửa mục cũ trong `profiles/doctor-feedback.yaml` (chỉ thêm). Chuẩn giai đoạn đã chấp nhận lưu append-only tại `profiles/factory-standards.yaml`; góp ý riêng chỉ áp dụng cho đúng `slug`, ghi chú `chung` áp dụng toàn kênh.
