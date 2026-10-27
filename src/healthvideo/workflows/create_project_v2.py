@@ -42,6 +42,13 @@ def create_project_v2(root: Path, slug: str, title: str, *, now: datetime) -> Pa
             (revision_root / directory).mkdir(parents=True)
 
         write_yaml_atomic(staging_dir / "project.yaml", manifest.model_dump(mode="json"))
+        # Legacy roots remain readable; configured factories pin only accepted versions.
+        from healthvideo.workflows.factory_standards import (
+            STANDARDS_FILE,
+            pin_standards,
+        )
+        if root.name == 'projects' or (root.parent / STANDARDS_FILE).exists():
+            pin_standards(root.parent, staging_dir)
         _validate_staging(staging_dir, manifest)
         if project_dir.exists():
             raise FileExistsError(f"Project already exists: {project_dir}")

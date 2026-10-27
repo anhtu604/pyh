@@ -45,7 +45,7 @@ def test_status_reports_gate_stage_and_agents(server):
     status, body = request(srv, 'GET', '/api/status')
     data = json.loads(body)
     assert status == 200
-    assert data['factory'] == {'running': False, 'pid': None}
+    assert data['factory'] == {'running': False, 'pid': None, 'can_start': False}
     assert data['agents'] == ['codex']
     assert data['waiting'] == 1
     item = data['projects'][0]
@@ -135,6 +135,15 @@ def test_decide_approve_with_pin(gate):
     message = _decide(gate, action='approve', pin='918273')
     assert 'Đã duyệt' in message
     assert read_yaml(gate[1] / 'project.yaml')['state'] == 'medically_approved'
+
+
+def test_decide_does_not_auto_start_without_four_standards(gate, monkeypatch):
+    monkeypatch.setattr(factory, 'running_pid', lambda _: None)
+    def forbidden(*args, **kwargs):
+        pytest.fail('Unaccepted factory started after gate decision')
+    monkeypatch.setattr(factory, 'start_background', forbidden)
+    message = _decide(gate, action='approve', pin='918273')
+    assert 'Đã duyệt' in message
 
 
 def test_decide_reject_requires_reason_and_records_it(gate):
