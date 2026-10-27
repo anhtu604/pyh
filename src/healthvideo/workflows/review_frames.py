@@ -17,7 +17,7 @@ from healthvideo.render.remotion import (
     build_render_argv,
     renderer_identity,
 )
-from healthvideo.storage.files import sha256_file
+from healthvideo.storage.files import read_yaml, sha256_file, write_yaml_atomic
 from healthvideo.storage.project_layout import resolve_project_layout
 from healthvideo.visuals.anatomy_library import (
     LIBRARY_PATH,
@@ -27,6 +27,72 @@ from healthvideo.visuals.anatomy_library import (
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 UNAPPROVED_COMPONENTS_HEADING = "Component giải phẫu mới hoặc vừa sửa cần soát kỹ"
+
+
+def imported_reviewed_paths(revision_root: Path) -> dict[str, Path]:
+    """Bound imported rasters and their inert contact sheet enter video review hashes."""
+    manifest_path = revision_root / 'assets/asset-manifest.yaml'
+    if not manifest_path.is_file():
+        return {}
+    result = {}
+    for asset in read_yaml(manifest_path).get('assets', []):
+        relative = asset.get('path', '')
+        if not relative.startswith('assets/imported/') or not asset.get('storyboard_role'):
+            continue
+        path = revision_root / relative
+        if not path.resolve().is_relative_to(revision_root.resolve()) or path.suffix != '.png':
+            raise ValueError('Imported review asset escapes revision')
+        if not path.is_file() or sha256_file(path) != asset.get('sha256'):
+            raise ValueError('Imported review asset hash changed')
+        result[relative] = path
+    if result:
+        for relative in ('reviews/imported-contact-sheet.png', 'reviews/imported-contact-sheet.yaml'):
+            path = revision_root / relative
+            if not path.resolve().is_relative_to(revision_root.resolve()) or not path.is_file():
+                raise ValueError('Imported contact sheet is missing or outside revision')
+            result[relative] = path
+        metadata = read_yaml(result['reviews/imported-contact-sheet.yaml'])
+        expected = {name: sha256_file(path) for name, path in result.items() if name.startswith('assets/')}
+        if metadata.get('assets') != expected or metadata.get('sheet_sha256') != sha256_file(result['reviews/imported-contact-sheet.png']):
+            raise ValueError('Imported contact sheet is stale')
+    return result
+
+
+def imported_contact_sheet(revision_root: Path) -> Path | None:
+    """Tile imported assets actually bound to scenes; no render or workflow calls."""
+    from healthvideo.workflows.asset_library import _index, _local
+
+    manifest = read_yaml(revision_root / 'assets/asset-manifest.yaml')
+    records = [a for a in manifest.get('assets', []) if a.get('path', '').startswith('assets/imported/') and a.get('storyboard_role')]
+    if not records:
+        return None
+    metadata = {i['path']: i for i in _index(revision_root)}
+    sheet = Image.new('RGB', (720, 260 * math.ceil(len(records) / 2)), '#121b30')
+    hashes = {}
+    provenance = []
+    for index, record in enumerate(records):
+        path = _local(revision_root, record['path'])
+        if not path.is_file() or sha256_file(path) != record['sha256']:
+            raise ValueError('Imported image changed before contact sheet')
+        with Image.open(path) as image:
+            tile = ImageOps.pad(image.convert('RGB'), (360, 220), color='#121b30')
+        x, y = index % 2 * 360, index // 2 * 260
+        sheet.paste(tile, (x, y))
+        row = metadata[record['path']]
+        label = f"{row['origin'][:24]} · {', '.join(row.get('used_in', []))}"
+        ImageDraw.Draw(sheet).text((x + 8, y + 228), label, fill='white')
+        hashes[record['path']] = record['sha256']
+        provenance.append(row)
+    output = revision_root / 'reviews/imported-contact-sheet.png'
+    if not output.resolve().is_relative_to(revision_root.resolve()):
+        raise ValueError('Imported contact sheet escapes revision')
+    output.parent.mkdir(parents=True, exist_ok=True)
+    sheet.save(output)
+    sidecar = revision_root / 'reviews/imported-contact-sheet.yaml'
+    if not sidecar.resolve().is_relative_to(revision_root.resolve()):
+        raise ValueError('Imported contact sheet metadata escapes revision')
+    write_yaml_atomic(sidecar, {'assets': hashes, 'sheet_sha256': sha256_file(output), 'provenance': provenance})
+    return output
 
 
 def _resolve_repo_root(project_dir: Path, repo: Path | None = None) -> Path:

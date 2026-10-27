@@ -21,7 +21,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import URLError
-from urllib.parse import unquote
+from urllib.parse import parse_qs, unquote, urlsplit
 from urllib.request import urlopen
 
 from healthvideo.agents import RUNNING_MARKER
@@ -30,7 +30,7 @@ from healthvideo.domain.gate_review import GateKind
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.env import child_env
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
-from healthvideo.workflows import factory, standards
+from healthvideo.workflows import dashboard_operations, factory, standards
 from healthvideo.workflows.gate_review import approve_gate, reject_gate
 
 APP_ID = 'healthvideo-dashboard'
@@ -245,7 +245,8 @@ def media_file(project_dir: Path, project: ProjectManifestV2, rel: str) -> Path:
     """Resolve a render file inside the active revision's renders dir, or raise LookupError."""
     renders = (project_dir / 'revisions' / project.active_revision / 'renders').resolve()
     target = (renders / rel).resolve()
-    if renders not in target.parents or target.suffix.lower() not in MEDIA_TYPES or not target.is_file():
+    if (not renders.is_relative_to(project_dir.resolve()) or renders not in target.parents
+            or target.suffix.lower() not in MEDIA_TYPES or not target.is_file()):
         raise LookupError('Không có file này')
     return target
 
@@ -410,6 +411,13 @@ class _Handler(BaseHTTPRequestHandler):
         path = unquote(self.path.split('?', 1)[0])
         parts = [p for p in path.split('/') if p]
         try:
+            extra = dashboard_operations.get_route(self.server, parts, parse_qs(urlsplit(self.path).query))
+            if extra is not None:
+                if isinstance(extra, bytes):
+                    self._send(HTTPStatus.OK, extra, 'image/png')
+                else:
+                    self._json(extra)
+                return
             if path in {'/', '/index.html'}:
                 html = HTML_PATH.read_text(encoding='utf-8').replace('__TOKEN__', self.server.token)
                 self._send(HTTPStatus.OK, html.encode('utf-8'), 'text/html; charset=utf-8')
@@ -482,7 +490,7 @@ class _Handler(BaseHTTPRequestHandler):
         parts = [p for p in self.path.split('/') if p]
         try:
             length = int(self.headers.get('Content-Length') or 0)
-            if length > MAX_BODY:
+            if length < 0 or length > MAX_BODY:
                 raise ValueError('Yêu cầu quá lớn.')
             raw = self.rfile.read(length) if length else b''
             body = json.loads(raw.decode('utf-8')) if raw else {}
@@ -519,12 +527,13 @@ class DashboardServer(ThreadingHTTPServer):
         return f'http://127.0.0.1:{self.server_address[1]}/'
 
     def project_dir(self, slug: str) -> tuple[Path, ProjectManifestV2]:
-        for path, project in factory.projects(self.root):
-            if path.name == slug:
-                return path, project
-        raise LookupError(f'Không có project {slug}')
+        layout = dashboard_operations.project_layout(self.root, slug)
+        return layout.project_dir, layout.manifest
 
     def dispatch(self, parts: list[str], body: dict | None = None) -> str:
+        extra = dashboard_operations.post_route(self, parts, body or {})
+        if extra is not None:
+            return extra
         if len(parts) == 3 and parts[0] == 'api' and parts[1] == 'standards':
             key = f'standards/{parts[2]}'
             if key in self.actions:

@@ -60,6 +60,9 @@ def test_index_embeds_token(server):
     assert status == 200
     assert "const TOKEN = 'tok'" in body
     assert '__TOKEN__' not in body
+    reopen_form = body.split('<form id="ops-reopen"', 1)[1].split('</form>', 1)[0]
+    assert 'name="pin" type="password"' in reopen_form
+    assert "pin:f.get('pin')" in body
 
 
 def test_post_requires_token(server):
@@ -276,3 +279,120 @@ def test_cli_app_reuses_running_dashboard(tmp_path, monkeypatch):
     result = CliRunner().invoke(cli.app, ['app', '--root', str(tmp_path), '--no-browser'])
     assert result.exit_code == 0, result.output
     assert 'App đã mở sẵn' in result.output
+
+
+@pytest.mark.parametrize('path', ['/api/topics/add', '/api/library/select', '/api/library/import',
+                                  '/api/project/offline-topic/retry', '/api/project/offline-topic/reopen'])
+def test_operations_routes_require_token_and_local_host(server, path):
+    srv, _, _ = server
+    assert request(srv, 'POST', path)[0] == 403
+    assert request(srv, 'POST', path, headers={'Host': 'evil.test', 'X-Dashboard-Token': 'tok'})[0] == 403
+
+
+def test_topics_and_operations_routes(live):
+    srv, project = live
+    status, data = post_json(srv, '/api/topics/add', {'slug': 'offline-topic', 'title': 'Offline', 'question': 'Fixture'})
+    assert status == 200, data
+    assert json.loads(request(srv, 'GET', '/api/topics')[1])['entries'][0]['slug'] == 'offline-topic'
+    status, body = request(srv, 'GET', f'/api/project/{project.name}/operations')
+    assert status == 200 and json.loads(body)['revision'] == '001'
+    assert post_json(srv, f'/api/project/{project.name}/retry', {'expected_revision': '002'})[0] == 400
+    assert post_json(srv, f'/api/project/{project.name}/reopen', {'confirmed': False})[0] == 400
+
+
+def test_library_select_import_preview_and_no_client_paths(live, monkeypatch, tmp_path):
+    from PIL import Image
+
+    from healthvideo.workflows import asset_library
+
+    srv, project = live
+    source = tmp_path / 'picker.png'
+    Image.new('RGB', (32, 24), 'green').save(source)
+    monkeypatch.setattr(asset_library, 'choose_image', lambda: source)
+    # The browser cannot use either import or the picker to read arbitrary paths.
+    for route in ('import', 'select'):
+        assert post_json(srv, f'/api/library/{route}', {'slug': project.name, 'source': str(source)})[0] == 400
+    status, body = post_json(srv, '/api/library/select', {'slug': project.name, 'expected_revision': '001'})
+    assert status == 200, body
+    selection = body['message']['selection_id']
+    payload = {'slug': project.name, 'expected_revision': '001', 'selection_id': selection,
+                   'origin': 'Muse AI', 'prompt': 'Offline fixture green', 'license': 'Fixture permission',
+                   'source_url': 'https://example.test/fixture'}
+    assert post_json(srv, '/api/library/import', payload)[0] == 200
+    assert post_json(srv, '/api/library/import', payload)[0] == 400
+    status, data = request(srv, 'GET', '/api/library?kind=imported&query=green')
+    assert status == 200
+    asset = json.loads(data)['items'][0]
+    assert asset['slug'] == project.name
+    conn = HTTPConnection('127.0.0.1', srv.server_address[1])
+    conn.request('GET', f"/media/{project.name}/library/{asset['id']}")
+    response = conn.getresponse()
+    assert response.status == 200
+    assert response.read().startswith(b'\x89PNG')
+    conn.close()
+    assert request(srv, 'GET', f'/media/{project.name}/library/..%2F..%2Fpicker.png')[0] == 404
+
+
+def test_media_rejects_escaped_render_directory(tmp_path):
+    project = create_v2_project_fixture(tmp_path / 'projects')
+    outside = tmp_path / 'outside'
+    outside.mkdir()
+    (outside / 'secret.png').write_bytes(b'secret')
+    renders = project / 'revisions/001/renders'
+    try:
+        renders.symlink_to(outside, target_is_directory=True)
+    except OSError:
+        import _winapi
+
+        _winapi.CreateJunction(str(outside), str(renders))
+    from healthvideo.domain.project_v2 import ProjectManifestV2
+    with pytest.raises(LookupError):
+        dashboard.media_file(project, ProjectManifestV2.model_validate(read_yaml(project / 'project.yaml')), 'secret.png')
+
+
+@pytest.mark.parametrize('mode', ['unconfigured', 'missing', 'wrong', 'locked', 'shared_lock', 'valid'])
+def test_reopen_pin_and_feedback(server, monkeypatch, mode):
+    from datetime import UTC, datetime
+
+    from healthvideo.approver_pin import set_pin
+    from healthvideo.domain.gate_review import GateKind
+    from healthvideo.workflows import standards
+    from healthvideo.workflows.gate_review import approve_gate
+
+    srv, project, _ = server
+    monkeypatch.setattr(dashboard, 'reviewer_name', lambda: 'Configured doctor')
+    pin_file = srv.root / 'config/approver-pin.json'
+    if mode != 'unconfigured':
+        set_pin('918273', path=pin_file)
+    if mode == 'shared_lock':
+        for _ in range(4):
+            with pytest.raises(PermissionError):
+                dashboard.decide(srv.root, project,
+                                 {'revision': '001', 'action': 'approve', 'pin': 'bad'}, limiter=srv.limiter)
+    approve_gate(project, GateKind.MEDICAL, reviewer='Fixture', now=datetime.now(UTC))
+    standards.record(srv.root, slug='prior', gate='medical', revision='001', kind='comment', text='Keep prior')
+    prior = standards.load(srv.root)
+    before = {p.relative_to(project): p.read_bytes() for p in project.rglob('*') if p.is_file()}
+    body = {'expected_revision': '001', 'confirmed': True, 'reviewer': 'Body doctor',
+            'reason': 'Replace the fixture image', 'changed': ['storyboard/storyboard.yaml']}
+    url = f'/api/project/{project.name}/reopen'
+    if mode in {'locked', 'shared_lock'}:
+        for _ in range(5 if mode == 'locked' else 1):
+            assert post_json(srv, url, {**body, 'pin': 'bad'})[0] == 403
+        assert srv.limiter.locked_until > srv.limiter.clock()
+    if mode != 'missing':
+        body['pin'] = 'bad' if mode == 'wrong' else '918273'
+    status, payload = post_json(srv, url, body)
+    if mode != 'valid':
+        assert status == (400 if mode == 'unconfigured' else 403), payload
+        assert {p.relative_to(project): p.read_bytes() for p in project.rglob('*') if p.is_file()} == before
+        assert standards.load(srv.root) == prior
+    else:
+        assert status == 200, payload
+        assert read_yaml(project / 'project.yaml')['state'] == 'needs_medical_revision'
+        entries = standards.load(srv.root)
+        assert entries[:-1] == prior
+        assert entries[-1]['text'] == body['reason']
+        assert entries[-1]['reviewer'] == 'Configured doctor'
+        assert entries[-1]['kind'] == 'reopen'
+        assert '918273' not in (srv.root / 'profiles/doctor-feedback.yaml').read_text(encoding='utf-8')

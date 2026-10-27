@@ -16,6 +16,33 @@ from healthvideo.visuals.anatomy_library import (
 from healthvideo.workflows import review_frames as frames
 
 
+def test_imported_contact_sheet_covers_bytes_and_detects_tampering(tmp_path):
+    from datetime import UTC, datetime
+
+    from healthvideo.storage.files import read_yaml, sha256_file
+    from healthvideo.workflows.asset_library import bind_image, import_image
+    from tests.helpers import create_v2_project_fixture
+
+    project = create_v2_project_fixture(tmp_path / 'projects')
+    rev = project / 'revisions/001'
+    image = tmp_path / 'fixture.png'
+    Image.new('RGB', (30, 20), 'red').save(image)
+    item = import_image(project, image, origin='Fixture', prompt='Red square fixture',
+                        license='Fixture permission', source_url='https://example.test', now=datetime.now(UTC))
+    board = read_yaml(rev / 'storyboard/storyboard.yaml')
+    scene = next(s for s in board['scenes'] if s['visual'] == 'whiteboard')
+    bind_image(project, item['id'], scene['id'], expected_revision='001')
+    sheet = rev / 'reviews/imported-contact-sheet.png'
+    assert sheet.is_file()
+    metadata = read_yaml(sheet.with_suffix('.yaml'))
+    assert metadata['assets'] == {item['path']: item['sha256']}
+    assert metadata['sheet_sha256'] == sha256_file(sheet)
+    assert frames.imported_reviewed_paths(rev)[item['path']] == rev / item['path']
+    sheet.write_bytes(b'tampered')
+    with pytest.raises(ValueError, match='stale'):
+        frames.imported_reviewed_paths(rev)
+
+
 def scene(
     number,
     start,
