@@ -2,7 +2,7 @@
 
 Quy ước mở rộng và duyệt component giải phẫu:
 
-1. **File component**: Tạo `<Name>.tsx` xuất component phẳng (flat SVG, không gradient/filter) dùng đúng bảng màu `palette.ts` (`brand`, `anatomyColors`) và nhận `OrganProps`.
+1. **File component**: Tạo `<Name>.tsx` xuất component phẳng (flat SVG, không gradient/filter) dùng đúng bảng màu `palette.ts` (`brand`, `anatomyColors`), helper `shade.ts` và nhận `OrganProps`.
 2. **Nhãn SVG v2**: Cho phép thuật ngữ giải phẫu/sinh lý tiếng Việt cố định trong code, không chứa số liệu hoặc diễn giải chưa được duyệt. Dùng font brand `Be Vietnam Pro`, nền/viền tương phản, leader line tới cấu trúc tương ứng; mũi tên riêng chỉ quá trình. Ảnh AI FLUX vẫn tuyệt đối không có chữ.
    - Tối đa 6 nhãn hiện cùng lúc; hộp nhãn không chồng nhau, không vượt viewBox. `visibleLabels` do beat điều khiển, mặc định ẩn. Camera chỉ biến đổi hình giải phẫu; scene đặt nhãn trên overlay cố định và biến đổi đầu leader line theo camera.
    - Mỗi component khai báo `FOCUS_REGIONS` (`id → {left, top, width, height}` theo tọa độ viewBox) và `LABELS` (`id → {text, region, x, y, width, height, anchor: [x,y]}`). Component cũ chưa có nhãn dùng object rỗng. Đồng bộ với `focus_regions`/`labels` trong `library.json` và các registry `ANATOMY_FOCUS_REGIONS`/`ANATOMY_LABELS`.
@@ -20,6 +20,13 @@ Quy ước mở rộng và duyệt component giải phẫu:
    - Mọi component có trạng thái `new` hoặc `modified` đang dùng trong video luôn được liệt kê thành mục riêng khi dựng contact sheet (`review_frames.py`) để bác sĩ soát kỹ trước khi duyệt cổng video.
 6. **Căn chuyển động theo lời nói**: Mỗi component xuất `CUE_ACTIONS` (mảng rỗng khi chưa hỗ trợ). `anatomy.cues` gắn `word` trong narration với một `action` hợp lệ; production thêm `start_frame` cục bộ từ alignment. Scene chuyển thành `cueProgress: Record<string, number>` trong khoảng 0–1 và component điều khiển riêng từng hành động. Thiếu mốc căn chữ thì giữ chuyển động liên tục cũ.
    - `UrateFluid`: `seed`, `grow`, `deposit`; `InflammationSignal`: `engulf`, `alarm`, `recruit`; `HepaticCell`: `fat`, `inflame`, `fibrose`. Không coi tiến độ minh họa là diễn tiến bệnh hay thang điểm lâm sàng.
+
+## Tiêu chuẩn dựng hình
+
+- **Khối phẳng (4 tông, không gradient/filter)**: Mỗi cấu trúc chính có độ dày và được tô 3–4 tông phẳng (`fourTones` trong `shade.ts` hoặc các bộ tông xương/sụn/màng hoạt dịch/dịch/tinh thể trong `palette.ts`) từ mặt hướng sáng tới vùng tối, kèm viền bắt sáng mảnh (~0,6–1 px theo viewBox) và bóng mềm dưới vật bằng hình phẳng độ mờ thấp.
+- **Chi tiết từ cấu trúc giải phẫu thật**: Thêm các thành phần giải phẫu có thật (bè xương xốp và đĩa xương dưới sụn, 4 vùng sụn khớp với hốc tế bào sụn và đường tidemark, nếp nhung mao màng hoạt dịch với tế bào lót và mao mạch dưới màng, tinh thể urat nhiều mặt dạng kim `FacetedNeedle`, nhân chia thùy/hạt bào tương/phức hợp NLRP3, hệ xương cổ chân–bàn chân–ngón cái và xương vừng khớp với nhau), không vẽ họa tiết trang trí vô nghĩa.
+- **Bình tĩnh và rõ trọng tâm**: Đường nét mảnh tiết chế, vẽ theo thứ tự từ sau ra trước để không có nét cắt xuyên qua cấu trúc phía trước; dùng một màu nhấn (`brand.yellow` hoặc `c.blood`) chỉ đúng vị trí cơ chế đang xét; chuyển động nội suy mượt (`smoothstep`), chậm đủ để mắt theo dõi.
+- **QA hình học và khối**: Test `GoutViews.test.tsx` kiểm tra tự động mọi component đã nâng không chứa `<linearGradient>`/`<radialGradient>`/`<filter>`, đạt tối thiểu ≥ 45 phần tử hình ở trạng thái thường (≥ 65 ở trạng thái bệnh) và mỗi layer cấu trúc chính có ≥ 3 tông màu phẳng khác nhau.
 
 ## Góc nhìn gout v2 và lời thoại đã duyệt
 
