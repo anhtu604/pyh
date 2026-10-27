@@ -664,6 +664,7 @@ def test_agent_prompt_carries_doctor_standards(tmp_path: Path) -> None:
 def test_agent_prompt_uses_pinned_v1_standards_and_filters_other_slug_feedback(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
+    from healthvideo.storage.files import write_yaml_atomic
     from healthvideo.workflows import factory_standards, factory_trials, standards
     from tests.helpers import create_v2_project_fixture
 
@@ -672,11 +673,21 @@ def test_agent_prompt_uses_pinned_v1_standards_and_filters_other_slug_feedback(
         sample.write_text("TEST renderer boundary", encoding="utf-8")
         return [sample]
 
+    def _trial_invoke(agents: Any, prompt: str, *, cwd: Path, log_dir: Path) -> AgentResult:
+        del agents, prompt, cwd
+        rev = log_dir.parent / "project" / "revisions" / "001"
+        write_yaml_atomic(rev / "script/script.yaml", {"lines": [{"id": "L01", "text": "Synthetic trial."}]})
+        log_path = log_dir / "fake.log"
+        log_path.write_text("ok", encoding="utf-8")
+        return AgentResult(agent="fake", ok=True, quota_exhausted=False, log_path=log_path)
+
     monkeypatch.setattr(factory_trials, "_render_samples", fake_render)
+    monkeypatch.setattr(factory_trials, "invoke_with_failover", _trial_invoke)
 
     for stage in range(1, 5):
         trial = factory_trials.create_trial(tmp_path, stage)
-        bundle = factory_trials.run_trial(tmp_path, trial["id"])
+        factory_trials.run_trial(tmp_path, trial["id"])
+        bundle = factory_trials.wait_trial(tmp_path, trial["id"])
         text = "Chuẩn kịch bản v1 đã pin cho project." if stage == 1 else f"Chuẩn stage {stage} v1"
         factory_standards.save_standard_draft(tmp_path, stage, text, trial["id"])
         factory_standards.accept_standard(
@@ -695,7 +706,8 @@ def test_agent_prompt_uses_pinned_v1_standards_and_filters_other_slug_feedback(
     factory_standards.pin_standards(tmp_path, project_dir)
 
     trial_v2 = factory_trials.create_trial(tmp_path, 1)
-    bundle_v2 = factory_trials.run_trial(tmp_path, trial_v2["id"])
+    factory_trials.run_trial(tmp_path, trial_v2["id"])
+    bundle_v2 = factory_trials.wait_trial(tmp_path, trial_v2["id"])
     factory_standards.save_standard_draft(
         tmp_path, 1, "Chuẩn kịch bản v2 mới chấp nhận sau.", trial_v2["id"]
     )

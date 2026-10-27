@@ -509,10 +509,13 @@ class _Handler(BaseHTTPRequestHandler):
                 directory = factory_trials.trial_dir(root, parts[2])
                 for output in bundle['outputs']:
                     name = output['path']
-                    if name in {'sample.txt', 'captions.txt', 'qa.json', 'script.yaml'}:
+                    base = Path(name).name
+                    if base in {'sample.txt', 'captions.txt', 'qa.json', 'script.yaml', 'ledger.yaml', 'claims.yaml', 'records.yaml'}:
                         target = directory / name
-                        bundle['previews'][name] = (read_yaml(target) if name == 'script.yaml'
-                                                    else target.read_text(encoding='utf-8'))
+                        content = (read_yaml(target) if base.endswith('.yaml')
+                                   else target.read_text(encoding='utf-8'))
+                        bundle['previews'][name] = content
+                        bundle['previews'].setdefault(base, content)
             self._json(bundle)
         elif len(parts) >= 5 and parts[3] == 'media':
             bundle = factory_trials.trial_bundle(root, parts[2])
@@ -570,6 +573,7 @@ class DashboardServer(ThreadingHTTPServer):
         self.agents = agents
         self.limiter = PinLimiter()
         self.actions = actions or default_actions(self)
+        factory_trials.list_trials(self.root)
 
     @property
     def url(self) -> str:
@@ -612,7 +616,11 @@ class DashboardServer(ThreadingHTTPServer):
             raise ValueError('Field không được phép trong khu TEST.')
         root = self.root
         if action == 'create':
-            return factory_trials.create_trial(root, body.get('stage'), topic=body.get('topic', 'TEST — Hình tròn chuyển động'))
+            stage = body.get('stage')
+            topic = body.get('topic', 'TEST — Hình tròn chuyển động')
+            if stage in (2, 3, 4) and isinstance(topic, str) and not topic.strip():
+                topic = 'TEST — Hình tròn chuyển động'
+            return factory_trials.create_trial(root, stage, topic=topic)
         trial_id = str(body.get('trial_id', ''))
         if action == 'run':
             return factory_trials.run_trial(root, trial_id, real_service=body.get('real_service', False))

@@ -60,7 +60,21 @@ def test_factory_stage1_acceptance_end_to_end_offline(
     monkeypatch.setattr(factory, "start_background", _forbidden)
     monkeypatch.setattr(VibiTTS, "synthesize", _forbidden)
     monkeypatch.setattr(ElevenLabsTTS, "synthesize", _forbidden)
+    from healthvideo.agents import AgentResult
+    from healthvideo.storage.files import write_yaml_atomic
+    from healthvideo.workflows import factory_trials
+
+    def _fake_invoke(agents: object, prompt: str, *, cwd: Path, log_dir: Path) -> AgentResult:
+        del agents, cwd
+        rev = log_dir.parent / "project" / "revisions" / "001"
+        write_yaml_atomic(rev / "script/script.yaml", {"lines": [{"id": "L01", "text": "Synthetic trial script.", "claim_id": "C01"}]})
+        write_yaml_atomic(rev / "evidence/ledger.yaml", {"claims": [{"id": "C01", "text_public": "Synthetic claim.", "sources": ["R01"], "support": [{"source_id": "R01", "locator": "p.1", "quote": "Quote."}]}], "records": [{"id": "R01", "title": "Source"}]})
+        log_path = log_dir / "fake.log"
+        log_path.write_text("ok", encoding="utf-8")
+        return AgentResult(agent="fake", ok=True, quota_exhausted=False, log_path=log_path)
+
     monkeypatch.setattr(factory, "running_pid", lambda _: None)
+    monkeypatch.setattr(factory_trials, "invoke_with_failover", _fake_invoke)
 
     pin_file = tmp_path / "config" / "approver-pin.json"
     set_pin("918273", path=pin_file)
@@ -115,7 +129,8 @@ def test_factory_stage1_acceptance_end_to_end_offline(
             {"trial_id": trial_id, "real_service": False},
         )
         assert status == 200, ran
-        assert ran["message"]["status"] == "ready"
+        assert ran["message"]["status"] == "running"
+        assert factory_trials.wait_trial(tmp_path, trial_id)["status"] == "ready"
 
         draft_text = "Chuẩn giai đoạn 1: mọi khẳng định phải gắn claim và câu trích nguyên văn."
         status, saved = _http_call(

@@ -148,11 +148,11 @@ def _produce_with_channel_voice(project_dir: Path) -> None:
     build_default_producer(tts="auto", voice=FACTORY_VOICE, tts_python=tts_python)(project_dir)
 
 
-def create_project(root: Path, entry: QueueEntry) -> Path:
+def create_project(root: Path, entry: QueueEntry, *, projects_dir: Path | None = None) -> Path:
     """Create a v2 project under ``root / 'projects' / entry.slug`` and select its card."""
     now = datetime.now().astimezone()
     project_dir = create_project_v2(
-        root / "projects",
+        projects_dir or (root / "projects"),
         entry.slug,
         entry.title,
         now=now,

@@ -17,7 +17,15 @@ def offline_renderer(monkeypatch):
         path = directory / 'injected-render.txt'
         path.write_text('TEST renderer boundary', encoding='utf-8')
         return [path]
+    from healthvideo.agents import AgentResult
+    def fake_invoke(agents, prompt, *, cwd, log_dir):
+        rev = log_dir.parent / 'project/revisions/001'
+        write_yaml_atomic(rev / 'script/script.yaml', {'lines': [{'id': 'L01', 'text': 'Synthetic trial line.'}]})
+        log_path = log_dir / 'fake.log'
+        log_path.write_text('ok', encoding='utf-8')
+        return AgentResult(agent='fake', ok=True, quota_exhausted=False, log_path=log_path)
     monkeypatch.setattr(trials, '_render_samples', render)
+    monkeypatch.setattr(trials, 'invoke_with_failover', fake_invoke)
 
 
 def module():
@@ -26,7 +34,8 @@ def module():
 
 def ready(root, stage=1, text='Clear TEST standard'):
     trial = trials.create_trial(root, stage)
-    bundle = trials.run_trial(root, trial['id'])
+    trials.run_trial(root, trial['id'])
+    bundle = trials.wait_trial(root, trial['id'])
     module().save_standard_draft(root, stage, text, trial['id'])
     return bundle
 

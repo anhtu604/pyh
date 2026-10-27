@@ -1,21 +1,41 @@
-"""Isolated, offline acceptance trials. Never dispatch production work."""
+"""Isolated acceptance trials: stage 1 runs real research+draft in trial dir; stages 2-4 stay offline."""
 from __future__ import annotations
 
 import hashlib
 import json
 import math
 import re
+import shutil
 import struct
 import subprocess
 import threading
 import wave
+from collections.abc import Callable, Sequence
 from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
+from healthvideo.agents import (
+    DEFAULT_AGENTS,
+    AgentCli,
+    AgentResult,
+    AllAgentsExhausted,
+    invoke_with_failover,
+)
+from healthvideo.domain.queue import QueueEntry
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
+from healthvideo.workflows.factory_deps import create_project
+from healthvideo.workflows.runner import render_prompt
+from healthvideo.workflows.standards import prompt_block
 
 TRIAL_LOCK = threading.RLock()
+_ACTIVE_TRIALS: dict[str, threading.Thread] = {}
+ORPHAN_REASON = 'App đã tắt khi mẫu đang chạy; bấm chạy lại.'
+TRIAL_ISOLATION_LINE = (
+    'Đây là mẫu nghiệm thu: chỉ ghi trong thư mục project này; '
+    'không đụng projects/, topics/, profiles/.'
+)
+_STEP_LABELS = {'research': 'tìm nguồn', 'draft': 'viết kịch bản'}
 
 
 def trial_root(root: Path) -> Path:
@@ -60,25 +80,167 @@ def create_trial(root: Path, stage: int, *, topic: str = 'TEST — Hình tròn c
     return record
 
 
+def _stage1_outputs(directory: Path) -> list[Path]:
+    project_dir = directory / 'project'
+    if not project_dir.is_dir():
+        return []
+    manifest_path = project_dir / 'project.yaml'
+    rev = '001'
+    if manifest_path.is_file():
+        try:
+            rev = str(read_yaml(manifest_path).get('active_revision') or '001')
+        except Exception:  # noqa: BLE001
+            rev = '001'
+    candidates = (
+        project_dir / 'revisions' / rev / 'script/script.yaml',
+        project_dir / 'revisions' / rev / 'evidence/ledger.yaml',
+        project_dir / 'revisions' / rev / 'evidence/claims.yaml',
+        project_dir / 'revisions' / rev / 'evidence/records.yaml',
+        project_dir / 'revisions' / rev / 'explainer/explainer.yaml',
+        project_dir / 'revisions' / rev / 'script/outline.yaml',
+        project_dir / 'revisions' / rev / 'script/clip-plan.yaml',
+        project_dir / 'revisions' / rev / 'storyboard/storyboard.yaml',
+        project_dir / 'revisions' / rev / 'assets/asset-manifest.yaml',
+        project_dir / 'script/script.yaml',
+        project_dir / 'script.yaml',
+        project_dir / 'evidence/ledger.yaml',
+        project_dir / 'ledger.yaml',
+        project_dir / 'claims.yaml',
+        project_dir / 'records.yaml',
+    )
+    seen: set[Path] = set()
+    outputs: list[Path] = []
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        if candidate.is_file() and resolved not in seen:
+            seen.add(resolved)
+            outputs.append(candidate)
+    return outputs
+
+
+def _populate_stage1_view(directory: Path, record: dict) -> None:
+    if record.get('stage') != 1 or record.get('status') != 'ready':
+        return
+    script_data: dict = {}
+    ledger_data: dict = {}
+    claims_data: dict = {}
+    records_data: dict = {}
+    for output in record.get('outputs', []):
+        target = directory / output['path']
+        if not target.is_file() or target.suffix != '.yaml':
+            continue
+        name = target.name
+        if name == 'script.yaml' and not script_data:
+            script_data = read_yaml(target)
+        elif name == 'ledger.yaml' and not ledger_data:
+            ledger_data = read_yaml(target)
+        elif name == 'claims.yaml' and not claims_data:
+            claims_data = read_yaml(target)
+        elif name == 'records.yaml' and not records_data:
+            records_data = read_yaml(target)
+    raw_lines = script_data.get('lines', []) if isinstance(script_data, dict) else []
+    record['lines'] = [
+        {
+            'id': line.get('id'),
+            'text': line.get('text', ''),
+            'purpose': line.get('purpose'),
+            'claim_id': line.get('claim_id'),
+            'source_marker': line.get('source_marker'),
+        }
+        for line in raw_lines
+        if isinstance(line, dict)
+    ]
+    raw_claims = (
+        (ledger_data.get('claims') if isinstance(ledger_data, dict) else None)
+        or (claims_data.get('claims') if isinstance(claims_data, dict) else None)
+        or (script_data.get('claims') if isinstance(script_data, dict) else None)
+        or []
+    )
+    record['claims'] = [
+        {
+            'id': c.get('id'),
+            'text': c.get('text_public') or c.get('text', ''),
+            'type': c.get('type'),
+            'sources': c.get('sources', []),
+            'applicability': c.get('applicability', ''),
+            'technical': c.get('text_technical', ''),
+            'support': [
+                {
+                    'source_id': s.get('source_id'),
+                    'locator': s.get('locator'),
+                    'quote': s.get('quote'),
+                }
+                for s in c.get('support', [])
+                if isinstance(s, dict)
+            ],
+        }
+        for c in raw_claims
+        if isinstance(c, dict)
+    ]
+    raw_records = (
+        (ledger_data.get('records') if isinstance(ledger_data, dict) else None)
+        or (records_data.get('records') if isinstance(records_data, dict) else None)
+        or (script_data.get('sources') if isinstance(script_data, dict) else None)
+        or (script_data.get('records') if isinstance(script_data, dict) else None)
+        or []
+    )
+    record['records'] = [
+        {
+            'id': r.get('id'),
+            'title': r.get('title'),
+            'year': r.get('year'),
+            'journal': r.get('journal'),
+            'doi': r.get('doi'),
+            'pmid': r.get('pmid'),
+            'url': r.get('url'),
+        }
+        for r in raw_records
+        if isinstance(r, dict)
+    ]
+
+
 def trial_bundle(root: Path, trial_id: str) -> dict:
-    directory = trial_dir(root, trial_id)
-    path = directory / 'trial.yaml'
-    if not path.is_file():
-        raise LookupError('Không có mẫu thử này.')
-    record = read_yaml(path)
-    if record.get('id') != trial_id:
-        raise ValueError('Trial identity mismatch.')
-    stage_number(record['stage'])
-    stale = record['input_hash'] != input_hash(record)
-    for output in record['outputs']:
-        target = (directory / output['path']).resolve()
-        if not target.is_relative_to(directory.resolve()) or not target.is_file() or digest(target) != output['sha256']:
+    with TRIAL_LOCK:
+        directory = trial_dir(root, trial_id)
+        path = directory / 'trial.yaml'
+        if not path.is_file():
+            raise LookupError('Không có mẫu thử này.')
+        record = read_yaml(path)
+        if record.get('id') != trial_id:
+            raise ValueError('Trial identity mismatch.')
+        stage_number(record['stage'])
+        if record.get('status') == 'running':
+            thread = _ACTIVE_TRIALS.get(trial_id)
+            if thread is None or not thread.is_alive():
+                _ACTIVE_TRIALS.pop(trial_id, None)
+                record.pop('step', None)
+                record.update(
+                    status='failed',
+                    reason=ORPHAN_REASON,
+                    error=ORPHAN_REASON,
+                    outputs=[],
+                )
+                record.setdefault('events', []).append('orphan-failed')
+                record.setdefault('timeline', []).append({
+                    'at': datetime.now().astimezone().isoformat(),
+                    'text': ORPHAN_REASON,
+                })
+                write_yaml_atomic(path, record)
+        stale = record['input_hash'] != input_hash(record)
+        for output in record['outputs']:
+            target = (directory / output['path']).resolve()
+            if not target.is_relative_to(directory.resolve()) or not target.is_file() or digest(target) != output['sha256']:
+                stale = True
+        # stage-1 samples from the old offline builder (no agent project) are not real scripts
+        if record['stage'] == 1 and record['outputs'] and not any(
+                o['path'].startswith('project/') for o in record['outputs']):
             stale = True
-    if stale:
-        record['status'] = 'stale'
-    draft = directory / 'standard-draft.yaml'
-    record['draft'] = read_yaml(draft) if draft.is_file() else {}
-    return record
+        if stale:
+            record['status'] = 'stale'
+        draft = directory / 'standard-draft.yaml'
+        record['draft'] = read_yaml(draft) if draft.is_file() else {}
+        _populate_stage1_view(directory, record)
+        return record
 
 
 def list_trials(root: Path) -> list[dict]:
@@ -86,19 +248,201 @@ def list_trials(root: Path) -> list[dict]:
             for path in sorted(trial_root(root).glob('*/trial.yaml'))]
 
 
-def run_trial(root: Path, trial_id: str, *, real_service: bool = False) -> dict:
-    if real_service is not False:
-        raise ValueError('real_service chưa được cấu hình; quota tối đa 1 mẫu, chỉ dùng offline.')
+def wait_trial(root: Path, trial_id: str, timeout: float = 5.0) -> dict:
+    with TRIAL_LOCK:
+        thread = _ACTIVE_TRIALS.get(trial_id)
+    if thread is not None:
+        thread.join(timeout=timeout)
+    return trial_bundle(root, trial_id)
+
+
+def _fail_stage1(directory: Path, reason: str, event: str) -> None:
+    with TRIAL_LOCK:
+        path = directory / 'trial.yaml'
+        if not path.is_file():
+            return
+        record = read_yaml(path)
+        for key in ('draft', 'lines', 'claims', 'records', 'step'):
+            record.pop(key, None)
+        now_iso = datetime.now().astimezone().isoformat()
+        record.update(status='failed', reason=reason, error=reason, outputs=[])
+        record.setdefault('events', []).append(event)
+        record.setdefault('timeline', []).append({'at': now_iso, 'text': reason})
+        write_yaml_atomic(path, record)
+
+
+def _run_stage1_worker(
+    root: Path,
+    trial_id: str,
+    directory: Path,
+    project_dir: Path,
+    topic: str,
+    invoke: Callable[..., AgentResult],
+    agents: Sequence[AgentCli],
+) -> None:
+    log_dir = directory / 'logs'
+    log_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        for step in ('research', 'draft'):
+            step_vi = _STEP_LABELS[step]
+            if step == 'draft':
+                with TRIAL_LOCK:
+                    record = read_yaml(directory / 'trial.yaml')
+                    record['step'] = 'draft'
+                    record.setdefault('timeline', []).append({
+                        'at': datetime.now().astimezone().isoformat(),
+                        'text': 'Đang viết kịch bản (draft)…',
+                    })
+                    write_yaml_atomic(directory / 'trial.yaml', record)
+            fields: dict[str, str] = {
+                'project': str(project_dir),
+                'slug': 'project',
+                'title': topic,
+                'question': topic,
+                'doctor_note': '',
+            }
+            if step == 'draft':
+                fields['reject_note'] = ''
+            prompt = render_prompt(step, **fields)
+            standards_block = prompt_block(root)
+            if standards_block:
+                prompt = f'{prompt.rstrip()}\n\n{standards_block}'
+            prompt = f'{prompt.rstrip()}\n\n{TRIAL_ISOLATION_LINE}\n'
+            try:
+                result = invoke(
+                    agents,
+                    prompt,
+                    cwd=root,
+                    log_dir=log_dir,
+                )
+            except AllAgentsExhausted:
+                _fail_stage1(
+                    directory,
+                    f'Agent đã hết hạn mức (quota) ở bước {step_vi}; vui lòng thử lại sau.',
+                    f'{step}-quota-exhausted',
+                )
+                return
+            except Exception as exc:  # noqa: BLE001
+                _fail_stage1(
+                    directory,
+                    f'Agent gặp lỗi ở bước {step_vi}: {exc}',
+                    f'{step}-exception',
+                )
+                return
+            if not result.ok:
+                if result.quota_exhausted:
+                    reason = f'Agent ({result.agent}) đã hết hạn mức (quota) ở bước {step_vi}; vui lòng thử lại sau.'
+                else:
+                    reason = f'Agent ({result.agent}) gặp lỗi ở bước {step_vi}; bấm chạy lại để thử lại.'
+                _fail_stage1(directory, reason, f'{step}-failed')
+                return
+            blocked = project_dir / 'blocked-reason.md'
+            if blocked.is_file():
+                detail = blocked.read_text(encoding='utf-8', errors='replace').strip()
+                _fail_stage1(
+                    directory,
+                    f'Không đủ bằng chứng xác minh: {detail}' if detail else 'Không đủ bằng chứng xác minh.',
+                    f'{step}-blocked',
+                )
+                return
+        outputs = _stage1_outputs(directory)
+        if not any(p.name == 'script.yaml' for p in outputs):
+            _fail_stage1(
+                directory,
+                'Agent chạy xong nhưng chưa tạo được file kịch bản (script.yaml).',
+                'draft-missing-script',
+            )
+            return
+        with TRIAL_LOCK:
+            now_iso = datetime.now().astimezone().isoformat()
+            record = read_yaml(directory / 'trial.yaml')
+            for key in ('draft', 'lines', 'claims', 'records', 'reason', 'error', 'step'):
+                record.pop(key, None)
+            record.update(
+                status='ready',
+                completed_at=now_iso,
+                outputs=[
+                    {'path': p.relative_to(directory).as_posix(), 'sha256': digest(p)}
+                    for p in outputs
+                ],
+            )
+            record.setdefault('events', []).append('stage1-ready')
+            record.setdefault('timeline', []).append({
+                'at': now_iso,
+                'text': 'Đã viết xong kịch bản mẫu; sẵn sàng xem.',
+            })
+            write_yaml_atomic(directory / 'trial.yaml', record)
+    finally:
+        with TRIAL_LOCK:
+            if _ACTIVE_TRIALS.get(trial_id) is threading.current_thread():
+                _ACTIVE_TRIALS.pop(trial_id, None)
+
+
+def run_trial(
+    root: Path,
+    trial_id: str,
+    *,
+    real_service: bool = False,
+    invoke: Callable[..., AgentResult] | None = None,
+    agents: Sequence[AgentCli] = DEFAULT_AGENTS,
+) -> dict:
     with TRIAL_LOCK:
         record = trial_bundle(root, trial_id)
+        stage = record['stage']
+        if stage != 1 and real_service is not False:
+            raise ValueError('real_service chưa được cấu hình; quota tối đa 1 mẫu, chỉ dùng offline.')
         if record['status'] == 'stale':
             raise ValueError('Mẫu stale; tạo mẫu mới trước khi thử.')
         directory = trial_dir(root, trial_id)
-        record.pop('draft', None)
+        for key in ('draft', 'lines', 'claims', 'records', 'reason', 'error', 'step'):
+            record.pop(key, None)
+        if stage == 1:
+            for tid, existing in list(_ACTIVE_TRIALS.items()):
+                if existing.is_alive():
+                    raise ValueError('Đang có mẫu chạy.')
+                _ACTIVE_TRIALS.pop(tid, None)
+            record['sample_version'] += 1
+            record['input_hash'] = input_hash(record)
+            project_dir = directory / 'project'
+            if project_dir.exists():
+                shutil.rmtree(project_dir)
+            now = datetime.now().astimezone()
+            entry = QueueEntry(
+                slug='project',
+                title=record['topic'],
+                question=record['topic'],
+                added=now.date(),
+            )
+            project_dir = create_project(root, entry, projects_dir=directory)
+            now_iso = now.isoformat()
+            record.update(
+                status='running',
+                started_at=now_iso,
+                step='research',
+                outputs=[],
+            )
+            record.setdefault('events', []).append('stage1-started')
+            record.setdefault('timeline', []).append({
+                'at': now_iso,
+                'text': 'Đang tìm nguồn và lập sổ cái bằng chứng (research)…',
+            })
+            write_yaml_atomic(directory / 'trial.yaml', record)
+            invoke_fn = invoke if invoke is not None else invoke_with_failover
+            worker = threading.Thread(
+                target=_run_stage1_worker,
+                args=(root, trial_id, directory, project_dir, record['topic'], invoke_fn, agents),
+                daemon=True,
+            )
+            _ACTIVE_TRIALS[trial_id] = worker
+            draft_path = directory / 'standard-draft.yaml'
+            running_snapshot = {**record, 'draft': read_yaml(draft_path) if draft_path.is_file() else {}}
+            worker.start()
+            return running_snapshot
+
         record['sample_version'] += 1
         record['input_hash'] = input_hash(record)
         try:
-            outputs = build_stage_sample(directory, record['stage'], record['topic'])
+            outputs = build_stage_sample(directory, stage, record['topic'])
         except (OSError, RuntimeError, subprocess.SubprocessError) as error:
             record.update(status='failed', outputs=[])
             record['events'].append(f'Offline sample failed: {type(error).__name__}')

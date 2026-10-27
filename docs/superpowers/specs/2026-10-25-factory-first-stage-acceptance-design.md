@@ -137,3 +137,8 @@ fixture và kiểm thử tích hợp UI; cách di chuyển bản sửa dở và 
 commit mà không mất dữ liệu. Phải đưa kết quả kiểm chứng Muse vào quyết định
 triển khai, chỉ chọn đường tích hợp đã chứng minh. Chưa triển khai sản phẩm mã
 trước khi bác sĩ duyệt toàn bộ thiết kế này; sau duyệt mới viết kế hoạch chi tiết.
+
+## 7. Quyết định cập nhật 2026-10-27
+
+- **Mẫu giai đoạn 1 (Chủ đề → kịch bản)** chạy agent thật (`research` → `draft`) theo chủ đề bác sĩ nhập ngay bên trong thư mục trial cô lập (`cache/factory-test/<trial_id>/project/`), chỉ để nghiệm thu chuẩn giai đoạn 1, không thêm vào `topics/`, không tạo approval, không chạy produce/render và không xuất bản.
+- **Giai đoạn 2–4** giữ nguyên mẫu ngoại tuyến cố định để kiểm khung.

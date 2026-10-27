@@ -14,7 +14,23 @@ from tests.helpers import create_v2_project_fixture
 def app(tmp_path, monkeypatch):
     def forbidden(*args, **kwargs):
         pytest.fail('Trial called production')
+    from healthvideo.agents import AgentResult
+    from healthvideo.storage.files import write_yaml_atomic
+    def fake_invoke(agents, prompt, *, cwd, log_dir):
+        rev = log_dir.parent / 'project/revisions/001'
+        write_yaml_atomic(rev / 'script/script.yaml', {
+            'lines': [{'id': 'T01', 'text': 'Một hình tròn đi ngang qua màn hình.', 'claim_id': 'C01', 'source_marker': '[R01]'}],
+        })
+        write_yaml_atomic(rev / 'evidence/ledger.yaml', {
+            'claims': [{'id': 'C01', 'text_public': 'Khẳng định mẫu.', 'sources': ['R01'],
+                        'support': [{'source_id': 'R01', 'locator': 'Abstract', 'quote': 'Trích dẫn ngắn.'}]}],
+            'records': [{'id': 'R01', 'title': 'Nguồn mẫu', 'year': 2024}],
+        })
+        log_path = log_dir / 'fake.log'
+        log_path.write_text('ok', encoding='utf-8')
+        return AgentResult(agent='fake', ok=True, quota_exhausted=False, log_path=log_path)
     monkeypatch.setattr(factory, 'start_background', forbidden)
+    monkeypatch.setattr(factory_trials, 'invoke_with_failover', fake_invoke)
     pin = tmp_path / 'config/approver-pin.json'
     set_pin('918273', path=pin)
     monkeypatch.setattr(dashboard, 'pin_path', lambda: pin)
@@ -54,6 +70,8 @@ def post(app, action, body):
         body = {'pin': '918273', **body}
     status, data = request(app, '/api/trials/' + action, body)
     assert status == 200, data
+    if action == 'run' and data['message'].get('status') == 'running':
+        return factory_trials.wait_trial(app.root, body['trial_id'])
     return data['message']
 
 
@@ -141,6 +159,10 @@ def test_acceptance_section_and_button_gate(app):
         'Cần nghiệm thu đủ 4 giai đoạn trước',
         'friendlyError(',
         'Xem nhật ký đầy đủ',
+        'Agent sẽ tìm nguồn và viết kịch bản thật cho chủ đề này (khoảng 5–15 phút). Mẫu chỉ để nghiệm thu, không xuất bản.',
+        'Mẫu ngoại tuyến cố định, chỉ kiểm khung.',
+        'Mẫu đang chạy',
+        'Chạy lại',
     ):
         assert snippet.encode('utf-8') in page
     status, data = request(app, '/api/status')
@@ -216,9 +238,10 @@ def test_bundle_has_readable_vietnamese_script_and_event_times(app):
     status, bundle = request(app, f"/api/trials/{trial['id']}/bundle")
     assert status == 200
     assert bundle['previews']['script.yaml']['lines'][0]['text'] == 'Một hình tròn đi ngang qua màn hình.'
-    assert 'Mẫu phi y khoa' in bundle['previews']['sample.txt']
+    assert bundle['lines'][0]['claim_id'] == 'C01'
+    assert bundle['claims'][0]['support'][0]['source_id'] == 'R01'
     assert all(event['at'] for event in bundle['timeline'])
-    assert len(bundle['timeline']) == 2
-    output = factory_trials.trial_dir(app.root, trial['id']) / 'script.yaml'
+    assert len(bundle['timeline']) >= 2
+    output = factory_trials.trial_dir(app.root, trial['id']) / bundle['outputs'][0]['path']
     output.write_text('changed', encoding='utf-8')
     assert request(app, f"/api/trials/{trial['id']}/bundle")[1]['previews'] == {}
