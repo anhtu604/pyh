@@ -32,6 +32,22 @@ def ignore_real_dotenv(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def trial_checkout_stub(monkeypatch):
+    """tmp roots are not git repos; return the real worktree builder for tests that opt in."""
+    from healthvideo.workflows import factory_trials
+
+    real = factory_trials.trial_checkout
+
+    def stub(root, directory):
+        checkout = directory / 'repo'
+        checkout.mkdir(parents=True, exist_ok=True)
+        return checkout
+
+    monkeypatch.setattr(factory_trials, 'trial_checkout', stub)
+    return real
+
+
+@pytest.fixture(autouse=True)
 def synthetic_workflow_brand(brand_profile_path, monkeypatch):
     from healthvideo.workflows import long_form, produce, visual_assets
 

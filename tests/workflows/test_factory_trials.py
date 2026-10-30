@@ -288,3 +288,56 @@ def test_samples_include_image_audio_and_seekable_video(tmp_path):
         assert sound.getnframes() / sound.getframerate() == 2
     assert len([p for p in samples[3] if p.suffix == '.mp4']) == 2
     assert all(p.stat().st_size > 1000 for p in samples[3] if p.suffix == '.mp4')
+
+
+def _git_repo(path):
+    import subprocess
+
+    def git(*args):
+        subprocess.run(['git', *args], cwd=path, check=True, capture_output=True)
+
+    git('init', '-q')
+    git('config', 'user.email', 't@example.test')
+    git('config', 'user.name', 't')
+    (path / 'video/src/anatomy').mkdir(parents=True)
+    (path / 'video/src/anatomy/library.json').write_text('{}', encoding='utf-8')
+    git('add', '.')
+    git('commit', '-qm', 'init')
+
+
+def test_stage1_agent_edits_land_in_disposable_checkout(tmp_path, monkeypatch, trial_checkout_stub):
+    trials = module()
+    monkeypatch.setattr(trials, 'trial_checkout', trial_checkout_stub)
+    _git_repo(tmp_path)
+    cwds = []
+
+    def invoke(agents, prompt, *, cwd, log_dir):
+        cwds.append(cwd)
+        (cwd / 'video/src/anatomy/NewOrgan.tsx').write_text('x', encoding='utf-8')
+        (cwd / 'video/src/anatomy/library.json').write_text('{"NewOrgan": {}}', encoding='utf-8')
+        return _fake_invoke(agents, prompt, cwd=cwd, log_dir=log_dir)
+
+    trial = trials.create_trial(tmp_path, 1, topic='Chủ đề cách ly')
+    trials.run_trial(tmp_path, trial['id'], invoke=invoke)
+    ready = trials.wait_trial(tmp_path, trial['id'])
+    assert ready['status'] == 'ready', ready.get('reason')
+    assert all(cwd != tmp_path for cwd in cwds)
+    assert not (tmp_path / 'video/src/anatomy/NewOrgan.tsx').exists()
+    assert (tmp_path / 'video/src/anatomy/library.json').read_text(encoding='utf-8') == '{}'
+    assert not cwds[0].exists()
+
+
+def test_stage1_fails_when_agent_writes_into_real_repo(tmp_path, monkeypatch, trial_checkout_stub):
+    trials = module()
+    monkeypatch.setattr(trials, 'trial_checkout', trial_checkout_stub)
+    _git_repo(tmp_path)
+
+    def invoke(agents, prompt, *, cwd, log_dir):
+        (tmp_path / 'video/src/anatomy/Leak.tsx').write_text('x', encoding='utf-8')
+        return _fake_invoke(agents, prompt, cwd=cwd, log_dir=log_dir)
+
+    trial = trials.create_trial(tmp_path, 1, topic='Chủ đề rò rỉ')
+    trials.run_trial(tmp_path, trial['id'], invoke=invoke)
+    failed = trials.wait_trial(tmp_path, trial['id'])
+    assert failed['status'] == 'failed'
+    assert 'video/src/anatomy/Leak.tsx' in failed['reason']

@@ -24,7 +24,11 @@ from healthvideo.agents import (
 )
 from healthvideo.domain.queue import QueueEntry
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
-from healthvideo.workflows.factory_deps import create_project
+from healthvideo.workflows.factory_deps import (
+    changed_code_paths,
+    code_snapshot,
+    create_project,
+)
 from healthvideo.workflows.runner import render_prompt
 from healthvideo.workflows.standards import prompt_block
 
@@ -32,8 +36,9 @@ TRIAL_LOCK = threading.RLock()
 _ACTIVE_TRIALS: dict[str, threading.Thread] = {}
 ORPHAN_REASON = 'App đã tắt khi mẫu đang chạy; bấm chạy lại.'
 TRIAL_ISOLATION_LINE = (
-    'Đây là mẫu nghiệm thu: chỉ ghi trong thư mục project này; '
-    'không đụng projects/, topics/, profiles/.'
+    'Đây là mẫu nghiệm thu: thư mục làm việc hiện tại là bản sao repo dùng một lần; '
+    'component SVG mới và test ghi vào video/src/anatomy/ của bản sao này. '
+    'Ngoài bản sao, chỉ ghi trong thư mục project; không ghi đường dẫn tuyệt đối nào khác.'
 )
 _STEP_LABELS = {'research': 'tìm nguồn', 'draft': 'viết kịch bản'}
 
@@ -271,6 +276,23 @@ def _fail_stage1(directory: Path, reason: str, event: str) -> None:
         write_yaml_atomic(path, record)
 
 
+def trial_checkout(root: Path, directory: Path) -> Path:
+    """Disposable git worktree so agent edits (e.g. new anatomy SVG) never reach the real repo."""
+    checkout = directory / 'repo'
+    _remove_checkout(root, checkout)
+    subprocess.run(['git', 'worktree', 'add', '--detach', str(checkout), 'HEAD'],
+                   cwd=root, check=True, capture_output=True)
+    return checkout
+
+
+def _remove_checkout(root: Path, checkout: Path) -> None:
+    if checkout.exists():
+        subprocess.run(['git', 'worktree', 'remove', '--force', str(checkout)], cwd=root, capture_output=True, check=False)
+        shutil.rmtree(checkout, ignore_errors=True)
+    if (root / '.git').exists():
+        subprocess.run(['git', 'worktree', 'prune'], cwd=root, capture_output=True, check=False)
+
+
 def _run_stage1_worker(
     root: Path,
     trial_id: str,
@@ -282,7 +304,15 @@ def _run_stage1_worker(
 ) -> None:
     log_dir = directory / 'logs'
     log_dir.mkdir(parents=True, exist_ok=True)
+    checkout = directory / 'repo'
     try:
+        guarded = (root / '.git').exists()
+        before = code_snapshot(root) if guarded else {}
+        try:
+            checkout = trial_checkout(root, directory)
+        except (OSError, subprocess.CalledProcessError) as exc:
+            _fail_stage1(directory, f'Không tạo được bản sao repo cho mẫu thử: {exc}', 'checkout-failed')
+            return
         for step in ('research', 'draft'):
             step_vi = _STEP_LABELS[step]
             if step == 'draft':
@@ -312,7 +342,7 @@ def _run_stage1_worker(
                 result = invoke(
                     agents,
                     prompt,
-                    cwd=root,
+                    cwd=checkout,
                     log_dir=log_dir,
                 )
             except AllAgentsExhausted:
@@ -345,6 +375,15 @@ def _run_stage1_worker(
                     f'{step}-blocked',
                 )
                 return
+        leaked = changed_code_paths(root, before) if guarded else []
+        if leaked:
+            _fail_stage1(
+                directory,
+                'Agent đã ghi ra ngoài khu thử, cần gỡ tay: '
+                + ', '.join(p.as_posix() for p in leaked),
+                'leaked-into-repo',
+            )
+            return
         outputs = _stage1_outputs(directory)
         if not any(p.name == 'script.yaml' for p in outputs):
             _fail_stage1(
@@ -373,6 +412,7 @@ def _run_stage1_worker(
             })
             write_yaml_atomic(directory / 'trial.yaml', record)
     finally:
+        _remove_checkout(root, checkout)
         with TRIAL_LOCK:
             if _ACTIVE_TRIALS.get(trial_id) is threading.current_thread():
                 _ACTIVE_TRIALS.pop(trial_id, None)
