@@ -28,6 +28,7 @@ from healthvideo.tts.normalize import NormalizedTTS
 from healthvideo.tts.silent import SilentTTS
 from healthvideo.tts.vibi import VibiTTS
 from healthvideo.workflows.create_project_v2 import create_project_v2
+from healthvideo.workflows.draft import submit_medical_review
 from healthvideo.workflows.gate_review import check_revision_posts
 from healthvideo.workflows.produce import produce_project
 from healthvideo.workflows.runner import RunDeps
@@ -277,7 +278,10 @@ def default_run_deps(
         create_project=create_project,
         read_state=read_state,
         reject_note=reject_note,
-        python_steps={"produce": _produce_with_channel_voice},
+        python_steps={
+            "produce": _produce_with_channel_voice,
+            "submit_medical": submit_medical_review,
+        },
         changed_code_paths=lambda repo_root: changed_code_paths(
             repo_root, runner=git_runner
         ),

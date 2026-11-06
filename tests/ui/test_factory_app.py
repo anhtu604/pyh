@@ -7,7 +7,7 @@ import pytest
 
 from healthvideo.approver_pin import set_pin
 from healthvideo.workflows import dashboard, factory, factory_standards, factory_trials
-from tests.helpers import create_v2_project_fixture
+from tests.helpers import create_v2_project_fixture, write_passing_script_review
 
 
 @pytest.fixture
@@ -18,6 +18,7 @@ def app(tmp_path, monkeypatch):
     from healthvideo.storage.files import write_yaml_atomic
     def fake_invoke(agents, prompt, *, cwd, log_dir):
         rev = log_dir.parent / 'project/revisions/001'
+        write_passing_script_review(rev)
         write_yaml_atomic(rev / 'script/script.yaml', {
             'lines': [{'id': 'T01', 'text': 'Một hình tròn đi ngang qua màn hình.', 'claim_id': 'C01', 'source_marker': '[R01]'}],
         })

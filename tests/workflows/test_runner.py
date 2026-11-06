@@ -12,7 +12,7 @@ EXPECTED_STEPS: dict[WorkflowState | None, StepKind] = {
     WorkflowState.TOPIC_SELECTED: "research",
     WorkflowState.RESEARCH_IN_PROGRESS: "research",
     WorkflowState.EVIDENCE_READY: "draft",
-    WorkflowState.DRAFT_READY: "draft",
+    WorkflowState.DRAFT_READY: "script_review",
     WorkflowState.MEDICALLY_APPROVED: "produce",
     WorkflowState.PRODUCTION_IN_PROGRESS: "produce",
     WorkflowState.NEEDS_MEDICAL_REVISION: "revise_medical",

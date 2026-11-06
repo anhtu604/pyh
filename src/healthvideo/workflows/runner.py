@@ -26,6 +26,12 @@ from healthvideo.workflows.production_retry import (
     record_failure,
     retry_status,
 )
+from healthvideo.workflows.script_review import (
+    next_script_action,
+    record_review,
+    revision_notes,
+    script_hash,
+)
 from healthvideo.workflows.standards import prompt_block
 from healthvideo.workflows.visual_review import review_pending
 
@@ -33,6 +39,8 @@ StepKind = Literal[
     "create",
     "research",
     "draft",
+    "script_review",
+    "submit_medical",
     "posts",
     "produce",
     "visual_review",
@@ -40,14 +48,22 @@ StepKind = Literal[
     "revise_production",
 ]
 AGENT_STEPS: frozenset[str] = frozenset(
-    {"research", "draft", "posts", "visual_review", "revise_medical", "revise_production"}
+    {
+        "research",
+        "draft",
+        "script_review",
+        "posts",
+        "visual_review",
+        "revise_medical",
+        "revise_production",
+    }
 )
 
 _STEP_BY_STATE: dict[WorkflowState, StepKind] = {
     WorkflowState.TOPIC_SELECTED: "research",
     WorkflowState.RESEARCH_IN_PROGRESS: "research",
     WorkflowState.EVIDENCE_READY: "draft",
-    WorkflowState.DRAFT_READY: "draft",
+    WorkflowState.DRAFT_READY: "script_review",
     WorkflowState.MEDICALLY_APPROVED: "produce",
     WorkflowState.PRODUCTION_IN_PROGRESS: "produce",
     WorkflowState.NEEDS_MEDICAL_REVISION: "revise_medical",
@@ -98,7 +114,7 @@ def render_prompt(step: str, **fields: str) -> str:
         value = fields.get(name)
         replacement = value if value is not None else "(không có)"
         text = text.replace(f"{{{name}}}", replacement)
-    if step in {"draft", "revise_medical"}:
+    if step in {"draft", "script_review", "revise_medical"}:
         examples_path = PROMPTS_DIR / "style_examples.vi.md"
         if examples_path.is_file():
             examples = examples_path.read_text(encoding="utf-8").strip()
@@ -263,6 +279,14 @@ def run_queue(
             elif step == "produce" and not deps.posts_ready(project_dir):
                 step = "posts"
 
+            if step == "script_review":
+                try:
+                    step = next_script_action(project_dir)
+                except (OSError, ValueError) as exc:
+                    _mark_blocked(root, entry.slug, f"chấm kịch bản lỗi: {exc}", report)
+                    break
+            rewriting = step == "draft" and state == WorkflowState.DRAFT_READY
+
             if steps_taken >= max_steps_per_topic:
                 _mark_blocked(root, entry.slug, "vượt số bước", report)
                 break
@@ -278,18 +302,25 @@ def run_queue(
                     "question": entry.question,
                     "doctor_note": entry.doctor_note or "",
                 }
-                if step.startswith("revise_") or step == "draft":
+                if step.startswith("revise_") or step in {"draft", "script_review"}:
                     prompt_fields["reject_note"] = (
                         deps.reject_note(project_dir) or ""
                     )
+                if rewriting:
+                    prompt_fields["reject_note"] = (
+                        f"{revision_notes(project_dir)}\n{prompt_fields['reject_note']}"
+                    ).strip()
                 prompt = render_prompt(step, **prompt_fields)
                 standards_block = prompt_block(root, slug=entry.slug)
                 if standards_block:
                     prompt = f"{prompt.rstrip()}\n\n{standards_block}"
                 before = deps.code_snapshot(root) if deps.code_snapshot is not None else None
+                reviewing = step == "script_review"
+                reviewed_hash = script_hash(project_dir) if reviewing else ""
                 try:
                     result = deps.invoke(
-                        agents,
+                        # The critic starts from the other agent so it is not grading itself.
+                        tuple(reversed(agents)) if reviewing else agents,
                         prompt,
                         cwd=root,
                         log_dir=log_dir,
@@ -310,6 +341,18 @@ def run_queue(
                         log_path=result.log_path,
                     )
                     break
+                if reviewing:
+                    try:
+                        record_review(project_dir, reviewed_hash)
+                    except (OSError, ValueError) as exc:
+                        _mark_blocked(
+                            root,
+                            entry.slug,
+                            f"chấm kịch bản lỗi: {exc}",
+                            report,
+                            log_path=result.log_path,
+                        )
+                        break
                 if step == "visual_review":
                     # Python validates the report, bounds regeneration and renders the
                     # chosen candidate/fallback before it can enter the physician gate.
@@ -365,7 +408,18 @@ def run_queue(
 
             steps_taken += 1
             new_state = deps.read_state(project_dir)
-            if step == "visual_review":
+            if step in {"visual_review", "script_review"}:
+                _mark_advanced(root, entry.slug, report)
+            elif rewriting:
+                if next_script_action(project_dir) == "draft":
+                    _mark_blocked(
+                        root,
+                        entry.slug,
+                        "agent không sửa kịch bản theo nhận xét biên tập",
+                        report,
+                        log_path=result_log_path,
+                    )
+                    break
                 _mark_advanced(root, entry.slug, report)
             elif step == "posts":
                 if not deps.posts_ready(project_dir):

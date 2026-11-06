@@ -13,7 +13,7 @@
 1. Soạn `script.yaml`, `storyboard.yaml`, `asset-manifest.yaml`, `outline.yaml` (video dài 16:9 thời lượng 10–25 phút, chia 4–8 chương) và `clip-plan.yaml` (1–6 clip dọc 9:16, 60–180 giây mỗi clip, chỉ cắt từ cảnh có sẵn trong storyboard kèm đủ câu giới hạn caveat, không viết lời mới) theo mạch 7 nhịp explain-first (`docs/superpowers/specs/2026-10-18-explain-first-content-design.md` §1–§15): Mở → Giải phẫu → Sinh lý → Sinh lý bệnh → Giải phẫu bệnh → Bằng chứng → Hành động + giới hạn.
 2. Giữ giọng người thường kể chuyện, hài hước kiểu châm biếm niềm tin sai hoặc thói quen phổ biến chứ không châm biếm người; có hook trong 3 giây đầu (cảnh mở đầu phải có chủ thể đang chuyển động: gắn `Scene.motion`, dùng anatomy có `CUE_ACTIONS`, hoặc `kinetic_term`/`stat_gauge`, không mở bằng ảnh tĩnh đứng yên); câu đùa chứa số liệu hay nhận định y khoa vẫn phải trỏ tới claim trong ledger. Viết xong lời thoại thì chạy skill `humanizer` trên toàn bộ lời thoại để khử mùi văn AI.
 3. Phong cách: sơ đồ y khoa có chú thích tiếng Việt, kiểu Osmosis/Armando Hasudungan. Cảnh cơ chế dùng SVG trong `video/src/anatomy/`; nhãn thuật ngữ cố định từ `LABELS`, có leader line và mũi tên quá trình, tối đa 6 nhãn không chồng/cắt. Nếu thiếu component, thêm `.tsx` + test, đăng ký `library.json`/`registry.ts`, khai báo `FOCUS_REGIONS`, `LABELS`, `CUE_ACTIONS`; đọc README thư viện. Chỉ minh họa nội dung lời thoại đã duyệt; mọi asset có `license`, `source`. FLUX không chứa chữ/nhãn/số liệu.
-4. Chạy `healthvideo step draft {project} --script <script.yaml> --storyboard <storyboard.yaml> --assets <asset-manifest.yaml>`; sửa cho tới khi hết lỗi kiểm tra; sau đó chạy `healthvideo step submit-medical {project}`.
+4. Chạy `healthvideo step draft {project} --script <script.yaml> --storyboard <storyboard.yaml> --assets <asset-manifest.yaml>`; sửa cho tới khi hết lỗi kiểm tra. Không tự chạy `submit-medical`: biên tập viên sẽ chấm kịch bản, xưởng tự nộp khi đạt. Nếu mục yêu cầu sửa ở trên có nhận xét của biên tập viên, sửa đúng các dòng bị chỉ ra, gộp hoặc bỏ ý lặp khi cần, giữ nguyên claim, nguồn và nghĩa y khoa, đồng bộ lời trong storyboard rồi chạy lại lệnh này.
 5. Không thêm quan điểm, lập trường hay trải nghiệm cá nhân của bác sĩ ngoài nội dung đã ghi trong `{doctor_note}`.
 6. Luân phiên `process_animation` / `comparison` / `timelapse` / `whiteboard`; không quá 4 cảnh cơ chế liên tiếp cùng subject và visual. Video dài dùng ≥ 4 subject, clip dọc ≥ 2 subject. Chọn góc nhìn cơ quan ↔ mặt cắt ↔ tế bào ↔ tinh thể theo đúng lời thoại. Đổi camera không thay đổi nội dung; không giữ hình không đổi quá 6 giây.
 7. Diễn giải bằng chứng dùng `visual: source_card`, `claim_id`, `source_marker` và `source_card`: `source_id`, `title`, `journal`, `year`, `pmid`, `doi`, `interpretation`. Chép nguyên metadata từ record trong ledger; `interpretation` bằng `claim.text_public`, nguồn thuộc `claim.sources` (có thể dùng `SourceCard.from_ledger`). Thẻ được React dựng bằng font brand, không cần asset nguồn giả; tính vào ngân sách `chart_crop`.
@@ -38,16 +38,15 @@ Mặc định có `whoosh-soft` mở chương và `chime-soft` vào `source_card
 
 ## Lệnh được dùng
 - `healthvideo step draft {project} --script <path> --storyboard <path> --assets <path>`
-- `healthvideo step submit-medical {project}`
 - `healthvideo status {project}`
 
 ## Đầu ra
 - `revisions/<rev>/script/script.yaml`, `revisions/<rev>/script/outline.yaml`, `revisions/<rev>/script/clip-plan.yaml`
 - `revisions/<rev>/storyboard/storyboard.yaml`, `revisions/<rev>/assets/asset-manifest.yaml`
-- Gói chờ duyệt cổng y khoa từ `revisions/<rev>/reviews/` qua `healthvideo review open {project} --gate medical` (và component SVG mới kèm test trong `video/src/anatomy/` nếu có)
+- Component SVG mới kèm test trong `video/src/anatomy/` nếu có
 
 ## Xong khi
-- Trạng thái đích của project đạt `awaiting_medical_review`, kiểm tra bằng lệnh `healthvideo status {project}`.
+- Trạng thái đích của project đạt `draft_ready` và `step draft` hết lỗi, kiểm tra bằng lệnh `healthvideo status {project}`.
 
 ## Đường dẫn revision hiện hành
 Đọc `active_revision` từ `{project}/project.yaml`; `<rev>` là giá trị đó.

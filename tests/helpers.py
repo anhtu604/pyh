@@ -579,3 +579,13 @@ def align_fixture_script(revision: Path, board: dict[str, Any]) -> None:
         lines.append(line)
     script["lines"] = lines
     write_yaml_atomic(script_path, script)
+
+
+def write_passing_script_review(revision: Path) -> None:
+    """Stand in for the critic agent: a report that passes every criterion."""
+    from healthvideo.workflows.script_review import CRITERIA, REPORT
+
+    write_yaml_atomic(
+        revision / REPORT,
+        {"scores": dict.fromkeys(CRITERIA, 8), "summary": "Đạt.", "issues": []},
+    )

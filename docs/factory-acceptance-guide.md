@@ -7,7 +7,7 @@ Tài liệu này tóm tắt cách bác sĩ nghiệm thu 4 giai đoạn của xư
 1. Mở **Xưởng video** trên Desktop (hoặc chạy `.venv\Scripts\healthvideo.exe app`).
 2. Tại khung **Nghiệm thu xưởng (TEST · ngoại tuyến)** ở đầu trang:
    - Chọn giai đoạn **1 · Chủ đề → kịch bản**, bấm **Tạo mẫu TEST**, sau đó bấm **Chạy mẫu ngoại tuyến · 0 yêu cầu trả phí**.
-   - Xem kịch bản mẫu từng dòng và tệp bằng chứng ngay trên trang.
+   - Xem điểm của biên tập viên, kịch bản mẫu từng dòng và tệp bằng chứng ngay trên trang.
    - Nhập nội dung quy định/góp ý vào ô **Góp ý / chuẩn nháp cho mẫu này**, bấm **Lưu nháp góp ý**.
    - Nhập **PIN bác sĩ** và bấm **Chấp nhận chuẩn v1**.
 3. Lặp lại theo đúng thứ tự cho giai đoạn **2 · Hình → giọng**, **3 · Dựng → QA**, **4 · Bài đăng → đóng gói**.

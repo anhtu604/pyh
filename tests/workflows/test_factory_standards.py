@@ -7,7 +7,7 @@ import pytest
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.workflows import factory_trials as trials
 from healthvideo.workflows import standards
-from tests.helpers import create_v2_project_fixture
+from tests.helpers import create_v2_project_fixture, write_passing_script_review
 
 
 @pytest.fixture(autouse=True)
@@ -20,6 +20,7 @@ def offline_renderer(monkeypatch):
     from healthvideo.agents import AgentResult
     def fake_invoke(agents, prompt, *, cwd, log_dir):
         rev = log_dir.parent / 'project/revisions/001'
+        write_passing_script_review(rev)
         write_yaml_atomic(rev / 'script/script.yaml', {'lines': [{'id': 'L01', 'text': 'Synthetic trial line.'}]})
         log_path = log_dir / 'fake.log'
         log_path.write_text('ok', encoding='utf-8')

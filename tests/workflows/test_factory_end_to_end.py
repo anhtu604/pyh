@@ -22,7 +22,7 @@ from healthvideo.workflows import (
     factory_standards,
     standards,
 )
-from tests.helpers import create_v2_project_fixture
+from tests.helpers import create_v2_project_fixture, write_passing_script_review
 
 
 def _http_call(
@@ -67,6 +67,7 @@ def test_factory_stage1_acceptance_end_to_end_offline(
     def _fake_invoke(agents: object, prompt: str, *, cwd: Path, log_dir: Path) -> AgentResult:
         del agents, cwd
         rev = log_dir.parent / "project" / "revisions" / "001"
+        write_passing_script_review(rev)
         write_yaml_atomic(rev / "script/script.yaml", {"lines": [{"id": "L01", "text": "Synthetic trial script.", "claim_id": "C01"}]})
         write_yaml_atomic(rev / "evidence/ledger.yaml", {"claims": [{"id": "C01", "text_public": "Synthetic claim.", "sources": ["R01"], "support": [{"source_id": "R01", "locator": "p.1", "quote": "Quote."}]}], "records": [{"id": "R01", "title": "Source"}]})
         log_path = log_dir / "fake.log"

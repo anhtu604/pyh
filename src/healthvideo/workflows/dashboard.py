@@ -38,6 +38,7 @@ from healthvideo.workflows import (
     standards,
 )
 from healthvideo.workflows.gate_review import approve_gate, reject_gate
+from healthvideo.workflows.script_review import review_view
 
 APP_ID = 'healthvideo-dashboard'
 DEFAULT_PORT = 8765
@@ -239,6 +240,7 @@ def review_bundle(root: Path, project_dir: Path, project: ProjectManifestV2) -> 
         'state': project.state.value, 'state_label': STATE_LABELS.get(project.state, project.state.value),
         'gate': factory.GATES.get(project.state), 'revision': project.active_revision,
         'lines': lines, 'claims': claims, 'records': records, 'media': media,
+        'script_review': review_view(rev),
         'video_stale': project.state in {WorkflowState.MEDICALLY_APPROVED, WorkflowState.PRODUCTION_IN_PROGRESS,
                                          WorkflowState.AWAITING_MEDICAL_REVIEW, WorkflowState.DRAFT_READY},
         'notes': _read_text(rev / 'reviews/medical-revision-notes.md'),

@@ -9,6 +9,7 @@ from healthvideo.domain.queue import QueueEntry
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.storage.queue import add_to_queue
 from healthvideo.workflows import factory, standards
+from healthvideo.workflows.script_review import CRITERIA
 from tests.helpers import create_v2_project_fixture
 
 
@@ -22,6 +23,12 @@ def _fake_invoke(agents, prompt, *, cwd, log_dir):
     rev = project_dir / 'revisions' / '001'
     log_dir.mkdir(parents=True, exist_ok=True)
     step = 'research' if '(`research`)' in prompt else 'draft'
+    if '(`script_review`)' in prompt:
+        log_path = log_dir / 'review-fake.log'
+        write_yaml_atomic(rev / 'reviews/script-review.yaml', {
+            'scores': dict.fromkeys(CRITERIA, 8), 'summary': 'Đạt.', 'issues': [],
+        })
+        return AgentResult(agent='fake-codex', ok=True, quota_exhausted=False, log_path=log_path)
     log_path = log_dir / f'{step}-fake.log'
     log_path.write_text(prompt, encoding='utf-8')
     if step == 'research':
@@ -92,9 +99,11 @@ def test_stage1_run_returns_running_then_ready_with_script_outputs(tmp_path):
     assert ready['claims'][0]['support'][0]['source_id'] == 'R01'
     assert ready['records'][0]['pmid'] == '21415251'
 
-    assert len(prompts) == 2
+    assert len(prompts) == 3
     assert '(`research`)' in prompts[0]
     assert '(`draft`)' in prompts[1]
+    assert '(`script_review`)' in prompts[2]
+    assert ready['script_review']['passed'] is True
     for prompt in prompts:
         assert topic in prompt
         assert 'Đi thẳng vào cơ chế giải phẫu.' in prompt

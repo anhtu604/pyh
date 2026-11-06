@@ -23,6 +23,7 @@ from healthvideo.workflows.runner import (
     render_prompt,
     run_queue,
 )
+from tests.helpers import write_passing_script_review
 
 
 def _entry(
@@ -676,6 +677,7 @@ def test_agent_prompt_uses_pinned_v1_standards_and_filters_other_slug_feedback(
     def _trial_invoke(agents: Any, prompt: str, *, cwd: Path, log_dir: Path) -> AgentResult:
         del agents, prompt, cwd
         rev = log_dir.parent / "project" / "revisions" / "001"
+        write_passing_script_review(rev)
         write_yaml_atomic(rev / "script/script.yaml", {"lines": [{"id": "L01", "text": "Synthetic trial."}]})
         log_path = log_dir / "fake.log"
         log_path.write_text("ok", encoding="utf-8")

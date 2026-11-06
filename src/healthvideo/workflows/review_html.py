@@ -26,6 +26,7 @@ from healthvideo.storage.explainer import read_explainer
 from healthvideo.storage.files import canonical_json_hash, read_yaml
 from healthvideo.workflows.long_form import OUTLINE_ARTIFACT, load_clip_scenes
 from healthvideo.workflows.review_frames import mechanism_sheets
+from healthvideo.workflows.script_review import review_view
 
 _NOT_YET_MODELED = (
     "chưa có trong hệ thống: population, certainty, applicability, "
@@ -171,6 +172,21 @@ def _render_style_section(revision_root: Path, script: Script) -> str:
     return f"<section><h2>Văn phong</h2><ul>{rows}</ul></section>"
 
 
+def _render_script_review_section(revision_root: Path) -> str:
+    review = review_view(revision_root)
+    if review is None:
+        return ""
+    verdict = "Đạt" if review["passed"] else "Chưa đạt, cần bác sĩ xem kỹ giọng văn"
+    scores = "".join(
+        f"<li>{item['score']}/10: {escape(item['label'])}</li>" for item in review["scores"]
+    )
+    return (
+        f"<section><h2>Biên tập viên chấm kịch bản</h2>"
+        f"<p>Lần chấm {review['round']}: {verdict}. {escape(review['summary'])}</p>"
+        f"<ul>{scores}</ul></section>"
+    )
+
+
 def render_medical_packet(revision_root: Path) -> str:
     ledger = read_yaml(revision_root / "evidence" / "ledger.yaml")
     sources = {
@@ -265,7 +281,9 @@ def render_medical_packet(revision_root: Path) -> str:
         read_yaml(revision_root / "assets" / "asset-manifest.yaml")
     )
     visual_budget_section = _render_visual_budget_section(storyboard, asset_manifest)
-    style_section = _render_style_section(revision_root, script)
+    style_section = _render_script_review_section(revision_root) + _render_style_section(
+        revision_root, script
+    )
     hook_outro_section = ""
     if script.format_profile == "hook_outro_v1":
         final = storyboard.scenes[-1]

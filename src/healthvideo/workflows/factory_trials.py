@@ -1,4 +1,4 @@
-"""Isolated acceptance trials: stage 1 runs real research+draft in trial dir; stages 2-4 stay offline."""
+"""Isolated acceptance trials: stage 1 runs real research, draft and script review in trial dir; stages 2-4 stay offline."""
 from __future__ import annotations
 
 import hashlib
@@ -30,6 +30,14 @@ from healthvideo.workflows.factory_deps import (
     create_project,
 )
 from healthvideo.workflows.runner import render_prompt
+from healthvideo.workflows.script_review import (
+    next_script_action,
+    record_review,
+    review_view,
+    revision_notes,
+    script_hash,
+    script_path,
+)
 from healthvideo.workflows.standards import prompt_block
 
 TRIAL_LOCK = threading.RLock()
@@ -40,7 +48,7 @@ TRIAL_ISOLATION_LINE = (
     'component SVG mới và test ghi vào video/src/anatomy/ của bản sao này. '
     'Ngoài bản sao, chỉ ghi trong thư mục project; không ghi đường dẫn tuyệt đối nào khác.'
 )
-_STEP_LABELS = {'research': 'tìm nguồn', 'draft': 'viết kịch bản'}
+_STEP_LABELS = {'research': 'tìm nguồn', 'draft': 'viết kịch bản', 'script_review': 'chấm kịch bản'}
 
 
 def trial_root(root: Path) -> Path:
@@ -143,6 +151,10 @@ def _populate_stage1_view(directory: Path, record: dict) -> None:
             claims_data = read_yaml(target)
         elif name == 'records.yaml' and not records_data:
             records_data = read_yaml(target)
+    script_output = next((o for o in record.get('outputs', [])
+                          if o['path'].endswith('script/script.yaml')), None)
+    if script_output is not None:
+        record['script_review'] = review_view((directory / script_output['path']).parent.parent)
     raw_lines = script_data.get('lines', []) if isinstance(script_data, dict) else []
     record['lines'] = [
         {
@@ -267,7 +279,7 @@ def _fail_stage1(directory: Path, reason: str, event: str) -> None:
         if not path.is_file():
             return
         record = read_yaml(path)
-        for key in ('draft', 'lines', 'claims', 'records', 'step'):
+        for key in ('draft', 'lines', 'claims', 'records', 'script_review', 'step'):
             record.pop(key, None)
         now_iso = datetime.now().astimezone().isoformat()
         record.update(status='failed', reason=reason, error=reason, outputs=[])
@@ -313,15 +325,18 @@ def _run_stage1_worker(
         except (OSError, subprocess.CalledProcessError) as exc:
             _fail_stage1(directory, f'Không tạo được bản sao repo cho mẫu thử: {exc}', 'checkout-failed')
             return
-        for step in ('research', 'draft'):
+        step: str | None = 'research'
+        rewriting = False
+        while step is not None:
             step_vi = _STEP_LABELS[step]
-            if step == 'draft':
+            if step != 'research':
                 with TRIAL_LOCK:
                     record = read_yaml(directory / 'trial.yaml')
-                    record['step'] = 'draft'
+                    record['step'] = step
                     record.setdefault('timeline', []).append({
                         'at': datetime.now().astimezone().isoformat(),
-                        'text': 'Đang viết kịch bản (draft)…',
+                        'text': ('Đang sửa kịch bản theo nhận xét biên tập…' if rewriting
+                                 else f'Đang {step_vi} ({step})…'),
                     })
                     write_yaml_atomic(directory / 'trial.yaml', record)
             fields: dict[str, str] = {
@@ -331,16 +346,18 @@ def _run_stage1_worker(
                 'question': topic,
                 'doctor_note': '',
             }
-            if step == 'draft':
-                fields['reject_note'] = ''
+            if step in {'draft', 'script_review'}:
+                fields['reject_note'] = revision_notes(project_dir) if rewriting else ''
             prompt = render_prompt(step, **fields)
             standards_block = prompt_block(root)
             if standards_block:
                 prompt = f'{prompt.rstrip()}\n\n{standards_block}'
             prompt = f'{prompt.rstrip()}\n\n{TRIAL_ISOLATION_LINE}\n'
+            reviewing = step == 'script_review'
+            reviewed_hash = script_hash(project_dir) if reviewing else ''
             try:
                 result = invoke(
-                    agents,
+                    tuple(reversed(agents)) if reviewing else agents,
                     prompt,
                     cwd=checkout,
                     log_dir=log_dir,
@@ -375,6 +392,23 @@ def _run_stage1_worker(
                     f'{step}-blocked',
                 )
                 return
+            if step == 'research':
+                step = 'draft'
+                continue
+            if step == 'draft' and not script_path(project_dir).is_file():
+                break
+            try:
+                if reviewing:
+                    record_review(project_dir, reviewed_hash)
+                action = next_script_action(project_dir)
+            except (OSError, ValueError) as exc:
+                _fail_stage1(directory, f'Không chấm được kịch bản: {exc}', 'script-review-failed')
+                return
+            if rewriting and action == 'draft':
+                _fail_stage1(directory, 'Agent không sửa kịch bản theo nhận xét biên tập.', 'draft-unchanged')
+                return
+            rewriting = reviewing and action == 'draft'
+            step = None if action == 'submit_medical' else action
         leaked = changed_code_paths(root, before) if guarded else []
         if leaked:
             _fail_stage1(
@@ -395,7 +429,7 @@ def _run_stage1_worker(
         with TRIAL_LOCK:
             now_iso = datetime.now().astimezone().isoformat()
             record = read_yaml(directory / 'trial.yaml')
-            for key in ('draft', 'lines', 'claims', 'records', 'reason', 'error', 'step'):
+            for key in ('draft', 'lines', 'claims', 'records', 'script_review', 'reason', 'error', 'step'):
                 record.pop(key, None)
             record.update(
                 status='ready',
@@ -434,7 +468,7 @@ def run_trial(
         if record['status'] == 'stale':
             raise ValueError('Mẫu stale; tạo mẫu mới trước khi thử.')
         directory = trial_dir(root, trial_id)
-        for key in ('draft', 'lines', 'claims', 'records', 'reason', 'error', 'step'):
+        for key in ('draft', 'lines', 'claims', 'records', 'script_review', 'reason', 'error', 'step'):
             record.pop(key, None)
         if stage == 1:
             for tid, existing in list(_ACTIVE_TRIALS.items()):

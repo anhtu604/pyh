@@ -898,9 +898,15 @@ function generalRow(dm){
   return `<div class="row ${dm.chung?'has-c':''}" id="gen-row" style="${dm.chung?'':'display:none'}"><div class="rid">chung</div>
     <div class="rtext" style="font-size:15px;color:var(--muted)">Góp ý chung cho cả sản phẩm (văn phong, nhịp, hình ảnh…).</div>${cbtn('chung',dm)}${cmtRow('chung',dm)}</div>`;
 }
+function scoreCard(r){
+  if(!r) return '';
+  const rows=r.scores.map(s=>`<li>${s.score<r.pass_score?'<b>':''}${esc(s.score)}/10 · ${esc(s.label)}${s.score<r.pass_score?'</b>':''}</li>`).join('');
+  const issues=r.issues.map(i=>`<li><b>${esc(i.line)}</b> · ${esc(i.criterion)}: ${esc(i.problem)} Hướng sửa: ${esc(i.fix)}</li>`).join('');
+  return `<div class="glass" style="padding:16px;margin-bottom:12px"><b>Biên tập viên · lần chấm ${esc(r.round)} · ${r.passed?'Đạt':'Chưa đạt'}</b><p>${esc(r.summary)}</p><ul>${rows}</ul>${issues?`<details><summary>Chỗ cần sửa (${r.issues.length})</summary><ul>${issues}</ul></details>`:''}</div>`;
+}
 function tabScript(b,dm,opts={}){
   if(!b.lines.length) return '<div class="glass empty">Chưa có kịch bản ở revision này.</div>';
-  return b.lines.map(l=>{const id=l.id||'?';
+  return scoreCard(b.script_review)+b.lines.map(l=>{const id=l.id||'?';
     return `<div class="row ${dm[id]?'has-c':''}"><div class="rid">${esc(id)}</div>
       <div><div class="rtext">${esc(l.text)}</div><div class="rmeta">${l.purpose&&l.purpose!=='content'?`<span class="tag">${esc(l.purpose)}</span>`:''}${l.claim_id?`<span class="tag claim" data-goto="${esc(l.claim_id)}" title="Xem bằng chứng">${esc(l.claim_id)}${l.source_marker?' · '+esc(l.source_marker):''}</span>`:''}</div></div>
       ${opts.readOnly?'':cbtn(id,dm)+cmtRow(id,dm)}</div>`}).join('');
@@ -1199,7 +1205,7 @@ async function faShow(id){
     const hasStage1View=b.stage===1&&((b.lines&&b.lines.length)||(b.claims&&b.claims.length));
     if(hasStage1View){
       const wrap=document.createElement('div');
-      wrap.innerHTML=`<figure><figcaption>Kịch bản mẫu · từng dòng (${(b.lines||[]).length} dòng)</figcaption>${tabScript({lines:b.lines||[]},{},{readOnly:true})}</figure>`
+      wrap.innerHTML=`<figure><figcaption>Kịch bản mẫu · từng dòng (${(b.lines||[]).length} dòng)</figcaption>${tabScript({lines:b.lines||[],script_review:b.script_review},{},{readOnly:true})}</figure>`
         +`<figure style="margin-top:16px"><figcaption>Khẳng định y khoa &amp; nguồn (${(b.claims||[]).length} khẳng định · ${(b.records||[]).length} nguồn)</figcaption>${tabClaims({lines:b.lines||[],claims:b.claims||[],records:b.records||[]},{},{readOnly:true,idPrefix:'fa-claim-'})}</figure>`;
       wrap.querySelectorAll('[data-goto]').forEach(t=>t.onclick=()=>{
         const target=document.getElementById('fa-claim-'+t.dataset.goto);
