@@ -27,7 +27,7 @@ from healthvideo.domain.gate_review import GateKind
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.queue import QueueEntry, QueueError
 from healthvideo.domain.state_graph import SIDE_EXIT_RULES
-from healthvideo.env import load_dotenv
+from healthvideo.env import hide_child_consoles, load_dotenv
 from healthvideo.evidence.clients import EuropePMCClient, PubMedClient
 from healthvideo.process import prepare_subprocess_argv, resolve_pnpm_argv
 from healthvideo.qa.script import lint_project_script
@@ -205,6 +205,7 @@ _RENDER_PACKET = {
 @app.callback()
 def main() -> None:
     """Các lệnh healthvideo."""
+    hide_child_consoles()
     if sys.platform == "win32":
         for stream in (sys.stdout, sys.stderr):
             reconfigure = getattr(stream, "reconfigure", None)

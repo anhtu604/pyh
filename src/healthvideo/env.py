@@ -3,7 +3,32 @@
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
 from pathlib import Path
+
+
+def hide_child_consoles(*, has_console: bool | None = None) -> None:
+    """Under pythonw every console child (git, ffmpeg, node, agents) flashes a window; hide them.
+
+    A child opened with CREATE_NEW_CONSOLE (the doctor's PIN window) stays visible.
+    """
+    if sys.platform != 'win32' or getattr(subprocess.Popen, '_hides_console', False):
+        return
+    if has_console is None:
+        import ctypes
+        has_console = bool(ctypes.windll.kernel32.GetConsoleWindow())
+    if has_console:
+        return
+    original = subprocess.Popen.__init__
+
+    def init(self, *args, creationflags=0, **kwargs):
+        if not creationflags & subprocess.CREATE_NEW_CONSOLE:
+            creationflags |= subprocess.CREATE_NO_WINDOW
+        original(self, *args, creationflags=creationflags, **kwargs)
+
+    subprocess.Popen.__init__ = init
+    subprocess.Popen._hides_console = True
 
 
 def child_env() -> dict[str, str]:

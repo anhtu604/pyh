@@ -111,3 +111,25 @@ def test_cli_callback_loads_dotenv_without_printing_values(
     assert os.environ.get("YOUTUBE_API_KEY") == secret_value
     assert "HEALTHVIDEO_PIN" not in os.environ
     assert secret_value not in result.output
+
+
+def test_hide_child_consoles_hides_children_but_keeps_pin_window(monkeypatch):
+    import subprocess
+    import sys
+
+    import pytest
+
+    from healthvideo.env import hide_child_consoles
+    if sys.platform != 'win32':
+        pytest.skip('Windows only')
+    seen = []
+    monkeypatch.setattr(subprocess.Popen, '__init__',
+                        lambda self, *a, creationflags=0, **k: seen.append(creationflags))
+    monkeypatch.setattr(subprocess.Popen, '_hides_console', False, raising=False)
+    hide_child_consoles(has_console=False)
+    subprocess.Popen(['git'])
+    subprocess.Popen(['python'], creationflags=subprocess.CREATE_NEW_CONSOLE)
+    assert seen == [subprocess.CREATE_NO_WINDOW, subprocess.CREATE_NEW_CONSOLE]
+    hide_child_consoles(has_console=False)  # idempotent
+    subprocess.Popen(['git'])
+    assert seen[-1] == subprocess.CREATE_NO_WINDOW
