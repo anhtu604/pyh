@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from healthvideo.agents import (
-    DEFAULT_AGENTS,
+    CODEX,
     AgentCli,
     AgentResult,
     AllAgentsExhausted,
@@ -455,15 +455,15 @@ def test_run_never_invokes_approve(tmp_path: Path) -> None:
         invoke=invoke_via_fake_runner,
     )
 
-    run_queue(tmp_path, deps, agents=(DEFAULT_AGENTS[0],))
+    run_queue(tmp_path, deps, agents=(CODEX,))
     assert states["kiem-soat-duong-huyet"] == WorkflowState.AWAITING_MEDICAL_REVIEW
 
     states["kiem-soat-duong-huyet"] = WorkflowState.NEEDS_MEDICAL_REVISION
-    run_queue(tmp_path, deps, agents=(DEFAULT_AGENTS[0],))
+    run_queue(tmp_path, deps, agents=(CODEX,))
     assert states["kiem-soat-duong-huyet"] == WorkflowState.AWAITING_MEDICAL_REVIEW
 
     states["kiem-soat-duong-huyet"] = WorkflowState.NEEDS_PRODUCTION_REVISION
-    run_queue(tmp_path, deps, agents=(DEFAULT_AGENTS[0],))
+    run_queue(tmp_path, deps, agents=(CODEX,))
     assert states["kiem-soat-duong-huyet"] == WorkflowState.AWAITING_VIDEO_REVIEW
 
     assert len(recorded_prompts) == 4

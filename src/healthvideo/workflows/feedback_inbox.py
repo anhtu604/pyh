@@ -140,8 +140,7 @@ def analyze(
             report.unlink(missing_ok=True)
             guarded = (root / '.git').exists()
             before = code_snapshot(root) if guarded else {}
-            # Codex is near its token limit, so the analyst starts from the other agent.
-            result = invoke(tuple(reversed(agents)), _prompt(root, entry, report),
+            result = invoke(tuple(agents), _prompt(root, entry, report),
                             cwd=root, log_dir=log_dir)
             if not result.ok:
                 raise RuntimeError(f'Agent {result.agent} không phân tích được.')

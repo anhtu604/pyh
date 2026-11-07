@@ -7,7 +7,9 @@ from typing import Any
 import pytest
 
 from healthvideo.agents import (
-     DEFAULT_AGENTS,
+    AGY,
+    CODEX,
+    DEFAULT_AGENTS,
     AgentCli,
     AllAgentsExhausted,
     invoke,
@@ -38,7 +40,7 @@ def test_quota_switches_to_next_agent(tmp_path: Path) -> None:
         return _completed(returncode=0, stdout="Done by agy")
 
     result = invoke_with_failover(
-        DEFAULT_AGENTS,
+        (CODEX, AGY),
         "Run research step",
         cwd=tmp_path,
         log_dir=tmp_path / "logs",
@@ -59,7 +61,7 @@ def test_non_quota_failure_does_not_switch(tmp_path: Path) -> None:
         return _completed(returncode=1, stderr="SyntaxError: invalid input")
 
     result = invoke_with_failover(
-        DEFAULT_AGENTS,
+        (CODEX, AGY),
         "Run research step",
         cwd=tmp_path,
         log_dir=tmp_path / "logs",
@@ -80,7 +82,7 @@ def test_all_exhausted_raises(tmp_path: Path) -> None:
 
     with pytest.raises(AllAgentsExhausted) as exc_info:
         invoke_with_failover(
-            DEFAULT_AGENTS,
+            (CODEX, AGY),
             "Run draft step",
             cwd=tmp_path,
             log_dir=tmp_path / "logs",
@@ -100,7 +102,7 @@ def test_prompt_sent_via_stdin_for_codex(tmp_path: Path) -> None:
         captured["kwargs"] = kwargs
         return _completed(returncode=0, stdout="ok")
 
-    codex = DEFAULT_AGENTS[0]
+    codex = CODEX
     prompt = "Tóm tắt bằng chứng y khoa"
     invoke(codex, prompt, cwd=tmp_path, log_dir=tmp_path / "logs", runner=fake_runner)
 
@@ -118,7 +120,7 @@ def test_prompt_substituted_for_agy(tmp_path: Path) -> None:
         captured["kwargs"] = kwargs
         return _completed(returncode=0, stdout="ok")
 
-    agy = DEFAULT_AGENTS[1]
+    agy = AGY
     prompt = "Viết kịch bản giai đoạn 2"
     invoke(agy, prompt, cwd=tmp_path, log_dir=tmp_path / "logs", runner=fake_runner)
 
@@ -129,7 +131,7 @@ def test_prompt_substituted_for_agy(tmp_path: Path) -> None:
 
 
 def test_agy_runs_headless_without_permission_prompts() -> None:
-    assert "--dangerously-skip-permissions" in DEFAULT_AGENTS[1].argv
+    assert "--dangerously-skip-permissions" in AGY.argv
 
 
 def test_permission_auto_denied_is_failure_not_quota(tmp_path: Path) -> None:
@@ -141,7 +143,7 @@ def test_permission_auto_denied_is_failure_not_quota(tmp_path: Path) -> None:
         )
 
     result = invoke(
-        DEFAULT_AGENTS[1],
+        AGY,
         "prompt",
         cwd=tmp_path,
         log_dir=tmp_path / "logs",
@@ -165,7 +167,7 @@ def test_env_has_no_pin_material(
         return _completed(returncode=0)
 
     invoke(
-        DEFAULT_AGENTS[0],
+        CODEX,
         "prompt",
         cwd=tmp_path,
         log_dir=tmp_path / "logs",
@@ -183,7 +185,7 @@ def test_success_returns_first_agent_result(tmp_path: Path) -> None:
         return _completed(returncode=0, stdout="completed on first try")
 
     result = invoke_with_failover(
-        DEFAULT_AGENTS,
+        (CODEX, AGY),
         "prompt",
         cwd=tmp_path,
         log_dir=tmp_path / "logs",
@@ -227,7 +229,7 @@ def test_log_written_utf8(tmp_path: Path) -> None:
         )
 
     result = invoke(
-        DEFAULT_AGENTS[0],
+        CODEX,
         "prompt",
         cwd=tmp_path,
         log_dir=tmp_path / "logs",
@@ -238,3 +240,7 @@ def test_log_written_utf8(tmp_path: Path) -> None:
     assert result.log_path.name.endswith("-codex.log")
     content = result.log_path.read_text(encoding="utf-8")
     assert content == vietnamese_stdout + vietnamese_stderr
+
+
+def test_agy_runs_first_by_default():
+    assert DEFAULT_AGENTS == (AGY, CODEX)

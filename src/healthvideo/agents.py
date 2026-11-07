@@ -20,32 +20,32 @@ class AgentCli:
     prompt_via_stdin: bool
 
 
-DEFAULT_AGENTS: tuple[AgentCli, ...] = (
-    AgentCli(
-        "codex",
-        ("codex", "exec", "--dangerously-bypass-approvals-and-sandbox", "-"),
-        True,
-    ),
-    AgentCli(
-        "agy",
-        (
-            "agy",
-            "-p",
-            "{prompt}",
-            "--mode",
-            "accept-edits",
-            # Headless mode cannot prompt; without this, shell tools are
-            # auto-denied and the agent silently does nothing. Parity with
-            # Codex's bypass flag; approval gates still need the TTY PIN.
-            "--dangerously-skip-permissions",
-            "--print-timeout",
-            "0s",
-            "--model",
-            "gemini-4-argon-medium",
-        ),
-        False,
-    ),
+CODEX = AgentCli(
+    "codex",
+    ("codex", "exec", "--dangerously-bypass-approvals-and-sandbox", "-"),
+    True,
 )
+AGY = AgentCli(
+    "agy",
+    (
+        "agy",
+        "-p",
+        "{prompt}",
+        "--mode",
+        "accept-edits",
+        # Headless mode cannot prompt; without this, shell tools are
+        # auto-denied and the agent silently does nothing. Parity with
+        # Codex's bypass flag; approval gates still need the TTY PIN.
+        "--dangerously-skip-permissions",
+        "--print-timeout",
+        "0s",
+        "--model",
+        "gemini-4-argon-medium",
+    ),
+    False,
+)
+# agy first: the doctor routes work to agy because Codex is near its token limit.
+DEFAULT_AGENTS: tuple[AgentCli, ...] = (AGY, CODEX)
 
 QUOTA_PATTERNS: tuple[str, ...] = (
     "usage limit",

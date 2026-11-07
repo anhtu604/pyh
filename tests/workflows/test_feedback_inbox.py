@@ -25,7 +25,7 @@ def _run(root, report, *, ok=True, text='Giọng nghe như đọc biên bản.')
     entry = inbox.add(root, 'gout', text)
     invoke = _invoke(report, ok=ok)
     invoke.name = f"{entry['id']}.yaml"
-    inbox.analyze(root, entry['id'], invoke=invoke, agents=(CODEX, AGY))
+    inbox.analyze(root, entry['id'], invoke=invoke, agents=(AGY, CODEX))
     return invoke, inbox.view(root)[0]
 
 
