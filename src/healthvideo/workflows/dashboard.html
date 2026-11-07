@@ -357,9 +357,8 @@ pre.md{white-space:pre-wrap;word-break:break-word;font-family:'Be Vietnam Pro',s
     <div class="controls">
       <span class="pill" id="factory-pill"><span class="dot"></span><span id="factory-text">Đang kiểm tra…</span></span>
       <span class="start-group">
-        <button class="btn primary" id="btn-start" type="button" disabled title="Cần nghiệm thu đủ 4 giai đoạn trước">
+        <button class="btn primary" id="btn-start" type="button" title="Bật xưởng sản xuất">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>Bật xưởng</button>
-        <a href="#factory-acceptance" class="start-hint" id="start-gate-hint">Cần nghiệm thu đủ 4 giai đoạn trước ↓</a>
       </span>
       <button class="btn danger" id="btn-stop" type="button" style="display:none">
         <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>Dừng xưởng</button>
@@ -382,7 +381,7 @@ pre.md{white-space:pre-wrap;word-break:break-word;font-family:'Be Vietnam Pro',s
       Duyệt ngay</button>
   </section>
 
-  <section class="glass card" id="factory-acceptance" aria-labelledby="fa-title">
+  <section class="glass card" id="factory-acceptance" aria-labelledby="fa-title" style="display:none">
     <div class="fa-done-banner" id="fa-done-banner" hidden>
       <div class="fa-done-text">
         <span class="fa-check" aria-hidden="true">✓</span>
@@ -510,7 +509,20 @@ pre.md{white-space:pre-wrap;word-break:break-word;font-family:'Be Vietnam Pro',s
     <button class="btn primary" type="button" data-ops-tab="overview" aria-pressed="true">Tổng quan</button>
     <button class="btn" type="button" data-ops-tab="queue" aria-pressed="false">Hàng đợi</button>
     <button class="btn" type="button" data-ops-tab="library" aria-pressed="false">Thư viện</button>
+    <button class="btn" type="button" data-ops-tab="feedback" aria-pressed="false">Ý kiến</button>
   </nav>
+  <section id="ops-feedback" hidden aria-label="Ý kiến của bác sĩ">
+    <div class="glass card">
+      <h2>Ý kiến của bác sĩ</h2>
+      <p class="sub">Gõ tự nhiên như đang nói. Agent độc lập sẽ phân tích và chuyển thành việc cho Claude sửa. Ý kiến ở đây không thay cho nút duyệt ở hai cổng.</p>
+      <form id="fb-form" class="ops-form">
+        <label>Áp dụng cho<select class="inp" id="fb-project" name="project"></select></label>
+        <label>Ý kiến<textarea class="inp" name="text" required maxlength="4000" rows="5"></textarea></label>
+        <button class="btn primary" type="submit">Gửi ý kiến</button>
+      </form>
+    </div>
+    <div id="fb-list" style="margin-top:18px"></div>
+  </section>
   <section id="ops-queue" hidden aria-label="Hàng đợi">
     <div class="glass card">
       <h2>Thêm chủ đề</h2>
@@ -604,8 +616,8 @@ pre.md{white-space:pre-wrap;word-break:break-word;font-family:'Be Vietnam Pro',s
       <div class="glass help">
         <div class="section-title" style="margin:0 0 8px">Cách dùng</div>
         <ul>
-          <li><b>Lần đầu</b>: làm 3 bước ở mục <b>Nghiệm thu xưởng</b> (Tạo mẫu → Xem mẫu → Góp ý &amp; nhập PIN) cho đủ 4 giai đoạn.</li>
-          <li>Khi đủ 4 chuẩn, bấm <b>Bật xưởng</b> một lần; xưởng tự chạy ngầm tới khi cần bác sĩ duyệt (đóng tab không dừng xưởng).</li>
+          <li>Bấm <b>Bật xưởng</b> một lần; xưởng tự chạy ngầm tới khi cần bác sĩ duyệt (đóng tab không dừng xưởng).</li>
+          <li>Có ý kiến về sản phẩm hay xưởng, gõ ở tab <b>Ý kiến</b>; agent phân tích rồi chuyển thành việc cho Claude sửa.</li>
           <li>Bấm <b>Xem sản phẩm</b> ở mỗi chủ đề để đọc kịch bản, kiểm tra nguồn y khoa và xem video.</li>
           <li>Bấm <b>Góp ý</b> cạnh từng dòng; khi xong bấm <b>Quyết định · PIN</b> để duyệt hoặc yêu cầu sửa.</li>
           <li>Mọi góp ý được lưu vào <b>Chuẩn đã ghi nhớ</b> để agent áp dụng cho các video sau.</li>
@@ -822,20 +834,10 @@ $('btn-log-toggle').onclick=()=>{
 };
 function syncStartGate(){
   const on=Boolean(state?.factory?.running);
-  const stdReady=[1,2,3,4].every(s=>Boolean(faStandards[s]));
-  const canStart=Boolean(state?.factory?.can_start) && stdReady;
   $('btn-start').style.display=on?'none':'';
   $('btn-stop').style.display=on?'':'none';
-  $('btn-start').disabled=busy||!canStart;
-  $('btn-start').title=canStart?'Bật xưởng sản xuất':'Cần nghiệm thu đủ 4 giai đoạn trước';
-  $('start-gate-hint').style.display=(!on&&!canStart)?'':'none';
+  $('btn-start').disabled=busy;
 }
-$('start-gate-hint').onclick=(e)=>{
-  e.preventDefault();
-  faReviewing=true;
-  faSyncCollapse();
-  $('factory-acceptance').scrollIntoView({behavior:'smooth',block:'start'});
-};
 function render(d){
   const on=d.factory.running;
   $('factory-pill').classList.toggle('on',on);
@@ -1320,9 +1322,9 @@ let opsCurrent=null, libSelection=null, libBinding=null, opsTab='overview';
 async function opsGet(url){const r=await fetch(url,{cache:'no-store'});const d=await r.json();if(!r.ok)throw Error(d.error||r.status);return d}
 async function opsLoadProjects(){
   const d=await opsGet('/api/status');
-  for(const id of ['ops-project','lib-project']){
+  for(const id of ['ops-project','lib-project','fb-project']){
     const el=$(id), selected=el.value;
-    el.innerHTML=`<option value="">${id==='lib-project'?'Tất cả dự án':'Chọn dự án'}</option>`+d.projects.map(p=>`<option value="${esc(p.slug)}">${esc(p.title)} · ${esc(p.slug)}</option>`).join('');
+    el.innerHTML=`<option value="">${{'lib-project':'Tất cả dự án','fb-project':'Chung cho cả kênh và xưởng'}[id]||'Chọn dự án'}</option>`+d.projects.map(p=>`<option value="${esc(p.slug)}">${esc(p.title)} · ${esc(p.slug)}</option>`).join('');
     el.value=selected;
   }
 }
@@ -1339,10 +1341,22 @@ async function opsPreview(){
 }
 $('ops-tabs').querySelectorAll('[data-ops-tab]').forEach(button=>button.onclick=async()=>{
   opsTab=button.dataset.opsTab;
-  for(const tab of ['overview','queue','library']){$('ops-'+tab).hidden=tab!==opsTab;if(tab==='overview')$('ops-'+tab).style.display=tab===opsTab?'':'none'}
+  for(const tab of ['overview','queue','library','feedback']){$('ops-'+tab).hidden=tab!==opsTab;if(tab==='overview')$('ops-'+tab).style.display=tab===opsTab?'':'none'}
   $('ops-tabs').querySelectorAll('button').forEach(b=>{b.classList.toggle('primary',b===button);b.setAttribute('aria-pressed',String(b===button))});
-  try{await opsLoadProjects();if(opsTab==='queue'){await opsQueue();await opsPreview()}if(opsTab==='library')await libLoad()}catch(e){toast(e.message,true)}
+  try{await opsLoadProjects();if(opsTab==='queue'){await opsQueue();await opsPreview()}if(opsTab==='library')await libLoad();if(opsTab==='feedback')await fbLoad()}catch(e){toast(e.message,true)}
 });
+const FB_STATUS={analyzing:'Đang phân tích…',ready:'Đã gửi việc cho Claude',done:'Claude đã xử lý',failed:'Lỗi phân tích'};
+const FB_KIND={san_pham:'Sản phẩm',xuong:'Xưởng',chuan_kenh:'Chuẩn kênh'};
+async function fbLoad(){
+  const d=await opsGet('/api/feedback');
+  $('fb-list').innerHTML=d.entries.map(e=>{
+    const tasks=(e.analysis?.tasks||[]).map(t=>`<li><b>${esc(FB_KIND[t.kind]||t.kind)}</b> · ${esc(t.target)}: ${esc(t.request)}</li>`).join('');
+    return `<div class="glass card" style="margin-bottom:12px"><p class="sub">${esc(e.at)} · ${esc(e.project)} · <b>${esc(FB_STATUS[e.status]||e.status)}</b></p><p style="white-space:pre-wrap">${esc(e.text)}</p>${e.analysis?`<p>${esc(e.analysis.summary)}</p><ul>${tasks}</ul>`:''}${e.error?`<p class="sub">${esc(e.error)}</p><button class="btn" type="button" data-fb-retry="${esc(e.id)}">Phân tích lại</button>`:''}</div>`;
+  }).join('')||'<div class="glass empty">Chưa có ý kiến nào.</div>';
+  $('fb-list').querySelectorAll('[data-fb-retry]').forEach(b=>b.onclick=async()=>{try{await post('/api/feedback/retry',{id:b.dataset.fbRetry});await fbLoad()}catch(ex){toast(ex.message,true)}});
+}
+$('fb-form').onsubmit=async e=>{e.preventDefault();try{await post('/api/feedback/add',Object.fromEntries(new FormData(e.target)));e.target.reset();await fbLoad();toast('Đã nhận ý kiến; agent đang phân tích.')}catch(ex){toast(ex.message,true)}};
+setInterval(()=>{if(opsTab==='feedback')fbLoad().catch(()=>{})},5000);
 $('ops-topic').onsubmit=async e=>{e.preventDefault();try{await post('/api/topics/add',Object.fromEntries(new FormData(e.target)));e.target.reset();await opsQueue();toast('Đã thêm chủ đề vào hàng đợi.')}catch(ex){toast(ex.message,true)}};
 $('ops-project').onchange=()=>{ $('ops-reopen').hidden=true;opsPreview().catch(e=>toast(e.message,true))};
 $('ops-retry').onclick=async()=>{if(!opsCurrent)return;const d=opsCurrent;if(!confirm(`Thử lại bước ${d.next_step||'—'}? Tối đa ${d.cache.max_requests} yêu cầu TTS cho một lượt; cache chưa kiểm hash/giọng/provider.`))return;try{await post(`/api/project/${encodeURIComponent(d.slug)}/retry`,{expected_revision:d.revision});await opsPreview();toast('Đã cho phép thử lại. Bật xưởng khi sẵn sàng.')}catch(e){toast(e.message,true)}};

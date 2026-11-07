@@ -35,6 +35,7 @@ from healthvideo.workflows import (
     factory,
     factory_standards,
     factory_trials,
+    feedback_inbox,
     standards,
 )
 from healthvideo.workflows.gate_review import approve_gate, reject_gate
@@ -155,8 +156,7 @@ def snapshot(root: Path, *, agents: Callable[[], list[str]] | None = None) -> di
     pid = factory.running_pid(root)
     return {
         'app': APP_ID,
-        'factory': {'running': pid is not None, 'pid': pid,
-                    'can_start': set(factory_standards.accepted_standards(root)) == {1, 2, 3, 4}},
+        'factory': {'running': pid is not None, 'pid': pid},
         'agents': agents() if agents is not None else running_agents(root),
         'stages': list(STAGES),
         'projects': items,
@@ -343,8 +343,7 @@ def decide(root: Path, project_dir: Path, body: dict, *, limiter: PinLimiter,
     clear_draft(root, project_dir.name)
     if draft or reason:
         message += ' Góp ý đã được ghi nhớ làm chuẩn.'
-    if (factory.running_pid(root) is None
-            and set(factory_standards.accepted_standards(root)) == {1, 2, 3, 4}):
+    if factory.running_pid(root) is None:
         factory.start_background(root)
         message += ' Đã bật xưởng để chạy tiếp.'
     return message
@@ -435,6 +434,8 @@ class _Handler(BaseHTTPRequestHandler):
                 self._json({'app': APP_ID})
             elif path == '/api/status':
                 self._json(snapshot(self.server.root, agents=self.server.agents))
+            elif path == '/api/feedback':
+                self._json({'entries': feedback_inbox.view(self.server.root)})
             elif path == '/api/standards':
                 self._json({'entries': standards.load(self.server.root)[::-1]})
             elif parts[:2] == ['api', 'trials'] or path == '/api/standards/accepted':
@@ -591,8 +592,8 @@ class DashboardServer(ThreadingHTTPServer):
         extra = dashboard_operations.post_route(self, parts, body or {})
         if extra is not None:
             return extra
-        if len(parts) == 3 and parts[0] == 'api' and parts[1] == 'standards':
-            key = f'standards/{parts[2]}'
+        if len(parts) == 3 and parts[0] == 'api' and parts[1] in {'standards', 'feedback'}:
+            key = f'{parts[1]}/{parts[2]}'
             if key in self.actions:
                 return self.actions[key](body or {})
         if len(parts) == 3 and parts[0] == 'api' and parts[1] in {'factory', 'review', 'app'}:
@@ -651,8 +652,6 @@ def default_actions(server: DashboardServer) -> dict[str, Callable[..., str]]:
     root = server.root
 
     def start() -> str:
-        from healthvideo.workflows.factory_standards import require_accepted
-        require_accepted(root)
         return f'Xưởng đang chạy (PID {factory.start_background(root)}).'
 
     def stop() -> str:
@@ -693,6 +692,19 @@ def default_actions(server: DashboardServer) -> dict[str, Callable[..., str]]:
             raise ValueError('Nhập nội dung chuẩn cần ghi nhớ.')
         return 'Đã ghi nhớ chuẩn mới; agent sẽ áp dụng từ lượt chạy tới.'
 
+    def add_feedback(body: dict) -> str:
+        project = str(body.get('project') or feedback_inbox.GENERAL)
+        if project != feedback_inbox.GENERAL:
+            server.project_dir(project)
+        entry = feedback_inbox.add(root, project, str(body.get('text', '')))
+        feedback_inbox.start(root, entry['id'])
+        return 'Đã nhận ý kiến; agent đang phân tích.'
+
+    def retry_feedback(body: dict) -> str:
+        entry = feedback_inbox.retry(root, str(body.get('id', '')))
+        feedback_inbox.start(root, entry['id'])
+        return 'Đang phân tích lại.'
+
     def quit_app() -> str:
         threading.Thread(target=server.shutdown, daemon=True).start()
         return 'App đã tắt (xưởng nền vẫn chạy nếu đang bật).'
@@ -701,6 +713,7 @@ def default_actions(server: DashboardServer) -> dict[str, Callable[..., str]]:
         'factory/start': start, 'factory/stop': stop, 'review/open': review,
         'project/packet': packet, 'project/folder': folder, 'project/decide': decision,
         'project/comment': comment, 'standards/add': add_standard,
+        'feedback/add': add_feedback, 'feedback/retry': retry_feedback,
         'app/quit': quit_app,
     }
 

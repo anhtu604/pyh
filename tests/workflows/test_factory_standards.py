@@ -91,8 +91,6 @@ def test_concurrent_tabs_only_accept_once(tmp_path):
 
 def test_snapshot_immutable_and_new_version_does_not_rewrite(tmp_path):
     project = create_v2_project_fixture(tmp_path / 'projects')
-    with pytest.raises(ValueError):
-        module().pin_standards(tmp_path, project)
     for stage in range(1, 5):
         accept(tmp_path, ready(tmp_path, stage))
     path = module().pin_standards(tmp_path, project)
@@ -137,17 +135,12 @@ def test_gate_hashes_cover_snapshot_and_deletion(tmp_path):
         snapshot.write_bytes(original)
 
 
-def test_start_requires_four_standards(tmp_path, monkeypatch):
+def test_start_needs_no_acceptance_standards(tmp_path, monkeypatch):
     from healthvideo.workflows import dashboard, factory
     calls = []
     monkeypatch.setattr(factory, 'start_background', lambda root: calls.append(root) or 123)
     server = dashboard.DashboardServer(tmp_path, 0)
     try:
-        with pytest.raises(ValueError):
-            server.dispatch(['api', 'factory', 'start'])
-        assert not calls
-        for stage in range(1, 5):
-            accept(tmp_path, ready(tmp_path, stage))
         assert '123' in server.dispatch(['api', 'factory', 'start'])
         assert calls == [tmp_path.resolve()]
     finally:
@@ -162,11 +155,12 @@ def test_new_project_pins_accepted_configuration(tmp_path):
     assert (project / 'revisions/001/workflow/standards.yaml').is_file()
 
 
-def test_new_production_project_refuses_missing_standards(tmp_path):
+def test_new_project_pins_only_the_standards_that_exist(tmp_path):
+    from healthvideo.storage.files import read_yaml
     from healthvideo.workflows.create_project_v2 import create_project_v2
-    with pytest.raises(ValueError, match='4'):
-        create_project_v2(tmp_path / 'projects', 'new-test', 'TEST', now=datetime.now(UTC))
-    assert not (tmp_path / 'projects/new-test').exists()
+    create_project_v2(tmp_path / 'projects', 'new-test', 'TEST', now=datetime.now(UTC))
+    snapshot = tmp_path / 'projects/new-test/revisions/001/workflow/standards.yaml'
+    assert read_yaml(snapshot)['standards'] == []
 
 
 def test_package_preserves_snapshot_and_rejects_edits(tmp_path):

@@ -178,15 +178,6 @@ def test_factory_stage1_acceptance_end_to_end_offline(
         assert set(std_info["accepted"]) == {"1"}
         assert std_info["accepted"]["1"]["version"] == 1
 
-        # (a) Starting the production factory is still refused while < 4 stages are accepted.
-        status, app_status = _http_call(server2, "GET", "/api/status")
-        assert status == 200
-        assert app_status["factory"]["can_start"] is False
-
-        status, start_err = _http_call(server2, "POST", "/api/factory/start", {})
-        assert status == 400
-        assert "4 chuẩn" in start_err["error"]
-
         # (d) Legacy project without workflow/standards.yaml snapshot remains readable without mutation.
         status, proj_bundle = _http_call(
             server2, "GET", f"/api/project/{legacy_project.name}/bundle"

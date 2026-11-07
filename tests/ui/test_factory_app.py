@@ -142,7 +142,6 @@ def test_trial_auth_and_media_containment(app):
     url = f"/api/trials/{trial['id']}/media/{trial['outputs'][0]['path']}"
     assert request(app, url)[0] == 200
     assert request(app, f"/api/trials/{trial['id']}/media/../../secret.txt")[0] in (400, 404, 500)
-    assert request(app, '/api/factory/start', {})[0] == 400
 
 
 def test_acceptance_section_and_button_gate(app):
@@ -157,7 +156,6 @@ def test_acceptance_section_and_button_gate(app):
         'Tạo và chạy mẫu',
         'Chi tiết kỹ thuật',
         'Xưởng đã nghiệm thu đủ 4 chuẩn',
-        'Cần nghiệm thu đủ 4 giai đoạn trước',
         'friendlyError(',
         'Xem nhật ký đầy đủ',
         'Agent sẽ tìm nguồn và viết kịch bản thật cho chủ đề này (khoảng 5–15 phút). Mẫu chỉ để nghiệm thu, không xuất bản.',
@@ -168,7 +166,9 @@ def test_acceptance_section_and_button_gate(app):
         assert snippet.encode('utf-8') in page
     status, data = request(app, '/api/status')
     assert status == 200, data
-    assert data['factory']['can_start'] is False
+    assert 'can_start' not in data['factory']
+    assert 'id="btn-start" type="button" title="Bật xưởng sản xuất"'.encode() in page
+    assert b'aria-labelledby="fa-title" style="display:none"' in page
 
 
 def acceptance_decision(app):

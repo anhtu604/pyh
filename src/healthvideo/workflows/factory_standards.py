@@ -44,13 +44,6 @@ def standards_hash(root: Path) -> str:
     return hashlib.sha256(json.dumps(accepted_standards(root), sort_keys=True).encode()).hexdigest()
 
 
-def require_accepted(root: Path) -> dict[int, dict]:
-    accepted = accepted_standards(root)
-    if set(accepted) != {1, 2, 3, 4}:
-        raise ValueError('Cần chấp nhận đủ 4 chuẩn trong Nghiệm thu xưởng trước khi Bật xưởng.')
-    return accepted
-
-
 def evidence_hash(bundle: dict) -> str:
     data = {'input_hash': bundle['input_hash'], 'outputs': bundle['outputs']}
     return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
@@ -112,6 +105,6 @@ def pin_standards(root: Path, project_dir: Path) -> Path:
     target = project_dir / 'revisions' / revision / SNAPSHOT
     if target.is_file():
         return target
-    accepted = require_accepted(root)
-    write_yaml_atomic(target, {'version': 1, 'standards': [accepted[s] for s in range(1, 5)]})
+    accepted = accepted_standards(root)
+    write_yaml_atomic(target, {'version': 1, 'standards': [accepted[s] for s in sorted(accepted)]})
     return target

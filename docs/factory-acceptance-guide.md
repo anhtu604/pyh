@@ -1,5 +1,7 @@
 # Hướng dẫn nghiệm thu xưởng theo giai đoạn trong app
 
+> Ngừng dùng từ 2026-11-07: khu nghiệm thu đã ẩn khỏi app. Bác sĩ nghiệm thu trên sản phẩm thật và gửi ý kiến ở tab **Ý kiến**. Mục 2 về Hàng đợi và Thư viện vẫn đúng.
+
 Tài liệu này tóm tắt cách bác sĩ nghiệm thu 4 giai đoạn của xưởng và vận hành hằng ngày ngay trong `healthvideo app` (lối tắt Desktop **Xưởng video**), không cần dùng PowerShell.
 
 ## 1. Nghiệm thu 4 giai đoạn (1 → 4)

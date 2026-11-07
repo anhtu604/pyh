@@ -2,6 +2,9 @@
 
 Đọc `AGENTS.md` trước. File này chỉ ghi **trạng thái hiện tại và việc còn dở**.
 
+## Cập nhật 2026-11-07
+Đã bỏ khóa nghiệm thu 4 giai đoạn: xưởng chuyển sang sản xuất, bác sĩ nghiệm thu trên sản phẩm thật qua hai cổng và tab **Ý kiến**. Các mục nói "chờ đủ 4 chuẩn" bên dưới không còn áp dụng.
+
 ## Mục tiêu hiện tại
 Theo thiết kế **hoàn thiện xưởng trước, sản xuất sau** (`docs/superpowers/specs/2026-10-25-factory-first-stage-acceptance-design.md`, trạng thái: đã duyệt): hoàn thiện công cụ xưởng và trình bác sĩ nghiệm thu từng giai đoạn 1 → 4 ngay trong `healthvideo app` bằng mẫu `TEST` phi y khoa trước khi mở chạy sản xuất A–Z. Dự án **gout** (`projects/gout-tinh-the-urat`) được giữ nguyên, **chờ sau khi bác sĩ chấp nhận đủ 4 chuẩn giai đoạn** mới mở vòng sửa sản phẩm.
 

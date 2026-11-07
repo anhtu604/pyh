@@ -39,7 +39,7 @@ Kiểm tra môi trường bất kỳ lúc nào bằng:
 
 ## Vận hành hằng ngày
 
-1. Lần đầu: bác sĩ chạy `healthvideo review set-pin`, rồi mở app điều khiển `healthvideo app` (hoặc bấm đúp lối tắt Desktop **Xưởng video**). Trước khi chạy hàng đợi sản xuất A–Z lần đầu, bác sĩ nghiệm thu và chấp nhận chuẩn 4 giai đoạn (1 → 4) bằng mẫu `TEST` và PIN ngay trong mục **Nghiệm thu xưởng** của app, rồi bấm **Bật xưởng** (hoặc `healthvideo xuong --background`).
+1. Lần đầu: bác sĩ chạy `healthvideo review set-pin`, rồi mở app điều khiển `healthvideo app` (hoặc bấm đúp lối tắt Desktop **Xưởng video**). Bấm **Bật xưởng** (hoặc `healthvideo xuong --background`). Bác sĩ nghiệm thu ngay trên sản phẩm thật ở hai cổng duyệt; ý kiến về sản phẩm hay xưởng gõ ở tab **Ý kiến**, agent độc lập phân tích thành việc rồi ghi vào `topics/feedback.yaml` cho Claude xử lý.
 2. Thêm chủ đề và xử lý lỗi: ngay trong tab **Hàng đợi** của `healthvideo app` (thêm chủ đề, xem bước kế tiếp + ước tính cache + `retry_after`, cho phép thử lại khi đã sửa đầu vào, mở lại cổng y khoa bằng PIN) và tab **Thư viện** (lọc/xem ảnh, nhập ảnh có nguồn như Muse AI và gắn vào cảnh `whiteboard`); hoặc qua CLI `healthvideo topic discover --query "<từ khóa>"`, `healthvideo topic add --slug <slug> --title "<tiêu đề>" --question "<câu hỏi>" [--note "<ghi chú>"]`.
 3. Khi có thông báo: xem sản phẩm (kịch bản, claim + câu trích, video/giọng), góp ý từng dòng và bấm **Quyết định · PIN** ngay trong `healthvideo app`, hoặc chạy `healthvideo duyet` trong terminal TTY (chọn **A** duyệt / **R** từ chối / **B** bỏ qua, nhập PIN). Tên bác sĩ lưu ngoài repo tại `~/.healthvideo/operator.yaml`; PIN chỉ kiểm tra cục bộ, không lưu.
 4. Xưởng tự chạy tiếp và đóng gói sau khi duyệt video. Lấy `revisions/<rev>/publish/` để đăng tay.
@@ -50,7 +50,7 @@ Kiểm tra môi trường bất kỳ lúc nào bằng:
 
 Bộ lệnh công khai của `healthvideo` (xem chi tiết bằng `--help`):
 
-- `healthvideo app [--port 8765] [--no-browser] [--install-shortcut]` — mở bảng điều khiển local (`127.0.0.1`) để nghiệm thu 4 giai đoạn của xưởng, quản lý hàng đợi/thử lại/mở lại cổng, duyệt thư viện ảnh và quyết định hai cổng bằng PIN.
+- `healthvideo app [--port 8765] [--no-browser] [--install-shortcut]` — mở bảng điều khiển local (`127.0.0.1`) để quản lý hàng đợi/thử lại/mở lại cổng, duyệt thư viện ảnh, gửi ý kiến và quyết định hai cổng bằng PIN.
 - `healthvideo topic discover` — tìm tín hiệu chủ đề từ YouTube, Google Trends, Reddit và đếm bài PubMed.
 - `healthvideo topic add` — thêm một thẻ chủ đề mới vào hàng đợi `topics/queue.yaml` (chặn trùng slug).
 - `healthvideo topic list` — liệt kê các chủ đề trong hàng đợi cùng trạng thái dự án.
@@ -91,6 +91,7 @@ Ngoài ra, nhóm lệnh ẩn `healthvideo step ...` (`hidden=True`) dành riêng
 
 | Task | Deliverable | Status | Tests | Commit |
 | --- | --- | --- | --- | --- |
+| Xưởng: bỏ khóa nghiệm thu, thêm khu Ý kiến | Người dùng đổi hướng 2026-11-07: nghiệm thu trên sản phẩm thật. Gỡ yêu cầu đủ 4 chuẩn khi **Bật xưởng** và khi tạo project, ẩn khu Nghiệm thu trong app (code mẫu thử còn giữ); hai cổng duyệt không đổi. Tab **Ý kiến**: agent độc lập chỉ đọc và ghi báo cáo, Python kiểm và lưu việc `san_pham`/`xuong`/`chuan_kenh` vào `topics/feedback.yaml`; lỗi hiện trong app và phân tích lại được; `CLAUDE.md` mục 7 yêu cầu Claude đọc đầu phiên | complete; chưa chạy với agent thật | pytest, Ruff, kiểm giao diện trong trình duyệt | `feat: move to production and route doctor opinions to Claude` |
 | Xưởng: agent biên tập viên chấm kịch bản | Bước `script_review` sau `draft`: agent riêng (khởi đầu bằng agent khác người viết) chấm 6 tiêu chí 1–10, ghi `reviews/script-review.yaml`; Python kiểm báo cáo và quyết định: mọi tiêu chí ≥ 7 thì nộp cổng y khoa, chưa đạt thì agent `draft` sửa theo nhận xét, tối đa 3 lần chấm rồi trình bác sĩ kèm điểm chưa đạt; `draft` không còn tự `submit-medical`; điểm hiện trong tab Kịch bản, mẫu giai đoạn 1 và gói duyệt y khoa. Bản sửa sau khi bác sĩ từ chối (`revise_medical`) chưa đi qua bước chấm | complete; chưa chạy thử với agent thật | pytest 1617 passed, 1 skipped; Ruff; vitest 251; typecheck | `feat: add script critic agent before the medical gate` |
 | Nghiệm thu: cách ly mẫu giai đoạn 1 | Agent research/draft của mẫu thử chạy trong git worktree dùng một lần `cache/factory-test/<id>/repo` (SVG mới và test ghi vào bản sao, xóa khi xong); chụp `code_snapshot` repo chính trước/sau, có file đổi thì mẫu `failed` kèm danh sách cần gỡ. Lộ ra khi mẫu co giật ghi 4 component vào `video/src/anatomy/` (đã gỡ) | complete | pytest 1599 passed, 1 skipped, 2 failed có sẵn (render Remotion: `video/node_modules` thiếu module); Ruff | `fix: run stage-1 trial agents in a disposable worktree` |
 | Gói I2: đưa 6 tư thế mascot mới vào xưởng | `point_up`, `thinking`, `surprised`, `thumbs_up`, `blank_board`, `myth_bust` thêm vào `MascotPose`, `profiles/brand.vi.yaml`, zod và schemas; `mascot_poses.py --promote` tách nền (khe kẹp khai báo `holes` trong `poses.yaml`) thành ảnh gốc, `build_mascot_artwork.py` đọc danh sách pose từ profile và nướng viền sticker; `draft.md` mục 13 hướng dẫn chọn pose | complete | pytest full; Ruff; vitest; typecheck | gói I2 |
