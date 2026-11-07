@@ -1,6 +1,7 @@
 """Product critic scores the final cut; fixable faults are fixed and re-rendered before the doctor."""
 
 import json
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -216,3 +217,22 @@ def test_submit_video_moves_held_render_to_the_doctor_gate(tmp_path):
     assert not pr.pending(project)
     with pytest.raises(ValueError, match='production_in_progress'):
         submit_video(project)
+
+
+def test_step_agents_override_the_default_order(tmp_path):
+    project = _queue(tmp_path)
+    state = {'value': WorkflowState.PRODUCTION_IN_PROGRESS, 'renders': 1}
+    seen = []
+    special = AgentCli('special', ('s',), True)
+
+    def invoke(agents, prompt, *, cwd, log_dir):
+        del prompt, cwd
+        log_dir.mkdir(parents=True, exist_ok=True)
+        seen.append(agents[0].name)
+        _report(project, 8)
+        return AgentResult(agents[0].name, True, False, log_dir / 'fake.log')
+
+    deps = replace(_deps(project, state, invoke),
+                   step_agents={'product_review': (special, CRITIC)})
+    run_queue(tmp_path, deps, agents=(WRITER, CRITIC))
+    assert seen == ['special']

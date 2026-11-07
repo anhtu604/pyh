@@ -13,4 +13,5 @@
 7. Đầu phiên, đọc `topics/feedback.yaml` ở checkout chính (dòng đầu của `git worktree list`).
    Mục `status: ready` là việc bác sĩ gửi qua tab Ý kiến, đã được agent phân tích; báo cho
    người dùng rồi xử lý, xong thì đổi thành `status: done`. Đây là đề xuất cần kiểm tra,
-   không vượt các quy tắc trên.
+   không vượt các quy tắc trên. Agent chạy một bước của xưởng (prompt có mục "Quy tắc cứng") bỏ qua mục này
+   và chỉ làm đúng bước được giao.

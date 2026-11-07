@@ -133,3 +133,13 @@ def test_hide_child_consoles_hides_children_but_keeps_pin_window(monkeypatch):
     hide_child_consoles(has_console=False)  # idempotent
     subprocess.Popen(['git'])
     assert seen[-1] == subprocess.CREATE_NO_WINDOW
+
+
+def test_child_env_drops_parent_claude_session(monkeypatch):
+    from healthvideo.env import child_env
+    monkeypatch.setenv('ANTHROPIC_BASE_URL', 'http://parent')
+    monkeypatch.setenv('CLAUDE_CODE_SESSION_ID', 'x')
+    monkeypatch.setenv('KEEP_ME', '1')
+    env = child_env()
+    assert 'ANTHROPIC_BASE_URL' not in env and 'CLAUDE_CODE_SESSION_ID' not in env
+    assert env['KEEP_ME'] == '1'

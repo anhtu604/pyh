@@ -121,10 +121,11 @@ def render_prompt(step: str, **fields: str) -> str:
         replacement = value if value is not None else "(không có)"
         text = text.replace(f"{{{name}}}", replacement)
     if step in {"draft", "script_review", "revise_medical"}:
-        examples_path = PROMPTS_DIR / "style_examples.vi.md"
-        if examples_path.is_file():
-            examples = examples_path.read_text(encoding="utf-8").strip()
-            text = f"{text.rstrip()}\n\n{examples}\n"
+        for name in ("style_examples.vi.md", "ai_writing_signs.vi.md"):
+            examples_path = PROMPTS_DIR / name
+            if examples_path.is_file():
+                examples = examples_path.read_text(encoding="utf-8").strip()
+                text = f"{text.rstrip()}\n\n{examples}\n"
     rules_block = "\n".join(f"- {rule}" for rule in HARD_RULES)
     return f"{text.rstrip()}\n\n## Quy tắc cứng\n{rules_block}\n"
 
@@ -143,6 +144,8 @@ class RunDeps:
     code_snapshot: Callable[[Path], dict[str, str]] | None = None
     visual_review_pending: Callable[[Path], bool] = review_pending
     product_review_pending: Callable[[Path], bool] = product_review.pending
+    # Per-step agent order; steps not listed use run_queue(agents=...).
+    step_agents: Mapping[str, Sequence[AgentCli]] = field(default_factory=dict)
 
 
 @dataclass
@@ -338,7 +341,8 @@ def run_queue(
                 try:
                     result = deps.invoke(
                         # The critic starts from the other agent so it is not grading itself.
-                        tuple(reversed(agents)) if reviewing else agents,
+                        tuple(deps.step_agents.get(step, ()))
+                        or (tuple(reversed(agents)) if reviewing else agents),
                         prompt,
                         cwd=root,
                         log_dir=log_dir,

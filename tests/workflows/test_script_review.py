@@ -196,3 +196,9 @@ def test_run_blocks_when_critic_writes_no_report(tmp_path):
 
     assert report.blocked == [SLUG]
     assert 'submitted' not in state
+
+
+@pytest.mark.parametrize('step', ['draft', 'script_review', 'revise_medical'])
+def test_script_prompts_carry_the_ai_writing_signs(step):
+    from healthvideo.workflows.runner import render_prompt
+    assert 'Dấu hiệu văn AI cần tránh trong lời đọc' in render_prompt(step)

@@ -405,3 +405,35 @@ def test_draft_step_records_style_warnings_in_packet(tmp_path: Path) -> None:
     html = render_medical_packet(project / "revisions/001")
     assert "<h2>Văn phong</h2>" in html
     assert "metaphor_disclaimer" in html
+
+
+def _rules(*texts: str) -> set[tuple[str, str]]:
+    script = Script(title="AI signs", lines=[
+        ScriptLine(id=f"L{index:02}", text=text, claim_id="C01")
+        for index, text in enumerate(texts, start=1)
+    ])
+    return {(issue.rule, issue.severity) for issue in lint_script_style(script)}
+
+
+def test_ai_writing_signs_block_chatbot_summaries_and_markup() -> None:
+    assert ("ai_chatbot", "block") in _rules("Tóm lại, urat lắng trong khớp.")
+    assert ("ai_chatbot", "block") in _rules("Câu hỏi hay đấy, vì sao lại đau?")
+    assert ("ai_markup", "block") in _rules("Urat **kết tinh** ở khớp lạnh.")
+    assert ("ai_markup", "block") in _rules("Urat kết tinh [chèn số liệu].")
+
+
+def test_ai_writing_signs_warn_puffery_vocab_dash_and_parallelism() -> None:
+    assert ("ai_puffery", "warn") in _rules("Urat đóng vai trò then chốt trong cơn đau.")
+    assert ("ai_puffery", "warn") in _rules("Nhiều nghiên cứu cho thấy khớp lạnh dễ kết tinh.")
+    assert ("ai_em_dash", "warn") in _rules("Urat — chất thải của purin — lắng xuống.")
+    vocab = ["Một hành trình thực sự sâu sắc.", "Chìa khóa vô cùng toàn diện."]
+    assert ("ai_vocab", "warn") in _rules(*vocab)
+    assert ("ai_vocab", "warn") not in _rules("Chuyện này thực sự lạ.")
+    assert ("not_x_but_y", "warn") in _rules(
+        "Không chỉ đau mà còn sưng.", "Do viêm chứ không phải kim đâm.",
+        "Không phải kim mà là viêm.")
+
+
+def test_plain_human_sentence_passes_ai_rules() -> None:
+    rules = _rules("Urat là chất thải khi cơ thể phân giải purin. Máu có quá nhiều thì nó kết tinh.")
+    assert not {rule for rule, _ in rules if rule.startswith("ai_")}

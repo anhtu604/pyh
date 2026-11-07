@@ -44,7 +44,24 @@ AGY = AgentCli(
     ),
     False,
 )
+# Claude runs headless with a fixed tool allowlist instead of bypassing permissions;
+# anything outside the list is refused, and the user's hooks stay on.
+CLAUDE = AgentCli(
+    "claude",
+    (
+        "claude",
+        "-p",
+        "--permission-mode",
+        "acceptEdits",
+        "--allowedTools",
+        "Read,Write,Edit,Glob,Grep,WebSearch,WebFetch,Bash(healthvideo:*)",
+        "--model",
+        "opus",
+    ),
+    True,
+)
 # agy first: the doctor routes work to agy because Codex is near its token limit.
+# Hard steps are routed to Claude per step in factory_deps.STEP_AGENTS.
 DEFAULT_AGENTS: tuple[AgentCli, ...] = (AGY, CODEX)
 
 QUOTA_PATTERNS: tuple[str, ...] = (
@@ -53,6 +70,10 @@ QUOTA_PATTERNS: tuple[str, ...] = (
     "quota",
     "resource_exhausted",
     "429",
+    "limit reached",
+    "hit your limit",
+    # Claude CLI login without a usable plan: fail over instead of blocking the topic.
+    "can't use your claude subscription",
 )
 
 PERMISSION_DENIED_PATTERNS: tuple[str, ...] = ("auto-denied",)

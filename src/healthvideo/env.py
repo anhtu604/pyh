@@ -33,9 +33,11 @@ def hide_child_consoles(*, has_console: bool | None = None) -> None:
 
 def child_env() -> dict[str, str]:
     """Agents do not need notification credentials, tokens, secrets or approval PINs."""
+    # CLAUDE*/ANTHROPIC_* come from a parent Claude session; a child CLI must use its own login.
     return {key: value for key, value in os.environ.items()
             if not any(word in key.upper()
-                       for word in ('TELEGRAM_', 'TOKEN', 'SECRET', 'PIN', 'API_KEY'))}
+                       for word in ('TELEGRAM_', 'TOKEN', 'SECRET', 'PIN', 'API_KEY'))
+            and not key.upper().startswith(('CLAUDE', 'ANTHROPIC_'))}
 
 
 def _parse_value(raw_value: str) -> str:

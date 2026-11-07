@@ -89,9 +89,79 @@ _MEDICAL_DISCLAIMER_MARKERS: tuple[str, ...] = (
     "tự ý dùng hay đổi thuốc",
 )
 
+# Signs of AI writing (Wikipedia: Signs of AI writing), adapted to Vietnamese narration.
+# See prompts/ai_writing_signs.vi.md; rule names start with ai_ so prompts can cite them.
+_AI_CHATBOT_PHRASES: tuple[str, ...] = (
+    "câu hỏi hay",
+    "tất nhiên rồi",
+    "chắc chắn rồi",
+    "hy vọng giúp ích",
+    "hy vọng thông tin",
+    "tóm lại",
+    "tổng kết lại",
+    "kết luận lại",
+    "tính đến thời điểm",
+    "mô hình ngôn ngữ",
+)
+
+_AI_PUFFERY_PHRASES: tuple[str, ...] = (
+    "vai trò then chốt",
+    "vai trò quan trọng",
+    "vai trò cốt lõi",
+    "đóng vai trò là",
+    "đóng vai trò như",
+    "được xem là",
+    "là minh chứng",
+    "là lời nhắc",
+    "tầm quan trọng",
+    "đặt nền móng",
+    "dấu ấn",
+    "bước ngoặt",
+    "điều này quan trọng vì",
+    "qua đó cho thấy",
+    "từ đó nhấn mạnh",
+    "làm nổi bật",
+    "góp phần",
+    "chuyên gia cho rằng",
+    "nhiều nghiên cứu cho thấy",
+    "giới khoa học",
+    "theo một số nguồn",
+    "còn nhiều thách thức",
+    "hứa hẹn",
+    "cần lưu ý rằng",
+    "điều quan trọng là",
+    "thông tin còn hạn chế",
+    "ghi nhận rộng rãi",
+    "tài liệu cho thấy",
+    "theo tài liệu",
+    "bộ tài liệu",
+    "không nên nhầm với",
+    "không đồng nghĩa với",
+)
+
+_AI_VOCAB_WORDS: tuple[str, ...] = (
+    "khám phá",
+    "bức tranh toàn cảnh",
+    "lăng kính",
+    "chìa khóa",
+    "bí mật",
+    "đáng kinh ngạc",
+    "vô cùng",
+    "không thể phủ nhận",
+    "thực sự",
+    "quả thực",
+    "sâu sắc",
+    "toàn diện",
+    "đa chiều",
+)
+_AI_VOCAB_ALLOWANCE = 3  # one stray word is fine; a cluster is the sign
+_AI_MARKUP_RE = re.compile(r"[*#`\[\]]|[\U0001F300-\U0001FAFF☀-➿]")
+
 _SENTENCE_SPLIT_RE = re.compile(r"[.?!…]+")
 _NOT_X_BUT_Y_RE = re.compile(
-    r"(?<!\w)không phải\b[^.?!;\n]{1,140}?\bmà(?:\s+là)?(?!\w)",
+    r"(?<!\w)không phải\b[^.?!;\n]{1,140}?\bmà(?:\s+là)?(?!\w)"
+    r"|(?<!\w)không chỉ\b[^.?!;\n]{1,140}?\bmà còn(?!\w)"
+    r"|(?<!\w)chứ không phải(?!\w)",
     re.IGNORECASE,
 )
 _TRIAD_RE = re.compile(
@@ -141,6 +211,14 @@ _PRESENTER_CLICHE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
 _CAVEAT_LIMIT_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
     (phrase, _phrase_pattern(phrase)) for phrase in _CAVEAT_LIMIT_PHRASES
 )
+# (rule, severity, patterns) checked on every non-exempt line.
+_AI_PHRASE_RULES: tuple[tuple[str, StyleSeverity, tuple[re.Pattern[str], ...]], ...] = (
+    ("ai_chatbot", "block", tuple(_phrase_pattern(p) for p in _AI_CHATBOT_PHRASES)),
+    ("ai_puffery", "warn", tuple(_phrase_pattern(p) for p in _AI_PUFFERY_PHRASES)),
+)
+_AI_VOCAB_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
+    _phrase_pattern(word) for word in _AI_VOCAB_WORDS
+)
 
 
 def _is_exempt_line(line: ScriptLine) -> bool:
@@ -169,6 +247,7 @@ def lint_script_style(script: Script) -> list[StyleIssue]:
     not_x_but_y_matches: list[tuple[str, str]] = []
     triad_matches: list[tuple[str, str]] = []
     metaphor_matches: list[tuple[str, str]] = []
+    vocab_matches: list[tuple[str, str]] = []
 
     for line in script.lines:
         if _is_exempt_line(line):
@@ -198,6 +277,19 @@ def lint_script_style(script: Script) -> list[StyleIssue]:
                         severity="block",
                     )
                 )
+
+        for rule, severity, patterns in _AI_PHRASE_RULES:
+            for pattern in patterns:
+                match = pattern.search(text)
+                if match is not None:
+                    issues.append(StyleIssue(line.id, rule, match.group(0), severity))
+        markup = _AI_MARKUP_RE.search(text)
+        if markup is not None:
+            issues.append(StyleIssue(line.id, "ai_markup", markup.group(0), "block"))
+        if "—" in text:
+            issues.append(StyleIssue(line.id, "ai_em_dash", "—", "warn"))
+        for pattern in _AI_VOCAB_PATTERNS:
+            vocab_matches.extend((line.id, m.group(0)) for m in pattern.finditer(text))
 
         matched_caveat_phrase: str | None = None
         for _, pattern in _CAVEAT_LIMIT_PATTERNS:
@@ -292,6 +384,9 @@ def lint_script_style(script: Script) -> list[StyleIssue]:
                     severity="warn",
                 )
             )
+
+    for line_id, excerpt in vocab_matches[_AI_VOCAB_ALLOWANCE:]:
+        issues.append(StyleIssue(line_id, "ai_vocab", excerpt, "warn"))
 
     if len(metaphor_matches) > 1:
         for line_id, excerpt in metaphor_matches[1:]:

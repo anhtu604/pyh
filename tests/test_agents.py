@@ -244,3 +244,19 @@ def test_log_written_utf8(tmp_path: Path) -> None:
 
 def test_agy_runs_first_by_default():
     assert DEFAULT_AGENTS == (AGY, CODEX)
+
+
+def test_claude_runs_with_a_tool_allowlist_not_a_permission_bypass():
+    from healthvideo.agents import CLAUDE
+    assert CLAUDE.prompt_via_stdin
+    assert '--allowedTools' in CLAUDE.argv
+    assert not any('dangerously' in token for token in CLAUDE.argv)
+
+
+def test_factory_routes_hard_steps_to_claude_and_critics_away_from_the_author():
+    from healthvideo.agents import CLAUDE
+    from healthvideo.workflows.factory_deps import STEP_AGENTS, default_run_deps
+    for step in ('research', 'draft', 'revise_medical', 'product_review'):
+        assert STEP_AGENTS[step][0] is CLAUDE
+    assert STEP_AGENTS['script_review'][0] is not STEP_AGENTS['draft'][0]
+    assert default_run_deps(Path('.')).step_agents is STEP_AGENTS
