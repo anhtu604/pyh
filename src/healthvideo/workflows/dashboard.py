@@ -36,6 +36,7 @@ from healthvideo.workflows import (
     factory_standards,
     factory_trials,
     feedback_inbox,
+    product_review,
     standards,
 )
 from healthvideo.workflows.gate_review import approve_gate, reject_gate
@@ -241,6 +242,7 @@ def review_bundle(root: Path, project_dir: Path, project: ProjectManifestV2) -> 
         'gate': factory.GATES.get(project.state), 'revision': project.active_revision,
         'lines': lines, 'claims': claims, 'records': records, 'media': media,
         'script_review': review_view(rev),
+        'product_review': product_review.review_view(rev),
         'video_stale': project.state in {WorkflowState.MEDICALLY_APPROVED, WorkflowState.PRODUCTION_IN_PROGRESS,
                                          WorkflowState.AWAITING_MEDICAL_REVIEW, WorkflowState.DRAFT_READY},
         'notes': _read_text(rev / 'reviews/medical-revision-notes.md'),

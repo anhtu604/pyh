@@ -30,7 +30,7 @@ from healthvideo.tts.vibi import VibiTTS
 from healthvideo.workflows.create_project_v2 import create_project_v2
 from healthvideo.workflows.draft import submit_medical_review
 from healthvideo.workflows.gate_review import check_revision_posts
-from healthvideo.workflows.produce import produce_project
+from healthvideo.workflows.produce import produce_project, submit_video
 from healthvideo.workflows.runner import RunDeps
 from healthvideo.workflows.topic import select_topic
 
@@ -135,7 +135,8 @@ def build_default_producer(
     )
 
     def _produce(project_dir: Path) -> None:
-        produce_project(project_dir, provider, _run_render_argv, dry_run=False)
+        produce_project(project_dir, provider, _run_render_argv, dry_run=False,
+                        hold_for_product_review=True)
 
     return _produce
 
@@ -281,6 +282,7 @@ def default_run_deps(
         python_steps={
             "produce": _produce_with_channel_voice,
             "submit_medical": submit_medical_review,
+            "submit_video": submit_video,
         },
         changed_code_paths=lambda repo_root: changed_code_paths(
             repo_root, runner=git_runner

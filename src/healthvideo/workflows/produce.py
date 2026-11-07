@@ -222,10 +222,16 @@ def produce_project(
     *,
     dry_run: bool = False,
     music: bool = True,
+    hold_for_product_review: bool = False,
 ) -> Path:
-    """Render an approved project, reusing an output with a matching input hash."""
+    """Render an approved project, reusing an output with a matching input hash.
+
+    With ``hold_for_product_review`` the final render waits for the product critic
+    instead of entering the doctor's video gate; ``submit_video`` submits it later.
+    """
     layout = resolve_project_layout(project_dir)
-    return _produce_v2(layout, tts, runner, dry_run=dry_run, music=music)
+    return _produce_v2(layout, tts, runner, dry_run=dry_run, music=music,
+                       hold=hold_for_product_review)
 
 
 def _produce_v2(
@@ -235,6 +241,7 @@ def _produce_v2(
     *,
     dry_run: bool,
     music: bool,
+    hold: bool = False,
 ) -> Path:
     project = layout.manifest
     assert isinstance(project, ProjectManifestV2)
@@ -413,7 +420,7 @@ def _produce_v2(
         )
         write_yaml_atomic(
             layout.project_dir / "project.yaml",
-            _production_project(layout, project, input_hash).model_dump(mode="json"),
+            _production_project(layout, project, input_hash, hold=hold).model_dump(mode="json"),
         )
         return output
 
@@ -688,7 +695,7 @@ def _produce_v2(
         )
         write_yaml_atomic(
             layout.project_dir / "project.yaml",
-            _production_project(layout, project, input_hash).model_dump(mode="json"),
+            _production_project(layout, project, input_hash, hold=hold).model_dump(mode="json"),
         )
     except Exception:
         shutil.rmtree(staging_dir, ignore_errors=True)
@@ -1054,10 +1061,36 @@ def _completed_v2_project(
     return complete.model_copy(update={"artifact_hashes": hashes})
 
 
-def _production_project(layout: ProjectLayout, project: ProjectManifestV2, input_hash: str) -> ProjectManifestV2:
-    if review_complete(layout.artifact_root):
+def submit_video(project_dir: Path) -> None:
+    """Submit a held final render to the doctor's video gate after product review."""
+    from healthvideo.workflows.product_review import mark_submitted
+
+    layout = resolve_project_layout(project_dir)
+    project = layout.manifest
+    assert isinstance(project, ProjectManifestV2)
+    if project.state is not WorkflowState.PRODUCTION_IN_PROGRESS:
+        raise ValueError(f"submit_video cần production_in_progress, đang là {project.state.value}")
+    input_hash = project.artifact_hashes.get(PRODUCTION_ARTIFACT)
+    if not input_hash:
+        raise ValueError("Chưa có bản dựng cuối để nộp bác sĩ.")
+    _ensure_v2_medical_approval_current(layout.artifact_root)
+    write_yaml_atomic(
+        layout.project_dir / "project.yaml",
+        _completed_v2_project(project, input_hash).model_dump(mode="json"),
+    )
+    mark_submitted(layout.artifact_root)
+
+
+def _production_project(layout: ProjectLayout, project: ProjectManifestV2, input_hash: str,
+                        *, hold: bool = False) -> ProjectManifestV2:
+    if review_complete(layout.artifact_root) and not hold:
         return _completed_v2_project(project, input_hash)
-    # No approval transition: Python rendered candidates and now awaits agent judgement.
+    if review_complete(layout.artifact_root):
+        from healthvideo.workflows.product_review import hold as hold_for_review
+
+        hold_for_review(layout.artifact_root, input_hash)
+    # No approval transition: Python rendered candidates or the final cut and now awaits
+    # agent judgement.
     producing = project
     if project.state is WorkflowState.MEDICALLY_APPROVED:
         producing = transition_v2(project, WorkflowState.PRODUCTION_IN_PROGRESS,

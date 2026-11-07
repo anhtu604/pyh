@@ -21,6 +21,7 @@ from healthvideo.storage.files import (
     write_yaml_atomic,
 )
 from healthvideo.storage.queue import load_queue
+from healthvideo.workflows import product_review
 from healthvideo.workflows.production_retry import (
     clear_retry,
     record_failure,
@@ -44,6 +45,9 @@ StepKind = Literal[
     "posts",
     "produce",
     "visual_review",
+    "product_review",
+    "revise_product",
+    "submit_video",
     "revise_medical",
     "revise_production",
 ]
@@ -54,6 +58,8 @@ AGENT_STEPS: frozenset[str] = frozenset(
         "script_review",
         "posts",
         "visual_review",
+        "product_review",
+        "revise_product",
         "revise_medical",
         "revise_production",
     }
@@ -136,6 +142,7 @@ class RunDeps:
     posts_ready: Callable[[Path], bool] = lambda _: True
     code_snapshot: Callable[[Path], dict[str, str]] | None = None
     visual_review_pending: Callable[[Path], bool] = review_pending
+    product_review_pending: Callable[[Path], bool] = product_review.pending
 
 
 @dataclass
@@ -278,6 +285,12 @@ def run_queue(
                 step = "visual_review"
             elif step == "produce" and not deps.posts_ready(project_dir):
                 step = "posts"
+            elif step == "produce" and deps.product_review_pending(project_dir):
+                try:
+                    step = product_review.next_product_action(project_dir)
+                except (OSError, ValueError) as exc:
+                    _mark_blocked(root, entry.slug, f"duyệt sản phẩm lỗi: {exc}", report)
+                    break
 
             if step == "script_review":
                 try:
@@ -306,6 +319,8 @@ def run_queue(
                     prompt_fields["reject_note"] = (
                         deps.reject_note(project_dir) or ""
                     )
+                if step == "revise_product":
+                    prompt_fields["reject_note"] = product_review.revision_notes(project_dir)
                 if rewriting:
                     prompt_fields["reject_note"] = (
                         f"{revision_notes(project_dir)}\n{prompt_fields['reject_note']}"
@@ -315,8 +330,11 @@ def run_queue(
                 if standards_block:
                     prompt = f"{prompt.rstrip()}\n\n{standards_block}"
                 before = deps.code_snapshot(root) if deps.code_snapshot is not None else None
-                reviewing = step == "script_review"
-                reviewed_hash = script_hash(project_dir) if reviewing else ""
+                reviewing = step in {"script_review", "product_review"}
+                reviewed_hash = (
+                    script_hash(project_dir) if step == "script_review"
+                    else product_review.render_hash(project_dir) if reviewing else ""
+                )
                 try:
                     result = deps.invoke(
                         # The critic starts from the other agent so it is not grading itself.
@@ -342,16 +360,27 @@ def run_queue(
                     )
                     break
                 if reviewing:
+                    record = (record_review if step == "script_review"
+                              else product_review.record_review)
                     try:
-                        record_review(project_dir, reviewed_hash)
+                        record(project_dir, reviewed_hash)
                     except (OSError, ValueError) as exc:
                         _mark_blocked(
                             root,
                             entry.slug,
-                            f"chấm kịch bản lỗi: {exc}",
+                            f"{'chấm kịch bản' if step == 'script_review' else 'duyệt sản phẩm'} lỗi: {exc}",
                             report,
                             log_path=result.log_path,
                         )
+                        break
+                if step == "revise_product":
+                    # Python re-renders the fix at once; an unchanged render goes to the doctor.
+                    try:
+                        product_review.mark_fix_attempted(project_dir)
+                        deps.python_steps["produce"](project_dir)
+                    except Exception as exc:  # noqa: BLE001
+                        record_failure(root, project_dir, deps.read_state(project_dir), exc)
+                        _mark_blocked(root, entry.slug, f"dựng lại sau sửa lỗi: {exc}", report)
                         break
                 if step == "visual_review":
                     # Python validates the report, bounds regeneration and renders the
@@ -408,7 +437,7 @@ def run_queue(
 
             steps_taken += 1
             new_state = deps.read_state(project_dir)
-            if step in {"visual_review", "script_review"}:
+            if step in {"visual_review", "script_review", "product_review", "revise_product"}:
                 _mark_advanced(root, entry.slug, report)
             elif rewriting:
                 if next_script_action(project_dir) == "draft":

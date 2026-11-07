@@ -904,7 +904,7 @@ function scoreCard(r){
   if(!r) return '';
   const rows=r.scores.map(s=>`<li>${s.score<r.pass_score?'<b>':''}${esc(s.score)}/10 · ${esc(s.label)}${s.score<r.pass_score?'</b>':''}</li>`).join('');
   const issues=r.issues.map(i=>`<li><b>${esc(i.line)}</b> · ${esc(i.criterion)}: ${esc(i.problem)} Hướng sửa: ${esc(i.fix)}</li>`).join('');
-  return `<div class="glass" style="padding:16px;margin-bottom:12px"><b>Biên tập viên · lần chấm ${esc(r.round)} · ${r.passed?'Đạt':'Chưa đạt'}</b><p>${esc(r.summary)}</p><ul>${rows}</ul>${issues?`<details><summary>Chỗ cần sửa (${r.issues.length})</summary><ul>${issues}</ul></details>`:''}</div>`;
+  return `<div class="glass" style="padding:16px;margin-bottom:12px"><b>${esc(r.title||'Biên tập viên')} · lần chấm ${esc(r.round)} · ${r.passed?'Đạt':'Chưa đạt'}</b><p>${esc(r.summary)}</p><ul>${rows}</ul>${issues?`<details><summary>Chỗ cần sửa (${r.issues.length})</summary><ul>${issues}</ul></details>`:''}</div>`;
 }
 function tabScript(b,dm,opts={}){
   if(!b.lines.length) return '<div class="glass empty">Chưa có kịch bản ở revision này.</div>';
@@ -934,7 +934,7 @@ function tabClaims(b,dm,opts={}){
       <div class="src">${srcs}</div>${opts.readOnly?'':`<div style="margin-top:10px">${cmtRow(id,dm)}</div>`}</div>`}).join('');
 }
 function tabVideo(b,dm){
-  let h='';
+  let h=scoreCard(b.product_review);
   if(b.video_stale&&b.media.length) h+='<div class="warnbox">Video/giọng dưới đây là bản dựng trước của revision này, có thể chưa khớp kịch bản mới nhất. Bản mới sẽ có sau bước sản xuất.</div>';
   const warns=(b.qa&&b.qa.warnings)||[];
   if(warns.length) h+=`<div class="warnbox"><b>QA video${b.qa.status?' · '+esc(b.qa.status):''}</b><ul style="margin:6px 0 0 18px">${warns.map(w=>`<li>${esc(typeof w==='string'?w:JSON.stringify(w))}</li>`).join('')}</ul></div>`;

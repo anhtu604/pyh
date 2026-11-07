@@ -24,6 +24,7 @@ from healthvideo.domain.visual_budget import calculate_visual_budget
 from healthvideo.render.timing import restore_timed_storyboard
 from healthvideo.storage.explainer import read_explainer
 from healthvideo.storage.files import canonical_json_hash, read_yaml
+from healthvideo.workflows import product_review
 from healthvideo.workflows.long_form import OUTLINE_ARTIFACT, load_clip_scenes
 from healthvideo.workflows.review_frames import mechanism_sheets
 from healthvideo.workflows.script_review import review_view
@@ -172,18 +173,28 @@ def _render_style_section(revision_root: Path, script: Script) -> str:
     return f"<section><h2>Văn phong</h2><ul>{rows}</ul></section>"
 
 
-def _render_script_review_section(revision_root: Path) -> str:
-    review = review_view(revision_root)
+def _render_script_review_section(
+    revision_root: Path,
+    view=review_view,
+    heading: str = "Biên tập viên chấm kịch bản",
+    weak: str = "giọng văn",
+) -> str:
+    review = view(revision_root)
     if review is None:
         return ""
-    verdict = "Đạt" if review["passed"] else "Chưa đạt, cần bác sĩ xem kỹ giọng văn"
+    verdict = "Đạt" if review["passed"] else f"Chưa đạt, cần bác sĩ xem kỹ {weak}"
     scores = "".join(
         f"<li>{item['score']}/10: {escape(item['label'])}</li>" for item in review["scores"]
     )
+    issues = "".join(
+        f"<li>{escape(item['line'])} · {escape(item['criterion'])}: {escape(item['problem'])} "
+        f"Hướng sửa: {escape(item['fix'])}</li>"
+        for item in review["issues"]
+    ) if view is not review_view else ""
     return (
-        f"<section><h2>Biên tập viên chấm kịch bản</h2>"
+        f"<section><h2>{escape(heading)}</h2>"
         f"<p>Lần chấm {review['round']}: {verdict}. {escape(review['summary'])}</p>"
-        f"<ul>{scores}</ul></section>"
+        f"<ul>{scores}</ul>{f'<ul>{issues}</ul>' if issues else ''}</section>"
     )
 
 
@@ -428,6 +439,9 @@ def render_video_packet(revision_root: Path) -> str:
         else:
             status = "không khớp report tái tính"
         budget_section += f"<p>QA production: {status}</p>"
+    budget_section = _render_script_review_section(
+        revision_root, product_review.review_view, "Người duyệt sản phẩm chấm video", "các chỗ nêu dưới",
+    ) + budget_section
 
     clip_spans = (
         {
