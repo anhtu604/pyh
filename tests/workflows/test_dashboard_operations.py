@@ -109,6 +109,22 @@ def test_reopen_requires_explicit_reviewer_and_preserves_history(project):
     assert list((rev / 'reviews/medical').glob('*-superseded-approval.yaml'))
 
 
+def test_blocked_project_reopens_while_factory_runs_but_not_mid_agent(project, monkeypatch):
+    root, project = project
+    monkeypatch.setattr(ops.factory, 'running_pid', lambda _: 99)
+    args = {'limiter': dashboard.PinLimiter(), 'pin': '918273', 'expected_revision': '001',
+            'reviewer': 'Fixture doctor', 'reason': 'Giảm cảnh biểu đồ', 'changed': ['storyboard/storyboard.yaml']}
+    logs = root / 'topics/logs' / project.name
+    logs.mkdir(parents=True)
+    (logs / 'blocked.txt').write_text('visual budget failed', encoding='utf-8')
+    (logs / ops.RUNNING_MARKER).write_text('agy', encoding='utf-8')
+    with pytest.raises(ValueError, match='dừng'):
+        ops.reopen_project(root, project.name, **args)
+    (logs / ops.RUNNING_MARKER).unlink()
+    ops.reopen_project(root, project.name, **args)
+    assert read_yaml(project / 'project.yaml')['state'] == 'needs_medical_revision'
+
+
 def test_reopen_refuses_reviews_junction_before_any_external_mutation(project):
     import os
 

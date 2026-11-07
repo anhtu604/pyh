@@ -122,7 +122,9 @@ def _editable(root: Path, slug: str, expected_revision: str):
     if expected_revision != layout.manifest.active_revision:
         raise ValueError('Revision đã thay đổi; tải lại trước khi thao tác.')
     marker = inside(root, root / 'topics/logs' / slug / RUNNING_MARKER)
-    if factory.running_pid(root) is not None or marker.exists():
+    # A blocked project is skipped by the factory loop, so it can be fixed while the factory runs.
+    blocked = inside(root, root / 'topics/logs' / slug / 'blocked.txt').is_file()
+    if marker.exists() or (factory.running_pid(root) is not None and not blocked):
         raise ValueError('Hãy dừng xưởng và chờ agent kết thúc trước khi thao tác.')
     check_revision_paths(layout.project_dir, layout.artifact_root)
     inside(root, root / 'profiles/doctor-feedback.yaml')

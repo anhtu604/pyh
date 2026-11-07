@@ -553,7 +553,7 @@ def resume_gate(
         if approved != hash_reviewed_artifacts(medical_reviewed_paths(revision_root)):
             raise ValueError(
                 "Tệp đã duyệt y khoa (storyboard, assets, script, ledger…) đã đổi; "
-                "bác sĩ phải chạy `review reopen --gate medical` rồi nộp lại cổng y khoa"
+                "bác sĩ bấm \"Mở lại cổng y khoa để sửa\" trên thẻ dự án trong app"
             )
     context = TransitionContext(
         active_revision=project.active_revision,

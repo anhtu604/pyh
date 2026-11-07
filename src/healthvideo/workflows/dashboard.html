@@ -781,6 +781,7 @@ function renderProjects(d){
       acts.push(`<button class="btn" data-product="${esc(p.slug)}">Xem sản phẩm</button>`);
     }
     if(p.comments) acts.push(`<span class="tag" style="align-self:center;color:var(--amber)">${p.comments} góp ý nháp</span>`);
+    if(p.blocked && REOPENABLE.includes(p.state)) acts.push(`<button class="btn warn" data-reopen="${esc(p.slug)}">Mở lại cổng y khoa để sửa</button>`);
     acts.push(`<button class="btn ghost" data-act="/api/project/${q}/folder">Mở thư mục</button>`);
     const noteHtml=p.blocked?`<div class="note"><div class="note-msg">${esc(friendlyError(p.blocked))}</div><details class="note-raw"><summary>Chi tiết lỗi</summary><code>${esc(p.blocked)}</code></details></div>`:'';
     return `<article class="glass card ${p.gate?'gate':''} ${cls==='bad'?'blocked':''}" style="animation-delay:${i*.05}s">
@@ -792,6 +793,7 @@ function renderProjects(d){
       <div class="actions">${acts.join('')}</div></article>`}).join('');
   box.querySelectorAll('[data-act]').forEach(b=>b.onclick=()=>act(b.dataset.act));
   box.querySelectorAll('[data-product]').forEach(b=>b.onclick=()=>openProduct(b.dataset.product));
+  box.querySelectorAll('[data-reopen]').forEach(b=>b.onclick=()=>openReopen(d.projects.find(p=>p.slug===b.dataset.reopen)).catch(e=>toast(e.message,true)));
 }
 function isTracebackLine(l){
   const t=String(l||'');
@@ -1360,6 +1362,14 @@ setInterval(()=>{if(opsTab==='feedback')fbLoad().catch(()=>{})},5000);
 $('ops-topic').onsubmit=async e=>{e.preventDefault();try{await post('/api/topics/add',Object.fromEntries(new FormData(e.target)));e.target.reset();await opsQueue();toast('Đã thêm chủ đề vào hàng đợi.')}catch(ex){toast(ex.message,true)}};
 $('ops-project').onchange=()=>{ $('ops-reopen').hidden=true;opsPreview().catch(e=>toast(e.message,true))};
 $('ops-retry').onclick=async()=>{if(!opsCurrent)return;const d=opsCurrent;if(!confirm(`Thử lại bước ${d.next_step||'—'}? Tối đa ${d.cache.max_requests} yêu cầu TTS cho một lượt; cache chưa kiểm hash/giọng/provider.`))return;try{await post(`/api/project/${encodeURIComponent(d.slug)}/retry`,{expected_revision:d.revision});await opsPreview();toast('Đã cho phép thử lại. Bật xưởng khi sẵn sàng.')}catch(e){toast(e.message,true)}};
+const REOPENABLE=['medically_approved','production_in_progress','needs_production_revision'];
+async function openReopen(p){
+  await $('ops-tabs').querySelector('[data-ops-tab="queue"]').onclick();
+  $('ops-project').value=p.slug; await opsPreview();
+  const f=$('ops-reopen'); f.hidden=false;
+  f.elements.reason.value=friendlyError(p.blocked);
+  f.scrollIntoView({behavior:'smooth',block:'center'}); f.elements.pin.focus();
+}
 $('ops-show-reopen').onclick=()=>{if(opsCurrent)$('ops-reopen').hidden=!$('ops-reopen').hidden};
 $('ops-reopen').onsubmit=async e=>{
   e.preventDefault();if(!opsCurrent)return;const d=opsCurrent,f=new FormData(e.target);

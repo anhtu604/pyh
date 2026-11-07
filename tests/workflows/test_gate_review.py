@@ -492,7 +492,7 @@ def test_resume_to_production_refuses_after_medical_reviewed_storyboard_edit(
     board["scenes"][0]["narration"] += " Sửa sau duyệt."
     write_yaml_atomic(board_path, board)
 
-    with pytest.raises(ValueError, match="review reopen --gate medical"):
+    with pytest.raises(ValueError, match="Mở lại cổng y khoa"):
         resume_gate(project_dir, GateKind.VIDEO,
                     target=WorkflowState.PRODUCTION_IN_PROGRESS, now=NOW)
     manifest = ProjectManifestV2.model_validate(read_yaml(project_dir / "project.yaml"))
