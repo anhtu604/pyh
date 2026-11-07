@@ -54,7 +54,7 @@ CLAUDE = AgentCli(
         "--permission-mode",
         "acceptEdits",
         "--allowedTools",
-        "Read,Write,Edit,Glob,Grep,WebSearch,WebFetch,Bash(healthvideo:*)",
+        "Read,Write,Edit,Glob,Grep,WebSearch,WebFetch,Bash(healthvideo:*),PowerShell(healthvideo:*)",
         "--model",
         "opus",
     ),

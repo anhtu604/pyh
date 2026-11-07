@@ -143,3 +143,14 @@ def test_child_env_drops_parent_claude_session(monkeypatch):
     env = child_env()
     assert 'ANTHROPIC_BASE_URL' not in env and 'CLAUDE_CODE_SESSION_ID' not in env
     assert env['KEEP_ME'] == '1'
+
+
+def test_child_env_puts_venv_scripts_first_on_path():
+    import os
+    import sys
+    from pathlib import Path
+
+    from healthvideo.env import child_env
+    env = child_env()
+    path = next(v for k, v in env.items() if k.upper() == 'PATH')
+    assert path.split(os.pathsep)[0] == str(Path(sys.executable).parent)
