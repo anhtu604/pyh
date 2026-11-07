@@ -30,6 +30,13 @@ def resolve_scene_entrances(scene: Scene) -> Scene:
             fraction = (.35 if scene.duration_frames > 120 else 0) if len(pieces) == 1 else .7*i/(len(pieces)-1)
             start = round(scene.duration_frames*fraction)
         entrances.append(TextEntrance(text=text, start_frame=min(scene.duration_frames-1, start)))
+    # Keyword timing can put every change in the opening; move the last text to mid-scene
+    # so a long scene does not sit still (entrance_timing_qa, six-second visual_rhythm_qa).
+    later = [b.start_frame for b in scene.beats if b.start_frame is not None]
+    later += [c.start_frame for c in scene.anatomy.cues if c.start_frame is not None] if scene.anatomy else []
+    cutoff = .15*scene.duration_frames
+    if scene.duration_frames > 120 and all(s < cutoff for s in later + [e.start_frame for e in entrances]):
+        entrances[-1] = entrances[-1].model_copy(update={'start_frame': scene.duration_frames//2})
     return scene.model_copy(update={'entrances': tuple(entrances)})
 
 
@@ -68,5 +75,7 @@ def entrance_timing_qa(scene: Scene) -> None:
     starts += [c.start_frame for c in scene.anatomy.cues if c.start_frame is not None] if scene.anatomy else []
     if any(start < 0 or start >= scene.duration_frames for start in starts):
         raise ValueError(f'Scene {scene.id}: entrance timing outside scene')
-    if scene.duration_frames > 120 and starts and all(start < .15*scene.duration_frames for start in starts):
+    # A beat (new focus/labels) is visible change too; visual_rhythm_qa checks its own timing.
+    changes = starts + [b.start_frame for b in scene.beats if b.start_frame is not None]
+    if scene.duration_frames > 120 and starts and all(start < .15*scene.duration_frames for start in changes):
         raise ValueError(f'Scene {scene.id}: front-loaded entrances all within first 15%')

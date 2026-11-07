@@ -64,3 +64,23 @@ def test_text_entrances_use_keyword_and_spread_fallback():
                   on_screen_text='Tinh thể; thiếu', words=[{'text': 'Tinh', 'start_frame': 60, 'end_frame': 75}])
     result = build_render_input(Storyboard(title='test', scenes=(scene,)), 'audio/narration.wav')
     assert [e.start_frame for e in result.scenes[0].entrances] == [60, 210]
+
+
+def test_later_beats_count_as_visible_change_for_front_loading():
+    from healthvideo.render.word_timing import entrance_timing_qa
+
+    beats = [{'at': 'Tinh', 'focus': 'fluid', 'labels': ['fluid'], 'start_frame': 5},
+             {'at': 'lắng', 'focus': 'crystal', 'labels': ['crystal'], 'start_frame': 200}]
+    scene = mechanism(on_screen_text='Urat', beats=beats,
+                      entrances=[{'text': 'Urat', 'start_frame': 10}])
+    entrance_timing_qa(scene)
+    early = scene.model_copy(update={'beats': tuple(b.model_copy(update={'start_frame': 20}) for b in scene.beats[:1])})
+    with pytest.raises(ValueError, match='front-loaded'):
+        entrance_timing_qa(early)
+
+
+def test_early_keyword_text_moves_later_instead_of_failing_qa():
+    scene = Scene(id='S01', start_frame=0, duration_frames=300, narration='test', visual='whiteboard',
+                  on_screen_text='Tophi: tinh thể', words=[{'text': 'tophi', 'start_frame': 14, 'end_frame': 22}])
+    result = build_render_input(Storyboard(title='test', scenes=(scene,)), 'audio/narration.wav')
+    assert [e.start_frame for e in result.scenes[0].entrances] == [150]
