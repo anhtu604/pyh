@@ -23,7 +23,10 @@ _LOCK = threading.RLock()
 _RUN_LOCK = threading.Lock()
 STEP_MARKER = '.chat-step-running'
 _NUMBER_CHANGE = re.compile(
-    r'\bN\d+\b|claim|số liệu|\d\s*(?:mg|mmol|%|ml|mmhg|g/dl)'
+    # Claim words count only after a change verb: "giữ nguyên ... claim" is a visual edit.
+    r'\bN\d+\b|\d\s*(?:mg|mmol|%|ml|mmhg|g/dl)'
+    r'|(?:đổi|sửa|thay|tăng|giảm|thêm|bỏ|xoá|xóa|change|replace|edit)\s+(?:\S+\s+){0,3}?'
+    r'(?:claim|số liệu|lời đọc|lời thoại)'
     r'|(?:đổi|sửa|thay|tăng|giảm|change|replace)\s+(?:số\s+)?\d', re.IGNORECASE)
 
 

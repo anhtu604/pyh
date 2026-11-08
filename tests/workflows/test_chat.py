@@ -41,6 +41,13 @@ def test_guard_downgrades_number_change(brief):
     assert chat.guard(chat.CoordinatorReply(reply='OK', action='edit_production', brief=brief)).action == 'edit_script'
 
 
+def test_guard_keeps_visual_edit_that_says_keep_claims():
+    # Real coordinator brief from acceptance: it names claims only to say they stay unchanged.
+    brief = ('Chỉnh hình minh họa tinh thể urat tại cảnh S07 (quanh mốc 139s) của chủ đề gout-tinh-the-urat '
+             '(revision 001) sang dạng tinh thể hình kim nhọn; giữ nguyên lời đọc, số liệu và các claim y khoa.')
+    assert chat.guard(chat.CoordinatorReply(reply='OK', action='edit_production', brief=brief)).action == 'edit_production'
+
+
 @pytest.mark.parametrize('output', ['reply: [', 'reply: OK\naction: approve', 'reply: OK\naction: edit_script', '[]', 'hello', ''])
 def test_bad_yaml_marks_message_failed_state_unchanged(tmp_path, project, output):
     before = (project / 'project.yaml').read_bytes()
