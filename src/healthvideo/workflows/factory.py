@@ -13,7 +13,6 @@ from datetime import UTC, datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from healthvideo.agents import AllAgentsExhausted
 from healthvideo.domain.gate_review import GateKind, GateRejectionRecord
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.env import child_env
@@ -23,7 +22,7 @@ from healthvideo.storage.revisions import create_revision
 from healthvideo.workflows.gate_review import resume_gate
 from healthvideo.workflows.package import package_project
 from healthvideo.workflows.production_retry import clear_retry
-from healthvideo.workflows.runner import RunDeps, run_queue
+from healthvideo.workflows.runner import RunDeps, run_queue, waiting_until
 
 GATES = {
     WorkflowState.AWAITING_MEDICAL_REVIEW: 'medical',
@@ -326,13 +325,12 @@ def run_factory(root: Path, deps: RunDeps, *, interval: float = 120, once: bool 
                 current = {}
                 try:
                     prepare_semantic_revisions(root)
-                    try:
-                        report = run_queue(root, deps)
-                        if report.exhausted:
-                            delay = max(interval, 1800)
-                    except AllAgentsExhausted:
-                        report = None
-                        delay = max(interval, 1800)
+                    report = run_queue(root, deps)
+                    backs = [back for slug in report.waiting_model
+                             if (back := waiting_until(root, slug)) is not None]
+                    if backs:  # wake when the first paused topic's model returns
+                        wait = (min(backs) - datetime.now(UTC)).total_seconds()
+                        delay = min(interval, max(1.0, wait))
                     for path, project in projects(root):
                         event = GATES.get(project.state)
                         signature = f'{project.active_revision}:{project.artifact_hashes}'
@@ -345,7 +343,7 @@ def run_factory(root: Path, deps: RunDeps, *, interval: float = 120, once: bool 
                                 event = f'bị chặn đóng gói: {error}'
                         elif project.state == WorkflowState.PACKAGED:
                             event = 'đã đóng gói'
-                        elif project.state == WorkflowState.BLOCKED or (report and path.name in report.blocked):
+                        elif project.state == WorkflowState.BLOCKED or path.name in report.blocked:
                             note = logs / path.name / 'blocked.txt'
                             event = 'bị chặn: ' + (note.read_text(encoding='utf-8') if note.exists() else project.state.value)
                         if event:

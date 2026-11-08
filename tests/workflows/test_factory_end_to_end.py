@@ -64,7 +64,7 @@ def test_factory_stage1_acceptance_end_to_end_offline(
     from healthvideo.storage.files import write_yaml_atomic
     from healthvideo.workflows import factory_trials
 
-    def _fake_invoke(agents: object, prompt: str, *, cwd: Path, log_dir: Path) -> AgentResult:
+    def _fake_invoke(agents: object, prompt: str, *, cwd: Path, log_dir: Path, **_) -> AgentResult:
         del agents, cwd
         rev = log_dir.parent / "project" / "revisions" / "001"
         write_passing_script_review(rev)

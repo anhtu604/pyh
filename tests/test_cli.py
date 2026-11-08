@@ -161,8 +161,9 @@ def test_doctor_exits_nonzero_for_a_missing_required_dependency(monkeypatch) -> 
 
 
 def test_produce_dry_run_prints_remotion_command_without_changing_state(
-    tmp_path,
+    tmp_path, monkeypatch,
 ) -> None:
+    monkeypatch.setattr("healthvideo.cli.resolve_pnpm_argv", lambda args: ["pnpm", *args])
     project_dir = create_v2_project_fixture(tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW)
     synthesize_fixture_audio(project_dir / "revisions" / "001")
     project = read_yaml(project_dir / "project.yaml")
@@ -183,7 +184,8 @@ def test_produce_dry_run_prints_remotion_command_without_changing_state(
     assert (project_dir / "project.yaml").read_bytes() == original_manifest
 
 
-def test_produce_dry_run_prints_remotion_command_for_a_cache_hit(tmp_path) -> None:
+def test_produce_dry_run_prints_remotion_command_for_a_cache_hit(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("healthvideo.cli.resolve_pnpm_argv", lambda args: ["pnpm", *args])
     project_dir = create_v2_project_fixture(tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW)
     synthesize_fixture_audio(project_dir / "revisions" / "001")
     project = read_yaml(project_dir / "project.yaml")

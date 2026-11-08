@@ -2,22 +2,22 @@
 
 import pytest
 
-from healthvideo.agents import AgentCli, AgentResult, AllAgentsExhausted
+from healthvideo.agents import AgentResult, AllAgentsExhausted
+from healthvideo.company import load_company
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.workflows import dashboard
 from healthvideo.workflows import feedback_inbox as inbox
 
-CODEX, AGY = AgentCli('codex', ('c',), True), AgentCli('agy', ('a',), True)
 TASK = {'kind': 'xuong', 'target': 'prompts/draft.md', 'request': 'Bớt rào đón.',
         'done_when': 'Không còn cụm rào đón.'}
 
 
 def _invoke(report, *, ok=True):
-    def invoke(agents, prompt, *, cwd, log_dir):
-        invoke.agents, invoke.prompt, invoke.cwd = agents, prompt, cwd
+    def invoke(agents, prompt, *, cwd, log_dir, **kwargs):
+        invoke.agents, invoke.prompt, invoke.cwd, invoke.kwargs = agents, prompt, cwd, kwargs
         if report is not None:
             write_yaml_atomic(log_dir / invoke.name, report)
-        return AgentResult(agents[0].name, ok, False, log_dir / 'fake.log')
+        return AgentResult(agents[0].cli, ok, False, log_dir / 'fake.log')
     return invoke
 
 
@@ -25,7 +25,7 @@ def _run(root, report, *, ok=True, text='Giọng nghe như đọc biên bản.')
     entry = inbox.add(root, 'gout', text)
     invoke = _invoke(report, ok=ok)
     invoke.name = f"{entry['id']}.yaml"
-    inbox.analyze(root, entry['id'], invoke=invoke, agents=(AGY, CODEX))
+    inbox.analyze(root, entry['id'], invoke=invoke)
     return invoke, inbox.view(root)[0]
 
 
@@ -34,7 +34,8 @@ def test_analysis_is_stored_as_ready_work_for_claude(tmp_path):
     assert entry['status'] == 'ready'
     assert entry['analysis']['tasks'] == [TASK]
     assert entry['project'] == 'gout'
-    assert invoke.agents[0].name == 'agy'
+    assert invoke.agents == load_company().chain('feedback_analyst')
+    assert invoke.kwargs == {'role': 'feedback_analyst', 'slug': 'gout', 'step': 'feedback_inbox'}
     assert 'Giọng nghe như đọc biên bản.' in invoke.prompt
     assert invoke.cwd == tmp_path
     assert not list((tmp_path / inbox.REPORT_DIR).glob('*.yaml'))
@@ -56,17 +57,17 @@ def test_bad_analysis_fails_visibly_then_retry_succeeds(tmp_path, report, ok, me
     assert inbox.retry(tmp_path, entry['id'])['status'] == 'analyzing'
     invoke = _invoke({'summary': 'Ổn.', 'tasks': [TASK]})
     invoke.name = f"{entry['id']}.yaml"
-    inbox.analyze(tmp_path, entry['id'], invoke=invoke, agents=(CODEX, AGY))
+    inbox.analyze(tmp_path, entry['id'], invoke=invoke)
     assert inbox.view(tmp_path)[0]['status'] == 'ready'
 
 
 def test_quota_exhaustion_is_retryable(tmp_path):
     entry = inbox.add(tmp_path, 'chung', 'Thêm nhạc.')
 
-    def invoke(agents, prompt, *, cwd, log_dir):
-        raise AllAgentsExhausted('hết hạn mức')
+    def invoke(agents, prompt, *, cwd, log_dir, **_):
+        raise AllAgentsExhausted()
 
-    inbox.analyze(tmp_path, entry['id'], invoke=invoke, agents=(CODEX, AGY))
+    inbox.analyze(tmp_path, entry['id'], invoke=invoke)
     assert inbox.view(tmp_path)[0]['status'] == 'failed'
 
 

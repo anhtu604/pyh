@@ -1,6 +1,6 @@
 import json
 import os
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from typer.testing import CliRunner, _NamedTextIOWrapper
@@ -241,28 +241,38 @@ def test_xuong_notifies_only_on_change(tmp_path, monkeypatch):
     assert len(notifications) == 1
 
 
-def test_xuong_waits_on_exhausted(tmp_path, monkeypatch):
-    monkeypatch.setattr(factory, 'run_queue', lambda *a: RunReport(exhausted=True))
+@pytest.mark.parametrize('seconds, expected', [(30, 30), (7200, 120)])
+def test_xuong_waits_until_model_return_or_interval(tmp_path, monkeypatch, seconds, expected):
+    now = datetime.now(UTC)
+    class Clock:
+        @staticmethod
+        def now(tz):
+            return now
+    monkeypatch.setattr(factory, 'datetime', Clock)
+    waiting = tmp_path / 'topics/logs/topic-a/waiting-model.txt'
+    waiting.parent.mkdir(parents=True)
+    waiting.write_text((now + timedelta(seconds=seconds)).isoformat(), encoding='utf-8')
+    monkeypatch.setattr(factory, 'run_queue', lambda *a: RunReport(waiting_model=['topic-a']))
     waits = []
     def sleep(seconds):
         waits.append(seconds)
         raise KeyboardInterrupt
     factory.run_factory(tmp_path, object(), sleep=sleep, notify=lambda *a: None)
-    assert waits == [1800]
+    assert waits == [expected]
 
 
 def test_xuong_handles_exhausted_exception(tmp_path, monkeypatch):
     from healthvideo.agents import AllAgentsExhausted
 
     def run(*a):
-        raise AllAgentsExhausted('quota')
+        raise AllAgentsExhausted()
     monkeypatch.setattr(factory, 'run_queue', run)
     waits = []
     def sleep(seconds):
         waits.append(seconds)
         raise KeyboardInterrupt
-    factory.run_factory(tmp_path, object(), sleep=sleep)
-    assert waits == [1800]
+    factory.run_factory(tmp_path, object(), sleep=sleep, notify=lambda *a: None)
+    assert waits == [120]
 
 
 def test_status_includes_worker_and_waiting_count(operator):

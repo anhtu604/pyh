@@ -7,12 +7,11 @@ from pathlib import Path
 from typing import Any
 
 from healthvideo.agents import (
-    CODEX,
-    AgentCli,
     AgentResult,
     AllAgentsExhausted,
     invoke_with_failover,
 )
+from healthvideo.company import ModelSlot, load_company
 from healthvideo.domain.project_v2 import WorkflowState
 from healthvideo.domain.queue import QueueEntry
 from healthvideo.storage.files import read_yaml
@@ -62,7 +61,7 @@ def test_run_reviews_visuals_after_produce_before_video_gate(tmp_path):
         state['value'] = WorkflowState.AWAITING_VIDEO_REVIEW if state['reviewed'] else WorkflowState.PRODUCTION_IN_PROGRESS
         state['pending'] = not state['reviewed']
 
-    def invoke(agents, prompt, *, cwd, log_dir):
+    def invoke(agents, prompt, *, cwd, log_dir, **_):
         assert 'visual-review.yaml' in prompt
         assert state['value'] == WorkflowState.PRODUCTION_IN_PROGRESS
         calls.append('visual_review')
@@ -105,6 +104,7 @@ def test_run_stops_at_medical_gate(tmp_path: Path) -> None:
         *,
         cwd: Path,
         log_dir: Path,
+        **_: Any,
     ) -> AgentResult:
         prompts.append(prompt)
         slug = log_dir.name
@@ -136,7 +136,7 @@ def test_run_stops_at_medical_gate(tmp_path: Path) -> None:
     assert report.advanced == ["tang-huyet-ap"]
     assert report.at_gate == ["tang-huyet-ap"]
     assert report.blocked == []
-    assert report.exhausted is False
+    assert report.waiting_model == []
     assert not stale_block.exists()
 
 
@@ -162,6 +162,7 @@ def test_run_rerun_resumes_same_step(tmp_path: Path) -> None:
         *,
         cwd: Path,
         log_dir: Path,
+        **_: Any,
     ) -> AgentResult:
         run1_prompts.append(prompt)
         return AgentResult(
@@ -195,6 +196,7 @@ def test_run_rerun_resumes_same_step(tmp_path: Path) -> None:
         *,
         cwd: Path,
         log_dir: Path,
+        **_: Any,
     ) -> AgentResult:
         run2_prompts.append(prompt)
         slug = log_dir.name
@@ -254,6 +256,7 @@ def test_unchanged_state_marks_blocked(tmp_path: Path) -> None:
         *,
         cwd: Path,
         log_dir: Path,
+        **_: Any,
     ) -> AgentResult:
         return AgentResult(
             agent="codex",
@@ -282,46 +285,64 @@ def test_unchanged_state_marks_blocked(tmp_path: Path) -> None:
     assert "agent không làm đổi trạng thái" in blocked_text
 
 
-def test_all_exhausted_stops_run_and_keeps_state(tmp_path: Path) -> None:
-    entry1 = _entry("chu-de-1")
-    entry2 = _entry("chu-de-2")
-    add_to_queue(tmp_path, entry1)
-    add_to_queue(tmp_path, entry2)
-
-    states: dict[str, WorkflowState] = {}
-
+def _quota_deps(states: dict[str, WorkflowState], exhausted: set[str], calls: list) -> RunDeps:
     def create_project(root: Path, item: QueueEntry) -> Path:
         project_dir = root / "projects" / item.slug
         project_dir.mkdir(parents=True, exist_ok=True)
         states[item.slug] = WorkflowState.TOPIC_SELECTED
         return project_dir
 
-    def exhausted_invoke(
-        agents: Any,
-        prompt: str,
-        *,
-        cwd: Path,
-        log_dir: Path,
-    ) -> AgentResult:
-        raise AllAgentsExhausted("All agents exhausted quota: codex, agy")
+    def invoke(slots: Any, prompt: str, *, cwd: Path, log_dir: Path, **kwargs: Any) -> AgentResult:
+        calls.append((list(slots), kwargs))
+        slug = kwargs["slug"]
+        if slug in exhausted:
+            raise AllAgentsExhausted(datetime.now(UTC) + timedelta(hours=2))
+        states[slug] = WorkflowState.EVIDENCE_READY
+        return AgentResult(agent="codex", ok=True, quota_exhausted=False, log_path=_log_file(log_dir))
 
-    deps = RunDeps(
+    return RunDeps(
         create_project=create_project,
         read_state=lambda project_dir: states[project_dir.name],
         reject_note=lambda _project_dir: None,
         python_steps={},
         changed_code_paths=lambda _root: [],
-        invoke=exhausted_invoke,
+        invoke=invoke,
     )
 
-    report = run_queue(tmp_path, deps)
 
-    assert report.exhausted is True
-    assert report.advanced == []
-    assert report.at_gate == []
-    assert report.blocked == []
+def test_exhausted_topic_waits_others_continue(tmp_path: Path) -> None:
+    add_to_queue(tmp_path, _entry("chu-de-1"))
+    add_to_queue(tmp_path, _entry("chu-de-2"))
+    states: dict[str, WorkflowState] = {}
+
+    report = run_queue(tmp_path, _quota_deps(states, {"chu-de-1"}, []), once=False,
+                       max_steps_per_topic=1)
+
+    assert report.waiting_model == ["chu-de-1"]
+    assert "chu-de-2" in report.advanced
+    assert report.blocked == ["chu-de-2"]  # only the step cap stops it
     assert states["chu-de-1"] == WorkflowState.TOPIC_SELECTED
-    assert "chu-de-2" not in states
+    waiting = tmp_path / "topics/logs/chu-de-1/waiting-model.txt"
+    assert datetime.fromisoformat(waiting.read_text(encoding="utf-8")) > datetime.now(UTC)
+
+    calls: list = []
+    again = run_queue(tmp_path, _quota_deps(states, set(), calls), max_steps_per_topic=1)
+    assert again.waiting_model == ["chu-de-1"]  # model not back yet: skipped, not invoked
+    assert all(kwargs["slug"] != "chu-de-1" for _, kwargs in calls)
+
+
+def test_waiting_topic_resumes_after_return(tmp_path: Path) -> None:
+    add_to_queue(tmp_path, _entry("chu-de-1"))
+    waiting = tmp_path / "topics/logs/chu-de-1/waiting-model.txt"
+    waiting.parent.mkdir(parents=True)
+    waiting.write_text((datetime.now(UTC) - timedelta(minutes=1)).isoformat(), encoding="utf-8")
+    states: dict[str, WorkflowState] = {}
+
+    report = run_queue(tmp_path, _quota_deps(states, set(), []), max_steps_per_topic=1)
+
+    assert report.waiting_model == []
+    assert "chu-de-1" in report.advanced
+    assert not waiting.exists()
 
 
 def test_code_changes_recorded(tmp_path: Path) -> None:
@@ -343,6 +364,7 @@ def test_code_changes_recorded(tmp_path: Path) -> None:
         *,
         cwd: Path,
         log_dir: Path,
+        **_: Any,
     ) -> AgentResult:
         slug = log_dir.name
         if states[slug] == WorkflowState.TOPIC_SELECTED:
@@ -429,23 +451,32 @@ def test_run_never_invokes_approve(tmp_path: Path) -> None:
         )
 
     def invoke_via_fake_runner(
-        agents: tuple[AgentCli, ...],
+        slots: Any,
         prompt: str,
         *,
         cwd: Path,
         log_dir: Path,
+        **kwargs: Any,
     ) -> AgentResult:
         return invoke_with_failover(
-            agents,
+            slots,
             prompt,
             cwd=cwd,
             log_dir=log_dir,
             runner=fake_subprocess_runner,
+            **kwargs,
         )
 
     def fake_produce(project_dir: Path) -> None:
         states[project_dir.name] = WorkflowState.AWAITING_VIDEO_REVIEW
 
+    # Every role on codex (prompt via stdin), as the old agents=(CODEX,) did.
+    company = load_company()
+    codex_only = company.model_copy(update={
+        "tiers": {tier: [ModelSlot(cli="codex", model="gpt-6.1-sol")] for tier in company.tiers},
+        "roles": {key: role.model_copy(update={"models": None})
+                  for key, role in company.roles.items()},
+    })
     deps = RunDeps(
         create_project=create_project,
         read_state=lambda project_dir: states[project_dir.name],
@@ -453,17 +484,18 @@ def test_run_never_invokes_approve(tmp_path: Path) -> None:
         python_steps={"produce": fake_produce},
         changed_code_paths=lambda _root: [],
         invoke=invoke_via_fake_runner,
+        company=codex_only,
     )
 
-    run_queue(tmp_path, deps, agents=(CODEX,))
+    run_queue(tmp_path, deps)
     assert states["kiem-soat-duong-huyet"] == WorkflowState.AWAITING_MEDICAL_REVIEW
 
     states["kiem-soat-duong-huyet"] = WorkflowState.NEEDS_MEDICAL_REVISION
-    run_queue(tmp_path, deps, agents=(CODEX,))
+    run_queue(tmp_path, deps)
     assert states["kiem-soat-duong-huyet"] == WorkflowState.AWAITING_MEDICAL_REVIEW
 
     states["kiem-soat-duong-huyet"] = WorkflowState.NEEDS_PRODUCTION_REVISION
-    run_queue(tmp_path, deps, agents=(CODEX,))
+    run_queue(tmp_path, deps)
     assert states["kiem-soat-duong-huyet"] == WorkflowState.AWAITING_VIDEO_REVIEW
 
     assert len(recorded_prompts) == 4
@@ -500,6 +532,7 @@ def test_produce_runs_python_step(tmp_path: Path) -> None:
         *,
         cwd: Path,
         log_dir: Path,
+        **_: Any,
     ) -> AgentResult:
         agent_calls.append(prompt)
         raise AssertionError("Agent should not be invoked for produce step")
@@ -544,6 +577,7 @@ def test_once_runs_single_step(tmp_path: Path) -> None:
         *,
         cwd: Path,
         log_dir: Path,
+        **_: Any,
     ) -> AgentResult:
         slug = log_dir.name
         invoked_slugs.append(slug)
@@ -600,6 +634,7 @@ def test_revise_step_gets_reject_note(tmp_path: Path) -> None:
         *,
         cwd: Path,
         log_dir: Path,
+        **_: Any,
     ) -> AgentResult:
         captured_prompts.append(prompt)
         states[log_dir.name] = WorkflowState.AWAITING_MEDICAL_REVIEW
@@ -641,7 +676,7 @@ def test_agent_prompt_carries_doctor_standards(tmp_path: Path) -> None:
     states = {entry.slug: WorkflowState.NEEDS_MEDICAL_REVISION}
     captured: list[str] = []
 
-    def fake_invoke(agents: Any, prompt: str, *, cwd: Path, log_dir: Path) -> AgentResult:
+    def fake_invoke(agents: Any, prompt: str, *, cwd: Path, log_dir: Path, **_: Any) -> AgentResult:
         captured.append(prompt)
         states[log_dir.name] = WorkflowState.AWAITING_MEDICAL_REVIEW
         return AgentResult(agent="codex", ok=True, quota_exhausted=False, log_path=_log_file(log_dir))
@@ -660,6 +695,8 @@ def test_agent_prompt_carries_doctor_standards(tmp_path: Path) -> None:
     assert "Chuẩn của bác sĩ" in captured[0]
     assert "Cắt đuôi giải thích ở mọi dòng." in captured[0]
     assert "Góp ý riêng cho chủ đề khác." not in captured[0]
+    from healthvideo.workflows.runner import HARD_RULES
+    assert captured[0].rstrip().endswith('\n'.join(f'- {rule}' for rule in HARD_RULES))
 
 
 def test_agent_prompt_uses_pinned_v1_standards_and_filters_other_slug_feedback(
@@ -674,7 +711,7 @@ def test_agent_prompt_uses_pinned_v1_standards_and_filters_other_slug_feedback(
         sample.write_text("TEST renderer boundary", encoding="utf-8")
         return [sample]
 
-    def _trial_invoke(agents: Any, prompt: str, *, cwd: Path, log_dir: Path) -> AgentResult:
+    def _trial_invoke(agents: Any, prompt: str, *, cwd: Path, log_dir: Path, **_: Any) -> AgentResult:
         del agents, prompt, cwd
         rev = log_dir.parent / "project" / "revisions" / "001"
         write_passing_script_review(rev)
@@ -744,7 +781,7 @@ def test_agent_prompt_uses_pinned_v1_standards_and_filters_other_slug_feedback(
     states = {entry.slug: WorkflowState.NEEDS_MEDICAL_REVISION}
     captured: list[str] = []
 
-    def fake_invoke(agents: Any, prompt: str, *, cwd: Path, log_dir: Path) -> AgentResult:
+    def fake_invoke(agents: Any, prompt: str, *, cwd: Path, log_dir: Path, **_: Any) -> AgentResult:
         captured.append(prompt)
         states[log_dir.name] = WorkflowState.AWAITING_MEDICAL_REVIEW
         return AgentResult(agent="codex", ok=True, quota_exhausted=False, log_path=_log_file(log_dir))

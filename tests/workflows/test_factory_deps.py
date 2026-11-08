@@ -204,7 +204,7 @@ def test_run_queue_snapshots_each_agent_step(tmp_path: Path) -> None:
 
     calls = 0
 
-    def invoke(agents, prompt, *, cwd, log_dir):
+    def invoke(agents, prompt, *, cwd, log_dir, **_):
         nonlocal calls
         calls += 1
         (cwd / "shared.py").write_text(str(calls), encoding="utf-8")

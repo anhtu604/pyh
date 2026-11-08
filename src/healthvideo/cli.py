@@ -715,8 +715,8 @@ def run(
         review_file = (root / "topics" / "code-review.yaml").as_posix()
         typer.echo(f"File code cần rà ({review_file}): {changed_list}")
 
-    if report.exhausted:
-        typer.echo("Cả Codex và agy đều hết quota — chạy lại sau.")
+    if report.waiting_model:
+        typer.echo(f"Chủ đề chờ model (hết lượt): {', '.join(report.waiting_model)} — chạy lại sau.")
         raise typer.Exit(code=3)
 
 

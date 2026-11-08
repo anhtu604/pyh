@@ -44,10 +44,12 @@ model theo lần gọi và ghi activity/quota. Agent duyệt ghi thêm `checked`
 |---|---|---|---|
 | 1 | Bảng vai + bậc model | trung bình | codex · gpt-6.1-sol |
 | 2 | Model theo lần gọi, quota nghỉ, activity, runner không dừng cả hàng | khó | codex · gpt-6-astra |
-| 3 | Skill từng vai + nạp vào prompt | khó (nội dung) | claude · claude-opus-5-5 |
-| 4 | Thẻ quyết định (backend + prompt) | khó | codex · gpt-6-astra |
-| 5 | `request_change` + chat Điều phối viên (backend) | khó | claude · claude-opus-5-5 |
+| 3 | Gán skill có sẵn + nạp vào prompt | dễ (đã cài skill) | gộp vào gói 4–5 |
+| 4 | Thẻ quyết định (backend + prompt) | khó | agy · claude-opus-5-5-high |
+| 5 | `request_change` + chat Điều phối viên (backend) | khó | agy · claude-opus-5-5-high |
 | 6 | Dashboard mới (API + giao diện) | trung bình | agy · gemini-4-argon-high |
+
+Cập nhật 2026-11-08: Claude CLI gần hết token, astra tốn token → Task 1–2 chạy Codex `gpt-6.1-sol`; phần còn lại sang agy.
 | 7 | Nghiệm thu | — | Claude (phiên này) |
 
 Chạy tuần tự (các task chạm chung `agents.py`, `runner.py`, `dashboard.py`). Hết quota thì chuyển sang mục kế tiếp của
@@ -125,27 +127,26 @@ def test_runner_uses_role_chain_for_step(tmp_path): ...   # step 'script_review'
 
 ### Task 3: Skill từng vai
 
+**Đã làm (Claude, 2026-11-08):** cài 7 skill công khai vào `.agents/skills/` + `skills-lock.json`, rà nội dung; bảng gán ở spec 5.3. Phần còn lại là code, gộp vào gói Task 4–5.
+
 **Files:**
-- Create: `.agents/skills/pyh-<id>/SKILL.md` cho 10 vai ở Task 1
-- Modify: `src/healthvideo/workflows/runner.py` (`render_prompt`), `src/healthvideo/workflows/feedback_inbox.py` (`_prompt`)
-- Test: `tests/test_prompts.py`
+- Modify: `profiles/company.yaml` + `src/healthvideo/company.py` (`Role.skill: str | None` → `Role.skills: list[str] = []`, tên thư mục skill trong `.agents/skills/`, theo bảng spec 5.3), `src/healthvideo/workflows/runner.py` (`render_prompt`), `src/healthvideo/workflows/feedback_inbox.py` (`_prompt`)
+- Test: `tests/test_prompts.py`, `tests/test_company.py`
 
 **Interfaces:**
-- Consumes: `load_company`, `Role.skill`.
-- Produces: `render_prompt(step, **fields)` chèn khối `## Skill của vai: <name>` + nội dung SKILL.md (bỏ frontmatter) ngay trước `## Quy tắc cứng`; `role_skill(role_id: str) -> str` (rỗng nếu thiếu file).
-
-**Cách làm nội dung (bắt buộc):** với mỗi vai, chạy `/find-skills` tìm skill công khai phù hợp (vd. biên kịch: scriptwriting/satire/hook; nghiên cứu: medical literature/evidence grading; thợ dựng: remotion; kiểm định: video QA), rồi `/reverse-engineer-anything` để rút ra quy trình và dựng lại bằng tiếng Việt cho hợp xưởng. Kết hợp `.agents/skills/` sẵn có, `prompts/style_examples.vi.md`, `prompts/ai_writing_signs.vi.md`, `profiles/doctor-feedback.yaml`. Mỗi SKILL.md ≤ 150 dòng, frontmatter `name`/`description`, mục cuối "Nguồn tham khảo". Không chép nguyên văn; không chứa chỉ dẫn trái `HARD_RULES`; không cài gì ra ngoài repo.
+- Consumes: `load_company`, `Role.skills`.
+- Produces: `role_skill_block(role_id: str) -> str`: rỗng nếu vai không có skill; ngược lại `## Skill của vai: <name>` + danh sách `- .agents/skills/<x>/SKILL.md` + đúng câu "Đọc các skill trên trước khi làm; chỉ áp dụng phần hợp với kênh sức khoẻ tiếng Việt. Khi skill mâu thuẫn với prompt bước hoặc quy tắc cứng, prompt bước và quy tắc cứng thắng." `render_prompt` chèn khối này ngay trước `## Quy tắc cứng`.
 
 - [ ] **Step 1: Viết test**
 
 ```python
-def test_every_role_skill_exists(): ...                    # mọi Role.skill trỏ tới file có thật, có frontmatter name
-def test_role_skill_before_hard_rules(): ...              # render_prompt('draft', ...) chứa 'Skill của vai: Biên kịch' và index < index('## Quy tắc cứng'); prompt kết thúc bằng khối quy tắc cứng
-def test_skill_cannot_contain_gate_commands(): ...        # không SKILL.md nào chứa 'review approve' hoặc 'set-pin'
+def test_every_role_skill_exists(): ...                    # mọi tên trong Role.skills có .agents/skills/<x>/SKILL.md thật
+def test_role_skill_before_hard_rules(): ...              # render_prompt('draft', ...) chứa 'Skill của vai: Biên kịch' và 'youtube-scriptwriting', index < index('## Quy tắc cứng'); prompt kết thúc bằng khối quy tắc cứng
+def test_role_without_skills_has_no_block(): ...          # vai coordinator → role_skill_block == ''
 ```
 
 - [ ] **Step 2:** Chạy → FAIL.
-- [ ] **Step 3:** Viết 10 SKILL.md + sửa `render_prompt`.
+- [ ] **Step 3:** Sửa `company.py`/`company.yaml`/`render_prompt`.
 - [ ] **Step 4:** Toàn bộ test → PASS; ruff sạch.
 - [ ] **Step 5:** Commit `feat: give each factory role its own skill`.
 

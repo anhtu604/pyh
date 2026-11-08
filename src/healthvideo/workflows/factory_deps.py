@@ -11,7 +11,7 @@ from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
-from healthvideo.agents import AGY, CLAUDE, CODEX, AgentCli
+from healthvideo.company import load_company
 from healthvideo.domain.project_v2 import WorkflowState
 from healthvideo.domain.queue import QueueEntry
 from healthvideo.domain.topic import TopicCard
@@ -269,17 +269,6 @@ def changed_code_paths(
     ]
 
 
-# Hard steps go to Claude; a critic never starts from the agent whose work it grades
-# (Claude writes the script, Codex grades it; agy builds the video, Claude grades it).
-STEP_AGENTS: dict[str, tuple[AgentCli, ...]] = {
-    "research": (CLAUDE, AGY, CODEX),
-    "draft": (CLAUDE, AGY, CODEX),
-    "revise_medical": (CLAUDE, AGY, CODEX),
-    "script_review": (CODEX, AGY),
-    "product_review": (CLAUDE, CODEX),
-}
-
-
 def default_run_deps(
     root: Path,
     *,
@@ -301,5 +290,5 @@ def default_run_deps(
         ),
         posts_ready=posts_ready,
         code_snapshot=lambda repo_root: code_snapshot(repo_root, runner=git_runner),
-        step_agents=STEP_AGENTS,
+        company=load_company(),
     )

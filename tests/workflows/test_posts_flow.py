@@ -81,6 +81,7 @@ def test_run_queue_runs_posts_step_before_produce(tmp_path: Path) -> None:
         *,
         cwd: Path,
         log_dir: Path,
+        **_: Any,
     ) -> AgentResult:
         events.append("posts")
         prompts.append(prompt)
@@ -144,6 +145,7 @@ def test_posts_step_success_without_state_change(tmp_path: Path) -> None:
         *,
         cwd: Path,
         log_dir: Path,
+        **_: Any,
     ) -> AgentResult:
         write_posts_fixture(revision_root)
         return AgentResult(
@@ -180,6 +182,7 @@ def test_posts_step_success_without_state_change(tmp_path: Path) -> None:
         *,
         cwd: Path,
         log_dir: Path,
+        **_: Any,
     ) -> AgentResult:
         return AgentResult(
             agent="codex",

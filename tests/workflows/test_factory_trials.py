@@ -17,7 +17,7 @@ def module():
     return importlib.import_module('healthvideo.workflows.factory_trials')
 
 
-def _fake_invoke(agents, prompt, *, cwd, log_dir):
+def _fake_invoke(agents, prompt, *, cwd, log_dir, **_):
     del agents, cwd
     project_dir = log_dir.parent / 'project'
     rev = project_dir / 'revisions' / '001'
@@ -78,7 +78,7 @@ def test_stage1_run_returns_running_then_ready_with_script_outputs(tmp_path):
     topic = 'Bẻ ngón tay gây to khớp thoái hóa; bẻ cổ khi massage kêu rắc giúp thư giãn kinh lạc.'
     prompts: list[str] = []
 
-    def invoke(agents, prompt, *, cwd, log_dir):
+    def invoke(agents, prompt, *, cwd, log_dir, **_):
         prompts.append(prompt)
         return _fake_invoke(agents, prompt, cwd=cwd, log_dir=log_dir)
 
@@ -108,6 +108,10 @@ def test_stage1_run_returns_running_then_ready_with_script_outputs(tmp_path):
         assert topic in prompt
         assert 'Đi thẳng vào cơ chế giải phẫu.' in prompt
         assert trials.TRIAL_ISOLATION_LINE in prompt
+        from healthvideo.workflows.runner import HARD_RULES
+        assert prompt.rstrip().endswith('\n'.join(f'- {rule}' for rule in HARD_RULES))
+        from healthvideo.workflows.runner import HARD_RULES
+        assert prompt.rstrip().endswith('\n'.join(f'- {rule}' for rule in HARD_RULES))
 
     tdir = trials.trial_dir(tmp_path, trial['id'])
     card = read_yaml(tdir / 'project/revisions/001/topic/card.yaml')
@@ -120,13 +124,13 @@ def test_stage1_run_returns_running_then_ready_with_script_outputs(tmp_path):
 def test_stage1_invoke_failure_sets_failed_with_vietnamese_reason(tmp_path, mode):
     trials = module()
 
-    def failing_invoke(agents, prompt, *, cwd, log_dir):
+    def failing_invoke(agents, prompt, *, cwd, log_dir, **_):
         del agents, prompt, cwd
         log_dir.mkdir(parents=True, exist_ok=True)
         log_path = log_dir / 'fail.log'
         log_path.write_text('failed', encoding='utf-8')
         if mode == 'quota_exhausted':
-            raise AllAgentsExhausted('All agents exhausted quota: codex, agy')
+            raise AllAgentsExhausted()
         return AgentResult(agent='codex', ok=False, quota_exhausted=False, log_path=log_path)
 
     trial = trials.create_trial(tmp_path, 1, topic='Chủ đề thử lỗi')
@@ -200,7 +204,7 @@ def test_concurrent_second_run_rejected_while_running(tmp_path):
     started = threading.Event()
     release = threading.Event()
 
-    def slow_invoke(agents, prompt, *, cwd, log_dir):
+    def slow_invoke(agents, prompt, *, cwd, log_dir, **_):
         started.set()
         release.wait(timeout=5)
         return _fake_invoke(agents, prompt, cwd=cwd, log_dir=log_dir)
@@ -320,7 +324,7 @@ def test_stage1_agent_edits_land_in_disposable_checkout(tmp_path, monkeypatch, t
     _git_repo(tmp_path)
     cwds = []
 
-    def invoke(agents, prompt, *, cwd, log_dir):
+    def invoke(agents, prompt, *, cwd, log_dir, **_):
         cwds.append(cwd)
         (cwd / 'video/src/anatomy/NewOrgan.tsx').write_text('x', encoding='utf-8')
         (cwd / 'video/src/anatomy/library.json').write_text('{"NewOrgan": {}}', encoding='utf-8')
@@ -341,7 +345,7 @@ def test_stage1_fails_when_agent_writes_into_real_repo(tmp_path, monkeypatch, tr
     monkeypatch.setattr(trials, 'trial_checkout', trial_checkout_stub)
     _git_repo(tmp_path)
 
-    def invoke(agents, prompt, *, cwd, log_dir):
+    def invoke(agents, prompt, *, cwd, log_dir, **_):
         (tmp_path / 'video/src/anatomy/Leak.tsx').write_text('x', encoding='utf-8')
         return _fake_invoke(agents, prompt, cwd=cwd, log_dir=log_dir)
 

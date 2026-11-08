@@ -18,7 +18,7 @@ def offline_renderer(monkeypatch):
         path.write_text('TEST renderer boundary', encoding='utf-8')
         return [path]
     from healthvideo.agents import AgentResult
-    def fake_invoke(agents, prompt, *, cwd, log_dir):
+    def fake_invoke(agents, prompt, *, cwd, log_dir, **_):
         rev = log_dir.parent / 'project/revisions/001'
         write_passing_script_review(rev)
         write_yaml_atomic(rev / 'script/script.yaml', {'lines': [{'id': 'L01', 'text': 'Synthetic trial line.'}]})

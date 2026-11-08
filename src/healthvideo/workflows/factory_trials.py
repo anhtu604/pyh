@@ -10,18 +10,20 @@ import struct
 import subprocess
 import threading
 import wave
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
 from healthvideo.agents import (
-    DEFAULT_AGENTS,
-    AgentCli,
+    ACTIVITY_FILE,
+    QUOTA_FILE,
     AgentResult,
     AllAgentsExhausted,
+    QuotaBook,
     invoke_with_failover,
 )
+from healthvideo.company import Company, load_company
 from healthvideo.domain.queue import QueueEntry
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.workflows.factory_deps import (
@@ -312,7 +314,7 @@ def _run_stage1_worker(
     project_dir: Path,
     topic: str,
     invoke: Callable[..., AgentResult],
-    agents: Sequence[AgentCli],
+    company: Company,
 ) -> None:
     log_dir = directory / 'logs'
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -350,17 +352,26 @@ def _run_stage1_worker(
                 fields['reject_note'] = revision_notes(project_dir) if rewriting else ''
             prompt = render_prompt(step, **fields)
             standards_block = prompt_block(root)
-            if standards_block:
-                prompt = f'{prompt.rstrip()}\n\n{standards_block}'
-            prompt = f'{prompt.rstrip()}\n\n{TRIAL_ISOLATION_LINE}\n'
+            body, heading, rules = prompt.rpartition('## Quy tắc cứng')
+            prompt = (
+                f'{body.rstrip()}\n\n{standards_block.rstrip()}\n\n'
+                f'{TRIAL_ISOLATION_LINE}\n\n{heading}{rules}'
+            )
             reviewing = step == 'script_review'
             reviewed_hash = script_hash(project_dir) if reviewing else ''
+            role = company.role_for_step(step)
             try:
+                # The trial runs in a throwaway checkout; quota and activity stay in the real root.
                 result = invoke(
-                    tuple(reversed(agents)) if reviewing else agents,
+                    company.chain(role.id),
                     prompt,
                     cwd=checkout,
                     log_dir=log_dir,
+                    role=role.id,
+                    slug=f'trial-{trial_id}',
+                    step=step,
+                    quota=QuotaBook(root / QUOTA_FILE),
+                    activity=root / ACTIVITY_FILE,
                 )
             except AllAgentsExhausted:
                 _fail_stage1(
@@ -458,7 +469,7 @@ def run_trial(
     *,
     real_service: bool = False,
     invoke: Callable[..., AgentResult] | None = None,
-    agents: Sequence[AgentCli] = DEFAULT_AGENTS,
+    company: Company | None = None,
 ) -> dict:
     with TRIAL_LOCK:
         record = trial_bundle(root, trial_id)
@@ -504,7 +515,8 @@ def run_trial(
             invoke_fn = invoke if invoke is not None else invoke_with_failover
             worker = threading.Thread(
                 target=_run_stage1_worker,
-                args=(root, trial_id, directory, project_dir, record['topic'], invoke_fn, agents),
+                args=(root, trial_id, directory, project_dir, record['topic'], invoke_fn,
+                      company or load_company()),
                 daemon=True,
             )
             _ACTIVE_TRIALS[trial_id] = worker

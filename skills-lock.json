@@ -97,6 +97,20 @@
       "skillPath": ".agents/skills/character-animation-qa/SKILL.md",
       "computedHash": "727ca3217c8d69cce95452c3d843db8c78536feaf8c61d0006bb2a62618ef9c7"
     },
+    "content-strategy": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/content-strategy/SKILL.md",
+      "computedHash": "2acc71a7c9828d21ce8e91d493ff27fa45e2a3736d0f07eac58459993dee5c90",
+      "installMode": "copy"
+    },
+    "copy-editing": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/copy-editing/SKILL.md",
+      "computedHash": "a46bdf2ab6ca57239ac65fd65054d1b95393e9db46700c35d60bb705314d0090",
+      "installMode": "copy"
+    },
     "d3-viz": {
       "source": "calesthio/openmontage",
       "sourceType": "github",
@@ -235,11 +249,32 @@
       "skillPath": "skills/safe-refactor/SKILL.md",
       "computedHash": "9df34a21a7a2c18ce13dbbe4a3f66b4e91df9e4bc33c1c9da8a80261583367ec"
     },
+    "scripting-and-storyboarding": {
+      "source": "social-media-skills/skills",
+      "sourceType": "github",
+      "skillPath": "skills/scripting-and-storyboarding/SKILL.md",
+      "computedHash": "315e68a1f1bb9515ac8c54d0b242c001bb10264598949b2caec04c160b652757",
+      "installMode": "copy"
+    },
+    "short-form-video": {
+      "source": "iart-ai/tiktok-video-skills",
+      "sourceType": "github",
+      "skillPath": "skills/short-form-video/SKILL.md",
+      "computedHash": "f2cb1610f64f2f3013ff20ef6acc4094bcd8de2c578098643f110926c7ef4df2",
+      "installMode": "copy"
+    },
     "show-me": {
       "source": "humanlayer/skills",
       "sourceType": "github",
       "skillPath": "plugins/show-me/skills/show-me/SKILL.md",
       "computedHash": "cda500d566bcd2ca93a5aab44b4317bbd31ace508fca0383afe3091ac1662b4b"
+    },
+    "social": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/social/SKILL.md",
+      "computedHash": "9f63cb645d9cb6e30e0144c8161a32c4481354752c70b3a3e2562859f16b5adf",
+      "installMode": "copy"
     },
     "surgical-patch": {
       "source": "JuliusBrussee/caveman",
@@ -252,6 +287,13 @@
       "sourceType": "github",
       "skillPath": ".agents/skills/svg-character-animation/SKILL.md",
       "computedHash": "65a17b9ab121f1fb11af63ff1cc8ab36accf96a36ce8decb82660fe26df6fbf0"
+    },
+    "systematic-literature-review": {
+      "source": "bytedance/deer-flow",
+      "sourceType": "github",
+      "skillPath": "skills/public/systematic-literature-review/SKILL.md",
+      "computedHash": "a4f42cb232c1b25a971c35c09933a1f26ef5c432439c0c7ca59137d0275cc4c1",
+      "installMode": "copy"
     },
     "threejs-animation": {
       "source": "calesthio/openmontage",
@@ -294,6 +336,13 @@
       "sourceType": "github",
       "skillPath": ".claude/skills/web-sims/SKILL.md",
       "computedHash": "1c5e3d7b60356a2063f8a5fc237f4f609d62ca7d475f3d3f43a5394845144dc0"
+    },
+    "youtube-scriptwriting": {
+      "source": "cdeistopened/skill-stack",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/youtube-scriptwriting/SKILL.md",
+      "computedHash": "47210319862e71615249298ad838b3dc6240290a33d3c3fb81882464fdc8efb0",
+      "installMode": "copy"
     }
   }
 }

@@ -7,7 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from healthvideo.agents import AgentCli, AgentResult
+from healthvideo.agents import AgentResult
+from healthvideo.company import ModelSlot, load_company
 from healthvideo.domain.gate_review import GateKind
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.queue import QueueEntry
@@ -21,7 +22,6 @@ from healthvideo.workflows.runner import RunDeps, run_queue
 from tests.helpers import create_v2_project_fixture
 
 SLUG = 'muoi-va-huyet-ap-v2'
-WRITER, CRITIC = AgentCli('writer', ('w',), True), AgentCli('critic', ('c',), True)
 REV = Path('revisions/001')
 
 
@@ -151,21 +151,22 @@ def test_run_reviews_fixes_rerenders_then_submits_without_approving(tmp_path):
     state = {'value': WorkflowState.PRODUCTION_IN_PROGRESS, 'renders': 1}
     calls: list[tuple[str, str]] = []
 
-    def invoke(agents, prompt, *, cwd, log_dir):
+    def invoke(agents, prompt, *, cwd, log_dir, **_):
         del cwd
         log_dir.mkdir(parents=True, exist_ok=True)
         reviewing = '(`product_review`)' in prompt
-        calls.append((agents[0].name, 'review' if reviewing else 'fix'))
+        calls.append((agents[0].cli, 'review' if reviewing else 'fix'))
         if reviewing:
             _report(project, 6 if len(calls) == 1 else 8)
         else:
             assert '(`revise_product`)' in prompt
             assert 'Thu nhỏ nhãn.' in prompt
-        return AgentResult(agents[0].name, True, False, log_dir / 'fake.log')
+        return AgentResult(agents[0].cli, True, False, log_dir / 'fake.log')
 
-    report = run_queue(tmp_path, _deps(project, state, invoke), agents=(WRITER, CRITIC))
+    report = run_queue(tmp_path, _deps(project, state, invoke))
 
-    assert calls == [('critic', 'review'), ('writer', 'fix'), ('critic', 'review')]
+    # product_critic starts on claude, the editor who fixes the cut on agy.
+    assert calls == [('claude', 'review'), ('agy', 'fix'), ('claude', 'review')]
     assert state['renders'] == 2
     assert state['value'] == WorkflowState.AWAITING_VIDEO_REVIEW
     assert report.at_gate == [SLUG]
@@ -179,12 +180,12 @@ def test_run_blocks_when_critic_writes_no_report(tmp_path):
     project = _queue(tmp_path)
     state = {'value': WorkflowState.PRODUCTION_IN_PROGRESS, 'renders': 1}
 
-    def invoke(agents, prompt, *, cwd, log_dir):
+    def invoke(agents, prompt, *, cwd, log_dir, **_):
         del prompt, cwd
         log_dir.mkdir(parents=True, exist_ok=True)
-        return AgentResult(agents[0].name, True, False, log_dir / 'fake.log')
+        return AgentResult(agents[0].cli, True, False, log_dir / 'fake.log')
 
-    report = run_queue(tmp_path, _deps(project, state, invoke), agents=(WRITER, CRITIC))
+    report = run_queue(tmp_path, _deps(project, state, invoke))
 
     assert report.blocked == [SLUG]
     assert state['value'] == WorkflowState.PRODUCTION_IN_PROGRESS
@@ -219,20 +220,21 @@ def test_submit_video_moves_held_render_to_the_doctor_gate(tmp_path):
         submit_video(project)
 
 
-def test_step_agents_override_the_default_order(tmp_path):
+def test_role_model_override_picks_the_chain(tmp_path):
     project = _queue(tmp_path)
     state = {'value': WorkflowState.PRODUCTION_IN_PROGRESS, 'renders': 1}
     seen = []
-    special = AgentCli('special', ('s',), True)
+    special = ModelSlot(cli='codex', model='special')
 
-    def invoke(agents, prompt, *, cwd, log_dir):
+    def invoke(agents, prompt, *, cwd, log_dir, **_):
         del prompt, cwd
         log_dir.mkdir(parents=True, exist_ok=True)
-        seen.append(agents[0].name)
+        seen.append(agents[0])
         _report(project, 8)
-        return AgentResult(agents[0].name, True, False, log_dir / 'fake.log')
+        return AgentResult(agents[0].cli, True, False, log_dir / 'fake.log')
 
-    deps = replace(_deps(project, state, invoke),
-                   step_agents={'product_review': (special, CRITIC)})
-    run_queue(tmp_path, deps, agents=(WRITER, CRITIC))
-    assert seen == ['special']
+    company = load_company()
+    critic = company.roles['product_critic'].model_copy(update={'models': [special]})
+    company = company.model_copy(update={'roles': {**company.roles, 'product_critic': critic}})
+    run_queue(tmp_path, replace(_deps(project, state, invoke), company=company))
+    assert seen == [special]

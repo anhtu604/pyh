@@ -1,18 +1,17 @@
 """Select the next factory workflow step for a project state and run the queue."""
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
 from healthvideo.agents import (
-    DEFAULT_AGENTS,
-    AgentCli,
     AgentResult,
     AllAgentsExhausted,
     invoke_with_failover,
 )
+from healthvideo.company import Company, load_company
 from healthvideo.domain.project_v2 import WorkflowState
 from healthvideo.domain.queue import QueueEntry
 from healthvideo.storage.files import (
@@ -144,8 +143,8 @@ class RunDeps:
     code_snapshot: Callable[[Path], dict[str, str]] | None = None
     visual_review_pending: Callable[[Path], bool] = review_pending
     product_review_pending: Callable[[Path], bool] = product_review.pending
-    # Per-step agent order; steps not listed use run_queue(agents=...).
-    step_agents: Mapping[str, Sequence[AgentCli]] = field(default_factory=dict)
+    # Role table: which (cli, model) chain runs each agent step.
+    company: Company = field(default_factory=load_company)
 
 
 @dataclass
@@ -156,7 +155,21 @@ class RunReport:
     at_gate: list[str] = field(default_factory=list)
     blocked: list[str] = field(default_factory=list)
     code_changes: list[Path] = field(default_factory=list)
-    exhausted: bool = False
+    # Topics paused until a model of their chain returns from quota rest.
+    waiting_model: list[str] = field(default_factory=list)
+
+
+WAITING_MODEL_FILE = "waiting-model.txt"
+
+
+def waiting_until(root: Path, slug: str) -> datetime | None:
+    """When a topic paused for quota may run again; None if unknown or not paused."""
+    path = root / "topics" / "logs" / slug / WAITING_MODEL_FILE
+    try:
+        moment = datetime.fromisoformat(path.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return None
+    return moment if moment.tzinfo else moment.astimezone()
 
 
 def _mark_advanced(root: Path, slug: str, report: RunReport) -> None:
@@ -241,7 +254,6 @@ def run_queue(
     root: Path,
     deps: RunDeps,
     *,
-    agents: Sequence[AgentCli] = DEFAULT_AGENTS,
     once: bool = False,
     max_steps_per_topic: int = 20,
 ) -> RunReport:
@@ -250,6 +262,13 @@ def run_queue(
     entries = load_queue(root)
 
     for entry in entries:
+        waiting = root / "topics" / "logs" / entry.slug / WAITING_MODEL_FILE
+        if waiting.exists():
+            back = waiting_until(root, entry.slug)
+            if back is not None and back > datetime.now(UTC):
+                report.waiting_model.append(entry.slug)
+                continue
+            waiting.unlink()
         project_dir = root / "projects" / entry.slug
         if not project_dir.exists():
             project_dir = deps.create_project(root, entry)
@@ -331,26 +350,34 @@ def run_queue(
                 prompt = render_prompt(step, **prompt_fields)
                 standards_block = prompt_block(root, slug=entry.slug)
                 if standards_block:
-                    prompt = f"{prompt.rstrip()}\n\n{standards_block}"
+                    body, heading, rules = prompt.rpartition('## Quy tắc cứng')
+                    prompt = f"{body.rstrip()}\n\n{standards_block.rstrip()}\n\n{heading}{rules}"
                 before = deps.code_snapshot(root) if deps.code_snapshot is not None else None
                 reviewing = step in {"script_review", "product_review"}
                 reviewed_hash = (
                     script_hash(project_dir) if step == "script_review"
                     else product_review.render_hash(project_dir) if reviewing else ""
                 )
+                role = deps.company.role_for_step(step)
                 try:
                     result = deps.invoke(
-                        # The critic starts from the other agent so it is not grading itself.
-                        tuple(deps.step_agents.get(step, ()))
-                        or (tuple(reversed(agents)) if reviewing else agents),
+                        deps.company.chain(role.id),
                         prompt,
                         cwd=root,
                         log_dir=log_dir,
+                        role=role.id,
+                        slug=entry.slug,
+                        step=step,
                     )
-                except AllAgentsExhausted:
+                except AllAgentsExhausted as exc:
+                    # Only this topic waits for a model; the rest of the queue keeps going.
                     _record_code_changes(root, entry.slug, deps, report, before)
-                    report.exhausted = True
-                    return report
+                    back = exc.earliest_return
+                    write_text_atomic(
+                        log_dir / WAITING_MODEL_FILE, back.isoformat() if back else ""
+                    )
+                    report.waiting_model.append(entry.slug)
+                    break
 
                 result_log_path = result.log_path
                 _record_code_changes(root, entry.slug, deps, report, before)

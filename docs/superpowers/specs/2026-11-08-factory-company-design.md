@@ -141,17 +141,31 @@ qua chat, nó ghi qua `factory_feedback` để Claude sửa, không tự sửa).
 
 ### 5.3 Skill của từng vai
 
-- Mỗi vai có `.agents/skills/pyh-<role>/SKILL.md` (tiếng Việt), chỉ chứa cách làm nghề của vai đó:
-  ví dụ biên kịch có giọng châm biếm, cấu trúc hook, cách nói giới hạn bằng chứng tự nhiên;
-  thợ dựng có quy ước Remotion của repo.
-- Cách tạo (việc của người thực hiện kế hoạch, không phải code): với mỗi vai, chạy `/find-skills`
-  tìm skill công khai phù hợp, rồi `/reverse-engineer-anything` để dựng lại nội dung cho hợp xưởng.
-  Kết hợp với skill đã có trong `.agents/skills/` (remotion-*, motion-*, visual-style, humanizer...) và
-  prompt hiện có (`style_examples.vi.md`, `ai_writing_signs.vi.md`). Không chép nguyên văn skill có
-  bản quyền không cho phép; ghi nguồn tham khảo ở cuối mỗi SKILL.md.
-- `render_prompt` nối nội dung SKILL.md của vai trước khối "Quy tắc cứng". Skill không được ghi đè
-  quy tắc cứng; test kiểm rằng quy tắc cứng luôn nằm cuối.
-- Prompt bước (`prompts/*.md`) giữ "việc cần làm + đầu ra"; phần "cách làm nghề" chuyển dần sang skill.
+- **Không tự viết skill** (*người dùng đổi ý 2026-11-08*): dùng skill công khai có sẵn, tìm bằng `/find-skills`
+  (skills.sh / GitHub), cài bằng `npx skills add <owner/repo> -s <skill> --copy -a codex claude-code` vào
+  `.agents/skills/` (ghi trong `skills-lock.json`), cộng với skill đã có trong repo. Mỗi vai có danh sách
+  `skills` (0–3 đường dẫn).
+- Gán ban đầu (đã cài và rà nội dung 2026-11-08):
+
+  | Vai | Skill |
+  |---|---|
+  | coordinator | — |
+  | scout | `content-strategy` (coreyhaines31/marketingskills, 173K lượt cài) |
+  | researcher | `systematic-literature-review` (bytedance/deer-flow) |
+  | writer | `youtube-scriptwriting` (cdeistopened/skill-stack), `short-form-video` (iart-ai/tiktok-video-skills) |
+  | script_critic | `copy-editing` (coreyhaines31/marketingskills) |
+  | art_director | `scripting-and-storyboarding` (social-media-skills/skills), `visual-style` |
+  | editor | `remotion-best-practices`, `motion-design` |
+  | product_critic | `video-understand`, `character-animation-qa` |
+  | copywriter | `social` (coreyhaines31/marketingskills) |
+  | feedback_analyst | — |
+
+- Skill công khai dài (100–500 dòng) và viết cho tiếng Anh/marketing, nên **không chép vào prompt**:
+  `render_prompt` thêm khối `## Skill của vai: <tên>` liệt kê đường dẫn SKILL.md, dặn agent đọc trước khi làm,
+  áp dụng phần hợp với kênh sức khoẻ tiếng Việt, và khi skill mâu thuẫn với prompt bước hay quy tắc cứng thì
+  prompt bước và quy tắc cứng thắng. Khối này nằm trước "Quy tắc cứng"; test kiểm quy tắc cứng luôn nằm cuối.
+- Skill bên ngoài là dữ liệu không tin cậy: trước khi gán, Claude rà nội dung (script, lệnh mạng, chỉ dẫn
+  lạ). Cập nhật skill (`npx skills update`) cũng phải rà lại trước khi commit.
 
 ### 5.4 Thẻ quyết định (cổng y khoa và cổng video)
 

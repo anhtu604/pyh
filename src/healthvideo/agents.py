@@ -1,14 +1,25 @@
 """Invoke coding agents with quota-exhaustion failover."""
 
+import json
+import os
+import re
 import subprocess
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
-from datetime import UTC, datetime
+from contextlib import contextmanager
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from healthvideo.company import REPO_ROOT, ModelSlot
 from healthvideo.env import child_env
+from healthvideo.process import prepare_subprocess_argv
+from healthvideo.storage.files import read_yaml, write_yaml_atomic
 
 RUNNING_MARKER = ".agent-running"
+QUOTA_FILE = Path("cache/agent-quota.yaml")
+ACTIVITY_FILE = Path("topics/logs/activity.jsonl")
+# A CLI that does not say when its quota resets rests this long.
+DEFAULT_REST = timedelta(hours=5)
 
 
 @dataclass(frozen=True)
@@ -60,9 +71,7 @@ CLAUDE = AgentCli(
     ),
     True,
 )
-# agy first: the doctor routes work to agy because Codex is near its token limit.
-# Hard steps are routed to Claude per step in factory_deps.STEP_AGENTS.
-DEFAULT_AGENTS: tuple[AgentCli, ...] = (AGY, CODEX)
+AGENT_CLIS: dict[str, AgentCli] = {"claude": CLAUDE, "codex": CODEX, "agy": AGY}
 
 QUOTA_PATTERNS: tuple[str, ...] = (
     "usage limit",
@@ -87,10 +96,133 @@ class AgentResult:
     ok: bool
     quota_exhausted: bool
     log_path: Path
+    model: str = ""
 
 
 class AllAgentsExhausted(RuntimeError):
-    """Raised when every configured agent fails due to quota exhaustion."""
+    """Raised when every slot of a chain is resting or just ran out of quota."""
+
+    def __init__(self, earliest_return: datetime | None = None) -> None:
+        self.earliest_return = earliest_return
+        when = earliest_return.strftime("%H:%M %d/%m") if earliest_return else "chưa rõ"
+        super().__init__(f"Mọi model trong chuỗi đều hết lượt; sớm nhất trở lại: {when}")
+
+
+def argv_for(slot: ModelSlot) -> tuple[AgentCli, list[str]]:
+    """Return the CLI for a slot and its argv with the slot's model flag."""
+    cli = AGENT_CLIS[slot.cli]
+    argv = list(cli.argv)
+    if "--model" in argv:  # claude, agy
+        argv[argv.index("--model") + 1] = slot.model
+    else:  # codex reads the prompt from the trailing "-"
+        dash = argv.index("-")
+        argv[dash:dash] = ["-m", slot.model]
+    return cli, argv
+
+
+def _when(value: object) -> datetime:
+    moment = value if isinstance(value, datetime) else datetime.fromisoformat(str(value))
+    return moment if moment.tzinfo else moment.astimezone()
+
+
+@contextmanager
+def _quota_lock(path: Path):
+    """Serialize quota read/modify/write across factory and dashboard processes."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.with_suffix(path.suffix + '.lock').open('a+b') as stream:
+        if stream.tell() == 0:
+            stream.write(b'\0')
+            stream.flush()
+        stream.seek(0)
+        if os.name == 'nt':
+            import msvcrt
+            msvcrt.locking(stream.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            stream.seek(0)
+            if os.name == 'nt':
+                msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+
+
+class QuotaBook:
+    """Slots resting after a quota hit; ``model: '*'`` rests every model of a CLI."""
+
+    def __init__(self, path: Path = REPO_ROOT / QUOTA_FILE) -> None:
+        self.path = path
+
+    def _entries(self) -> list[dict]:
+        if not self.path.is_file():
+            return []
+        return list(read_yaml(self.path).get("entries") or [])
+
+    def _until(self, slot: ModelSlot, now: datetime) -> datetime | None:
+        times = [
+            _when(entry["resting_until"]) for entry in self._entries()
+            if entry["cli"] == slot.cli and entry["model"] in (slot.model, "*")
+        ]
+        return max((moment for moment in times if moment > now), default=None)
+
+    def resting(self, slot: ModelSlot, now: datetime) -> bool:
+        return self._until(slot, now) is not None
+
+    def rest(self, slot: ModelSlot, until: datetime, reason: str) -> None:
+        with _quota_lock(self.path):
+            entries = [
+                entry for entry in self._entries()
+                if (entry["cli"], entry["model"]) != (slot.cli, slot.model)
+            ]
+            entries.append({
+                "cli": slot.cli,
+                "model": slot.model,
+                "resting_until": until.isoformat(timespec="seconds"),
+                "reason": reason,
+            })
+            write_yaml_atomic(self.path, {"version": 1, "entries": entries})
+
+    def earliest_return(self, slots: Sequence[ModelSlot], now: datetime) -> datetime | None:
+        times = [self._until(slot, now) for slot in slots]
+        return min((moment for moment in times if moment is not None), default=None)
+
+    def snapshot(self, now: datetime) -> list[dict]:
+        return [entry for entry in self._entries() if _when(entry["resting_until"]) > now]
+
+
+_RESET_AT = re.compile(r"try again at\s+(\d{1,2}):(\d{2})\s*(am|pm)?", re.IGNORECASE)
+_RESET_IN = re.compile(
+    r"(?:resets?|try again)\s+in\s+(\d+)\s*(hours?|hrs?|minutes?|mins?)", re.IGNORECASE
+)
+_ACCOUNT = re.compile(r"\b(account|plan)\b", re.IGNORECASE)
+
+
+def parse_reset(output: str, now: datetime) -> datetime | None:
+    """Read the reset time a CLI printed; None when it gave none."""
+    match = _RESET_AT.search(output)
+    if match:
+        hour, minute, half = int(match[1]), int(match[2]), (match[3] or "").lower()
+        if half:
+            hour = hour % 12 + (12 if half == "pm" else 0)
+        if hour > 23 or minute > 59:
+            return None
+        moment = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        return moment if moment > now else moment + timedelta(days=1)
+    match = _RESET_IN.search(output)
+    if match:
+        unit = "hours" if match[2].lower().startswith("h") else "minutes"
+        return now + timedelta(**{unit: int(match[1])})
+    return None
+
+
+def _quota_reason(output: str) -> str:
+    for line in output.splitlines():
+        if any(pattern in line.lower() for pattern in QUOTA_PATTERNS):
+            return line.strip()[:200]
+    return "hết lượt"
 
 
 def invoke(
@@ -118,7 +250,7 @@ def invoke(
 
     try:
         completed = runner(
-            argv,
+            prepare_subprocess_argv(argv),
             cwd=cwd,
             input=stdin_input,
             capture_output=True,
@@ -156,20 +288,50 @@ def invoke(
 
 
 def invoke_with_failover(
-    agents: Sequence[AgentCli],
+    slots: Sequence[ModelSlot],
     prompt: str,
     *,
     cwd: Path,
     log_dir: Path,
+    role: str,
+    slug: str,
+    step: str,
     runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+    now: Callable[[], datetime] = lambda: datetime.now().astimezone(),
+    quota: QuotaBook | None = None,
+    activity: Path | None = None,
 ) -> AgentResult:
-    """Invoke agents in order, failing over only on quota exhaustion."""
-    exhausted_names: list[str] = []
-    for agent in agents:
-        result = invoke(agent, prompt, cwd=cwd, log_dir=log_dir, runner=runner)
+    """Try each non-resting slot in order, failing over only on quota exhaustion.
+
+    ``quota`` and ``activity`` default to ``cache/`` and ``topics/logs/`` under ``cwd``.
+    """
+    quota = quota or QuotaBook(cwd / QUOTA_FILE)
+    activity = activity or cwd / ACTIVITY_FILE
+
+    def log(slot: ModelSlot, event: str, ok: bool | None) -> None:
+        row = {"at": now().isoformat(timespec="seconds"), "role": role, "cli": slot.cli,
+               "model": slot.model, "slug": slug, "step": step, "event": event, "ok": ok}
+        activity.parent.mkdir(parents=True, exist_ok=True)
+        with activity.open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+    for slot in slots:
+        if quota.resting(slot, now()):
+            continue
+        cli, argv = argv_for(slot)
+        log(slot, "start", None)
+        result = invoke(replace(cli, argv=tuple(argv)), prompt, cwd=cwd, log_dir=log_dir,
+                        runner=runner)
+        result = replace(result, model=slot.model)
+        log(slot, "end", result.ok)
         if result.ok or not result.quota_exhausted:
             return result
-        exhausted_names.append(agent.name)
+        log(slot, "quota", False)
+        output = result.log_path.read_text(encoding="utf-8", errors="replace")
+        moment = now()
+        until = parse_reset(output, moment) or moment + DEFAULT_REST
+        # Quota is per CLI account; only an account-wide message rests every model.
+        rested = ModelSlot(cli=slot.cli, model="*") if _ACCOUNT.search(output) else slot
+        quota.rest(rested, until, _quota_reason(output))
 
-    joined = ", ".join(exhausted_names)
-    raise AllAgentsExhausted(f"All agents exhausted quota: {joined}")
+    raise AllAgentsExhausted(quota.earliest_return(slots, now()))

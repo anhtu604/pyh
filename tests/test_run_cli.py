@@ -31,7 +31,6 @@ def test_run_prints_gate_hint(
             at_gate=["tang-huyet-ap"],
             blocked=["gan-nhiem-mo"],
             code_changes=[Path("video/src/anatomy/ArteryWall.tsx")],
-            exhausted=False,
         )
 
     monkeypatch.setattr("healthvideo.cli.run_queue", fake_run_queue)
@@ -46,7 +45,7 @@ def test_run_prints_gate_hint(
     assert "topics/code-review.yaml" in result.output
 
 
-def test_run_exhausted_exit_code_3(
+def test_run_waiting_model_exit_code_3(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -58,14 +57,14 @@ def test_run_exhausted_exit_code_3(
         **kwargs: Any,
     ) -> RunReport:
         del root, deps, once, kwargs
-        return RunReport(exhausted=True)
+        return RunReport(waiting_model=["gut"])
 
     monkeypatch.setattr("healthvideo.cli.run_queue", fake_run_queue)
 
     result = runner.invoke(app, ["run", "--root", str(tmp_path)])
 
     assert result.exit_code == 3
-    assert "Cả Codex và agy đều hết quota — chạy lại sau." in result.output
+    assert "Chủ đề chờ model (hết lượt): gut" in result.output
 
 
 def test_run_once_flag_passed(

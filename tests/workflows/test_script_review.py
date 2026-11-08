@@ -5,7 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from healthvideo.agents import AgentCli, AgentResult
+from healthvideo.agents import AgentResult
+from healthvideo.company import load_company
 from healthvideo.domain.project_v2 import WorkflowState
 from healthvideo.domain.queue import QueueEntry
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
@@ -26,7 +27,6 @@ from healthvideo.workflows.script_review import (
 from tests.helpers import create_v2_project_fixture
 
 SLUG = 'muoi-va-huyet-ap-v2'
-WRITER, CRITIC = AgentCli('writer', ('w',), True), AgentCli('critic', ('c',), True)
 
 
 def _project(root: Path) -> Path:
@@ -141,22 +141,23 @@ def test_run_reviews_rewrites_with_notes_then_submits_without_approving(tmp_path
     state = {'value': WorkflowState.DRAFT_READY}
     calls: list[tuple[str, str]] = []
 
-    def invoke(agents, prompt, *, cwd, log_dir):
+    def invoke(agents, prompt, *, cwd, log_dir, **_):
         del cwd
         log_dir.mkdir(parents=True, exist_ok=True)
         reviewing = '(`script_review`)' in prompt
-        calls.append((agents[0].name, 'review' if reviewing else 'draft'))
+        calls.append((agents[0].cli, 'review' if reviewing else 'draft'))
         if reviewing:
             _report(project, 6 if len(calls) == 1 else 8)
         else:
             assert 'Nói tự nhiên.' in prompt
             assert 'Bác sĩ muốn nói rõ hơn.' in prompt
             _script(project, 'Bản đã sửa.')
-        return AgentResult(agents[0].name, True, False, log_dir / 'fake.log')
+        return AgentResult(agents[0].cli, True, False, log_dir / 'fake.log')
 
-    report = run_queue(tmp_path, _deps(state, invoke), agents=(WRITER, CRITIC))
+    report = run_queue(tmp_path, _deps(state, invoke))
 
-    assert calls == [('critic', 'review'), ('writer', 'draft'), ('critic', 'review')]
+    # The critic (codex first) never starts on the writer's model (claude first).
+    assert calls == [('codex', 'review'), ('claude', 'draft'), ('codex', 'review')]
     assert state['submitted'] is True
     assert report.at_gate == [SLUG]
     assert report.blocked == []
@@ -168,14 +169,14 @@ def test_run_blocks_when_writer_leaves_script_unchanged(tmp_path):
     project = _queue(tmp_path)
     state = {'value': WorkflowState.DRAFT_READY}
 
-    def invoke(agents, prompt, *, cwd, log_dir):
+    def invoke(agents, prompt, *, cwd, log_dir, **_):
         del cwd
         log_dir.mkdir(parents=True, exist_ok=True)
         if '(`script_review`)' in prompt:
             _report(project, 5)
-        return AgentResult(agents[0].name, True, False, log_dir / 'fake.log')
+        return AgentResult(agents[0].cli, True, False, log_dir / 'fake.log')
 
-    report = run_queue(tmp_path, _deps(state, invoke), agents=(WRITER, CRITIC))
+    report = run_queue(tmp_path, _deps(state, invoke))
 
     assert report.blocked == [SLUG]
     assert 'submitted' not in state
@@ -187,15 +188,33 @@ def test_run_blocks_when_critic_writes_no_report(tmp_path):
     _queue(tmp_path)
     state = {'value': WorkflowState.DRAFT_READY}
 
-    def invoke(agents, prompt, *, cwd, log_dir):
+    def invoke(agents, prompt, *, cwd, log_dir, **_):
         del prompt, cwd
         log_dir.mkdir(parents=True, exist_ok=True)
-        return AgentResult(agents[0].name, True, False, log_dir / 'fake.log')
+        return AgentResult(agents[0].cli, True, False, log_dir / 'fake.log')
 
-    report = run_queue(tmp_path, _deps(state, invoke), agents=(WRITER, CRITIC))
+    report = run_queue(tmp_path, _deps(state, invoke))
 
     assert report.blocked == [SLUG]
     assert 'submitted' not in state
+
+
+def test_runner_uses_role_chain_for_step(tmp_path):
+    _queue(tmp_path)
+    state = {'value': WorkflowState.DRAFT_READY}
+    seen = []
+
+    def invoke(slots, prompt, *, cwd, log_dir, **kwargs):
+        del prompt, cwd
+        seen.append((list(slots), kwargs))
+        log_dir.mkdir(parents=True, exist_ok=True)
+        return AgentResult(slots[0].cli, True, False, log_dir / 'fake.log')
+
+    run_queue(tmp_path, _deps(state, invoke), once=True)
+
+    slots, kwargs = seen[0]
+    assert kwargs == {'role': 'script_critic', 'slug': SLUG, 'step': 'script_review'}
+    assert slots == load_company().chain('script_critic')
 
 
 @pytest.mark.parametrize('step', ['draft', 'script_review', 'revise_medical'])

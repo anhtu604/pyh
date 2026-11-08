@@ -69,7 +69,7 @@ def test_notify_setup_prints_chat_id(monkeypatch, tmp_path):
 
 
 def test_agent_invocation_strips_credentials(monkeypatch, tmp_path):
-    from healthvideo.agents import DEFAULT_AGENTS, invoke
+    from healthvideo.agents import CODEX, invoke
     monkeypatch.setenv('TELEGRAM_CHAT_ID', '123')
     monkeypatch.setenv('OTHER_SECRET', 'secret')
     def runner(argv, **kwargs):
@@ -77,7 +77,7 @@ def test_agent_invocation_strips_credentials(monkeypatch, tmp_path):
         assert 'TELEGRAM_CHAT_ID' not in keys
         assert 'OTHER_SECRET' not in keys
         return type('Done', (), {'returncode': 0, 'stdout': '', 'stderr': ''})()
-    assert invoke(DEFAULT_AGENTS[0], 'test', cwd=tmp_path, log_dir=tmp_path / 'logs', runner=runner).ok
+    assert invoke(CODEX, 'test', cwd=tmp_path, log_dir=tmp_path / 'logs', runner=runner).ok
 
 
 def test_doctor_telegram_optional(monkeypatch):

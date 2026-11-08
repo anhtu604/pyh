@@ -5,7 +5,7 @@ The analyst never edits anything but its report. Finished items stay in
 """
 
 import threading
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
@@ -15,12 +15,11 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
 from healthvideo.agents import (
-    DEFAULT_AGENTS,
-    AgentCli,
     AgentResult,
     AllAgentsExhausted,
     invoke_with_failover,
 )
+from healthvideo.company import Company, load_company
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.workflows.factory_deps import changed_code_paths, code_snapshot
 from healthvideo.workflows.runner import PROMPTS_DIR
@@ -128,7 +127,7 @@ def analyze(
     entry_id: str,
     *,
     invoke: Callable[..., AgentResult] = invoke_with_failover,
-    agents: Sequence[AgentCli] = DEFAULT_AGENTS,
+    company: Company | None = None,
 ) -> None:
     """Run the analyst and store its validated work items; failures stay retryable."""
     log_dir = root / REPORT_DIR
@@ -140,8 +139,10 @@ def analyze(
             report.unlink(missing_ok=True)
             guarded = (root / '.git').exists()
             before = code_snapshot(root) if guarded else {}
-            result = invoke(tuple(agents), _prompt(root, entry, report),
-                            cwd=root, log_dir=log_dir)
+            result = invoke((company or load_company()).chain('feedback_analyst'),
+                            _prompt(root, entry, report), cwd=root, log_dir=log_dir,
+                            role='feedback_analyst', slug=entry['project'],
+                            step='feedback_inbox')
             if not result.ok:
                 raise RuntimeError(f'Agent {result.agent} không phân tích được.')
             leaked = [path for path in (changed_code_paths(root, before) if guarded else [])

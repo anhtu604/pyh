@@ -82,6 +82,7 @@ def test_preview_active_run_argv_and_url_are_read_only(
     "outcome,code", [(7, 7), (KeyboardInterrupt(), 0), (OSError("missing"), 1)]
 )
 def test_preview_default_port_and_foreground_exit(tmp_path, monkeypatch, outcome, code):
+    monkeypatch.setattr("healthvideo.cli.resolve_pnpm_argv", lambda args: ["pnpm", *args])
     project = create_v2_project_fixture(tmp_path)
     manifest = read_yaml(project / "project.yaml")
     manifest["artifact_hashes"]["production"] = "preview-run"

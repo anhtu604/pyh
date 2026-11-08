@@ -1,6 +1,8 @@
 """Tests for external coding agent invocation and quota failover."""
 
+import json
 import subprocess
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -9,12 +11,39 @@ import pytest
 from healthvideo.agents import (
     AGY,
     CODEX,
-    DEFAULT_AGENTS,
     AgentCli,
     AllAgentsExhausted,
+    QuotaBook,
+    argv_for,
     invoke,
     invoke_with_failover,
+    parse_reset,
 )
+from healthvideo.company import ModelSlot
+
+NOW = datetime(2026, 11, 8, 18, 0, tzinfo=timezone(timedelta(hours=7)))
+CODEX_SLOT = ModelSlot(cli="codex", model="gpt-6-astra")
+AGY_SLOT = ModelSlot(cli="agy", model="claude-opus-5-5-high")
+
+
+@pytest.fixture(autouse=True)
+def isolated_executables(monkeypatch):
+    monkeypatch.setattr('healthvideo.process.shutil.which', lambda command: None)
+
+
+def _failover(tmp_path: Path, slots: Any, runner: Any, **kwargs: Any):
+    return invoke_with_failover(
+        slots,
+        "prompt",
+        cwd=tmp_path,
+        log_dir=tmp_path / "logs",
+        role="writer",
+        slug="gout",
+        step="draft",
+        runner=runner,
+        now=lambda: NOW,
+        **kwargs,
+    )
 
 
 def _completed(
@@ -39,16 +68,11 @@ def test_quota_switches_to_next_agent(tmp_path: Path) -> None:
             return _completed(returncode=1, stderr="Error: Usage limit reached for today")
         return _completed(returncode=0, stdout="Done by agy")
 
-    result = invoke_with_failover(
-        (CODEX, AGY),
-        "Run research step",
-        cwd=tmp_path,
-        log_dir=tmp_path / "logs",
-        runner=fake_runner,
-    )
+    result = _failover(tmp_path, (CODEX_SLOT, AGY_SLOT), fake_runner)
 
     assert result.ok is True
     assert result.agent == "agy"
+    assert result.model == "claude-opus-5-5-high"
     assert result.quota_exhausted is False
     assert [call[0] for call in calls] == ["codex", "agy"]
 
@@ -60,13 +84,7 @@ def test_non_quota_failure_does_not_switch(tmp_path: Path) -> None:
         calls.append(list(argv))
         return _completed(returncode=1, stderr="SyntaxError: invalid input")
 
-    result = invoke_with_failover(
-        (CODEX, AGY),
-        "Run research step",
-        cwd=tmp_path,
-        log_dir=tmp_path / "logs",
-        runner=fake_runner,
-    )
+    result = _failover(tmp_path, (CODEX_SLOT, AGY_SLOT), fake_runner)
 
     assert result.ok is False
     assert result.agent == "codex"
@@ -81,17 +99,9 @@ def test_all_exhausted_raises(tmp_path: Path) -> None:
         return _completed(returncode=1, stdout="RESOURCE_EXHAUSTED: quota exceeded")
 
     with pytest.raises(AllAgentsExhausted) as exc_info:
-        invoke_with_failover(
-            (CODEX, AGY),
-            "Run draft step",
-            cwd=tmp_path,
-            log_dir=tmp_path / "logs",
-            runner=fake_runner,
-        )
+        _failover(tmp_path, (CODEX_SLOT, AGY_SLOT), fake_runner)
 
-    message = str(exc_info.value)
-    assert "codex" in message
-    assert "agy" in message
+    assert exc_info.value.earliest_return == NOW + timedelta(hours=5)
 
 
 def test_prompt_sent_via_stdin_for_codex(tmp_path: Path) -> None:
@@ -184,13 +194,7 @@ def test_success_returns_first_agent_result(tmp_path: Path) -> None:
         calls.append(argv[0])
         return _completed(returncode=0, stdout="completed on first try")
 
-    result = invoke_with_failover(
-        (CODEX, AGY),
-        "prompt",
-        cwd=tmp_path,
-        log_dir=tmp_path / "logs",
-        runner=fake_runner,
-    )
+    result = _failover(tmp_path, (CODEX_SLOT, AGY_SLOT), fake_runner)
 
     assert result.ok is True
     assert result.agent == "codex"
@@ -242,8 +246,14 @@ def test_log_written_utf8(tmp_path: Path) -> None:
     assert content == vietnamese_stdout + vietnamese_stderr
 
 
-def test_agy_runs_first_by_default():
-    assert DEFAULT_AGENTS == (AGY, CODEX)
+def test_argv_for_each_cli_injects_model():
+    for slot in (CODEX_SLOT, AGY_SLOT, ModelSlot(cli='claude', model='claude-opus-5-5')):
+        cli, argv = argv_for(slot)
+        assert cli.name == slot.cli
+        flag = '-m' if slot.cli == 'codex' else '--model'
+        assert argv[argv.index(flag) + 1] == slot.model
+        if slot.cli == 'codex':
+            assert argv.index('-m') < argv.index('-')
 
 
 def test_claude_runs_with_a_tool_allowlist_not_a_permission_bypass():
@@ -254,9 +264,95 @@ def test_claude_runs_with_a_tool_allowlist_not_a_permission_bypass():
 
 
 def test_factory_routes_hard_steps_to_claude_and_critics_away_from_the_author():
-    from healthvideo.agents import CLAUDE
-    from healthvideo.workflows.factory_deps import STEP_AGENTS, default_run_deps
+    from healthvideo.workflows.factory_deps import default_run_deps
+    company = default_run_deps(Path('.')).company
     for step in ('research', 'draft', 'revise_medical', 'product_review'):
-        assert STEP_AGENTS[step][0] is CLAUDE
-    assert STEP_AGENTS['script_review'][0] is not STEP_AGENTS['draft'][0]
-    assert default_run_deps(Path('.')).step_agents is STEP_AGENTS
+        assert company.chain(company.role_for_step(step).id)[0].cli == 'claude'
+    assert company.chain('script_critic')[0] != company.chain('writer')[0]
+
+
+def test_resting_slot_is_skipped(tmp_path):
+    book = QuotaBook(tmp_path / 'quota.yaml')
+    book.rest(CODEX_SLOT, NOW + timedelta(hours=1), 'quota')
+    calls = []
+
+    def runner(argv, **kwargs):
+        calls.append(argv)
+        return _completed()
+
+    result = _failover(tmp_path, [CODEX_SLOT, AGY_SLOT], runner,
+                       quota=QuotaBook(book.path))
+    assert result.model == AGY_SLOT.model
+    assert len(calls) == 1
+    assert calls[0][0] == 'agy'
+
+
+def test_quota_rests_slot_default_five_hours(tmp_path):
+    with pytest.raises(AllAgentsExhausted) as error:
+        _failover(tmp_path, [CODEX_SLOT], lambda *a, **kw: _completed(1, 'usage limit'))
+    book = QuotaBook(tmp_path / 'cache/agent-quota.yaml')
+    assert error.value.earliest_return == NOW + timedelta(hours=5)
+    assert datetime.fromisoformat(book.snapshot(NOW)[0]['resting_until']) == NOW + timedelta(hours=5)
+    assert book.resting(CODEX_SLOT, NOW)
+    assert not book.resting(CODEX_SLOT, NOW + timedelta(hours=5))
+    rows = [json.loads(line) for line in
+            (tmp_path / 'topics/logs/activity.jsonl').read_text(encoding='utf-8').splitlines()]
+    assert [row['event'] for row in rows] == ['start', 'end', 'quota']
+
+
+def test_parse_reset_reads_cli_hint():
+    assert parse_reset('try again at 21:30', NOW) == NOW.replace(hour=21, minute=30)
+    assert parse_reset('try again at 17:30', NOW) == NOW.replace(hour=17, minute=30) + timedelta(days=1)
+    assert parse_reset('resets in 2 hours', NOW) == NOW + timedelta(hours=2)
+    assert parse_reset('resets in 15 minutes', NOW) == NOW + timedelta(minutes=15)
+    assert parse_reset('usage limit', NOW) is None
+
+
+def test_account_quota_rests_all_slots_of_cli(tmp_path):
+    other = ModelSlot(cli='codex', model='gpt-6.1-sol')
+    calls = []
+
+    def runner(argv, **kwargs):
+        calls.append(argv[0])
+        return _completed(1, 'account quota exceeded') if argv[0] == 'codex' else _completed()
+
+    _failover(tmp_path, [CODEX_SLOT, other, AGY_SLOT], runner)
+    book = QuotaBook(tmp_path / 'cache/agent-quota.yaml')
+    assert calls == ['codex', 'agy']
+    assert book.resting(other, NOW)
+    assert book.resting(ModelSlot(cli='codex', model='gpt-6-luna'), NOW)
+    assert not book.resting(AGY_SLOT, NOW)
+
+
+def test_activity_lines_written(tmp_path):
+    _failover(tmp_path, [CODEX_SLOT], lambda *a, **kw: _completed())
+    rows = [json.loads(line) for line in
+            (tmp_path / 'topics/logs/activity.jsonl').read_text(encoding='utf-8').splitlines()]
+    assert [row['event'] for row in rows] == ['start', 'end']
+    for row in rows:
+        assert row['role'] == 'writer'
+        assert row['model'] == 'gpt-6-astra'
+        assert row['slug'] == 'gout'
+        assert row['step'] == 'draft'
+    assert rows[-1]['ok'] is True
+
+
+def test_quota_preserves_other_slots_with_injected_clock(tmp_path):
+    past = NOW.replace(year=2020)
+    book = QuotaBook(tmp_path / 'quota.yaml')
+    book.rest(CODEX_SLOT, past + timedelta(hours=2), 'quota')
+    book.rest(AGY_SLOT, past + timedelta(hours=3), 'quota')
+    assert QuotaBook(book.path).resting(CODEX_SLOT, past)
+
+
+def test_invoke_prepares_windows_launcher(tmp_path, monkeypatch):
+    from healthvideo import process
+    monkeypatch.setattr(process.shutil, 'which', lambda command: 'C:/tools/codex.exe')
+    calls = []
+
+    def runner(argv, **kwargs):
+        calls.append(argv)
+        return _completed()
+
+    _failover(tmp_path, [CODEX_SLOT], runner)
+    assert calls[0][0] == 'C:/tools/codex.exe'

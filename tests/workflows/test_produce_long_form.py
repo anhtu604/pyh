@@ -66,6 +66,8 @@ def test_cli_runner_routes_ffmpeg_concat_past_pnpm(tmp_path: Path, monkeypatch) 
         out.write_bytes(b"mp4")
         return type("Done", (), {"returncode": 0})()
 
+    monkeypatch.setattr(cli, "resolve_pnpm_argv",
+                        lambda args: ["pnpm", *args])
     monkeypatch.setattr(cli.subprocess, "run", fake_run)
     result = CliRunner().invoke(cli.app, ["produce", str(project_dir), "--tts", "silent"])
 

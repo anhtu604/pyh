@@ -16,7 +16,7 @@ def app(tmp_path, monkeypatch):
         pytest.fail('Trial called production')
     from healthvideo.agents import AgentResult
     from healthvideo.storage.files import write_yaml_atomic
-    def fake_invoke(agents, prompt, *, cwd, log_dir):
+    def fake_invoke(agents, prompt, *, cwd, log_dir, **_):
         rev = log_dir.parent / 'project/revisions/001'
         write_passing_script_review(rev)
         write_yaml_atomic(rev / 'script/script.yaml', {
