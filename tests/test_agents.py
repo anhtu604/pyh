@@ -263,11 +263,12 @@ def test_claude_runs_with_a_tool_allowlist_not_a_permission_bypass():
     assert not any('dangerously' in token for token in CLAUDE.argv)
 
 
-def test_factory_routes_hard_steps_to_claude_and_critics_away_from_the_author():
+def test_factory_routes_hard_steps_to_opus_and_critics_away_from_the_author():
     from healthvideo.workflows.factory_deps import default_run_deps
     company = default_run_deps(Path('.')).company
     for step in ('research', 'draft', 'revise_medical', 'product_review'):
-        assert company.chain(company.role_for_step(step).id)[0].cli == 'claude'
+        # agy runs Opus first while Claude and astra are short on tokens (2026-11-08).
+        assert company.chain(company.role_for_step(step).id)[0].model == 'claude-opus-5-5-high'
     assert company.chain('script_critic')[0] != company.chain('writer')[0]
 
 

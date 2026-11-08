@@ -299,6 +299,24 @@ Từ trên xuống:
   (qua `resolve_pnpm_argv`, output ghi ra file log vì Remotion treo pipe trên Windows), rồi mở trong tab mới.
   Không đóng gói `@remotion/player` vào dashboard; dashboard giữ dạng HTML/JS thuần, không có bước build.
 
+### 5.8 Tách khâu kịch bản thành hai nhân viên (*người dùng đổi 2026-11-08*)
+
+1. **Chuyên gia y học** (`medical_expert`, thay vai `researcher`, bậc `hard`, bước `research`): nghiên cứu học thuật
+   chuyên sâu: tìm tài liệu, đọc và phân tích chuyên môn. Đầu ra gồm ledger claim như hiện tại, cộng thêm
+   `revisions/<rev>/evidence/expert-brief.md`: cơ chế giải thích đúng mức, mức bằng chứng từng ý, điểm còn tranh cãi,
+   những gì **không được nói quá**, các hiểu lầm phổ biến nên bác bỏ. Mọi ý trỏ tới claim trong ledger.
+   - **Tài khoản Elsevier:** chỉ dùng **API chính thức** (Scopus Search / Abstract, ScienceDirect Article Retrieval)
+     với `ELSEVIER_API_KEY` (và `ELSEVIER_INSTTOKEN` nếu có) trong `.env`. Không lưu key vào Git, không truyền key vào
+     prompt, không đăng nhập web hay cào trang. `check_scopus_policy` (chặn cào tự động) vẫn giữ; client API mới là
+     đường hợp lệ duy nhất. Toàn văn đọc xong không lưu vào repo (quy tắc 4 `CLAUDE.md`); trích ≤ 25 từ kèm locator.
+     Không có key thì chuyên gia vẫn chạy bằng PubMed/PMC như hiện tại.
+   - Skill: `systematic-literature-review`.
+2. **Biên kịch viral** (`writer`, bậc `hard`, bước `draft`, `revise_medical`): chỉ chuyển `expert-brief.md` + ledger
+   thành kịch bản: câu chữ đời thường, châm biếm theo giọng bác sĩ, hook, nhịp, dễ viral. **Không tìm nguồn mới,
+   không thêm claim**; thiếu ý thì ghi vào `script/questions.yaml` để chuyên gia bổ sung (vòng `research` chạy lại).
+   Skill: `youtube-scriptwriting`, `short-form-video`.
+3. Kiểm duyệt kịch bản giữ nguyên, thêm tiêu chí: kịch bản không nói quá so với `expert-brief.md`.
+
 ## 6. Thứ tự thực hiện (đề xuất)
 
 1. Bậc model + bảng vai + model theo lần gọi + cho model nghỉ (5.1, 5.2). Nền cho mọi thứ khác.

@@ -150,6 +150,32 @@ def test_role_without_skills_has_no_block(): ...          # vai coordinator → 
 - [ ] **Step 4:** Toàn bộ test → PASS; ruff sạch.
 - [ ] **Step 5:** Commit `feat: give each factory role its own skill`.
 
+### Task 3b: Chuyên gia y học + Biên kịch viral (spec 5.8)
+
+**Files:**
+- Create: `src/healthvideo/evidence/elsevier.py`, `tests/evidence/test_elsevier.py`
+- Modify: `profiles/company.yaml` (vai `researcher` → `medical_expert`, tên "Chuyên gia y học"; `writer` tên "Biên kịch viral"), `src/healthvideo/company.py` (`CRITIC_OF` nếu cần), `src/healthvideo/cli.py` (lệnh `healthvideo evidence elsevier-search` / `elsevier-abstract`), `src/healthvideo/prompts/research.md`, `src/healthvideo/prompts/draft.md`, `src/healthvideo/prompts/revise_medical.md`, `src/healthvideo/prompts/script_review.md`, `src/healthvideo/workflows/runner.py` (nếu `script/questions.yaml` có câu hỏi chưa trả lời → bước kế là `research` thay vì `script_review`), `.env.example` (thêm `ELSEVIER_API_KEY=`, `ELSEVIER_INSTTOKEN=`)
+
+**Interfaces:**
+- `ElsevierClient(api_key: str | None = None, insttoken: str | None = None, *, http=urllib)`: đọc env khi không truyền; `available() -> bool`; `search(query: str, count: int = 25) -> list[dict]` (Scopus Search API: `title, doi, year, journal, cited_by, eid`); `abstract(doi: str) -> dict` (Abstract Retrieval: `title, abstract, doi`); `article_text(doi: str) -> str` (ScienceDirect Article Retrieval, chỉ trả về bộ nhớ, **không ghi file**). Header `X-ELS-APIKey`, `X-ELS-Insttoken` nếu có; HTTP 401/403/429 → `ValueError` tiếng Việt; không bao giờ log key.
+- CLI in kết quả JSON ra stdout; agent gọi qua `healthvideo` (đã nằm trong allowlist).
+- `check_scopus_policy` giữ nguyên.
+- `expert-brief.md` bắt buộc trước `EVIDENCE_READY`: thiếu thì bước `research` coi như chưa xong.
+
+- [ ] **Step 1: Viết test**
+
+```python
+def test_search_sends_key_header_never_logs_it(monkeypatch, caplog): ...
+def test_missing_key_unavailable(monkeypatch): ...          # available() is False, search → ValueError
+def test_rate_limit_raises_vietnamese_error(): ...          # 429
+def test_article_text_not_written_to_disk(tmp_path): ...
+def test_writer_questions_route_back_to_research(tmp_path): ...
+def test_evidence_ready_requires_expert_brief(tmp_path): ...
+```
+
+- [ ] **Step 2–4:** FAIL → cài đặt → toàn bộ test PASS, ruff sạch.
+- [ ] **Step 5:** Commit `feat: split medical expert and viral scriptwriter`.
+
 ### Task 4: Thẻ quyết định
 
 **Files:**
