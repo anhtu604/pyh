@@ -180,4 +180,7 @@ def submit_medical_review(project_dir: Path) -> ProjectManifestV2:
     )
     changed = transition_v2(project, WorkflowState.AWAITING_MEDICAL_REVIEW, context)
     write_yaml_atomic(project_dir / "project.yaml", changed.model_dump(mode="json"))
+    from healthvideo.workflows.script_review import mark_submitted
+
+    mark_submitted(revision)
     return changed

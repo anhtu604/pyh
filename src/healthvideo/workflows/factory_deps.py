@@ -30,6 +30,7 @@ from healthvideo.tts.silent import SilentTTS
 from healthvideo.tts.vibi import VibiTTS
 from healthvideo.workflows.create_project_v2 import create_project_v2
 from healthvideo.workflows.draft import submit_medical_review
+from healthvideo.workflows.expert import expert_brief_ready
 from healthvideo.workflows.gate_review import check_revision_posts
 from healthvideo.workflows.produce import produce_project, submit_video
 from healthvideo.workflows.runner import RunDeps
@@ -290,5 +291,6 @@ def default_run_deps(
         ),
         posts_ready=posts_ready,
         code_snapshot=lambda repo_root: code_snapshot(repo_root, runner=git_runner),
+        expert_brief_ready=expert_brief_ready,
         company=load_company(),
     )

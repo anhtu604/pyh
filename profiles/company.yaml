@@ -1,5 +1,6 @@
 # Bậc model và bảng vai của xưởng (spec 2026-11-08 mục 5.1).
 # Mỗi chuỗi được thử theo thứ tự; mục hết lượt thì "nghỉ" và chuyển sang mục kế tiếp.
+# skills: tên thư mục trong .agents/skills/ (spec 5.3), tối đa 3.
 tiers:
   hard:  # agy trước: Claude và astra đang ít token (2026-11-08)
     - {cli: agy, model: claude-opus-5-5-high}
@@ -20,27 +21,26 @@ tiers:
 roles:
   coordinator:
     name: Điều phối viên
-    skill: .agents/skills/pyh-coordinator/SKILL.md
     steps: [chat]
     tier: medium
   scout:
     name: Trinh sát chủ đề
-    skill: .agents/skills/pyh-scout/SKILL.md
+    skills: [content-strategy]
     steps: [scout]
     tier: bulk
-  researcher:
-    name: Nhà nghiên cứu
-    skill: .agents/skills/pyh-researcher/SKILL.md
+  medical_expert:  # spec 5.8: thay vai researcher
+    name: Chuyên gia y học
+    skills: [systematic-literature-review]
     steps: [research]
     tier: hard
   writer:
-    name: Biên kịch
-    skill: .agents/skills/pyh-writer/SKILL.md
+    name: Biên kịch viral
+    skills: [youtube-scriptwriting, short-form-video]
     steps: [draft, revise_medical]
     tier: hard
   script_critic:
     name: Kiểm duyệt kịch bản
-    skill: .agents/skills/pyh-script_critic/SKILL.md
+    skills: [copy-editing]
     steps: [script_review]
     tier: hard
     models:  # bắt đầu từ nhà cung cấp khác với biên kịch
@@ -50,7 +50,7 @@ roles:
       - {cli: codex, model: gpt-6-astra}
   art_director:
     name: Đạo diễn hình
-    skill: .agents/skills/pyh-art_director/SKILL.md
+    skills: [scripting-and-storyboarding, visual-style]
     steps: [visual_review]
     tier: medium
     models:  # nhìn ảnh tốt
@@ -60,7 +60,7 @@ roles:
       - {cli: codex, model: gpt-6.1-terra}
   editor:
     name: Thợ dựng
-    skill: .agents/skills/pyh-editor/SKILL.md
+    skills: [remotion-best-practices, motion-design]
     steps: [revise_production, revise_product]
     tier: medium
     models:  # quen repo video
@@ -70,16 +70,15 @@ roles:
       - {cli: codex, model: gpt-6.1-terra}
   product_critic:
     name: Kiểm định sản phẩm
-    skill: .agents/skills/pyh-product_critic/SKILL.md
+    skills: [video-understand, character-animation-qa]
     steps: [product_review]
     tier: hard
   copywriter:
     name: Viết bài đăng
-    skill: .agents/skills/pyh-copywriter/SKILL.md
+    skills: [social]
     steps: [posts]
     tier: bulk
   feedback_analyst:
     name: Phân tích ý kiến
-    skill: .agents/skills/pyh-feedback_analyst/SKILL.md
     steps: [feedback_inbox]
     tier: medium

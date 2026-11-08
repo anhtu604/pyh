@@ -1,4 +1,6 @@
-# Bước: Soạn kịch bản và storyboard (`draft`)
+# Bước: Biên kịch viral soạn kịch bản và storyboard (`draft`)
+
+Bạn là biên kịch viral: chỉ chuyển `expert-brief.md` + ledger của chuyên gia y học thành kịch bản đời thường, châm biếm theo giọng bác sĩ, có hook và nhịp dễ lan truyền. **Không tìm nguồn mới, không thêm claim, không nói quá so với brief.**
 
 ## Bối cảnh
 - Project: `{project}`
@@ -10,6 +12,7 @@
 - Nếu đang ở revision mới, cập nhật `revision` của asset manifest và license ledger sang revision hiện hành khi tái dùng đúng byte ảnh; giữ nguyên nguồn, giấy phép và SHA-256, không bịa quyền sử dụng.
 
 ## Việc cần làm
+Đọc `revisions/<rev>/evidence/expert-brief.md` và ledger trước. Thiếu ý hay bằng chứng thì vẫn hoàn tất bản nháp với ý đã có, rồi ghi câu hỏi vào `revisions/<rev>/script/questions.yaml` (`questions: [{id: Q1, line: N03, ask: "..."}]`); chuyên gia sẽ trả lời và xưởng chuyển lại cho bạn. Khi mục yêu cầu sửa có câu trả lời của chuyên gia, đưa vào kịch bản (chỉ dùng claim có trong ledger) rồi xoá câu đã dùng khỏi file đó.
 1. Soạn `script.yaml`, `storyboard.yaml`, `asset-manifest.yaml`, `outline.yaml` (video dài 16:9 thời lượng 10–25 phút, chia 4–8 chương) và `clip-plan.yaml` (1–6 clip dọc 9:16, 60–180 giây mỗi clip, chỉ cắt từ cảnh có sẵn trong storyboard kèm đủ câu giới hạn caveat, không viết lời mới) theo mạch 7 nhịp explain-first (`docs/superpowers/specs/2026-10-18-explain-first-content-design.md` §1–§15): Mở → Giải phẫu → Sinh lý → Sinh lý bệnh → Giải phẫu bệnh → Bằng chứng → Hành động + giới hạn.
 2. Giữ giọng người thường kể chuyện, hài hước kiểu châm biếm niềm tin sai hoặc thói quen phổ biến chứ không châm biếm người; có hook trong 3 giây đầu (cảnh mở đầu phải có chủ thể đang chuyển động: gắn `Scene.motion`, dùng anatomy có `CUE_ACTIONS`, hoặc `kinetic_term`/`stat_gauge`, không mở bằng ảnh tĩnh đứng yên); câu đùa chứa số liệu hay nhận định y khoa vẫn phải trỏ tới claim trong ledger. Viết xong lời thoại thì chạy skill `humanizer` trên toàn bộ lời thoại để khử mùi văn AI, rồi tự soát từng dòng theo mục "Dấu hiệu văn AI cần tránh trong lời đọc" ở cuối prompt; sau `step draft`, sửa hết cảnh báo `ai_*` trong `reviews/style-lint.json` của revision.
 3. Phong cách: sơ đồ y khoa có chú thích tiếng Việt, kiểu Osmosis/Armando Hasudungan. Cảnh cơ chế dùng SVG trong `video/src/anatomy/`; nhãn thuật ngữ cố định từ `LABELS`, có leader line và mũi tên quá trình, tối đa 6 nhãn không chồng/cắt. Nếu thiếu component, thêm `.tsx` + test, đăng ký `library.json`/`registry.ts`, khai báo `FOCUS_REGIONS`, `LABELS`, `CUE_ACTIONS`; đọc README thư viện. Chỉ minh họa nội dung lời thoại đã duyệt; mọi asset có `license`, `source`. FLUX không chứa chữ/nhãn/số liệu.
@@ -43,7 +46,7 @@ Mặc định có `whoosh-soft` mở chương và `chime-soft` vào `source_card
 ## Đầu ra
 - `revisions/<rev>/script/script.yaml`, `revisions/<rev>/script/outline.yaml`, `revisions/<rev>/script/clip-plan.yaml`
 - `revisions/<rev>/storyboard/storyboard.yaml`, `revisions/<rev>/assets/asset-manifest.yaml`
-- Component SVG mới kèm test trong `video/src/anatomy/` nếu có
+- Component SVG mới kèm test trong `video/src/anatomy/` nếu có; `revisions/<rev>/script/questions.yaml` nếu cần chuyên gia bổ sung
 
 ## Xong khi
 - Trạng thái đích của project đạt `draft_ready` và `step draft` hết lỗi, kiểm tra bằng lệnh `healthvideo status {project}`.

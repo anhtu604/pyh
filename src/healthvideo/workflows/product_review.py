@@ -13,6 +13,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from healthvideo.storage.files import read_yaml, sha256_file, write_yaml_atomic
 from healthvideo.storage.project_layout import resolve_project_layout
+from healthvideo.workflows.decision_card import (
+    MAX_DECISIONS,
+    Decision,
+    validate_decisions,
+)
 
 PENDING = 'reviews/product/pending.yaml'
 REPORT = 'reviews/product-review.yaml'
@@ -47,6 +52,8 @@ class ProductReviewReport(BaseModel):
     scores: dict[str, int]
     summary: str = Field(min_length=1)
     issues: list[ProductIssue] = Field(default_factory=list)
+    checked: list[str] = Field(default_factory=list)
+    decisions: list[Decision] = Field(default_factory=list)
 
 
 def _root(project: Path) -> Path:
@@ -88,6 +95,8 @@ def next_product_action(project: Path) -> ProductAction:
     if not rounds or rounds[-1]['render_sha256'] != render_hash(project):
         return 'product_review'
     latest = rounds[-1]
+    if len(latest.get('decisions', [])) > MAX_DECISIONS:
+        return 'product_review' if latest.get('fix_attempted') else 'revise_product'
     if latest['passed'] or latest.get('fix_attempted'):
         return 'submit_video'
     if not any(item['fixable'] for item in latest['issues']):
@@ -96,6 +105,7 @@ def next_product_action(project: Path) -> ProductAction:
 
 
 def _validated(report: ProductReviewReport) -> None:
+    validate_decisions(report.decisions)
     if set(report.scores) != set(CRITERIA):
         raise ValueError('Báo cáo duyệt sản phẩm phải có đủ đúng các tiêu chí.')
     if any(not 1 <= score <= 10 for score in report.scores.values()):
@@ -127,7 +137,8 @@ def record_review(project: Path, reviewed_hash: str) -> dict:
     entry = {
         'round': len(log['rounds']) + 1,
         'render_sha256': reviewed_hash,
-        'passed': all(score >= PASS_SCORE for score in report.scores.values()),
+        'passed': (all(score >= PASS_SCORE for score in report.scores.values())
+                   and len(report.decisions) <= MAX_DECISIONS),
         **report.model_dump(mode='json'),
     }
     log['rounds'].append(entry)
@@ -159,6 +170,9 @@ def revision_notes(project: Path) -> str:
     latest = rounds[-1]
     rows = [f"- {item['at']} ({CRITERIA[item['criterion']]}): {item['problem']} "
             f"Hướng sửa: {item['fix']}" for item in latest['issues'] if item['fixable']]
+    if len(latest.get('decisions', [])) > MAX_DECISIONS:
+        rows.append('Còn quá 5 điểm khó: tự xử lý các lỗi thuộc thẩm quyền; '
+                    'không tự quyết điểm cần bác sĩ. Xếp điểm nặng nhất trước.')
     return '\n'.join([f"Người duyệt sản phẩm chấm lần {latest['round']}: {latest['summary']}", *rows])
 
 

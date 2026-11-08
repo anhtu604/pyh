@@ -20,6 +20,7 @@ Các biến môi trường tùy chọn đặt trong file `.env` ở gốc repo (
 
 - `YOUTUBE_API_KEY`: khóa YouTube Data API cho bước tìm chủ đề.
 - `NCBI_EMAIL`, `NCBI_API_KEY`: email liên hệ và khóa API tùy chọn khi tìm kiếm PubMed/NCBI.
+- `ELSEVIER_API_KEY`, `ELSEVIER_INSTTOKEN`: khóa Elsevier API chính thức (tùy chọn) cho `healthvideo evidence elsevier-search` / `elsevier-abstract`; khóa chỉ đi trong header, không ghi log, toàn văn không lưu vào repo. Xem `.env.example`.
 - `HEALTHVIDEO_TTS_PYTHON`, `HEALTHVIDEO_MUSIC_PYTHON`, `HEALTHVIDEO_FLUX_PYTHON`: đường dẫn `python.exe` ghi đè các venv tương ứng trong `cache/`.
 
 Kiểm tra môi trường bất kỳ lúc nào bằng:
@@ -165,5 +166,8 @@ Ngoài ra, nhóm lệnh ẩn `healthvideo step ...` (`hidden=True`) dành riêng
 | Video gate: sync, chart, motion, captions | TTS từng dòng, timing production có hash, WAV khớp scene và clip tái dùng audio; QA chặn lệch/đuôi im lặng; chart lớn, cơ chế chuyển động xuyên cảnh, phụ đề đủ dấu tiếng Việt | complete | pytest 1416 passed, 3 skipped; vitest passed; typecheck; Ruff; chưa render lại pilot | `feat: sync narration timing and polish mechanism visuals` |
 | Xưởng-công ty: spec + plan | Bậc model (hard/medium/bulk) + 10 vai có skill riêng, chuyển model khi hết token, thẻ quyết định ở hai cổng (chỉ hỏi điểm khó), chat Điều phối viên sửa ngay trên video, dashboard tổng quan + trang xem sản phẩm; 7 task giao Codex/Claude/agy theo độ khó | approved | builder check | `docs: add factory company design and plan` |
 | Xưởng-công ty Task 1+2 (+ cài skill Task 3) | `profiles/company.yaml` bậc hard/medium/bulk + 10 vai; `invoke_with_failover` chọn model theo lần gọi, `QuotaBook` cho model nghỉ (+5h mặc định), `activity.jsonl`; hết chuỗi chỉ dự án đó chờ model; 7 skill công khai cài vào `.agents/skills` | complete | pytest 1686 passed, 1 skipped; Ruff | `feat: per-call models, quota rest and activity log` |
+| Xưởng-công ty Task 3+3b | `Role.skills` (tên thư mục `.agents/skills`, tối đa 3, theo bảng spec 5.3); `role_skill_block` chèn khối "Skill của vai" trước Quy tắc cứng trong `render_prompt` và prompt phân tích ý kiến; vai `researcher` → `medical_expert` (Chuyên gia y học), `writer` → Biên kịch viral; `expert-brief.md` bắt buộc trước khi biên kịch viết (thiếu → bước `research` chưa xong); câu hỏi của biên kịch trong `script/questions.yaml` → chuyên gia trả lời → biên kịch viết lại rồi mới chấm; `ElsevierClient` (Scopus Search, Abstract, Article Retrieval chỉ trong bộ nhớ; khóa chỉ ở header, không log) + `healthvideo evidence elsevier-search/elsevier-abstract`; `.env.example` | complete — chờ tech lead review | pytest (phần Task 3+3b xanh; 3 test đỏ thuộc Task 4 đang làm dở: `product_review.md` dài 63 dòng, `test_dashboard` draft comments); Ruff | `feat: give each factory role its own skill` + `feat: split medical expert and viral scriptwriter` (chưa commit) |
+
+| Xưởng-công ty Task 4 | Thẻ quyết định ở hai cổng: checked/decisions, tối đa 5 điểm và đếm phần còn lại, chu kỳ chấm lại khi nộp, lựa chọn giữ/gửi sửa kèm góp ý đã lưu; ghép prompt với Task 3+3b, giữ tiêu chí expert-brief và giới hạn 60 dòng | complete — chưa commit | pytest 1757 passed, 1 skipped; Ruff sạch; git diff --check | `feat: decision cards at both gates` (chưa commit) |
 
 Lịch sử trước 2026-10-23: docs/archive/README-2026-10.md

@@ -32,6 +32,7 @@ from healthvideo.env import child_env
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.workflows import (
     dashboard_operations,
+    decision_card,
     factory,
     factory_standards,
     factory_trials,
@@ -307,7 +308,7 @@ def decide(root: Path, project_dir: Path, body: dict, *, limiter: PinLimiter,
         raise ValueError('Revision đã thay đổi kể từ lúc mở; tải lại trang và xem lại gói duyệt.')
     gate = GateKind(factory.GATES[project.state])
     action = str(body.get('action', ''))
-    if action not in {'approve', 'approve_pronunciation', 'reject'}:
+    if action not in {'approve', 'approve_pronunciation', 'reject', 'card'}:
         raise ValueError('Thiếu lựa chọn duyệt/từ chối.')
     if action == 'approve_pronunciation' and gate is not GateKind.VIDEO:
         raise ValueError('Chấp nhận phát âm chỉ dùng ở cổng video.')
@@ -323,21 +324,36 @@ def decide(root: Path, project_dir: Path, body: dict, *, limiter: PinLimiter,
         raise ValueError('Chưa đặt PIN; chạy healthvideo review set-pin một lần.')
     pin = str(body.get('pin', ''))
     limiter.check(pin, verify or (lambda value: verify_pin(value, path=pin_file)))
+    card_note = None
+    card_fix = False
+    if action == 'card':
+        current_card = decision_card.card(project_dir)
+        if current_card is None:
+            raise ValueError('Project này không ở cổng duyệt.')
+        result, card_note = decision_card.compose(
+            current_card, body.get('choices', {}), body.get('other', ''))
+        card_fix = result == 'send_fix'
+        action = 'reject' if card_fix else 'approve'
+        reason = standards.compose_reason(card_note, draft) if card_fix else reason
     if not _operator_config().exists():
         write_yaml_atomic(_operator_config(), {'reviewer': reviewer})
     if action == 'reject':
         options = RESUME_TARGETS[gate]
-        choice = int(body.get('resume', 1))
+        choice = 1 if card_fix else int(body.get('resume', 1))
         if choice not in range(1, len(options) + 1):
             raise ValueError('Nơi làm lại không hợp lệ.')
         reject_gate(project_dir, gate, reviewer=reviewer, reason=reason,
                     resume_state=options[choice - 1][0], now=now(),
                     reason_code='semantic_issue' if gate is GateKind.VIDEO and choice == 2 else None)
+        if card_fix:
+            decision_card.remember_fix(project_dir / 'revisions' / project.active_revision,
+                                       gate.value, body.get('choices', {}), body.get('other', ''))
         message = f'Đã từ chối cổng {gate.value}; xưởng sẽ sửa theo lý do.'
     else:
         pronunciation = action == 'approve_pronunciation'
         approve_gate(project_dir, gate, reviewer=reviewer,
-                     note=standards.compose_reason(str(body.get('note', '')), draft),
+                     note=standards.compose_reason(
+                         card_note if card_note is not None else str(body.get('note', '')), draft),
                      accept_pronunciation=pronunciation,
                      pronunciation_pin=pin if pronunciation else None,
                      pin_file=pin_file, now=now())
@@ -442,6 +458,9 @@ class _Handler(BaseHTTPRequestHandler):
                 self._json({'entries': standards.load(self.server.root)[::-1]})
             elif parts[:2] == ['api', 'trials'] or path == '/api/standards/accepted':
                 self._trial_get(parts)
+            elif len(parts) == 4 and parts[:2] == ['api', 'projects'] and parts[3] == 'card':
+                project_dir, _ = self.server.project_dir(parts[2])
+                self._json(decision_card.card(project_dir))
             elif len(parts) == 4 and parts[:2] == ['api', 'project'] and parts[3] == 'bundle':
                 project_dir, project = self.server.project_dir(parts[2])
                 self._json(review_bundle(self.server.root, project_dir, project))

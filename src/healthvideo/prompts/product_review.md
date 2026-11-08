@@ -45,4 +45,13 @@ issues:
     problem: "Nhãn 'bạch cầu' bị cắt mép phải"
     fix: "Thu nhỏ nhãn hoặc dời leader line trong component SVG"
     fixable: true
+checked:
+  - "Chỉ ghi những kiểm tra đã thực hiện và thấy ổn; không nhận đã nghe âm thanh"
+decisions: []
 ```
+
+`decisions` chỉ dành cho 5 loại điểm khó: nguồn mâu thuẫn hoặc không chắc; claim gần ranh giới lời khuyên điều trị; câu châm biếm có thể bị hiểu nhầm; hình có thể sai giải phẫu; những gì bác sĩ đã dặn phải hỏi.
+Mỗi điểm có `id` (D1…), `where` (S07@03:12 hoặc posts), `question`, `why_hard`, `options` (2–3 mục). Mỗi phương án có `id`, `label`, `effect`, `recommended` (mặc định false), `keep` (mặc định false). ID điểm và ID phương án không trùng.
+Đúng một phương án `keep: true`; tối đa một `recommended: true` mỗi điểm.
+Mọi phương án phải bám claim có trong ledger; cấm số liệu ngoài ledger, không bịa claim.
+Lỗi thường đưa vào `issues` để agent tự sửa qua vòng hiện có. Tối đa 5 điểm trên thẻ; nếu thực sự còn hơn 5 thì ghi đủ, xếp điểm nặng nhất trước: Python yêu cầu sửa khi còn vòng, hết vòng hiện 5 điểm đầu và số điểm còn lại. Không tự quyết thay bác sĩ để giảm số điểm.

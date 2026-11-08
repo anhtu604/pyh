@@ -94,6 +94,21 @@ def test_rounds_are_bounded_and_reset_after_submission(tmp_path):
     assert pr.review_view(project / REV)['round'] == pr.MAX_REVIEWS
 
 
+def test_excess_decisions_recheck_after_unchanged_fix_and_stay_bounded(tmp_path):
+    from tests.workflows.test_decision_card import decision
+
+    project = _project(tmp_path)
+    decisions = [decision(id=f'D{i}') for i in range(7)]
+    for attempt in range(pr.MAX_REVIEWS):
+        _review(project, 8, decisions=decisions)
+        if attempt == pr.MAX_REVIEWS - 1:
+            assert pr.next_product_action(project) == 'submit_video'
+        else:
+            assert pr.next_product_action(project) == 'revise_product'
+            pr.mark_fix_attempted(project)
+            assert pr.next_product_action(project) == 'product_review'
+
+
 @pytest.mark.parametrize(('change', 'message'), [
     ({'scores': {'hinh_ro': 8}}, 'đủ đúng'),
     ({'scores': dict.fromkeys(pr.CRITERIA, 11)}, '1 đến 10'),

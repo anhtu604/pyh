@@ -104,9 +104,11 @@ app = typer.Typer(no_args_is_help=True)
 review_app = typer.Typer(no_args_is_help=True)
 topic_app = typer.Typer(no_args_is_help=True)
 step_app = typer.Typer(no_args_is_help=True)
+evidence_app = typer.Typer(no_args_is_help=True, help="Tra cứu Elsevier qua API chính thức.")
 app.add_typer(review_app, name="review")
 app.add_typer(topic_app, name="topic")
 app.add_typer(step_app, name="step", hidden=True)
+app.add_typer(evidence_app, name="evidence")
 step_app.command("new")(operator.new)
 step_app.command("select")(operator.select)
 step_app.command("draft")(operator.draft)
@@ -1060,3 +1062,32 @@ def evidence_build_ledger(project_dir: ProjectDir) -> None:
     typer.echo(
         f"Đã tổng hợp ledger: {built_path} (Trạng thái mới: {new_manifest.state.value})"
     )
+
+
+def _elsevier_json(call: Any) -> None:
+    """Run an Elsevier client call and print JSON; the API key is never printed."""
+    from healthvideo.evidence import elsevier
+
+    try:
+        result = call(elsevier.ElsevierClient())
+    except ValueError as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@evidence_app.command("elsevier-search")
+def elsevier_search(
+    query: Annotated[str, typer.Argument(help="Truy vấn Scopus (tiếng Anh)")],
+    count: Annotated[int, typer.Option("--count", min=1, max=25, help="Số kết quả tối đa")] = 25,
+) -> None:
+    """Tìm Scopus qua API chính thức (cần ELSEVIER_API_KEY); in JSON metadata."""
+    _elsevier_json(lambda client: client.search(query, count=count))
+
+
+@evidence_app.command("elsevier-abstract")
+def elsevier_abstract(
+    doi: Annotated[str, typer.Argument(help="DOI của bài báo")],
+) -> None:
+    """Lấy tóm tắt theo DOI qua Abstract Retrieval API; in JSON."""
+    _elsevier_json(lambda client: client.abstract(doi))

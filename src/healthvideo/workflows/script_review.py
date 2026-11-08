@@ -8,6 +8,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from healthvideo.storage.files import canonical_json_hash, read_yaml, write_yaml_atomic
 from healthvideo.storage.project_layout import resolve_project_layout
+from healthvideo.workflows.decision_card import (
+    MAX_DECISIONS,
+    Decision,
+    validate_decisions,
+)
 
 REPORT = 'reviews/script-review.yaml'
 LOG = 'reviews/script-review-log.yaml'
@@ -39,6 +44,8 @@ class ScriptReviewReport(BaseModel):
     scores: dict[str, int]
     summary: str = Field(min_length=1)
     issues: list[ScriptIssue] = Field(default_factory=list)
+    checked: list[str] = Field(default_factory=list)
+    decisions: list[Decision] = Field(default_factory=list)
 
 
 def _root(project: Path) -> Path:
@@ -58,9 +65,22 @@ def _rounds(root: Path) -> list[dict]:
     return list(read_yaml(path).get('rounds', [])) if path.is_file() else []
 
 
+def _cycle(root: Path) -> list[dict]:
+    path = root / LOG
+    log = read_yaml(path) if path.is_file() else {}
+    return list(log.get('rounds', []))[int(log.get('submitted', 0)):]
+
+
+def mark_submitted(artifact_root: Path) -> None:
+    """Keep history visible while resetting the critic budget for the next submission."""
+    rounds = _rounds(artifact_root)
+    write_yaml_atomic(artifact_root / LOG,
+                      {'version': 1, 'rounds': rounds, 'submitted': len(rounds)})
+
+
 def next_script_action(project: Path) -> ScriptAction:
     """Choose the next step for a draft_ready script from the recorded rounds."""
-    rounds = _rounds(_root(project))
+    rounds = _cycle(_root(project))
     if len(rounds) >= MAX_REVIEWS:
         return 'submit_medical'
     if not rounds or rounds[-1]['script_sha256'] != script_hash(project):
@@ -69,6 +89,7 @@ def next_script_action(project: Path) -> ScriptAction:
 
 
 def _validated(report: ScriptReviewReport, line_ids: set[str]) -> None:
+    validate_decisions(report.decisions, line_ids)
     if set(report.scores) != set(CRITERIA):
         raise ValueError('Báo cáo chấm kịch bản phải có đủ đúng các tiêu chí.')
     if any(not 1 <= score <= 10 for score in report.scores.values()):
@@ -104,10 +125,13 @@ def record_review(project: Path, reviewed_hash: str) -> dict:
     entry = {
         'round': len(rounds) + 1,
         'script_sha256': current,
-        'passed': all(score >= PASS_SCORE for score in report.scores.values()),
+        'passed': (all(score >= PASS_SCORE for score in report.scores.values())
+                   and len(report.decisions) <= MAX_DECISIONS),
         **report.model_dump(mode='json'),
     }
-    write_yaml_atomic(root / LOG, {'version': 1, 'rounds': [*rounds, entry]})
+    log = read_yaml(root / LOG) if (root / LOG).is_file() else {}
+    write_yaml_atomic(root / LOG, {'version': 1, 'rounds': [*rounds, entry],
+                                 'submitted': int(log.get('submitted', 0))})
     report_file.unlink()
     return entry
 
@@ -120,6 +144,9 @@ def revision_notes(project: Path) -> str:
     latest = rounds[-1]
     rows = [f"- {item['line']} ({CRITERIA[item['criterion']]}): {item['problem']} "
             f"Hướng sửa: {item['fix']}" for item in latest['issues']]
+    if len(latest.get('decisions', [])) > MAX_DECISIONS:
+        rows.append('Còn quá 5 điểm khó: tự xử lý các lỗi thuộc thẩm quyền; '
+                    'không tự quyết điểm cần bác sĩ. Xếp điểm nặng nhất trước.')
     return '\n'.join([f"Biên tập viên chấm lần {latest['round']}: {latest['summary']}", *rows])
 
 

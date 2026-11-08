@@ -210,6 +210,12 @@ def test_run_queue_snapshots_each_agent_step(tmp_path: Path) -> None:
         (cwd / "shared.py").write_text(str(calls), encoding="utf-8")
         manifest_path = cwd / "projects" / log_dir.name / "project.yaml"
         manifest = read_yaml(manifest_path)
+        if manifest["state"] == "topic_selected":
+            # The medical expert leaves its brief before evidence_ready (spec 2026-11-08 §5.8).
+            brief = manifest_path.parent / "revisions" / manifest["active_revision"] / \
+                "evidence/expert-brief.md"
+            brief.parent.mkdir(parents=True, exist_ok=True)
+            brief.write_text("# Brief\n- C01\n", encoding="utf-8")
         manifest["state"] = (
             "evidence_ready" if manifest["state"] == "topic_selected"
             else "awaiting_medical_review"

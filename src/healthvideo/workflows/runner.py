@@ -11,7 +11,7 @@ from healthvideo.agents import (
     AllAgentsExhausted,
     invoke_with_failover,
 )
-from healthvideo.company import Company, load_company
+from healthvideo.company import Company, load_company, role_skill_block
 from healthvideo.domain.project_v2 import WorkflowState
 from healthvideo.domain.queue import QueueEntry
 from healthvideo.storage.files import (
@@ -20,7 +20,7 @@ from healthvideo.storage.files import (
     write_yaml_atomic,
 )
 from healthvideo.storage.queue import load_queue
-from healthvideo.workflows import product_review
+from healthvideo.workflows import expert, product_review
 from healthvideo.workflows.production_retry import (
     clear_retry,
     record_failure,
@@ -105,7 +105,7 @@ PROMPT_FIELDS: tuple[str, ...] = (
 )
 
 
-def render_prompt(step: str, **fields: str) -> str:
+def render_prompt(step: str, *, company: Company | None = None, **fields: str) -> str:
     """Render the fixed prompt template for an agent workflow step."""
     if step not in AGENT_STEPS:
         msg = f"Unknown agent step: {step!r}"
@@ -125,6 +125,10 @@ def render_prompt(step: str, **fields: str) -> str:
             if examples_path.is_file():
                 examples = examples_path.read_text(encoding="utf-8").strip()
                 text = f"{text.rstrip()}\n\n{examples}\n"
+    company = company or load_company()
+    skills_block = role_skill_block(company.role_for_step(step).id, company)
+    if skills_block:
+        text = f"{text.rstrip()}\n\n{skills_block.rstrip()}\n"
     rules_block = "\n".join(f"- {rule}" for rule in HARD_RULES)
     return f"{text.rstrip()}\n\n## Quy tắc cứng\n{rules_block}\n"
 
@@ -143,6 +147,9 @@ class RunDeps:
     code_snapshot: Callable[[Path], dict[str, str]] | None = None
     visual_review_pending: Callable[[Path], bool] = review_pending
     product_review_pending: Callable[[Path], bool] = product_review.pending
+    # Spec 5.8: the writer starts only after the medical expert's brief exists. Production
+    # wires ``expert.expert_brief_ready`` (factory_deps), like ``posts_ready``.
+    expert_brief_ready: Callable[[Path], bool] = lambda _: True
     # Role table: which (cli, model) chain runs each agent step.
     company: Company = field(default_factory=load_company)
 
@@ -196,6 +203,33 @@ def _mark_blocked(
         else f"{reason}\n"
     )
     write_text_atomic(blocked_file, detail)
+
+
+def _unused_answers(project_dir: Path) -> str | None:
+    """Why a writer rewrite is unfinished: expert answers still waiting in questions.yaml."""
+    try:
+        if expert.answered_questions(project_dir):
+            return (
+                "biên kịch chưa đưa câu trả lời của chuyên gia vào kịch bản "
+                f"(còn câu đã trả lời trong {expert.QUESTIONS})"
+            )
+    except (OSError, TypeError, ValueError) as exc:
+        return f"câu hỏi của biên kịch lỗi: {exc}"
+    return None
+
+
+def _expert_unfinished(project_dir: Path, deps: RunDeps, state: WorkflowState) -> str | None:
+    """Why a research step is not done yet (spec 5.8), or None."""
+    if state == WorkflowState.DRAFT_READY:
+        try:
+            if expert.open_questions(project_dir):
+                return f"chuyên gia chưa trả lời hết câu hỏi trong {expert.QUESTIONS}"
+        except (OSError, TypeError, ValueError) as exc:
+            return f"câu hỏi của biên kịch lỗi: {exc}"
+        return None
+    if not deps.expert_brief_ready(project_dir):
+        return f"chưa có {expert.EXPERT_BRIEF}: bước research chưa xong"
+    return None
 
 
 def _record_code_changes(
@@ -314,12 +348,27 @@ def run_queue(
                     _mark_blocked(root, entry.slug, f"duyệt sản phẩm lỗi: {exc}", report)
                     break
 
+            answering = False
+            if step == "script_review":
+                # Spec 5.8: open writer questions go to the medical expert; answered ones go
+                # back to the writer before the critic reads the script.
+                try:
+                    if expert.open_questions(project_dir):
+                        step = "research"
+                    elif expert.answered_questions(project_dir):
+                        step, answering = "draft", True
+                except (OSError, TypeError, ValueError) as exc:
+                    _mark_blocked(root, entry.slug, f"câu hỏi của biên kịch lỗi: {exc}", report)
+                    break
             if step == "script_review":
                 try:
                     step = next_script_action(project_dir)
                 except (OSError, ValueError) as exc:
                     _mark_blocked(root, entry.slug, f"chấm kịch bản lỗi: {exc}", report)
                     break
+            if (step == "draft" and state == WorkflowState.EVIDENCE_READY
+                    and not deps.expert_brief_ready(project_dir)):
+                step = "research"  # no expert brief yet: the research step is not finished
             rewriting = step == "draft" and state == WorkflowState.DRAFT_READY
 
             if steps_taken >= max_steps_per_topic:
@@ -344,10 +393,12 @@ def run_queue(
                 if step == "revise_product":
                     prompt_fields["reject_note"] = product_review.revision_notes(project_dir)
                 if rewriting:
+                    notes = (expert.answer_notes(project_dir) if answering
+                             else revision_notes(project_dir))
                     prompt_fields["reject_note"] = (
-                        f"{revision_notes(project_dir)}\n{prompt_fields['reject_note']}"
+                        f"{notes}\n{prompt_fields['reject_note']}"
                     ).strip()
-                prompt = render_prompt(step, **prompt_fields)
+                prompt = render_prompt(step, company=deps.company, **prompt_fields)
                 standards_block = prompt_block(root, slug=entry.slug)
                 if standards_block:
                     body, heading, rules = prompt.rpartition('## Quy tắc cứng')
@@ -471,6 +522,10 @@ def run_queue(
             if step in {"visual_review", "script_review", "product_review", "revise_product"}:
                 _mark_advanced(root, entry.slug, report)
             elif rewriting:
+                unused = _unused_answers(project_dir)
+                if unused:
+                    _mark_blocked(root, entry.slug, unused, report, log_path=result_log_path)
+                    break
                 if next_script_action(project_dir) == "draft":
                     _mark_blocked(
                         root,
@@ -490,6 +545,14 @@ def run_queue(
                         report,
                         log_path=result_log_path,
                     )
+                    break
+                _mark_advanced(root, entry.slug, report)
+            elif step == "research" and (
+                state == WorkflowState.DRAFT_READY or new_state == WorkflowState.EVIDENCE_READY
+            ):
+                problem = _expert_unfinished(project_dir, deps, state)
+                if problem:
+                    _mark_blocked(root, entry.slug, problem, report, log_path=result_log_path)
                     break
                 _mark_advanced(root, entry.slug, report)
             else:

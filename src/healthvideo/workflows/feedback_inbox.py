@@ -19,7 +19,7 @@ from healthvideo.agents import (
     AllAgentsExhausted,
     invoke_with_failover,
 )
-from healthvideo.company import Company, load_company
+from healthvideo.company import Company, load_company, role_skill_block
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.workflows.factory_deps import changed_code_paths, code_snapshot
 from healthvideo.workflows.runner import PROMPTS_DIR
@@ -113,13 +113,14 @@ def view(root: Path) -> list[dict]:
     return entries[::-1]
 
 
-def _prompt(root: Path, entry: dict, report: Path) -> str:
+def _prompt(root: Path, entry: dict, report: Path, company: Company | None = None) -> str:
     text = (PROMPTS_DIR / 'feedback_triage.md').read_text(encoding='utf-8')
     fields = {'project': entry['project'], 'report': str(report), 'root': str(root),
               'text': entry['text']}
     for name, value in fields.items():
         text = text.replace(f'{{{name}}}', value)
-    return text
+    skills_block = role_skill_block('feedback_analyst', company)
+    return f'{text.rstrip()}\n\n{skills_block}' if skills_block else text
 
 
 def analyze(
@@ -139,8 +140,9 @@ def analyze(
             report.unlink(missing_ok=True)
             guarded = (root / '.git').exists()
             before = code_snapshot(root) if guarded else {}
-            result = invoke((company or load_company()).chain('feedback_analyst'),
-                            _prompt(root, entry, report), cwd=root, log_dir=log_dir,
+            company = company or load_company()
+            result = invoke(company.chain('feedback_analyst'),
+                            _prompt(root, entry, report, company), cwd=root, log_dir=log_dir,
                             role='feedback_analyst', slug=entry['project'],
                             step='feedback_inbox')
             if not result.ok:

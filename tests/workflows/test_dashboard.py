@@ -117,6 +117,74 @@ def test_decide_wrong_pin_never_mutates(gate):
     assert read_yaml(gate[1] / 'project.yaml')['state'] == 'awaiting_medical_review'
 
 
+def test_card_decide_wrong_pin_changes_nothing(gate):
+    from tests.workflows.test_decision_card import decision, report
+    root, project, _ = gate
+    report(project, decisions=[decision()])
+    before = {p.relative_to(root): p.read_bytes() for p in root.rglob('*') if p.is_file()}
+    limiter = dashboard.PinLimiter()
+    with pytest.raises(PermissionError):
+        _decide(gate, limiter, action='card', choices={'D1': 'b'}, other='', pin='000000')
+    assert limiter.failures == 1
+    assert {p.relative_to(root): p.read_bytes() for p in root.rglob('*') if p.is_file()} == before
+
+
+@pytest.mark.parametrize('kind', ['medical', 'video'])
+def test_card_send_fix_rejects_to_draft(gate, kind):
+    from healthvideo.storage.files import write_yaml_atomic
+    from healthvideo.workflows.decision_card import card
+    from tests.workflows.test_decision_card import decision, report
+    _, project, rev = gate
+    data = read_yaml(project / 'project.yaml')
+    data['state'] = f'awaiting_{kind}_review'
+    write_yaml_atomic(project / 'project.yaml', data)
+    report(project, gate=kind, decisions=[decision()])
+    _decide(gate, action='card', choices={'D1': 'b'}, pin='918273')
+    data = read_yaml(project / 'project.yaml')
+    assert data['state'] == ('needs_medical_revision' if kind == 'medical' else 'needs_production_revision')
+    assert data['side_state']['resume_state'] == ('draft_ready' if kind == 'medical' else 'production_in_progress')
+    rejection = next((project / 'revisions' / rev / 'reviews' / kind).glob('*-rejected.yaml'))
+    assert read_yaml(rejection)['reason'] == 'D1 (N14) → b: Nói rõ hơn'
+    assert not (project / 'revisions' / rev / f'reviews/{kind}-approval.yaml').exists()
+    # A fresh critic pass, rather than the old round, supplies the follow-up card.
+    data['state'] = f'awaiting_{kind}_review'
+    data['side_state'] = None
+    write_yaml_atomic(project / 'project.yaml', data)
+    assert card(project)['followup'] is None
+    report(project, gate=kind)
+    assert 'Đã sửa theo D1=b' in card(project)['followup']
+
+
+def test_card_all_keep_records_choices_in_approval(gate):
+    from tests.workflows.test_decision_card import decision, report
+    line_id = read_yaml(gate[1] / 'revisions/001/script/script.yaml')['lines'][0]['id']
+    report(gate[1], decisions=[decision(line_id)], preserve_script=True)
+    _decide(gate, action='card', choices={'D1': 'a'}, pin='918273')
+    approval = read_yaml(gate[1] / 'revisions/001/reviews/medical-approval.yaml')
+    assert approval['note'] == f'D1 ({line_id}) → a: Giữ nguyên'
+
+
+@pytest.mark.parametrize('other', ['', 'Sửa cách diễn đạt'])
+def test_card_preserves_existing_draft_comments(gate, other):
+    root, project, _ = gate
+    dashboard.save_comment(root, project.name, 'chung', 'Góp ý cần giữ lại')
+    _decide(gate, action='card', choices={}, other=other, pin='918273')
+    rev = project / 'revisions/001'
+    if other:
+        record = read_yaml(next((rev / 'reviews/medical').glob('*-rejected.yaml')))
+        assert 'Góp ý cần giữ lại' in record['reason']
+    else:
+        assert 'Góp ý cần giữ lại' in read_yaml(rev / 'reviews/medical-approval.yaml')['note']
+
+
+def test_card_get_route(server):
+    srv, project, _ = server
+    status, body = request(srv, 'GET', f'/api/projects/{project.name}/card')
+    assert status == 200
+    assert json.loads(body)['decisions'] == []
+    assert request(srv, 'GET', '/api/projects/missing/card')[0] == 404
+
+
 def test_decide_locks_after_repeated_wrong_pins(gate):
     limiter = dashboard.PinLimiter(clock=lambda: 1000.0)
     for _ in range(dashboard.MAX_PIN_FAILURES):

@@ -87,6 +87,18 @@ def test_reviews_are_bounded_then_doctor_sees_the_failed_score(tmp_path):
     assert 'Chưa đạt' in _render_script_review_section(root)
 
 
+def test_medical_submission_marks_review_cycle_without_losing_history(tmp_path):
+    from healthvideo.workflows.draft import submit_medical_review
+
+    project = create_v2_project_fixture(tmp_path / 'projects')
+    _report(project)
+    record_review(project, script_hash(project))
+    submit_medical_review(project)
+    log = read_yaml(project / 'revisions/001' / LOG)
+    assert log['submitted'] == len(log['rounds']) == 1
+    assert next_script_action(project) == 'script_review'
+
+
 @pytest.mark.parametrize(('change', 'message'), [
     ({'scores': {'ca_tinh': 8}}, 'đủ đúng các tiêu chí'),
     ({'scores': dict.fromkeys(CRITERIA, 11)}, 'từ 1 đến 10'),
