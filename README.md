@@ -163,5 +163,6 @@ Ngoài ra, nhóm lệnh ẩn `healthvideo step ...` (`hidden=True`) dành riêng
 | Xưởng video: kế hoạch triển khai | 8 giai đoạn P0–P7, 25 task; theo dõi ở đầu file plan | approved | self-review | `docs: add video factory implementation plan` |
 | Xưởng video: spec tái cấu trúc | Cắt gọt tại chỗ, 4 giai đoạn, hàng đợi `run` Codex/agy, PIN chống tự duyệt, Claude chỉ rà code | approved | builder check; `git diff --check` | `docs: add video factory restructure design` |
 | Video gate: sync, chart, motion, captions | TTS từng dòng, timing production có hash, WAV khớp scene và clip tái dùng audio; QA chặn lệch/đuôi im lặng; chart lớn, cơ chế chuyển động xuyên cảnh, phụ đề đủ dấu tiếng Việt | complete | pytest 1416 passed, 3 skipped; vitest passed; typecheck; Ruff; chưa render lại pilot | `feat: sync narration timing and polish mechanism visuals` |
+| Xưởng-công ty: spec + plan | Bậc model (hard/medium/bulk) + 10 vai có skill riêng, chuyển model khi hết token, thẻ quyết định ở hai cổng (chỉ hỏi điểm khó), chat Điều phối viên sửa ngay trên video, dashboard tổng quan + trang xem sản phẩm; 7 task giao Codex/Claude/agy theo độ khó | approved | builder check | `docs: add factory company design and plan` |
 
 Lịch sử trước 2026-10-23: docs/archive/README-2026-10.md

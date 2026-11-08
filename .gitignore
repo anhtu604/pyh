@@ -33,3 +33,6 @@ projects/**/.healthvideo/
 
 # Disposable contact sheets/drafts, including synthetic QA projects outside projects/.
 **/renders/review-frames/
+
+# Brainstorm mockups
+.superpowers/
