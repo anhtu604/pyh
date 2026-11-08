@@ -176,6 +176,13 @@ def read_state(project_dir: Path) -> WorkflowState:
 
 
 def reject_note(project_dir: Path) -> str | None:
+    from healthvideo.workflows.change_request import pending_note
+
+    notes = [_gate_reject_note(project_dir), pending_note(project_dir)]
+    return '\n\n'.join(note for note in notes if note) or None
+
+
+def _gate_reject_note(project_dir: Path) -> str | None:
     """Read the rejection note, including semantic rework carried into a revision."""
     layout = resolve_project_layout(project_dir)
     state = layout.manifest.state

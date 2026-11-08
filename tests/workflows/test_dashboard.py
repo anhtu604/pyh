@@ -474,3 +474,161 @@ def test_reopen_pin_and_feedback(server, monkeypatch, mode):
         assert entries[-1]['reviewer'] == 'Configured doctor'
         assert entries[-1]['kind'] == 'reopen'
         assert '918273' not in (srv.root / 'profiles/doctor-feedback.yaml').read_text(encoding='utf-8')
+
+
+def _with_server(tmp_path, fn):
+    srv = dashboard.DashboardServer(tmp_path, 0, token='tok', agents=list)
+    thread = threading.Thread(target=srv.serve_forever, daemon=True)
+    thread.start()
+    try:
+        return fn(srv)
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_overview_shape(tmp_path):
+    from datetime import datetime, timedelta
+
+    from healthvideo.agents import QUOTA_FILE, QuotaBook
+    from healthvideo.company import ModelSlot
+
+    project = create_v2_project_fixture(tmp_path / 'projects', state='awaiting_medical_review')
+    now = datetime.now().astimezone()
+    QuotaBook(tmp_path / QUOTA_FILE).rest(
+        ModelSlot(cli='codex', model='gpt-6-astra'), now + timedelta(hours=2), 'usage limit'
+    )
+
+    def check(srv):
+        status, body = request(srv, 'GET', '/api/overview')
+        assert status == 200
+        data = json.loads(body)
+        assert {'tiles', 'decisions', 'projects', 'resting', 'channel'} <= set(data)
+        assert set(data['tiles']) == {
+            'running', 'waiting_doctor', 'done_7d', 'done_30d',
+            'avg_days_topic_to_video', 'models_resting',
+        }
+        assert data['tiles']['waiting_doctor'] == 1
+        assert data['tiles']['models_resting'] == 1
+        assert data['channel']['connected'] is False
+        assert len(data['decisions']) == 1
+        assert {'slug', 'title', 'gate', 'count'} <= set(data['decisions'][0])
+        assert data['decisions'][0]['slug'] == project.name
+        assert data['decisions'][0]['gate'] == 'medical'
+        assert len(data['projects']) == 1
+        assert {'slug', 'title', 'stage_index', 'state', 'preview_url', 'status_line'} <= set(data['projects'][0])
+        assert len(data['resting']) == 1
+
+    _with_server(tmp_path, check)
+
+
+def test_activity_running_job_listed(tmp_path):
+    log = tmp_path / 'topics/logs/activity.jsonl'
+    log.parent.mkdir(parents=True, exist_ok=True)
+    rows = [
+        {'at': '2026-11-08T10:00:00+07:00', 'role': 'medical_expert', 'cli': 'claude',
+         'model': 'claude-opus-5-5', 'slug': 'gout', 'step': 'research', 'event': 'start', 'ok': None},
+        {'at': '2026-11-08T10:02:00+07:00', 'role': 'medical_expert', 'cli': 'claude',
+         'model': 'claude-opus-5-5', 'slug': 'gout', 'step': 'research', 'event': 'end', 'ok': True},
+        {'at': '2026-11-08T10:05:00+07:00', 'role': 'writer', 'cli': 'agy',
+         'model': 'claude-opus-5-5-high', 'slug': 'gout', 'step': 'draft', 'event': 'start', 'ok': None},
+    ]
+    log.write_text('\n'.join(json.dumps(r) for r in rows) + '\n', encoding='utf-8')
+
+    def check(srv):
+        status, body = request(srv, 'GET', '/api/activity?limit=10')
+        assert status == 200
+        data = json.loads(body)
+        assert len(data['running']) == 1
+        assert data['running'][0]['step'] == 'draft'
+        assert data['running'][0]['model'] == 'claude-opus-5-5-high'
+        assert data['running'][0]['running'] is True
+        assert any(item['step'] == 'research' and item['ok'] is True for item in data['recent'])
+        assert any(item['step'] == 'draft' and item['running'] is True for item in data['items'])
+
+    _with_server(tmp_path, check)
+
+
+def test_timeline_from_render_input(tmp_path):
+    from healthvideo.storage.files import write_yaml_atomic
+
+    project = create_v2_project_fixture(tmp_path / 'projects', state='awaiting_medical_review')
+    rev = project / 'revisions/001'
+    renders = rev / 'renders'
+    renders.mkdir(parents=True, exist_ok=True)
+    (renders / 'render-input.json').write_text(json.dumps({
+        'fps': 30,
+        'scenes': [
+            {'id': 'S01', 'start_frame': 0, 'duration_frames': 90},
+            {'id': 'S07', 'start_frame': 90, 'duration_frames': 150},
+        ],
+    }), encoding='utf-8')
+    write_yaml_atomic(rev / 'reviews/changes/20261108-requested.yaml', {
+        'at': '2026-11-08T10:00:00+07:00',
+        'by': 'doctor-chat',
+        'kind': 'edit_production',
+        'brief': 'Đổi hình S07 sang dạng kim',
+        'context': {'scene': 'S07', 'time_s': 4},
+        'applied': False,
+    })
+
+    def check(srv):
+        status, body = request(srv, 'GET', f'/api/projects/{project.name}/timeline')
+        assert status == 200
+        data = json.loads(body)
+        assert data == [
+            {'scene': 'S01', 'start_s': 0.0, 'end_s': 3.0, 'open_change': False},
+            {'scene': 'S07', 'start_s': 3.0, 'end_s': 8.0, 'open_change': True},
+        ]
+
+    _with_server(tmp_path, check)
+
+
+def test_timeline_missing_render_is_empty(tmp_path):
+    project = create_v2_project_fixture(tmp_path / 'projects', state='awaiting_medical_review')
+
+    def check(srv):
+        status, body = request(srv, 'GET', f'/api/projects/{project.name}/timeline')
+        assert status == 200
+        assert json.loads(body) == []
+
+    _with_server(tmp_path, check)
+
+
+def test_html_has_sections_in_order():
+    html = dashboard.HTML_PATH.read_text(encoding='utf-8')
+    positions = [html.index(f'id="{sec}"') for sec in ('tiles', 'decisions', 'projects', 'activity', 'channel')]
+    assert positions == sorted(positions)
+
+
+def test_feedback_tab_removed():
+    html = dashboard.HTML_PATH.read_text(encoding='utf-8')
+    assert 'data-ops-tab="feedback"' not in html
+    assert 'id="ops-feedback"' not in html
+
+
+def test_studio_route_launches_once_and_logs(tmp_path, monkeypatch):
+    calls = []
+
+    class FakeProc:
+        def poll(self):
+            return None
+
+    monkeypatch.setattr(dashboard, 'resolve_pnpm_argv', lambda args: ['pnpm', *args])
+    monkeypatch.setattr(
+        dashboard.subprocess, 'Popen',
+        lambda argv, **kw: calls.append((argv, kw)) or FakeProc(),
+    )
+
+    def check(srv):
+        status, data = post_json(srv, '/api/studio', {})
+        assert status == 200
+        assert 'http' in data['url']
+        assert calls[0][0] == ['pnpm', '--dir', 'video', 'exec', 'remotion', 'studio']
+        assert (tmp_path / 'cache/studio.log').is_file()
+        status2, data2 = post_json(srv, '/api/studio', {})
+        assert status2 == 200
+        assert data2['url'] == data['url']
+        assert len(calls) == 1
+
+    _with_server(tmp_path, check)

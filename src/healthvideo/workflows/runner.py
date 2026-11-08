@@ -20,7 +20,7 @@ from healthvideo.storage.files import (
     write_yaml_atomic,
 )
 from healthvideo.storage.queue import load_queue
-from healthvideo.workflows import expert, product_review
+from healthvideo.workflows import change_request, chat, expert, product_review
 from healthvideo.workflows.production_retry import (
     clear_retry,
     record_failure,
@@ -309,168 +309,24 @@ def run_queue(
 
         steps_taken = 0
         while True:
-            state = deps.read_state(project_dir)
-            step = next_step(state)
-            if step is None:
-                if state == WorkflowState.BLOCKED:
-                    if entry.slug not in report.blocked:
-                        report.blocked.append(entry.slug)
-                elif state in (WorkflowState.PACKAGED, WorkflowState.PUBLISHED_MANUAL):
-                    pass  # finished topics are not waiting at any gate
-                else:
-                    if entry.slug not in report.at_gate:
-                        report.at_gate.append(entry.slug)
-                break
-
-            if step == "produce":
-                try:
-                    status = retry_status(root, project_dir, state)
-                except ValueError as exc:
-                    _mark_blocked(root, entry.slug, str(exc), report)
-                    break
-                if not status["allowed"]:
-                    _mark_blocked(
-                        root,
-                        entry.slug,
-                        f"bước produce lỗi: {status['reason']}",
-                        report,
-                    )
+            with chat.step_boundary(root, entry.slug):
+                state = deps.read_state(project_dir)
+                pending_change = change_request.pending_note(project_dir)
+                step = next_step(state)
+                if step is None:
+                    if state == WorkflowState.BLOCKED:
+                        if entry.slug not in report.blocked:
+                            report.blocked.append(entry.slug)
+                    elif state in (WorkflowState.PACKAGED, WorkflowState.PUBLISHED_MANUAL):
+                        pass  # finished topics are not waiting at any gate
+                    else:
+                        if entry.slug not in report.at_gate:
+                            report.at_gate.append(entry.slug)
                     break
 
-            if step == "produce" and deps.visual_review_pending(project_dir):
-                step = "visual_review"
-            elif step == "produce" and not deps.posts_ready(project_dir):
-                step = "posts"
-            elif step == "produce" and deps.product_review_pending(project_dir):
-                try:
-                    step = product_review.next_product_action(project_dir)
-                except (OSError, ValueError) as exc:
-                    _mark_blocked(root, entry.slug, f"duyệt sản phẩm lỗi: {exc}", report)
-                    break
-
-            answering = False
-            if step == "script_review":
-                # Spec 5.8: open writer questions go to the medical expert; answered ones go
-                # back to the writer before the critic reads the script.
-                try:
-                    if expert.open_questions(project_dir):
-                        step = "research"
-                    elif expert.answered_questions(project_dir):
-                        step, answering = "draft", True
-                except (OSError, TypeError, ValueError) as exc:
-                    _mark_blocked(root, entry.slug, f"câu hỏi của biên kịch lỗi: {exc}", report)
-                    break
-            if step == "script_review":
-                try:
-                    step = next_script_action(project_dir)
-                except (OSError, ValueError) as exc:
-                    _mark_blocked(root, entry.slug, f"chấm kịch bản lỗi: {exc}", report)
-                    break
-            if (step == "draft" and state == WorkflowState.EVIDENCE_READY
-                    and not deps.expert_brief_ready(project_dir)):
-                step = "research"  # no expert brief yet: the research step is not finished
-            rewriting = step == "draft" and state == WorkflowState.DRAFT_READY
-
-            if steps_taken >= max_steps_per_topic:
-                _mark_blocked(root, entry.slug, "vượt số bước", report)
-                break
-
-            log_dir = root / "topics" / "logs" / entry.slug
-            result_log_path: Path | None = None
-
-            if step in AGENT_STEPS:
-                prompt_fields: dict[str, str] = {
-                    "project": str(project_dir),
-                    "slug": entry.slug,
-                    "title": entry.title,
-                    "question": entry.question,
-                    "doctor_note": entry.doctor_note or "",
-                }
-                if step.startswith("revise_") or step in {"draft", "script_review"}:
-                    prompt_fields["reject_note"] = (
-                        deps.reject_note(project_dir) or ""
-                    )
-                if step == "revise_product":
-                    prompt_fields["reject_note"] = product_review.revision_notes(project_dir)
-                if rewriting:
-                    notes = (expert.answer_notes(project_dir) if answering
-                             else revision_notes(project_dir))
-                    prompt_fields["reject_note"] = (
-                        f"{notes}\n{prompt_fields['reject_note']}"
-                    ).strip()
-                prompt = render_prompt(step, company=deps.company, **prompt_fields)
-                standards_block = prompt_block(root, slug=entry.slug)
-                if standards_block:
-                    body, heading, rules = prompt.rpartition('## Quy tắc cứng')
-                    prompt = f"{body.rstrip()}\n\n{standards_block.rstrip()}\n\n{heading}{rules}"
-                before = deps.code_snapshot(root) if deps.code_snapshot is not None else None
-                reviewing = step in {"script_review", "product_review"}
-                reviewed_hash = (
-                    script_hash(project_dir) if step == "script_review"
-                    else product_review.render_hash(project_dir) if reviewing else ""
-                )
-                role = deps.company.role_for_step(step)
-                try:
-                    result = deps.invoke(
-                        deps.company.chain(role.id),
-                        prompt,
-                        cwd=root,
-                        log_dir=log_dir,
-                        role=role.id,
-                        slug=entry.slug,
-                        step=step,
-                    )
-                except AllAgentsExhausted as exc:
-                    # Only this topic waits for a model; the rest of the queue keeps going.
-                    _record_code_changes(root, entry.slug, deps, report, before)
-                    back = exc.earliest_return
-                    write_text_atomic(
-                        log_dir / WAITING_MODEL_FILE, back.isoformat() if back else ""
-                    )
-                    report.waiting_model.append(entry.slug)
-                    break
-
-                result_log_path = result.log_path
-                _record_code_changes(root, entry.slug, deps, report, before)
-                if not result.ok:
-                    _mark_blocked(
-                        root,
-                        entry.slug,
-                        f"agent {result.agent} thất bại ở bước {step}",
-                        report,
-                        log_path=result.log_path,
-                    )
-                    break
-                if reviewing:
-                    record = (record_review if step == "script_review"
-                              else product_review.record_review)
+                if step == "produce":
                     try:
-                        record(project_dir, reviewed_hash)
-                    except (OSError, ValueError) as exc:
-                        _mark_blocked(
-                            root,
-                            entry.slug,
-                            f"{'chấm kịch bản' if step == 'script_review' else 'duyệt sản phẩm'} lỗi: {exc}",
-                            report,
-                            log_path=result.log_path,
-                        )
-                        break
-                if step == "revise_product":
-                    # Python re-renders the fix at once; an unchanged render goes to the doctor.
-                    try:
-                        product_review.mark_fix_attempted(project_dir)
-                        deps.python_steps["produce"](project_dir)
-                    except Exception as exc:  # noqa: BLE001
-                        record_failure(root, project_dir, deps.read_state(project_dir), exc)
-                        _mark_blocked(root, entry.slug, f"dựng lại sau sửa lỗi: {exc}", report)
-                        break
-                if step == "visual_review":
-                    # Python validates the report, bounds regeneration and renders the
-                    # chosen candidate/fallback before it can enter the physician gate.
-                    try:
-                        status = retry_status(
-                            root, project_dir, deps.read_state(project_dir)
-                        )
+                        status = retry_status(root, project_dir, state)
                     except ValueError as exc:
                         _mark_blocked(root, entry.slug, str(exc), report)
                         break
@@ -478,97 +334,248 @@ def run_queue(
                         _mark_blocked(
                             root,
                             entry.slug,
-                            f"visual_review lỗi: {status['reason']}",
+                            f"bước produce lỗi: {status['reason']}",
                             report,
                         )
                         break
+
+                if step == "produce" and deps.visual_review_pending(project_dir):
+                    step = "visual_review"
+                elif step == "produce" and not deps.posts_ready(project_dir):
+                    step = "posts"
+                elif step == "produce" and deps.product_review_pending(project_dir):
                     try:
-                        deps.python_steps["produce"](project_dir)
-                    except Exception as exc:  # noqa: BLE001
-                        record_failure(
-                            root, project_dir, deps.read_state(project_dir), exc
-                        )
-                        _mark_blocked(root, entry.slug, f"visual_review lỗi: {exc}", report)
+                        step = product_review.next_product_action(project_dir)
+                    except (OSError, ValueError) as exc:
+                        _mark_blocked(root, entry.slug, f"duyệt sản phẩm lỗi: {exc}", report)
                         break
-                    clear_retry(root, entry.slug)
-            elif step in deps.python_steps:
-                try:
-                    deps.python_steps[step](project_dir)
-                except Exception as exc:  # noqa: BLE001 — one failing topic is blocked, the queue keeps going
-                    if step == "produce":
-                        record_failure(
-                            root, project_dir, deps.read_state(project_dir), exc
+
+                answering = False
+                if step == "script_review":
+                    # Spec 5.8: open writer questions go to the medical expert; answered ones go
+                    # back to the writer before the critic reads the script.
+                    try:
+                        if expert.open_questions(project_dir):
+                            step = "research"
+                        elif expert.answered_questions(project_dir):
+                            step, answering = "draft", True
+                    except (OSError, TypeError, ValueError) as exc:
+                        _mark_blocked(root, entry.slug, f"câu hỏi của biên kịch lỗi: {exc}", report)
+                        break
+                if step == "script_review":
+                    try:
+                        step = ('draft' if pending_change else next_script_action(project_dir))
+                    except (OSError, ValueError) as exc:
+                        _mark_blocked(root, entry.slug, f"chấm kịch bản lỗi: {exc}", report)
+                        break
+                if (step == "draft" and state == WorkflowState.EVIDENCE_READY
+                        and not deps.expert_brief_ready(project_dir)):
+                    step = "research"  # no expert brief yet: the research step is not finished
+                rewriting = step == "draft" and state == WorkflowState.DRAFT_READY
+
+                if steps_taken >= max_steps_per_topic:
+                    _mark_blocked(root, entry.slug, "vượt số bước", report)
+                    break
+
+                log_dir = root / "topics" / "logs" / entry.slug
+                result_log_path: Path | None = None
+
+                if step in AGENT_STEPS:
+                    prompt_fields: dict[str, str] = {
+                        "project": str(project_dir),
+                        "slug": entry.slug,
+                        "title": entry.title,
+                        "question": entry.question,
+                        "doctor_note": entry.doctor_note or "",
+                    }
+                    if step.startswith("revise_") or step in {"draft", "script_review"}:
+                        prompt_fields["reject_note"] = (
+                            deps.reject_note(project_dir) or ""
                         )
-                    _mark_blocked(
-                        root,
-                        entry.slug,
-                        f"bước {step} lỗi: {type(exc).__name__}: {exc}",
-                        report,
+                    if step == "revise_product":
+                        prompt_fields["reject_note"] = product_review.revision_notes(project_dir)
+                    if rewriting:
+                        notes = (expert.answer_notes(project_dir) if answering
+                                 else revision_notes(project_dir))
+                        prompt_fields["reject_note"] = (
+                            f"{notes}\n{prompt_fields['reject_note']}"
+                        ).strip()
+                    prompt = render_prompt(step, company=deps.company, **prompt_fields)
+                    standards_block = prompt_block(root, slug=entry.slug)
+                    if standards_block:
+                        body, heading, rules = prompt.rpartition('## Quy tắc cứng')
+                        prompt = f"{body.rstrip()}\n\n{standards_block.rstrip()}\n\n{heading}{rules}"
+                    before = deps.code_snapshot(root) if deps.code_snapshot is not None else None
+                    reviewing = step in {"script_review", "product_review"}
+                    reviewed_hash = (
+                        script_hash(project_dir) if step == "script_review"
+                        else product_review.render_hash(project_dir) if reviewing else ""
                     )
-                    break
-                if step == "produce":
-                    clear_retry(root, entry.slug)
-            else:
-                _mark_blocked(
-                    root,
-                    entry.slug,
-                    f"không tìm thấy bước xử lý cho {step}",
-                    report,
-                )
-                break
+                    role = deps.company.role_for_step(step)
+                    try:
+                        result = deps.invoke(
+                            deps.company.chain(role.id),
+                            prompt,
+                            cwd=root,
+                            log_dir=log_dir,
+                            role=role.id,
+                            slug=entry.slug,
+                            step=step,
+                        )
+                    except AllAgentsExhausted as exc:
+                        # Only this topic waits for a model; the rest of the queue keeps going.
+                        _record_code_changes(root, entry.slug, deps, report, before)
+                        back = exc.earliest_return
+                        write_text_atomic(
+                            log_dir / WAITING_MODEL_FILE, back.isoformat() if back else ""
+                        )
+                        report.waiting_model.append(entry.slug)
+                        break
 
-            steps_taken += 1
-            new_state = deps.read_state(project_dir)
-            if step in {"visual_review", "script_review", "product_review", "revise_product"}:
-                _mark_advanced(root, entry.slug, report)
-            elif rewriting:
-                unused = _unused_answers(project_dir)
-                if unused:
-                    _mark_blocked(root, entry.slug, unused, report, log_path=result_log_path)
-                    break
-                if next_script_action(project_dir) == "draft":
+                    result_log_path = result.log_path
+                    _record_code_changes(root, entry.slug, deps, report, before)
+                    if not result.ok:
+                        _mark_blocked(
+                            root,
+                            entry.slug,
+                            f"agent {result.agent} thất bại ở bước {step}",
+                            report,
+                            log_path=result.log_path,
+                        )
+                        break
+                    if reviewing:
+                        record = (record_review if step == "script_review"
+                                  else product_review.record_review)
+                        try:
+                            record(project_dir, reviewed_hash)
+                        except (OSError, ValueError) as exc:
+                            _mark_blocked(
+                                root,
+                                entry.slug,
+                                f"{'chấm kịch bản' if step == 'script_review' else 'duyệt sản phẩm'} lỗi: {exc}",
+                                report,
+                                log_path=result.log_path,
+                            )
+                            break
+                    if step == "revise_product":
+                        # Python re-renders the fix at once; an unchanged render goes to the doctor.
+                        try:
+                            product_review.mark_fix_attempted(project_dir)
+                            deps.python_steps["produce"](project_dir)
+                        except Exception as exc:  # noqa: BLE001
+                            record_failure(root, project_dir, deps.read_state(project_dir), exc)
+                            _mark_blocked(root, entry.slug, f"dựng lại sau sửa lỗi: {exc}", report)
+                            break
+                    if step == "visual_review":
+                        # Python validates the report, bounds regeneration and renders the
+                        # chosen candidate/fallback before it can enter the physician gate.
+                        try:
+                            status = retry_status(
+                                root, project_dir, deps.read_state(project_dir)
+                            )
+                        except ValueError as exc:
+                            _mark_blocked(root, entry.slug, str(exc), report)
+                            break
+                        if not status["allowed"]:
+                            _mark_blocked(
+                                root,
+                                entry.slug,
+                                f"visual_review lỗi: {status['reason']}",
+                                report,
+                            )
+                            break
+                        try:
+                            deps.python_steps["produce"](project_dir)
+                        except Exception as exc:  # noqa: BLE001
+                            record_failure(
+                                root, project_dir, deps.read_state(project_dir), exc
+                            )
+                            _mark_blocked(root, entry.slug, f"visual_review lỗi: {exc}", report)
+                            break
+                        clear_retry(root, entry.slug)
+                elif step in deps.python_steps:
+                    try:
+                        deps.python_steps[step](project_dir)
+                    except Exception as exc:  # noqa: BLE001 — one failing topic is blocked, the queue keeps going
+                        if step == "produce":
+                            record_failure(
+                                root, project_dir, deps.read_state(project_dir), exc
+                            )
+                        _mark_blocked(
+                            root,
+                            entry.slug,
+                            f"bước {step} lỗi: {type(exc).__name__}: {exc}",
+                            report,
+                        )
+                        break
+                    if step == "produce":
+                        clear_retry(root, entry.slug)
+                else:
                     _mark_blocked(
                         root,
                         entry.slug,
-                        "agent không sửa kịch bản theo nhận xét biên tập",
+                        f"không tìm thấy bước xử lý cho {step}",
                         report,
-                        log_path=result_log_path,
                     )
                     break
-                _mark_advanced(root, entry.slug, report)
-            elif step == "posts":
-                if not deps.posts_ready(project_dir):
-                    _mark_blocked(
-                        root,
-                        entry.slug,
-                        "agent không làm đổi trạng thái: posts.yaml chưa hợp lệ",
-                        report,
-                        log_path=result_log_path,
-                    )
-                    break
-                _mark_advanced(root, entry.slug, report)
-            elif step == "research" and (
-                state == WorkflowState.DRAFT_READY or new_state == WorkflowState.EVIDENCE_READY
-            ):
-                problem = _expert_unfinished(project_dir, deps, state)
-                if problem:
-                    _mark_blocked(root, entry.slug, problem, report, log_path=result_log_path)
-                    break
-                _mark_advanced(root, entry.slug, report)
-            else:
-                if step in AGENT_STEPS and new_state == state:
-                    _mark_blocked(
-                        root,
-                        entry.slug,
-                        "agent không làm đổi trạng thái",
-                        report,
-                        log_path=result_log_path,
-                    )
-                    break
-                if new_state != state:
+
+                steps_taken += 1
+                new_state = deps.read_state(project_dir)
+                if step in {"visual_review", "script_review", "product_review", "revise_product"}:
                     _mark_advanced(root, entry.slug, report)
+                elif rewriting:
+                    unused = _unused_answers(project_dir)
+                    if unused:
+                        _mark_blocked(root, entry.slug, unused, report, log_path=result_log_path)
+                        break
+                    if next_script_action(project_dir) == "draft":
+                        _mark_blocked(
+                            root,
+                            entry.slug,
+                            "agent không sửa kịch bản theo nhận xét biên tập",
+                            report,
+                            log_path=result_log_path,
+                        )
+                        break
+                    _mark_advanced(root, entry.slug, report)
+                elif step == "posts":
+                    if not deps.posts_ready(project_dir):
+                        _mark_blocked(
+                            root,
+                            entry.slug,
+                            "agent không làm đổi trạng thái: posts.yaml chưa hợp lệ",
+                            report,
+                            log_path=result_log_path,
+                        )
+                        break
+                    _mark_advanced(root, entry.slug, report)
+                elif step == "research" and (
+                    state == WorkflowState.DRAFT_READY or new_state == WorkflowState.EVIDENCE_READY
+                ):
+                    problem = _expert_unfinished(project_dir, deps, state)
+                    if problem:
+                        _mark_blocked(root, entry.slug, problem, report, log_path=result_log_path)
+                        break
+                    _mark_advanced(root, entry.slug, report)
+                else:
+                    if step in AGENT_STEPS and new_state == state:
+                        _mark_blocked(
+                            root,
+                            entry.slug,
+                            "agent không làm đổi trạng thái",
+                            report,
+                            log_path=result_log_path,
+                        )
+                        break
+                    if new_state != state:
+                        _mark_advanced(root, entry.slug, report)
 
-            if once:
-                return report
+                if (pending_change and step in {'draft', 'revise_medical', 'revise_production'}
+                        and new_state != WorkflowState.RESEARCH_IN_PROGRESS
+                        and (new_state != state or rewriting)):
+                    chat.completed(root, entry.slug, project_dir)
+
+                if once:
+                    return report
 
     return report

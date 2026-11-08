@@ -24,13 +24,17 @@ from urllib.error import URLError
 from urllib.parse import parse_qs, unquote, urlsplit
 from urllib.request import urlopen
 
-from healthvideo.agents import RUNNING_MARKER
+from healthvideo.agents import ACTIVITY_FILE, QUOTA_FILE, RUNNING_MARKER, QuotaBook
 from healthvideo.approver_pin import pin_path, verify_pin
+from healthvideo.company import REPO_ROOT, load_company
 from healthvideo.domain.gate_review import GateKind
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.env import child_env
+from healthvideo.process import resolve_pnpm_argv
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
+from healthvideo.storage.queue import load_queue
 from healthvideo.workflows import (
+    asset_library,
     dashboard_operations,
     decision_card,
     factory,
@@ -45,6 +49,7 @@ from healthvideo.workflows.script_review import review_view
 
 APP_ID = 'healthvideo-dashboard'
 DEFAULT_PORT = 8765
+STUDIO_URL = 'http://localhost:3000'
 HTML_PATH = Path(__file__).with_name('dashboard.html')
 LOG_TAIL = 40
 MAX_BODY = 16_000
@@ -128,6 +133,343 @@ def running_agents(root: Path) -> list[str]:
         first = marker.read_text(encoding='utf-8', errors='replace').splitlines()[:1]
         names.append(first[0].strip() if first else 'agent')
     return names
+
+
+STEP_LABELS: dict[str, str] = {
+    'create': 'Đang tạo dự án',
+    'research': 'Đang nghiên cứu y văn',
+    'draft': 'Đang viết kịch bản',
+    'script_review': 'Đang chấm kịch bản',
+    'posts': 'Đang soạn bài đăng',
+    'produce': 'Đang dựng video',
+    'visual_review': 'Đang chọn hình minh họa',
+    'product_review': 'Đang kiểm định video',
+    'revise_medical': 'Đang sửa theo góp ý y khoa',
+    'revise_production': 'Đang sửa hình/nhịp video',
+    'revise_product': 'Đang sửa lỗi sản phẩm',
+    'coordinator': 'Đang điều phối chat',
+    'feedback_inbox': 'Đang phân tích ý kiến',
+}
+
+
+def _parse_iso(value: object) -> datetime | None:
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.astimezone()
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value))
+        return parsed if parsed.tzinfo else parsed.astimezone()
+    except ValueError:
+        return None
+
+
+def _role_names() -> dict[str, str]:
+    try:
+        return {role_id: role.name for role_id, role in load_company().roles.items()}
+    except ValueError:
+        return {}
+
+
+def activity(
+    root: Path,
+    *,
+    limit: int = 10,
+    slug: str | None = None,
+    now: Callable[[], datetime] = lambda: datetime.now().astimezone(),
+) -> dict:
+    """Recent completed agent events plus any currently running (start without end) jobs."""
+    path = root / ACTIVITY_FILE
+    roles = _role_names()
+    current_now = now()
+    open_starts: dict[tuple[str, str, str, str, str], tuple[dict, datetime | None]] = {}
+    history: list[dict] = []
+    if path.is_file():
+        for raw in path.read_text(encoding='utf-8', errors='replace').splitlines():
+            if not raw.strip():
+                continue
+            try:
+                row = json.loads(raw)
+            except ValueError:
+                continue
+            if not isinstance(row, dict):
+                continue
+            if slug and str(row.get('slug') or '') != slug:
+                continue
+            key = (
+                str(row.get('slug') or ''),
+                str(row.get('step') or ''),
+                str(row.get('role') or ''),
+                str(row.get('cli') or ''),
+                str(row.get('model') or ''),
+            )
+            role_id = str(row.get('role') or '')
+            enriched = {
+                **row,
+                'role_name': roles.get(role_id, role_id),
+                'step_label': STEP_LABELS.get(str(row.get('step') or ''), str(row.get('step') or '')),
+            }
+            event = row.get('event')
+            at_dt = _parse_iso(row.get('at'))
+            if event == 'start':
+                open_starts[key] = (enriched, at_dt)
+            elif event == 'end':
+                prior = open_starts.pop(key, None)
+                duration_s = 0.0
+                started_at = row.get('at')
+                if prior is not None:
+                    started_at = prior[0].get('at')
+                    if prior[1] is not None and at_dt is not None:
+                        duration_s = round(max(0.0, (at_dt - prior[1]).total_seconds()), 1)
+                history.append({
+                    **enriched,
+                    'started_at': started_at,
+                    'duration_s': duration_s,
+                    'running': False,
+                })
+            elif event == 'quota':
+                history.append({
+                    **enriched,
+                    'started_at': row.get('at'),
+                    'duration_s': 0.0,
+                    'running': False,
+                })
+    running: list[dict] = []
+    for start_row, start_dt in open_starts.values():
+        duration_s = 0.0
+        if start_dt is not None:
+            duration_s = round(max(0.0, (current_now - start_dt).total_seconds()), 1)
+        running.append({
+            **start_row,
+            'started_at': start_row.get('at'),
+            'duration_s': duration_s,
+            'running': True,
+        })
+    recent = history[::-1][: max(1, int(limit))]
+    return {
+        'running': running,
+        'recent': recent,
+        'items': [*running, *recent],
+    }
+
+
+def _project_preview_url(path: Path, project: ProjectManifestV2) -> str | None:
+    rev = path / 'revisions' / project.active_revision
+    renders = rev / 'renders'
+    if (renders / 'thumbnail.png').is_file():
+        return f'/media/{path.name}/thumbnail.png'
+    if (rev / 'posts/thumbnail.png').is_file():
+        opaque = asset_library._opaque(path.name, project.active_revision, 'posts/thumbnail.png')
+        return f'/media/{path.name}/library/{opaque}'
+    if (renders / 'review-frames').is_dir():
+        sheets = sorted((renders / 'review-frames').glob('*/sheet-*.png'))
+        if sheets:
+            rel = sheets[0].relative_to(renders).as_posix()
+            return f'/media/{path.name}/{rel}'
+    return None
+
+
+def _project_status_line(
+    root: Path,
+    path: Path,
+    project: ProjectManifestV2,
+    running_job: dict | None,
+    recent_job: dict | None,
+    blocked_note: str,
+) -> str:
+    if running_job is not None:
+        step = running_job.get('step_label') or STEP_LABELS.get(str(running_job.get('step') or ''), 'Đang xử lý')
+        role = running_job.get('role_name') or running_job.get('role') or 'Agent'
+        model = running_job.get('model') or running_job.get('cli') or ''
+        return f'{step} · {role} · {model}'.strip(' ·')
+    waiting_file = root / 'topics/logs' / path.name / 'waiting-model.txt'
+    if waiting_file.is_file():
+        until_raw = waiting_file.read_text(encoding='utf-8', errors='replace').strip()
+        until_dt = _parse_iso(until_raw)
+        when = until_dt.strftime('%H:%M') if until_dt else until_raw
+        return f'Chờ model trở lại ({when})'
+    if blocked_note:
+        return f'Bị chặn · {STAGES[stage_index(project)].lower()}'
+    label = STATE_LABELS.get(project.state, project.state.value)
+    if recent_job is not None and project.state not in factory.GATES:
+        role = recent_job.get('role_name') or recent_job.get('role') or ''
+        model = recent_job.get('model') or ''
+        if role and model:
+            return f'{label} · {role} · {model}'
+    return label
+
+
+def overview(
+    root: Path,
+    *,
+    now: Callable[[], datetime] = lambda: datetime.now().astimezone(),
+) -> dict:
+    """Company overview payload for the home page: KPI tiles, decision strip, projects, resting models."""
+    current_now = now()
+    act = activity(root, limit=30, now=lambda: current_now)
+    running_by_slug = {str(item.get('slug')): item for item in act['running'] if item.get('slug')}
+    recent_by_slug: dict[str, dict] = {}
+    for item in act['recent']:
+        slug_key = str(item.get('slug') or '')
+        if slug_key and slug_key not in recent_by_slug:
+            recent_by_slug[slug_key] = item
+    resting = QuotaBook(root / QUOTA_FILE).snapshot(current_now)
+    queue_dates: dict[str, datetime] = {}
+    try:
+        for entry in load_queue(root):
+            queue_dates[entry.slug] = datetime.combine(entry.added, datetime.min.time()).astimezone()
+    except (OSError, ValueError):
+        pass
+
+    logs = root / 'topics' / 'logs'
+    decisions: list[dict] = []
+    project_cards: list[dict] = []
+    done_states = {WorkflowState.VIDEO_APPROVED, WorkflowState.PACKAGED, WorkflowState.PUBLISHED_MANUAL}
+    inactive_states = done_states | {WorkflowState.IDEA, WorkflowState.TOPIC_REJECTED, WorkflowState.BLOCKED} | set(factory.GATES)
+    running_count = 0
+    done_7d = 0
+    done_30d = 0
+    lead_days: list[float] = []
+
+    for path, project in factory.projects(root):
+        blocked = logs / path.name / 'blocked.txt'
+        reason = path / 'blocked-reason.md'
+        note = ''
+        if project.state is WorkflowState.BLOCKED or blocked.exists():
+            source = reason if reason.exists() else blocked
+            note = source.read_text(encoding='utf-8', errors='replace').strip() if source.exists() else ''
+        current_card = decision_card.card(path)
+        title = factory.project_title(path, project)
+        if current_card is not None:
+            decisions.append({
+                'slug': path.name,
+                'title': title,
+                'gate': current_card['gate'],
+                'count': len(current_card['decisions']),
+                'revision': project.active_revision,
+            })
+        marker = logs / path.name / RUNNING_MARKER
+        is_running = (
+            path.name in running_by_slug
+            or marker.is_file()
+            or (project.state not in inactive_states and not note)
+        )
+        if is_running:
+            running_count += 1
+        manifest_file = path / 'project.yaml'
+        mtime_dt = datetime.fromtimestamp(manifest_file.stat().st_mtime).astimezone()
+        if project.state in done_states:
+            rev = path / 'revisions' / project.active_revision
+            approval_file = rev / 'reviews/video-approval.yaml'
+            done_dt = mtime_dt
+            if approval_file.is_file():
+                done_dt = _parse_iso(read_yaml(approval_file).get('reviewed_at')) or mtime_dt
+            age_days = max(0.0, (current_now - done_dt).total_seconds() / 86400.0)
+            if age_days <= 7.0:
+                done_7d += 1
+            if age_days <= 30.0:
+                done_30d += 1
+            start_dt = queue_dates.get(path.name)
+            if start_dt is None:
+                first_card = path / 'revisions/001/topic/card.yaml'
+                if first_card.is_file():
+                    start_dt = datetime.fromtimestamp(first_card.stat().st_mtime).astimezone()
+            if start_dt is not None and done_dt >= start_dt:
+                lead_days.append((done_dt - start_dt).total_seconds() / 86400.0)
+
+        label = STATE_LABELS.get(project.state, project.state.value)
+        project_cards.append({
+            'slug': path.name,
+            'title': title,
+            'stage_index': stage_index(project),
+            'stage': stage_index(project),
+            'state': project.state.value,
+            'state_label': f'Bị chặn · {STAGES[stage_index(project)].lower()}' if note else label,
+            'gate': factory.GATES.get(project.state),
+            'revision': project.active_revision,
+            'blocked': note,
+            'preview_url': _project_preview_url(path, project),
+            'status_line': _project_status_line(
+                root, path, project,
+                running_by_slug.get(path.name),
+                recent_by_slug.get(path.name),
+                note,
+            ),
+            'updated_at': mtime_dt.isoformat(timespec='seconds'),
+        })
+
+    avg_days = round(sum(lead_days) / len(lead_days), 1) if lead_days else 0.0
+    return {
+        'tiles': {
+            'running': running_count,
+            'waiting_doctor': len(decisions),
+            'done_7d': done_7d,
+            'done_30d': done_30d,
+            'avg_days_topic_to_video': avg_days,
+            'models_resting': len(resting),
+        },
+        'decisions': decisions,
+        'projects': project_cards,
+        'resting': resting,
+        'channel': {'connected': False},
+    }
+
+
+def timeline(project_dir: Path) -> list[dict]:
+    """Scene timeline from the active revision's render-input.json with open change flags."""
+    project = ProjectManifestV2.model_validate(read_yaml(project_dir / 'project.yaml'))
+    rev = project_dir / 'revisions' / project.active_revision
+    render_input = rev / 'renders/render-input.json'
+    if not render_input.is_file():
+        return []
+    try:
+        data = read_yaml(render_input)
+    except (OSError, ValueError):
+        return []
+    if not isinstance(data, dict):
+        return []
+    fps = float(data.get('fps') or 30)
+    open_scenes: set[str] = set()
+    open_briefs: list[str] = []
+    changes_dir = rev / 'reviews/changes'
+    if changes_dir.is_dir():
+        for req_path in sorted(changes_dir.glob('*-requested.yaml')):
+            try:
+                req = read_yaml(req_path)
+            except (OSError, ValueError):
+                continue
+            if isinstance(req, dict) and not req.get('applied', False):
+                ctx = req.get('context')
+                if isinstance(ctx, dict) and ctx.get('scene'):
+                    open_scenes.add(str(ctx['scene']))
+                if req.get('brief'):
+                    open_briefs.append(str(req['brief']))
+    rows: list[dict] = []
+    for scene in data.get('scenes', []):
+        if not isinstance(scene, dict):
+            continue
+        scene_id = str(scene.get('id') or scene.get('scene') or '')
+        if 'start_s' in scene and 'end_s' in scene:
+            start_s = round(float(scene['start_s']), 2)
+            end_s = round(float(scene['end_s']), 2)
+        else:
+            start_frame = int(scene.get('start_frame', 0))
+            duration_frames = int(scene.get('duration_frames', 0))
+            start_s = round(start_frame / fps, 2)
+            end_s = round((start_frame + duration_frames) / fps, 2)
+        is_open = bool(
+            scene_id and (
+                scene_id in open_scenes
+                or any(re.search(rf'\b{re.escape(scene_id)}\b', brief) for brief in open_briefs)
+            )
+        )
+        rows.append({
+            'scene': scene_id,
+            'start_s': start_s,
+            'end_s': end_s,
+            'open_change': is_open,
+        })
+    return rows
 
 
 def snapshot(root: Path, *, agents: Callable[[], list[str]] | None = None) -> dict:
@@ -236,12 +578,28 @@ def review_bundle(root: Path, project_dir: Path, project: ProjectManifestV2) -> 
             media.append({'label': label, 'url': f'/media/{project_dir.name}/{rel}', 'kind': rel.rsplit('.', 1)[1]})
     for clip in sorted((renders / 'clips').glob('*.mp4')) if renders.is_dir() else []:
         media.append({'label': f'Clip {clip.stem}', 'url': f'/media/{project_dir.name}/clips/{clip.name}', 'kind': 'mp4'})
+    frames = []
+    if (renders / 'frames').is_dir():
+        for frame in sorted((renders / 'frames').glob('*.png')):
+            frames.append({'name': frame.name, 'url': f'/media/{project_dir.name}/frames/{frame.name}'})
+    expert_brief = (
+        read_yaml(rev / 'evidence/expert-brief.yaml')
+        if (rev / 'evidence/expert-brief.yaml').is_file() else {}
+    )
+    storyboard = (
+        read_yaml(rev / 'storyboard/storyboard.yaml')
+        if (rev / 'storyboard/storyboard.yaml').is_file() else {}
+    )
     qa = read_yaml(rev / 'reviews/video-qa.json') if (rev / 'reviews/video-qa.json').is_file() else {}
     return {
         'slug': project_dir.name, 'title': factory.project_title(project_dir, project),
         'state': project.state.value, 'state_label': STATE_LABELS.get(project.state, project.state.value),
         'gate': factory.GATES.get(project.state), 'revision': project.active_revision,
         'lines': lines, 'claims': claims, 'records': records, 'media': media,
+        'frames': frames, 'expert_brief': expert_brief, 'storyboard': storyboard,
+        'timeline': timeline(project_dir),
+        'card': decision_card.card(project_dir),
+        'activity': activity(root, limit=50, slug=project_dir.name)['items'],
         'script_review': review_view(rev),
         'product_review': product_review.review_view(rev),
         'video_stale': project.state in {WorkflowState.MEDICALLY_APPROVED, WorkflowState.PRODUCTION_IN_PROGRESS,
@@ -427,7 +785,7 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _json(self, payload: dict, status: HTTPStatus = HTTPStatus.OK) -> None:
+    def _json(self, payload: dict | list | None, status: HTTPStatus = HTTPStatus.OK) -> None:
         self._send(status, json.dumps(payload, ensure_ascii=False).encode('utf-8'),
                    'application/json; charset=utf-8')
 
@@ -437,8 +795,9 @@ class _Handler(BaseHTTPRequestHandler):
             return
         path = unquote(self.path.split('?', 1)[0])
         parts = [p for p in path.split('/') if p]
+        query = parse_qs(urlsplit(self.path).query)
         try:
-            extra = dashboard_operations.get_route(self.server, parts, parse_qs(urlsplit(self.path).query))
+            extra = dashboard_operations.get_route(self.server, parts, query)
             if extra is not None:
                 if isinstance(extra, bytes):
                     self._send(HTTPStatus.OK, extra, 'image/png')
@@ -452,15 +811,27 @@ class _Handler(BaseHTTPRequestHandler):
                 self._json({'app': APP_ID})
             elif path == '/api/status':
                 self._json(snapshot(self.server.root, agents=self.server.agents))
+            elif path == '/api/overview':
+                self._json(overview(self.server.root))
+            elif path == '/api/activity':
+                try:
+                    limit = max(1, min(200, int(query.get('limit', ['10'])[0])))
+                except ValueError:
+                    limit = 10
+                slug_filter = query.get('slug', [None])[0] or None
+                self._json(activity(self.server.root, limit=limit, slug=slug_filter))
             elif path == '/api/feedback':
                 self._json({'entries': feedback_inbox.view(self.server.root)})
             elif path == '/api/standards':
                 self._json({'entries': standards.load(self.server.root)[::-1]})
             elif parts[:2] == ['api', 'trials'] or path == '/api/standards/accepted':
                 self._trial_get(parts)
-            elif len(parts) == 4 and parts[:2] == ['api', 'projects'] and parts[3] == 'card':
+            elif len(parts) == 4 and parts[0] == 'api' and parts[1] in {'project', 'projects'} and parts[3] == 'card':
                 project_dir, _ = self.server.project_dir(parts[2])
                 self._json(decision_card.card(project_dir))
+            elif len(parts) == 4 and parts[0] == 'api' and parts[1] in {'project', 'projects'} and parts[3] == 'timeline':
+                project_dir, _ = self.server.project_dir(parts[2])
+                self._json(timeline(project_dir))
             elif len(parts) == 4 and parts[:2] == ['api', 'project'] and parts[3] == 'bundle':
                 project_dir, project = self.server.project_dir(parts[2])
                 self._json(review_bundle(self.server.root, project_dir, project))
@@ -580,7 +951,10 @@ class _Handler(BaseHTTPRequestHandler):
         except (OSError, TypeError, ValueError, RuntimeError) as error:
             self._json({'error': str(error)}, HTTPStatus.BAD_REQUEST)
         else:
-            self._json({'ok': True, 'message': message})
+            payload = {'ok': True, 'message': message}
+            if isinstance(message, dict):
+                payload = {**message, **payload}
+            self._json(payload)
 
 
 class DashboardServer(ThreadingHTTPServer):
@@ -596,6 +970,9 @@ class DashboardServer(ThreadingHTTPServer):
         self.token = token or secrets.token_urlsafe(24)
         self.agents = agents
         self.limiter = PinLimiter()
+        self._studio_proc: object | None = None
+        self._studio_log_handle: object | None = None
+        self._studio_lock = threading.Lock()
         self.actions = actions or default_actions(self)
         factory_trials.list_trials(self.root)
 
@@ -607,7 +984,49 @@ class DashboardServer(ThreadingHTTPServer):
         layout = dashboard_operations.project_layout(self.root, slug)
         return layout.project_dir, layout.manifest
 
+    def start_studio(self) -> dict[str, str]:
+        with self._studio_lock:
+            log_path = self.root / 'cache/studio.log'
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            if self._studio_proc is None or getattr(self._studio_proc, 'poll', lambda: None)() is not None:
+                if self._studio_log_handle is not None:
+                    try:
+                        self._studio_log_handle.close()
+                    except OSError:
+                        pass
+                log_file = log_path.open('a', encoding='utf-8')
+                self._studio_log_handle = log_file
+                flags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
+                cwd = self.root if (self.root / 'video').is_dir() else REPO_ROOT
+                argv = resolve_pnpm_argv(['--dir', 'video', 'exec', 'remotion', 'studio'])
+                self._studio_proc = subprocess.Popen(
+                    argv,
+                    cwd=cwd,
+                    stdout=log_file,
+                    stderr=subprocess.STDOUT,
+                    shell=False,
+                    creationflags=flags,
+                )
+            url = 'http://127.0.0.1:3000'
+            if log_path.is_file():
+                text = _read_text(log_path, limit=8000)
+                match = re.search(r'https?://(?:localhost|127\.0\.0\.1):\d+', text)
+                if match:
+                    url = match.group(0)
+            return {'url': url}
+
+    def server_close(self) -> None:
+        if self._studio_log_handle is not None:
+            try:
+                self._studio_log_handle.close()
+            except OSError:
+                pass
+            self._studio_log_handle = None
+        super().server_close()
+
     def dispatch(self, parts: list[str], body: dict | None = None) -> str | dict:
+        if parts == ['api', 'studio']:
+            return self.start_studio()
         if len(parts) == 3 and parts[:2] == ['api', 'trials']:
             return self.trial_action(parts[2], body or {})
         extra = dashboard_operations.post_route(self, parts, body or {})

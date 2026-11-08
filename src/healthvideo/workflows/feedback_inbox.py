@@ -92,6 +92,20 @@ def add(root: Path, project: str, text: str) -> dict:
     return entry
 
 
+def add_ready(root: Path, project: str, text: str) -> dict:
+    """Store coordinator-analyzed feedback directly, without a second analyst."""
+    if not isinstance(text, str) or not text.strip() or len(text) > MAX_TEXT:
+        raise ValueError(f'Ý kiến cần nội dung từ 1 đến {MAX_TEXT} ký tự.')
+    entry = {
+        'id': uuid4().hex, 'at': datetime.now().astimezone().isoformat(),
+        'project': project, 'text': text.strip(), 'status': 'ready',
+        'analysis': {'summary': text.strip(), 'tasks': []}, 'error': None,
+    }
+    with _LOCK:
+        _save(root, [*load(root), entry])
+    return entry
+
+
 def retry(root: Path, entry_id: str) -> dict:
     with _LOCK:
         entry = next((item for item in view(root) if item['id'] == entry_id), None)

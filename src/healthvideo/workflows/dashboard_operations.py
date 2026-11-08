@@ -191,6 +191,10 @@ def reopen_project(root: Path, slug: str, *, expected_revision: str, reviewer: s
 def get_route(server, parts: list[str], query: dict) -> dict | bytes | None:
     from healthvideo.workflows import asset_library as library
 
+    if parts == ['api', 'chat']:
+        from healthvideo.workflows import chat
+
+        return {'messages': chat.load(server.root, query.get('slug', [None])[0] or None)[-100:]}
     if parts == ['api', 'topics']:
         return {'entries': [e.model_dump(mode='json') for e in load_queue(server.root)]}
     if len(parts) == 4 and parts[:2] == ['api', 'project'] and parts[3] == 'operations':
@@ -208,6 +212,15 @@ def get_route(server, parts: list[str], query: dict) -> dict | bytes | None:
 
 
 def post_route(server, parts: list[str], body: dict) -> dict | None:
+    if parts in (['api', 'chat'], ['api', 'chat', 'confirm']):
+        from healthvideo.workflows import chat
+
+        allowed = {'slug', 'id'} if parts[-1] == 'confirm' else {'slug', 'text', 'context'}
+        if set(body) - allowed:
+            raise ValueError('Trường chat không hợp lệ; không nhận PIN.')
+        if parts[-1] == 'confirm':
+            return chat.confirm(server.root, body.get('slug') or None, body.get('id'))
+        return chat.post(server.root, body.get('slug') or None, body.get('text'), body.get('context', {}))
     if len(parts) == 3 and parts[:2] == ['api', 'library']:
         return _library_post(server, parts[2], body)
     if parts == ['api', 'topics', 'add']:
