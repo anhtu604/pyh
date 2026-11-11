@@ -33,3 +33,35 @@ entries:
     N09, N10, N13, N19, N22, N23, N27 cho gọn như bản v2; "không phải…" tối đa 2 lần
     cả bài. Giữ nguyên các dòng khác.'
   items: []
+- at: '2026-11-07T21:55:54+07:00'
+  slug: gout-tinh-the-urat
+  gate: medical
+  revision: '001'
+  kind: reopen
+  reviewer: Tu
+  text: Tỷ lệ cảnh biểu đồ đang là 25.2%, cao hơn mức cho phép 15–25%. Cần sửa storyboard.
+  items: []
+- at: '2026-11-07T22:19:07+07:00'
+  slug: gout-tinh-the-urat
+  gate: medical
+  revision: '001'
+  kind: approve_note
+  reviewer: Tu
+  text: Anh Tu Vuong Dinh
+  items: []
+- at: '2026-11-07T22:20:17+07:00'
+  slug: gout-tinh-the-urat
+  gate: medical
+  revision: '001'
+  kind: reopen
+  reviewer: Tu
+  text: Cảnh S02 có nhịp nằm ngoài thời lượng cảnh.
+  items: []
+- at: '2026-11-07T23:03:11+07:00'
+  slug: gout-tinh-the-urat
+  gate: medical
+  revision: '001'
+  kind: reopen
+  reviewer: Tu
+  text: Bước sản xuất video gặp lỗi.
+  items: []

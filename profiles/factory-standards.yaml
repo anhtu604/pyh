@@ -1,0 +1,179 @@
+version: 1
+entries:
+- id: d74962cb823a4f60a4285d69e53f2e81
+  stage: 1
+  version: 1
+  text: 'Kịch bản hiện tại mang đậm dấu ấn của một **pipeline RAG / LLM được kiểm
+    soát quá chặt về mặt bằng chứng** — an toàn tuyệt đối về mặt học thuật và pháp
+    lý y khoa, nhưng nghe giống một "robot đọc biên bản thẩm định tài liệu" hơn là
+    một bác sĩ đang trò chuyện trên video.
+
+
+    ---
+
+
+    ### 1. Đánh giá tổng quan: Vì sao kịch bản này nghe "rất AI"?
+
+
+    * **Hội chứng "Rào đón nguồn" (Meta-rag leak):** Những cụm từ như *"Bộ tài liệu
+    đã kiểm tra..."*, *"Bộ nguồn đang dùng cho phép nói..."*, *"Đây là tìm kiếm có
+    giới hạn, không phải tổng quan hệ thống..."* (N02, N08, N15, N37, N42) là ngôn
+    ngữ của prompt hệ thống (system prompt) bắt AI không được suy diễn ngoài tài liệu
+    (hallucination guardrails). Người thật nói chuyện trên video không ai tự khai
+    báo phạm vi database của mình như vậy.
+
+    * **Cấu trúc câu "Văn dịch + Phòng thủ":** Các câu có độ dài đều chằn chặn (3
+    câu/node), nhịp điệu đều đều, liên tục lặp lại cấu trúc: *Nêu 1 ý $\rightarrow$
+    Rào lại giới hạn của ý đó $\rightarrow$ Nhắc đi khám*. Sự cẩn trọng này cần thiết
+    trong nghiên cứu, nhưng lên kịch bản truyền thông lại làm tụt cảm xúc (flat pacing).
+
+    * **Lặp ý nghiêm trọng (Redundancy):** Từ N05 đến N24 (20 đoạn!) chỉ xoay quanh
+    đúng một ý: *Mạng thần kinh bình thường có điều hòa đồng bộ $\rightarrow$ Động
+    kinh là đồng bộ quá mức*. Người xem video sẽ rời đi ngay từ N10 vì cảm giác bị
+    "giảng đạo vòng vo".
+
+    * **Thiếu hoàn toàn cá tính của bạn:** Kịch bản hiện tại thiếu sự sắc sảo, gãy
+    gọn của một người làm chuyên môn thực chiến và hoàn toàn chưa có chất "cà khịa
+    nhẹ" (châm biếm duyên dáng) để làm mềm các kiến thức giải phẫu/sinh lý khô khan.
+
+
+    ---
+
+
+    ### 2. Nhận xét chi tiết theo từng cụm kịch bản
+
+
+    * **Đoạn mở đầu (N01 – N04):**
+
+    * *Điểm cộng:* Câu đầu *"Khoan vắt chanh đã!"* vào đề tốt.
+
+    * *Điểm trừ (Mùi AI):* Ngay câu N02 đã tụt mood vì *"Bộ tài liệu đã kiểm tra chưa
+    chứng minh được..."*. Câu *"Nghe chữ xả độc cứ như mở vòi là xong"* là một mầm
+    mống châm biếm rất hay, nhưng câu chốt *"nhưng lời hứa ấy vẫn cần bằng chứng"*
+    lại kéo tụt về giọng văn mẫu.
+
+
+
+    * **Đoạn giải thích cơ chế M01 – M02 (N05 – N24):**
+
+    * *Điểm trừ lớn nhất:* Đây là "vùng trũng" đậm mùi AI nhất. Việc tách bạch giữa
+    "đồng bộ sinh lý có điều hòa" và "đồng bộ quá mức trong cơn" chỉ cần **3–4 đoạn
+    có hình ảnh so sánh đời thường** là người xem hiểu ngay. Hiện tại kịch bản đang
+    tự tranh luận với chính nó qua 20 đoạn bằng ngôn từ trừu tượng (*"mức mô tả"*,
+    *"bối cảnh rối loạn điều hòa"*, *"bài tổng quan tường thuật"*).
+
+
+
+    * **Đoạn triệu chứng & Ranh giới chẩn đoán M03 (N25 – N34):**
+
+    * *Nhận xét:* Ý tứ rất chuẩn y đức (tách bạch giữa mô tả triệu chứng *co cứng
+    - co giật toàn thể* và chẩn đoán nguyên nhân/tổn thương mô). Tuy nhiên, cách diễn
+    đạt ở N28 (*"Mình không coi mỗi lần cơ thể giật là một phép đo trực tiếp hoạt
+    động từng tế bào"*) nghe cực kỳ máy móc và sách vở.
+
+
+
+    * **Đoạn Phản biện mẹo & Hướng dẫn sơ cứu (N35 – N51):**
+
+    * *Nhận xét:* N37 và N42 lộ nguyên văn câu lệnh ép AI không được bịa số liệu (*"vì
+    vậy mình không gán cho chanh một tỷ lệ hiệu quả hay một con số nguy cơ tự nghĩ
+    ra"*). Khi lên sóng, câu này làm giảm uy tín của người nói vì nghe như đang đọc
+    nháp. Ngoài ra, hướng dẫn sơ cứu ở N35 và N46 bị lặp lại gần như y hệt nhau.
+
+
+
+
+    ---
+
+
+    ### 3. Đề xuất chỉnh sửa để "Ra chất riêng, hóm hỉnh và đời hơn"
+
+
+    Để kịch bản vừa giữ được **kỷ luật bằng chứng cực kỳ chặt chẽ** (đúng tinh thần
+    các mã `M01`, `I01`, `E01` của bạn), vừa mang giọng điệu **thẳng thắn, thông minh,
+    hơi châm biếm nhẹ nhưng vẫn ấm áp**, bạn có thể áp dụng 4 nguyên tắc sau:
+
+
+    1. **Giấu "nhãn nguồn" vào thái độ chuyên môn:** Thay vì nói *"Bộ nguồn đang dùng
+    không có bước nối chứng minh..."*, hãy chuyển thành giọng tự nhiên: *"Nghe thì
+    rất thuận tai, nhưng tìm đỏ mắt trong các tài liệu y khoa hiện có thì chẳng thấy
+    bằng chứng nào nối được từ chuyện rối loạn điện trong não ra tới... đầu ngón tay
+    cả."*
+
+    2. **Dùng ẩn dụ đời thường cho phần Mạng thần kinh (M01-M02):** So sánh mạng tế
+    bào thần kinh như một **dàn nhạc giao hưởng** hoặc **ngã tư giờ cao điểm có đèn
+    giao thông** (đồng bộ có điều hòa). Khi lên cơn co giật, đó là lúc cả dàn nhạc
+    bỗng dưng gõ trống cùng một nhịp điên cuồng (đồng bộ quá mức) — chứ không phải
+    có "cục độc" nào đang chờ chích kim cho xì ra.
+
+    3. **Nâng cấp chất châm biếm (Sarcasm tinh tế):** Châm biếm vào **sự vô lý của
+    cái mẹo**, tuyệt đối không châm biếm **sự hoảng loạn của người nhà**. Ví dụ: biến
+    quả chanh thành thứ chỉ nên dành cho đĩa rau muống luộc hoặc cốc nước giải khát
+    cho người đứng xem hạ hỏa, chứ không phải thuốc cấp cứu.
+
+    4. **Cắt gọn số lượng Node (Gộp ý):** Rút gọn cụm giải thích cơ chế xuống một
+    nửa về mặt cảm giác bằng cách làm câu văn sắc, giàu hình ảnh hơn, tránh lặp lại
+    cùng một cấu trúc rào đón ở mọi câu.
+
+
+    ---
+
+
+    ### 4. Bản viết lại mẫu (Thử nghiệm giọng điệu mới trên một số đoạn đắt giá)
+
+
+    Dưới đây là cách viết lại một số node tiêu biểu để bạn thấy sự khác biệt khi **giữ
+    nguyên 100% ràng buộc bằng chứng (`[1]`, `[2]`)** nhưng đổi hẳn sang giọng người
+    thật có pha chút dí dỏm:
+
+
+    * **N01 (I01 · [1]):** Khoan, hạ quả chanh xuống đã bạn ơi! Biết là nhìn người
+    nhà co giật thì ai cũng sốt ruột muốn làm ngay một cái gì đó. Nhưng quả chanh
+    lúc này nên để yên trong tủ lạnh, chứ tuyệt đối không phải thứ đưa vào miệng người
+    đang lên cơn. Mình ưu tiên sơ cứu đúng cách và gọi hỗ trợ y tế trước nhé.
+
+    * **N02 (I02 · [1,2]):** Thế còn tuyệt chiêu lấy kim chích máu đầu ngón tay để
+    "xả độc"? Nghe chữ "xả độc" cứ nhẹ tênh như mở van nước là xong chuyện. Nhưng
+    lục tìm trong các tài liệu y khoa đã kiểm chứng thì... chưa có bằng chứng nào
+    bảo chứng cho lời hứa ngọt ngào ấy cả. Đừng lấy mẹo truyền miệng ra thế chỗ cho
+    sơ cứu chuẩn nhé.
+
+    * **N06 – N07 (M01 · [2]):** Khi nói chuyện não bộ hoạt động, mình không nhìn
+    lẻ tẻ một tế bào thần kinh đứng cô đơn, mà nhìn cả một mạng lưới. Bình thường,
+    mạng này giống như một dàn nhạc có nhạc trưởng điều phối: lúc nào cần lên tiếng,
+    phối hợp với nhau tới đâu đều có quy củ. Nghe chữ "đồng bộ" đừng vội nghĩ càng
+    cùng lúc càng tốt — phối hợp nhịp nhàng khác hẳn với chuyện tất cả cùng hét lên
+    một lượt.
+
+    * **N18 (M02 · [2]):** Khi cơ chế điều hòa của mạng lưới bị rối loạn, hàng loạt
+    tế bào thần kinh có thể bỗng dưng hoạt động đồng bộ quá mức trong cơn. Bản chất
+    câu chuyện nằm ở sự rối loạn nhịp điệu của mạng thần kinh đó, chứ chẳng có "chất
+    độc" bí ẩn nào đang xếp hàng ở đầu ngón tay chờ bạn chích kim cho thoát ra đâu.
+
+    * **N36 & N42 (I01 · [1]):** Quay lại chuyện quả chanh: nguyên tắc an toàn tối
+    thượng là không đổ hay vắt bất cứ thứ gì vào miệng người đang co giật. Ngay cả
+    trong y tế, muốn dùng đường uống còn phải đánh giá xem người bệnh có tỉnh táo
+    làm theo lệnh và tự nuốt an toàn được không. Đằng này người ta đang co giật đùng
+    đùng mà vắt chanh vào thì chỉ làm tăng rủi ro chứ chẳng thấy lợi đâu.
+
+    * **N40 (M02 · [2]):** Nếu ai đó giải thích chuyện rối loạn trên não nghe rất
+    bác học, rồi chốt hạ bằng câu "vậy nên phải chích máu ngón tay", bạn cứ mạnh dạn
+    hỏi lại: *Ủa, bước nối giữa hai chuyện đó nằm ở đâu?* Trong các nguồn bằng chứng
+    hiện có thì cây cầu nối đó hoàn toàn chưa tồn tại. Một thuật ngữ nghe có vẻ chuyên
+    môn không thể làm thay nhiệm vụ của bằng chứng lâm sàng được.
+
+    * **N47 & N49 (E01, I01 · [1]):** Lúc người bệnh đang giật mà xung quanh mỗi người
+    hiến một kế, bạn không cần đứng thắng một cuộc tranh luận y học rồi mới bắt tay
+    vào làm. Ai giục vắt chanh hay chích máu, cứ gạt nhẹ nhưng dứt khoát: *"Đừng cho
+    gì vào miệng, để em dọn chỗ nằm an toàn rồi gọi cấp cứu đã!"*
+
+
+    Bạn muốn giữ nguyên đúng **52 khung (N01–N52)** cùng toàn bộ mã gán nhãn (`I01
+    · [1]`, `M01 · [2]`...) để mình chuốt lại toàn bộ kịch bản theo đúng tông giọng
+    này, hay muốn gộp bớt các câu bị lặp ở phần giữa cho nhịp video nhanh hơn?'
+  reviewer: Tu
+  accepted_at: '2026-10-30T15:11:23.666162+07:00'
+  trial_id: cb6feff17a2f4a39b870e7d3d2a5a2b3
+  evidence_hash: 61a1f75211a1531dd329f256460220032f6f1ef27b27f3117408d51901ce8b22
+  scope: channel
+feedback_scope: Only chung and matching project slug; history preserved.
