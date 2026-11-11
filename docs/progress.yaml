@@ -7,11 +7,11 @@ phases:
 - id: P0
   title: Giữ an toàn dữ liệu và môi trường
   tasks:
-  - {id: '0.1', title: Commit hồ sơ góp ý và chuẩn của bác sĩ, status: todo, owner: claude}
+  - {id: '0.1', title: Commit hồ sơ góp ý và chuẩn của bác sĩ, status: done, owner: claude}
   - {id: '0.2', title: Merge nhánh kế hoạch vào master và push lên GitHub, status: done, owner: claude}
-  - {id: '0.3', title: Cài pnpm 11 để dựng video chạy lại được, status: todo, owner: claude, note: cần bác sĩ đồng ý}
-  - {id: '0.4', title: Dọn file lạc ở gốc repo và ignore .remotion, status: todo, owner: claude}
-  - {id: '0.5', title: Khởi động lại app bằng code mới, status: todo, owner: claude}
+  - {id: '0.3', title: Cài pnpm 11 để dựng video chạy lại được, status: done, owner: claude, note: pnpm 11.28.11, doctor báo OK pnpm}
+  - {id: '0.4', title: Dọn file lạc ở gốc repo và ignore .remotion, status: done, owner: claude, note: m4a và api-docs.zip đã chuyển vào cache/}
+  - {id: '0.5', title: Khởi động lại app bằng code mới, status: doing, owner: bác sĩ, note: chờ bác sĩ tắt app và mở lại bằng lối tắt Xưởng video}
 - id: P1
   title: Bắt lỗi bố cục trước cổng y khoa
   tasks:
