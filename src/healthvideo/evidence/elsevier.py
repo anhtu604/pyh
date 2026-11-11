@@ -3,7 +3,7 @@
 This is the only sanctioned route to Elsevier content (spec 2026-11-08 §5.8); automated
 scraping stays forbidden (``clients.check_scopus_policy``). The API key travels only in request
 headers: it is never put in URLs, messages, logs or prompts. Full text is returned in memory
-and never written to disk (CLAUDE.md rule 4).
+and never written to disk (CLAUDE.md rule 3).
 """
 
 from __future__ import annotations

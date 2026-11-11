@@ -171,6 +171,44 @@ def _role_names() -> dict[str, str]:
         return {}
 
 
+PROGRESS_FILE = Path('docs/progress.yaml')
+PROGRESS_STATUSES = ('todo', 'doing', 'done', 'blocked')
+
+
+def progress(root: Path) -> dict:
+    """Development plan progress for the home page, read from ``docs/progress.yaml``."""
+    path = root / PROGRESS_FILE
+    if not path.is_file():
+        return {'updated': None, 'done': 0, 'total': 0, 'doing': [], 'phases': []}
+    data = read_yaml(path)
+    phases, doing, done, total = [], [], 0, 0
+    for phase in data.get('phases') or []:
+        tasks = []
+        for task in phase.get('tasks') or []:
+            status = task.get('status') if task.get('status') in PROGRESS_STATUSES else 'todo'
+            item = {
+                'id': str(task.get('id', '')),
+                'title': str(task.get('title', '')),
+                'status': status,
+                'owner': str(task.get('owner') or ''),
+                'note': str(task.get('note') or ''),
+            }
+            tasks.append(item)
+            total += 1
+            done += status == 'done'
+            if status == 'doing':
+                doing.append(item)
+        phases.append({
+            'id': str(phase.get('id', '')),
+            'title': str(phase.get('title', '')),
+            'done': sum(t['status'] == 'done' for t in tasks),
+            'total': len(tasks),
+            'tasks': tasks,
+        })
+    return {'updated': str(data.get('updated') or '') or None, 'done': done, 'total': total,
+            'doing': doing, 'phases': phases}
+
+
 def activity(
     root: Path,
     *,
@@ -813,6 +851,8 @@ class _Handler(BaseHTTPRequestHandler):
                 self._json(snapshot(self.server.root, agents=self.server.agents))
             elif path == '/api/overview':
                 self._json(overview(self.server.root))
+            elif path == '/api/progress':
+                self._json(progress(self.server.root))
             elif path == '/api/activity':
                 try:
                     limit = max(1, min(200, int(query.get('limit', ['10'])[0])))

@@ -7,8 +7,8 @@ tiers:
     - {cli: codex, model: gpt-6.1-sol}
     - {cli: claude, model: claude-opus-5-5}
     - {cli: codex, model: gpt-6-astra}
-  medium:  # agy trước: Claude đang ít token (2026-11-08)
-    - {cli: agy, model: gemini-4-argon-medium}
+  medium:  # agy trước; Gemini 4 Carbon thay Argon từ 2026-11-11 (đã thử headless)
+    - {cli: agy, model: gemini-4-carbon-medium}
     - {cli: codex, model: gpt-6.1-sol}
     - {cli: claude, model: claude-sonnet-5-5}
     - {cli: codex, model: gpt-6.1-terra}
@@ -54,7 +54,7 @@ roles:
     steps: [visual_review]
     tier: medium
     models:  # nhìn ảnh tốt
-      - {cli: agy, model: gemini-4-argon-high}
+      - {cli: agy, model: gemini-4-carbon-high}
       - {cli: claude, model: claude-sonnet-5-5}
       - {cli: codex, model: gpt-6.1-sol}
       - {cli: codex, model: gpt-6.1-terra}

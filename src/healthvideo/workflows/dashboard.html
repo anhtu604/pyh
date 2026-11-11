@@ -100,6 +100,12 @@ html[data-theme="light"] .btn.primary{color:#fff}
 .chip.done{background:hsl(168 78% 52% / .15);color:var(--teal);border:1px solid hsl(168 78% 52% / .4)}
 .chip.bad{background:hsl(350 88% 64% / .15);color:var(--rose);border-color:hsl(350 88% 64% / .4)}
 .chip.work{background:hsl(258 90% 70% / .16);color:var(--violet);border-color:hsl(258 90% 70% / .38)}
+.prog-bar{height:6px;border-radius:999px;background:var(--line-strong);overflow:hidden;margin:6px 0 2px}
+.prog-bar i{display:block;height:100%;background:var(--teal)}
+#prog-phases details{padding:8px 0;border-top:1px solid var(--line-strong)}
+#prog-phases summary{cursor:pointer;font-weight:600}
+.prog-task{display:flex;gap:10px;align-items:baseline;padding:5px 0 5px 14px;font-size:14px}
+.prog-task .meta{margin-left:auto;white-space:nowrap}
 .chip.pending{background:rgba(148,173,255,.09);color:var(--muted);border-color:var(--line-strong)}
 
 .steps{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin:12px 0 6px}
@@ -346,6 +352,13 @@ pre.md{white-space:pre-wrap;word-break:break-word;font-family:'Be Vietnam Pro',s
       <div><b id="agent-title">—</b><p id="agent-sub" class="sub"></p></div>
     </div>
     <div class="act-list" id="activity-list"><div class="empty">Chưa có hoạt động agent nào.</div></div>
+  </section>
+
+  <!-- 4b. Tiến độ hoàn thiện xưởng (docs/progress.yaml) -->
+  <div class="section-title">Tiến độ hoàn thiện xưởng <span class="tag" id="prog-total"></span></div>
+  <section class="glass card" id="progress">
+    <div id="prog-doing"></div>
+    <div id="prog-phases"><div class="empty">Chưa có kế hoạch.</div></div>
   </section>
 
   <!-- 5. "Kết quả kênh" -->
@@ -784,6 +797,29 @@ function renderOverview(ov){
   $('channel').innerHTML = `<span><b>Kết quả kênh:</b> ${ch.connected ? 'đã kết nối' : 'chưa kết nối'}</span><span class="tag">YouTube / TikTok / Facebook</span>`;
 }
 
+const PROG_CHIP = {todo:['pending','Chưa làm'], doing:['work','Đang làm'], done:['done','Xong'], blocked:['bad','Bị chặn']};
+function progTask(t){
+  const [cls,label] = PROG_CHIP[t.status] || PROG_CHIP.todo;
+  return `<div class="prog-task"><span class="chip ${cls}">${label}</span>
+    <div><b>${esc(t.id)}</b> ${esc(t.title)}${t.note ? `<div class="meta">${esc(t.note)}</div>` : ''}</div>
+    <span class="meta">${esc(t.owner)}</span></div>`;
+}
+function renderProgress(p){
+  if(!p) return;
+  $('prog-total').textContent = p.total ? `${p.done}/${p.total} việc · cập nhật ${p.updated || '—'}` : '';
+  $('prog-doing').innerHTML = (p.doing || []).map(progTask).join('');
+  const openState = {};
+  document.querySelectorAll('#prog-phases details').forEach(d => openState[d.dataset.phase] = d.open);
+  $('prog-phases').innerHTML = (p.phases || []).map(ph => {
+    const pct = ph.total ? Math.round(100 * ph.done / ph.total) : 0;
+    const open = openState[ph.id] ?? (ph.done < ph.total && ph.tasks.some(t => t.status !== 'todo'));
+    return `<details data-phase="${esc(ph.id)}" ${open ? 'open' : ''}>
+      <summary>${esc(ph.id)} · ${esc(ph.title)} <span class="meta">${ph.done}/${ph.total}</span>
+        <div class="prog-bar"><i style="width:${pct}%"></i></div></summary>
+      ${ph.tasks.map(progTask).join('')}</details>`;
+  }).join('') || '<div class="empty">Chưa có kế hoạch.</div>';
+}
+
 function renderActivityFeed(actData){
   if(!actData) return;
   activityData = actData;
@@ -921,10 +957,11 @@ function render(d){
 }
 async function refresh(){
   try{
-    const [rStatus, rOv, rAct] = await Promise.all([
+    const [rStatus, rOv, rAct, rProg] = await Promise.all([
       fetch('/api/status',{cache:'no-store'}),
       fetch('/api/overview',{cache:'no-store'}),
       fetch('/api/activity?limit=10',{cache:'no-store'}),
+      fetch('/api/progress',{cache:'no-store'}),
     ]);
     const d = await rStatus.json();
     if(!rStatus.ok) throw new Error(d.error||rStatus.status);
@@ -933,6 +970,7 @@ async function refresh(){
     $('offline').classList.remove('show');
     if(ov) renderOverview(ov);
     if(actData) renderActivityFeed(actData);
+    if(rProg.ok) renderProgress(await rProg.json());
     state=d; render(d);
     if(!busy) document.querySelectorAll('main button, header button').forEach(b=>b.disabled=false);
     $('fa-reviewer-box').hidden=!!d.reviewer;

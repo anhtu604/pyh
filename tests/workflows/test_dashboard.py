@@ -632,3 +632,24 @@ def test_studio_route_launches_once_and_logs(tmp_path, monkeypatch):
         assert len(calls) == 1
 
     _with_server(tmp_path, check)
+
+
+def test_progress_counts_tasks_and_lists_work_in_progress(tmp_path):
+    assert dashboard.progress(tmp_path)["total"] == 0
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "progress.yaml").write_text(
+        "updated: '2026-11-11'\n"
+        "phases:\n"
+        "- id: P0\n"
+        "  title: An toan\n"
+        "  tasks:\n"
+        "  - {id: '0.1', title: a, status: done, owner: claude}\n"
+        "  - {id: '0.2', title: b, status: doing, owner: agy, note: n}\n"
+        "  - {id: '0.3', title: c, status: bogus}\n",
+        encoding="utf-8",
+    )
+    result = dashboard.progress(tmp_path)
+    assert (result["done"], result["total"], result["updated"]) == (1, 3, "2026-11-11")
+    assert [task["id"] for task in result["doing"]] == ["0.2"]
+    assert result["phases"][0]["done"] == 1
+    assert result["phases"][0]["tasks"][2]["status"] == "todo"

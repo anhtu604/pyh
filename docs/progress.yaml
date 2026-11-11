@@ -1,0 +1,45 @@
+# Tiến độ hoàn thiện xưởng. App `healthvideo app` đọc file này (mục "Tiến độ hoàn thiện xưởng").
+# Kế hoạch chi tiết từng việc: CLAUDE.md mục 5. status: todo | doing | done | blocked.
+# Claude sửa file này ở checkout chính khi bắt đầu và khi xong mỗi việc (CLAUDE.md mục 3).
+version: 1
+updated: '2026-11-11'
+phases:
+- id: P0
+  title: Giữ an toàn dữ liệu và môi trường
+  tasks:
+  - {id: '0.1', title: Commit hồ sơ góp ý và chuẩn của bác sĩ, status: todo, owner: claude}
+  - {id: '0.2', title: Merge nhánh kế hoạch vào master và push lên GitHub, status: done, owner: claude}
+  - {id: '0.3', title: Cài pnpm 11 để dựng video chạy lại được, status: todo, owner: claude, note: cần bác sĩ đồng ý}
+  - {id: '0.4', title: Dọn file lạc ở gốc repo và ignore .remotion, status: todo, owner: claude}
+  - {id: '0.5', title: Khởi động lại app bằng code mới, status: todo, owner: claude}
+- id: P1
+  title: Bắt lỗi bố cục trước cổng y khoa
+  tasks:
+  - {id: '1.1', title: Ước lượng thời lượng lời đọc từ cache giọng đã có, status: todo, owner: codex}
+  - {id: '1.2', title: Chạy các bộ kiểm của bước dựng ngay khi nộp cổng y khoa, status: todo, owner: codex}
+  - {id: '1.3', title: Lệch nhỏ sau khi có giọng thật thì tự kẹp thay vì chặn, status: todo, owner: codex}
+- id: P2
+  title: Video gout chuẩn
+  tasks:
+  - {id: '2.1', title: 'Một vòng sửa gộp: biểu đồ, beat S02, clip CL02, hình kim S07', status: todo, owner: xưởng}
+  - {id: '2.2', title: Bác sĩ duyệt cổng y khoa, status: todo, owner: bác sĩ}
+  - {id: '2.3', title: Dựng video và agent duyệt sản phẩm, status: todo, owner: xưởng}
+  - {id: '2.4', title: Bác sĩ xem và duyệt cổng video, status: todo, owner: bác sĩ}
+  - {id: '2.5', title: Ghi điều bác sĩ chấp nhận thành kiểm tự động, status: todo, owner: claude}
+  - {id: '2.6', title: Đóng gói và bác sĩ đăng tay, status: todo, owner: bác sĩ}
+- id: P3
+  title: Tinh gọn kết cấu
+  tasks:
+  - {id: '3.1', title: Xóa khu nghiệm thu 4 giai đoạn đã bỏ, status: todo, owner: agy}
+  - {id: '3.2', title: Xóa giọng ElevenLabs và module ASR không dùng, status: todo, owner: agy}
+  - {id: '3.3', title: Bỏ các skill agent không vai nào dùng, status: todo, owner: agy}
+  - {id: '3.4', title: Gọn tài liệu, một nguồn tiến độ duy nhất, status: todo, owner: agy}
+  - {id: '3.5', title: Xóa worktree và nhánh cũ, status: todo, owner: claude, note: cần bác sĩ xác nhận danh sách}
+  - {id: '3.6', title: Gộp tab Ý kiến vào khung chat, status: todo, owner: agy, note: làm sau khi gout xong}
+- id: P4
+  title: Chủ đề thứ hai và bàn giao
+  tasks:
+  - {id: '4.1', title: Bác sĩ chọn một chủ đề thật, status: todo, owner: bác sĩ}
+  - {id: '4.2', title: Xưởng chạy A–Z, Claude chỉ quan sát và ghi chỗ phải can thiệp, status: todo, owner: xưởng}
+  - {id: '4.3', title: Sửa các chỗ đã ghi, status: todo, owner: codex}
+  - {id: '4.4', title: Cài thử trên checkout sạch và kiểm lệnh /pyh, status: todo, owner: claude}
