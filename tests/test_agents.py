@@ -263,13 +263,15 @@ def test_claude_runs_with_a_tool_allowlist_not_a_permission_bypass():
     assert not any('dangerously' in token for token in CLAUDE.argv)
 
 
-def test_factory_routes_hard_steps_to_opus_and_critics_away_from_the_author():
+def test_factory_keeps_scarce_opus_last_and_critics_away_from_the_author():
     from healthvideo.workflows.factory_deps import default_run_deps
     company = default_run_deps(Path('.')).company
     for step in ('research', 'draft', 'revise_medical', 'product_review'):
-        # agy runs Opus first while Claude and astra are short on tokens (2026-11-08).
-        assert company.chain(company.role_for_step(step).id)[0].model == 'claude-opus-5-5-high'
-    assert company.chain('script_critic')[0] != company.chain('writer')[0]
+        # agy has too little Opus quota for half a video (2026-11-12): reserve only.
+        chain = company.chain(company.role_for_step(step).id)
+        assert chain[0].model == 'gemini-4-carbon-high'
+        assert chain[-1].model == 'claude-opus-5-5-high'
+    assert company.chain('script_critic')[0].cli != company.chain('writer')[0].cli
 
 
 def test_resting_slot_is_skipped(tmp_path):
