@@ -125,7 +125,9 @@ scenes:
 - id: S06
   start_frame: 1020
   duration_frames: 90
-  narration: Synthetic illustration.
+  narration: Illustrative visualizations. Illustrative visualizations. Illustrative
+    visualizations. Illustrative visualizations. Illustrative visualizations. Illustrative
+    visualizations. IllustrativeVisualization.
   claim_id: C02
   visual: whiteboard
   on_screen_text: Synthetic illustration.

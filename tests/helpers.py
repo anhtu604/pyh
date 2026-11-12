@@ -532,7 +532,9 @@ def complete_explain_first_fixture(revision: Path) -> None:
         elif scene["visual"] == "evidence_highlight":
             line["text"] = " ".join(["Synthetic evidence."] * 30)
         elif scene["visual"] == "whiteboard":
-            line["text"] = "Synthetic illustration."
+            # Sustain ~12% whiteboard share after speech-based retiming,
+            # including the fixed branded outro (the old single phrase was ~5%).
+            line["text"] = " ".join(["Illustrative visualizations."] * 6 + ["IllustrativeVisualization."])
         scene["narration"] = line["text"]
     write_yaml_atomic(script_path, script)
     write_yaml_atomic(board_path, board)

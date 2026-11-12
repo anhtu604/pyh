@@ -59,7 +59,9 @@ lines:
   delivery:
     intent: advise
 - id: L06
-  text: Synthetic illustration.
+  text: Illustrative visualizations. Illustrative visualizations. Illustrative visualizations.
+    Illustrative visualizations. Illustrative visualizations. Illustrative visualizations.
+    IllustrativeVisualization.
   claim_id: C02
   delivery:
     intent: caution

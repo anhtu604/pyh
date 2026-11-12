@@ -4,14 +4,80 @@ For consecutive scenes sharing a script line, each timing row records the FULL
 line's ``audio_ms``. The source WAV is spoken once, continuously across the group.
 """
 
+import hashlib
+import json
+import math
 import wave
 from collections.abc import Mapping
 from pathlib import Path
 
+from healthvideo.domain.script import Script
 from healthvideo.domain.storyboard import Scene, Storyboard
+from healthvideo.storage.files import canonical_json_hash, read_yaml, sha256_file
 
-TIMING_POLICY_VERSION = "1.0"
+TIMING_POLICY_VERSION = "1.1"
 PAD_FRAMES = 9
+
+# Measured 2026-11-12 on gout revision 001: renders/render-input.json narration
+# paired by script_line_id with renders/audio/lines/N01.wav through N30.wav.
+# After the same tts_text/apply_pronunciation preprocessing used below:
+# 9,254 characters / 564.55 WAV seconds = 16.39181649101054 characters/second.
+# One pooled constant (no per-line fitting); absolute scene errors <= 9.642%
+# on this calibration set, not an independent validation set. See report-codex-p1.md.
+# Voice: vibi_minimax / speech-2.8-hd / 1d90e9bd-a67b-4d63-a415-032eb9ce91b5,
+# speed 1.0. This fallback is an estimate, never a medical approval or TTS call.
+FALLBACK_CHARACTERS_PER_SECOND = 16.39181649101054
+VOICE_PROFILE_PATH = Path(__file__).resolve().parents[3] / 'profiles/voice.yaml'
+
+
+def estimate_line_ms(script: Script, project_dir: Path, *,
+                     voice_profile: dict | None = None) -> dict[str, int]:
+    """Character-based estimates calibrated only on verified, matching cache receipts.
+
+    No provider is instantiated. Legacy SHA-only receipts cannot establish voice
+    or text provenance and are deliberately excluded from calibration.
+    """
+    from healthvideo.tts.pronunciation import (
+        PRONUNCIATION_PROFILE_PATH,
+        apply_pronunciation,
+        load_pronunciation_lexicon,
+    )
+
+    profile = voice_profile if voice_profile is not None else read_yaml(VOICE_PROFILE_PATH)
+    settings = profile.get('settings', {})
+    runtime = 'rest-' + hashlib.sha256(json.dumps(settings, sort_keys=True).encode()).hexdigest()[:24]
+    characters, seconds = 0, 0.0
+    for receipt in sorted((project_dir / 'cache/tts').glob('*.json')):
+        try:
+            data = read_yaml(receipt)
+            provider, request = data['provider'], data['request']
+            if any(provider.get(k) != profile.get(k) for k in ('provider', 'voice_id', 'model_id')):
+                continue
+            if provider.get('runtime_id') != runtime and provider.get('settings') != settings:
+                continue
+            # Request speed is additional to the voice profile's speed.
+            if request.get('speed', 1.0) != 1.0 or request.get('language') != script.language:
+                continue
+            if canonical_json_hash({'request': request, 'provider': provider}) != receipt.stem:
+                continue
+            wav = receipt.with_suffix('.wav')
+            if data['sha256'] != sha256_file(wav):
+                continue
+            with wave.open(str(wav), 'rb') as source:
+                duration = source.getnframes() / source.getframerate()
+            text = request['text']
+            if isinstance(text, str) and text.strip() and duration > 0:
+                characters += len(text)
+                seconds += duration
+        except (OSError, ValueError, TypeError, KeyError, AttributeError, EOFError, wave.Error):
+            continue
+    rate = characters / seconds if characters and seconds else FALLBACK_CHARACTERS_PER_SECOND
+    lexicon = load_pronunciation_lexicon(PRONUNCIATION_PROFILE_PATH)
+    if len({line.id for line in script.lines}) != len(script.lines):
+        raise ValueError('Script line IDs must be unique for estimated timing')
+    return {line.id: max(1, math.ceil(1000 * len(apply_pronunciation(
+        line.tts_text(expressive=profile.get('provider') == 'elevenlabs'), lexicon,
+    )) / rate)) for line in script.lines}
 
 
 def _integer(value: object, name: str, minimum: int = 0) -> int:

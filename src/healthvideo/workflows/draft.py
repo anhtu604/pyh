@@ -12,6 +12,7 @@ from healthvideo.domain.asset_manifest import (
     AssetManifest,
     validate_asset_manifest,
 )
+from healthvideo.domain.clip_plan import ClipPlan, validate_clip_plan
 from healthvideo.domain.evidence import EvidenceClaim
 from healthvideo.domain.hook_outro import validate_hook_outro
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
@@ -30,6 +31,53 @@ from healthvideo.storage.files import (
     write_yaml_atomic,
 )
 from healthvideo.workflows.citations import resolve_citations
+
+
+def validate_estimated_layout(
+    project_dir: Path, script: Script, storyboard: Storyboard,
+    assets: AssetManifest | None = None, *, clip_plan: ClipPlan | None = None,
+    claims: dict[str, EvidenceClaim] | None = None,
+) -> Storyboard:
+    """Read-only pre-gate timing check; collect actionable errors in one pass."""
+    from healthvideo.render.beats import resolve_scene_beats, visual_rhythm_qa
+    from healthvideo.render.timing import estimate_line_ms, retime_storyboard
+    from healthvideo.render.word_timing import entrance_timing_qa
+
+    timed, _ = retime_storyboard(storyboard, estimate_line_ms(script, project_dir))
+    errors: list[str] = []
+    try:
+        validate_visual_budget(timed, assets, margin_percent=1)
+    except ValueError as error:
+        errors.append(str(error) + '; scenes: ' + ', '.join(
+            f'{s.id}={s.duration_frames} frames ({s.visual})' for s in timed.scenes))
+    for scene in timed.scenes:
+        try:
+            resolved = resolve_scene_beats(scene)
+            entrance_timing_qa(resolved)
+            visual_rhythm_qa(resolved)
+        except ValueError as error:
+            errors.append(f'{error}; scene duration={scene.duration_frames} frames; '
+                          f'entrances={[e.start_frame for e in scene.entrances]}')
+    revision = project_dir / 'revisions' / _project(project_dir).active_revision if (
+        project_dir / 'project.yaml').is_file() else None
+    if timed.format_profile == 'youtube_long':
+        if clip_plan is None:
+            if revision is None:
+                raise ValueError('youtube_long requires script/clip-plan.yaml')
+            clip_plan = ClipPlan.model_validate(read_yaml(revision / 'script/clip-plan.yaml'))
+        if claims is None:
+            ledger = read_yaml(revision / 'evidence/ledger.yaml') if revision else {}
+            claims = {item.id: item for item in (
+                EvidenceClaim.model_validate(data) for data in ledger.get('claims', []))}
+        for clip in clip_plan.clips:
+            try:
+                validate_clip_plan(ClipPlan(clips=(clip,)), timed, claims,
+                                   min_frames=1980, max_frames=4860)
+            except ValueError as error:
+                errors.append(str(error))
+    if errors:
+        raise ValueError('Estimated layout precheck failed:\n' + '\n'.join(errors))
+    return timed
 
 
 def _project(project_dir: Path) -> ProjectManifestV2:
@@ -170,6 +218,7 @@ def submit_medical_review(project_dir: Path) -> ProjectManifestV2:
     script = Script.model_validate(script_data)
     storyboard = Storyboard.model_validate(read_yaml(revision / "storyboard/storyboard.yaml"))
     assets = AssetManifest.model_validate(read_yaml(revision / "assets/asset-manifest.yaml"))
+    validate_estimated_layout(project_dir, script, storyboard, assets)
     _validate(revision, script, storyboard, assets, project=project)
     context = TransitionContext(
         active_revision=project.active_revision,

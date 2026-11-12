@@ -6,7 +6,7 @@ from healthvideo.domain.storyboard import CaptionWord, Scene
 from healthvideo.render.word_timing import _keyword_frame, resolve_scene_entrances
 
 
-def resolve_scene_beats(scene: Scene, *, fps: int = 30) -> Scene:
+def resolve_scene_beats(scene: Scene, *, fps: int = 30, clamp_outside: bool = False) -> Scene:
     """Use existing Whisper word anchors; proportional tokens only for draft/offline fallback."""
     words = scene.words
     if not words:
@@ -20,12 +20,26 @@ def resolve_scene_beats(scene: Scene, *, fps: int = 30) -> Scene:
                  else round(beat.at*fps))
         if start is None:
             raise ValueError(f"Scene {scene.id}: beat keyword has no scene-local alignment: {beat.at}")
-        if not 0 <= start < scene.duration_frames:
-            raise ValueError(f"Scene {scene.id}: beat at {beat.at!r} outside timed scene")
+        if not 0 <= start < scene.duration_frames and not clamp_outside:
+            raise ValueError(f"Scene {scene.id}: beat at {beat.at!r} ({start} frames) "
+                             f"outside timed scene of {scene.duration_frames} frames")
         beats.append(beat.model_copy(update={"start_frame": start}))
     starts = [beat.start_frame for beat in beats]
     if starts != sorted(starts) or len(starts) != len(set(starts)):
         raise ValueError(f"Scene {scene.id}: beats must have distinct increasing times")
+    if clamp_outside and starts and starts[-1] >= scene.duration_frames:
+        if len(starts) > scene.duration_frames:
+            raise ValueError(f"Scene {scene.id}: {len(starts)} beats cannot fit "
+                             f"{scene.duration_frames} frames")
+        # Work backwards so several overflowing beats occupy distinct final frames.
+        ceiling = scene.duration_frames - 1
+        for index in range(len(beats) - 1, -1, -1):
+            start = min(starts[index], ceiling)
+            updates = {"start_frame": start}
+            if start != starts[index]:
+                updates["at"] = start / fps
+            beats[index] = beats[index].model_copy(update=updates)
+            ceiling = start - 1
     result = resolve_scene_entrances(scene.model_copy(update={"beats": tuple(beats)}))
     return result.model_copy(update={"words": words})
 

@@ -62,7 +62,8 @@ def resolve_clip_scenes(clip: ClipSpec, storyboard: Storyboard) -> tuple[Scene, 
 
 
 def validate_clip_plan(
-    plan: ClipPlan, storyboard: Storyboard, claims: Mapping[str, EvidenceClaim]
+    plan: ClipPlan, storyboard: Storyboard, claims: Mapping[str, EvidenceClaim],
+    *, min_frames: int = CLIP_MIN_FRAMES, max_frames: int = CLIP_MAX_FRAMES,
 ) -> dict[str, tuple[Scene, ...]]:
     """Block clips that run too short/long, cite unknown claims, or drop a caveat."""
     if storyboard.format_profile != "youtube_long":
@@ -71,10 +72,10 @@ def validate_clip_plan(
     for clip in plan.clips:
         scenes = resolve_clip_scenes(clip, storyboard)
         frames = sum(scene.duration_frames for scene in scenes) + CLIP_CTA_FRAMES
-        if not CLIP_MIN_FRAMES <= frames <= CLIP_MAX_FRAMES:
+        if not min_frames <= frames <= max_frames:
             raise ValueError(
                 f"{clip.id}: duration {frames} frames must be between "
-                f"{CLIP_MIN_FRAMES} and {CLIP_MAX_FRAMES}"
+                f"{min_frames} and {max_frames}"
             )
         present = {scene.claim_id for scene in scenes if scene.claim_id}
         for claim_id in sorted(present):

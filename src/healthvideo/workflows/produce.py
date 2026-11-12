@@ -50,6 +50,7 @@ from healthvideo.domain.storyboard import (
     validate_anatomy_subjects,
 )
 from healthvideo.domain.visual_budget import validate_visual_budget
+from healthvideo.render.beats import resolve_scene_beats
 from healthvideo.render.chapters import render_long_form
 from healthvideo.render.input import audio_timing_qa, build_render_input
 from healthvideo.render.remotion import build_render_argv, renderer_identity
@@ -151,7 +152,9 @@ def _synthesize_cached_line(
     temporary = cached.with_suffix(".tmp")
     shutil.copyfile(output, temporary)
     os.replace(temporary, cached)
-    _write_json_atomic(receipt, {"sha256": sha256_file(cached)})
+    _write_json_atomic(receipt, {"sha256": sha256_file(cached),
+                                 "request": request.model_dump(mode="json"),
+                                 "provider": provider_identity(tts)})
 
 
 def _music_mood(root: Path) -> str:
@@ -362,6 +365,9 @@ def _produce_v2(
             visual_budget_qa = visual_budget_report.model_dump(mode="json")
             final_frame = storyboard.scenes[-1].start_frame + storyboard.scenes[-1].duration_frames
             storyboard = apply_alignment(storyboard, _read_alignment(renders_dir, script))
+            storyboard = storyboard.model_copy(update={"scenes": tuple(
+                resolve_scene_beats(scene, clamp_outside=True) for scene in storyboard.scenes
+            )})
             storyboard = apply_visual_fallbacks(layout.artifact_root, storyboard)
             expected_input = build_render_input(
                 storyboard, audio_file="audio/narration.wav"
@@ -489,6 +495,9 @@ def _produce_v2(
         _write_json_atomic(staging_dir / "pronunciation-qa.json", pronunciation_report)
         storyboard, timing_record = retime_storyboard(approved_storyboard, line_ms)
         storyboard = apply_alignment(storyboard, alignment)
+        storyboard = storyboard.model_copy(update={"scenes": tuple(
+            resolve_scene_beats(scene, clamp_outside=True) for scene in storyboard.scenes
+        )})
         timing_record["audio_alignment"] = concat_scene_audio(storyboard, line_wavs, staged_audio)
         # Keyword-timed SFX read the alignment just written to staging, not the previous run's.
         sfx_events = resolve_sfx(storyboard, staging_dir)

@@ -133,8 +133,13 @@ def _effective_bounds(storyboard: Storyboard) -> dict[VisualCategory, PercentRan
     }
 
 
-def calculate_visual_budget(storyboard: Storyboard, assets: AssetManifest | None = None) -> VisualBudgetReport:
+def calculate_visual_budget(storyboard: Storyboard, assets: AssetManifest | None = None,
+                            *, margin_percent: int = 0) -> VisualBudgetReport:
     bounds = _effective_bounds(storyboard)
+    if margin_percent:
+        bounds = {category: PercentRange(min_percent=bound.min_percent + margin_percent,
+                                          max_percent=bound.max_percent - margin_percent)
+                  for category, bound in bounds.items()}
     category_frames = {category: 0 for category in bounds}
     expected_start = 0
     for scene in storyboard.scenes:
@@ -194,8 +199,9 @@ def calculate_visual_budget(storyboard: Storyboard, assets: AssetManifest | None
     )
 
 
-def validate_visual_budget(storyboard: Storyboard, assets: AssetManifest | None = None) -> VisualBudgetReport:
-    report = calculate_visual_budget(storyboard, assets)
+def validate_visual_budget(storyboard: Storyboard, assets: AssetManifest | None = None,
+                           *, margin_percent: int = 0) -> VisualBudgetReport:
+    report = calculate_visual_budget(storyboard, assets, margin_percent=margin_percent)
     if not report.passed:
         failures = []
         for category, bound in report.effective_bounds.items():
