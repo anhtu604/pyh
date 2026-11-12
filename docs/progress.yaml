@@ -22,7 +22,7 @@ phases:
   title: Video gout chuẩn
   tasks:
   - {id: '2.1', title: 'Một vòng sửa gộp: biểu đồ, beat S02, clip CL02, hình kim S07', status: done, owner: xưởng, note: qua kiểm bố cục trước cổng; hình kim S07 nằm ở code hình, xem lại ở cổng video}
-  - {id: '2.2', title: Bác sĩ duyệt cổng y khoa, status: doing, owner: bác sĩ, note: gout đang chờ bác sĩ duyệt trong app}
+  - {id: '2.2', title: Bác sĩ duyệt cổng y khoa, status: doing, owner: bác sĩ, note: 'vòng 2 đã sửa theo ghi chú 22:16, chờ duyệt lại; ước lượng dài khoảng 4,6 phút'}
   - {id: '2.3', title: Dựng video và agent duyệt sản phẩm, status: todo, owner: xưởng}
   - {id: '2.4', title: Bác sĩ xem và duyệt cổng video, status: todo, owner: bác sĩ}
   - {id: '2.5', title: Ghi điều bác sĩ chấp nhận thành kiểm tự động, status: todo, owner: claude}
