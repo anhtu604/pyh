@@ -30,10 +30,10 @@ phases:
 - id: P3
   title: Tinh gọn kết cấu
   tasks:
-  - {id: '3.1', title: Xóa khu nghiệm thu 4 giai đoạn đã bỏ, status: doing, owner: agy, note: brief sẵn ở cache/briefs, bác sĩ giao qua agy IDE trên nhánh chore/p3-cleanup}
+  - {id: '3.1', title: Xóa khu nghiệm thu 4 giai đoạn đã bỏ, status: done, owner: agy, note: bớt 1.882 dòng, pytest 1767 đạt}
   - {id: '3.2', title: Xóa giọng ElevenLabs và module ASR không dùng, status: todo, owner: agy, note: chờ P1 vào master vì cùng sửa produce.py}
-  - {id: '3.3', title: Bỏ các skill agent không vai nào dùng, status: todo, owner: agy}
-  - {id: '3.4', title: Gọn tài liệu, một nguồn tiến độ duy nhất, status: todo, owner: agy}
+  - {id: '3.3', title: Bỏ các skill agent không vai nào dùng, status: done, owner: agy, note: còn 13 skill, bớt 0,9 MB}
+  - {id: '3.4', title: Gọn tài liệu, một nguồn tiến độ duy nhất, status: done, owner: agy, note: README còn 93 dòng, HANDOFF đã xóa}
   - {id: '3.5', title: Xóa worktree và nhánh cũ, status: todo, owner: claude, note: cần bác sĩ xác nhận danh sách}
   - {id: '3.6', title: Gộp tab Ý kiến vào khung chat, status: todo, owner: agy, note: làm sau khi gout xong}
 - id: P4
