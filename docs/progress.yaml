@@ -15,9 +15,9 @@ phases:
 - id: P1
   title: Bắt lỗi bố cục trước cổng y khoa
   tasks:
-  - {id: '1.1', title: Ước lượng thời lượng lời đọc từ cache giọng đã có, status: doing, owner: codex, note: vòng sửa 2 — sửa fixture test và chứng minh sai số ≤10% trên 30 dòng gout}
-  - {id: '1.2', title: Chạy các bộ kiểm của bước dựng ngay khi nộp cổng y khoa, status: doing, owner: codex}
-  - {id: '1.3', title: Lệch nhỏ sau khi có giọng thật thì tự kẹp thay vì chặn, status: doing, owner: codex}
+  - {id: '1.1', title: Ước lượng thời lượng lời đọc từ cache giọng đã có, status: done, owner: codex, note: 16,39 ký tự/giây, 30/30 cảnh gout sai số ≤10%}
+  - {id: '1.2', title: Chạy các bộ kiểm của bước dựng ngay khi nộp cổng y khoa, status: done, owner: codex, note: gout hiện tại bị chặn vì clip CL02 quá ngắn}
+  - {id: '1.3', title: Lệch nhỏ sau khi có giọng thật thì tự kẹp thay vì chặn, status: done, owner: codex}
 - id: P2
   title: Video gout chuẩn
   tasks:
