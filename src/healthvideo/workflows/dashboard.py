@@ -38,8 +38,6 @@ from healthvideo.workflows import (
     dashboard_operations,
     decision_card,
     factory,
-    factory_standards,
-    factory_trials,
     feedback_inbox,
     product_review,
     standards,
@@ -864,8 +862,6 @@ class _Handler(BaseHTTPRequestHandler):
                 self._json({'entries': feedback_inbox.view(self.server.root)})
             elif path == '/api/standards':
                 self._json({'entries': standards.load(self.server.root)[::-1]})
-            elif parts[:2] == ['api', 'trials'] or path == '/api/standards/accepted':
-                self._trial_get(parts)
             elif len(parts) == 4 and parts[0] == 'api' and parts[1] in {'project', 'projects'} and parts[3] == 'card':
                 project_dir, _ = self.server.project_dir(parts[2])
                 self._json(decision_card.card(project_dir))
@@ -927,48 +923,6 @@ class _Handler(BaseHTTPRequestHandler):
             except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
                 return
 
-    def _trial_get(self, parts: list[str]) -> None:
-        root = self.server.root
-        if parts == ['api', 'standards', 'accepted']:
-            self._json({'accepted': factory_standards.accepted_standards(root),
-                        'standards_hash': factory_standards.standards_hash(root)})
-        elif len(parts) == 2:
-            self._json({'trials': factory_trials.list_trials(root), 'mode': 'TEST',
-                        'real_service': False, 'quota': 1})
-        elif len(parts) == 4 and parts[3] == 'bundle':
-            bundle = factory_trials.trial_bundle(root, parts[2])
-            bundle['standards_hash'] = factory_standards.standards_hash(root)
-            bundle['accepted'] = factory_standards.accepted_standards(root)
-            bundle['previews'] = {}
-            if bundle['status'] == 'ready':
-                directory = factory_trials.trial_dir(root, parts[2])
-                for output in bundle['outputs']:
-                    name = output['path']
-                    base = Path(name).name
-                    if base in {'sample.txt', 'captions.txt', 'qa.json', 'script.yaml', 'ledger.yaml', 'claims.yaml', 'records.yaml'}:
-                        target = directory / name
-                        content = (read_yaml(target) if base.endswith('.yaml')
-                                   else target.read_text(encoding='utf-8'))
-                        bundle['previews'][name] = content
-                        bundle['previews'].setdefault(base, content)
-            self._json(bundle)
-        elif len(parts) >= 5 and parts[3] == 'media':
-            bundle = factory_trials.trial_bundle(root, parts[2])
-            relative = '/'.join(parts[4:])
-            output = next((o for o in bundle['outputs'] if o['path'] == relative), None)
-            if output is None or bundle['status'] != 'ready':
-                raise LookupError('Không có media đã kiểm hash này.')
-            directory = factory_trials.trial_dir(root, parts[2]).resolve()
-            target = (directory / relative).resolve()
-            if not target.is_relative_to(directory):
-                raise LookupError('Media ngoài khu thử.')
-            if target.suffix.lower() in MEDIA_TYPES:
-                self._file(target)
-            else:
-                self._send(HTTPStatus.OK, target.read_bytes(), 'text/plain; charset=utf-8')
-        else:
-            raise LookupError('Không có route thử này.')
-
     def do_POST(self) -> None:
         if not self._host_ok() or not secrets.compare_digest(
                 self.headers.get('X-Dashboard-Token', ''), self.server.token):
@@ -1014,7 +968,6 @@ class DashboardServer(ThreadingHTTPServer):
         self._studio_log_handle: object | None = None
         self._studio_lock = threading.Lock()
         self.actions = actions or default_actions(self)
-        factory_trials.list_trials(self.root)
 
     @property
     def url(self) -> str:
@@ -1067,8 +1020,6 @@ class DashboardServer(ThreadingHTTPServer):
     def dispatch(self, parts: list[str], body: dict | None = None) -> str | dict:
         if parts == ['api', 'studio']:
             return self.start_studio()
-        if len(parts) == 3 and parts[:2] == ['api', 'trials']:
-            return self.trial_action(parts[2], body or {})
         extra = dashboard_operations.post_route(self, parts, body or {})
         if extra is not None:
             return extra
@@ -1085,47 +1036,6 @@ class DashboardServer(ThreadingHTTPServer):
             if key in self.actions:
                 return self.actions[key](parts[2], body or {})
         raise LookupError('Không có thao tác này')
-
-    def trial_action(self, action: str, body: dict) -> dict:
-        allowed = {
-            'create': {'stage', 'topic'}, 'run': {'trial_id', 'real_service'},
-            'standard-draft': {'trial_id', 'stage', 'text'},
-            'accept': {'trial_id', 'stage', 'text', 'expected_input_hash', 'expected_version',
-                       'reviewer', 'pin', 'expected_standards_hash'},
-        }
-        if action not in allowed:
-            raise LookupError('Không có thao tác thử này.')
-        if set(body) - allowed[action]:
-            raise ValueError('Field không được phép trong khu TEST.')
-        root = self.root
-        if action == 'create':
-            stage = body.get('stage')
-            topic = body.get('topic', 'TEST — Hình tròn chuyển động')
-            if stage in (2, 3, 4) and isinstance(topic, str) and not topic.strip():
-                topic = 'TEST — Hình tròn chuyển động'
-            return factory_trials.create_trial(root, stage, topic=topic)
-        trial_id = str(body.get('trial_id', ''))
-        if action == 'run':
-            return factory_trials.run_trial(root, trial_id, real_service=body.get('real_service', False))
-        stage = body.get('stage')
-        if action == 'standard-draft':
-            return factory_standards.save_standard_draft(root, stage, body.get('text', ''), trial_id)
-        # All configuration decisions are serialized, including two browser tabs.
-        required = allowed['accept'] - {'reviewer', 'pin'}
-        if required - set(body):
-            raise ValueError('Thiếu bằng chứng/phiên bản/chuẩn đã xem; tải lại mẫu.')
-        reviewer = reviewer_name() or str(body.get('reviewer', '')).strip()
-        if not reviewer:
-            raise ValueError('Nhập tên bác sĩ duyệt.')
-        pin_file = pin_path()
-        if not pin_file.is_file():
-            raise ValueError('Chưa đặt PIN; chạy healthvideo review set-pin một lần.')
-        self.limiter.check(str(body.get('pin', '')), lambda value: verify_pin(value, path=pin_file))
-        return factory_standards.accept_standard(
-            root, stage, trial_id=trial_id, expected_input_hash=body['expected_input_hash'],
-            expected_version=body['expected_version'], reviewer=reviewer,
-            expected_text=body['text'], expected_standards_hash=body['expected_standards_hash'],
-            now=datetime.now().astimezone())
 
 
 def default_actions(server: DashboardServer) -> dict[str, Callable[..., str]]:

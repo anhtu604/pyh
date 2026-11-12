@@ -22,7 +22,6 @@ from healthvideo.workflows.runner import (
     render_prompt,
     run_queue,
 )
-from tests.helpers import write_passing_script_review
 
 
 def _entry(
@@ -700,66 +699,53 @@ def test_agent_prompt_carries_doctor_standards(tmp_path: Path) -> None:
 
 
 def test_agent_prompt_uses_pinned_v1_standards_and_filters_other_slug_feedback(
-    tmp_path: Path, monkeypatch: Any
+    tmp_path: Path,
 ) -> None:
     from healthvideo.storage.files import write_yaml_atomic
-    from healthvideo.workflows import factory_standards, factory_trials, standards
+    from healthvideo.workflows import factory_standards, standards
     from tests.helpers import create_v2_project_fixture
 
-    def fake_render(directory: Path) -> list[Path]:
-        sample = directory / "injected-render.txt"
-        sample.write_text("TEST renderer boundary", encoding="utf-8")
-        return [sample]
-
-    def _trial_invoke(agents: Any, prompt: str, *, cwd: Path, log_dir: Path, **_: Any) -> AgentResult:
-        del agents, prompt, cwd
-        rev = log_dir.parent / "project" / "revisions" / "001"
-        write_passing_script_review(rev)
-        write_yaml_atomic(rev / "script/script.yaml", {"lines": [{"id": "L01", "text": "Synthetic trial."}]})
-        log_path = log_dir / "fake.log"
-        log_path.write_text("ok", encoding="utf-8")
-        return AgentResult(agent="fake", ok=True, quota_exhausted=False, log_path=log_path)
-
-    monkeypatch.setattr(factory_trials, "_render_samples", fake_render)
-    monkeypatch.setattr(factory_trials, "invoke_with_failover", _trial_invoke)
-
-    for stage in range(1, 5):
-        trial = factory_trials.create_trial(tmp_path, stage)
-        factory_trials.run_trial(tmp_path, trial["id"])
-        bundle = factory_trials.wait_trial(tmp_path, trial["id"])
-        text = "Chuẩn kịch bản v1 đã pin cho project." if stage == 1 else f"Chuẩn stage {stage} v1"
-        factory_standards.save_standard_draft(tmp_path, stage, text, trial["id"])
-        factory_standards.accept_standard(
-            tmp_path,
-            stage,
-            trial_id=bundle["id"],
-            expected_input_hash=bundle["input_hash"],
-            expected_version=0,
-            reviewer="Bác sĩ",
-            now=datetime.now(UTC),
-        )
+    v1_entries = [
+        {
+            "id": f"std-{stage}-v1",
+            "stage": stage,
+            "version": 1,
+            "text": "Chuẩn kịch bản v1 đã pin cho project." if stage == 1 else f"Chuẩn stage {stage} v1",
+            "reviewer": "Bác sĩ",
+            "accepted_at": datetime.now(UTC).isoformat(),
+            "scope": "channel",
+        }
+        for stage in range(1, 5)
+    ]
+    write_yaml_atomic(
+        tmp_path / factory_standards.STANDARDS_FILE,
+        {"version": 1, "entries": v1_entries},
+    )
 
     entry = _entry("muoi-va-huyet-ap-v2")
     add_to_queue(tmp_path, entry)
     project_dir = create_v2_project_fixture(tmp_path / "projects")
     factory_standards.pin_standards(tmp_path, project_dir)
 
-    trial_v2 = factory_trials.create_trial(tmp_path, 1)
-    factory_trials.run_trial(tmp_path, trial_v2["id"])
-    bundle_v2 = factory_trials.wait_trial(tmp_path, trial_v2["id"])
-    factory_standards.save_standard_draft(
-        tmp_path, 1, "Chuẩn kịch bản v2 mới chấp nhận sau.", trial_v2["id"]
+    write_yaml_atomic(
+        tmp_path / factory_standards.STANDARDS_FILE,
+        {
+            "version": 1,
+            "entries": [
+                *v1_entries,
+                {
+                    "id": "std-1-v2",
+                    "stage": 1,
+                    "version": 2,
+                    "text": "Chuẩn kịch bản v2 mới chấp nhận sau.",
+                    "reviewer": "Bác sĩ",
+                    "accepted_at": datetime.now(UTC).isoformat(),
+                    "scope": "channel",
+                },
+            ],
+        },
     )
-    accepted_v2 = factory_standards.accept_standard(
-        tmp_path,
-        1,
-        trial_id=bundle_v2["id"],
-        expected_input_hash=bundle_v2["input_hash"],
-        expected_version=1,
-        reviewer="Bác sĩ",
-        now=datetime.now(UTC),
-    )
-    assert accepted_v2["version"] == 2
+    assert factory_standards.accepted_standards(tmp_path)[1]["version"] == 2
 
     standards.record(
         tmp_path,
