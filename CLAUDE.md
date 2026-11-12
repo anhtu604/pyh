@@ -42,7 +42,7 @@ Hai nhân viên:
 | --- | --- | --- |
 | `agy` | `gemini-4-carbon-high` | Giao diện app (`dashboard.html`), Remotion/TypeScript, xóa code hàng loạt, việc cần nhìn ảnh hay khung hình |
 | `agy` | `gemini-4-carbon-medium` | Tài liệu, sửa nhỏ, việc lặp |
-| `agy` | `claude-opus-5-5-high` | Dự phòng khi Carbon làm sai hai vòng liền |
+| `codex` | `gpt-6.1-sol` | Dự phòng khi Carbon làm sai hai vòng liền (bác sĩ 2026-11-12: dùng model vừa phải, không dùng Opus hay astra) |
 | `codex` | `gpt-6.1-sol` | Python có bất biến cần giữ: cổng duyệt, hash, timing, retry, storage |
 
 `gemini-4-carbon` có từ 2026-11-11, đã thử chạy headless được. Việc đầu tiên giao cho nó
