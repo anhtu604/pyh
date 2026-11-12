@@ -364,3 +364,48 @@ entries:
     nhiệm (disclaimer) khá khô cứng, thiếu lời kêu gọi hành động (CTA) để người xem
     tương tác, lưu video hoặc đặt lịch tầm soát.'
   items: []
+- at: '2026-11-12T23:10:16+07:00'
+  slug: chung
+  gate: chung
+  revision: '-'
+  kind: comment
+  reviewer: Tu
+  text: 'Nguyên tắc viết kịch bản cho mọi chủ đề (Claude tóm từ góp ý gout của bác
+    sĩ ngày 2026-11-12; chi tiết từng dòng ở mục gout 22:16):
+
+    1. Cấu trúc phễu: TOFU mở bằng nỗi đau thật của người bệnh và câu người xung quanh
+    hay hỏi, có chút hài đời thường trong 3 giây đầu; MOFU giải thích cơ chế; BOFU
+    kết bằng việc người xem làm được ngay.
+
+    2. Một ẩn dụ đời thường xuyên suốt (như cốc nước đường) và nhân hóa cơ chế (đội
+    bảo vệ, chuông báo cháy, dân phòng dập lửa). Không để lời đọc thành sách giáo
+    khoa.
+
+    3. Thuật ngữ chuyên môn (tên phân tử, tên cytokine, tên cơ chế) chỉ hiện chữ nhỏ
+    trên màn hình, lời đọc dùng tiếng Việt đời thường. Không dùng từ dịch sát tiếng
+    Anh như "chết theo chương trình".
+
+    4. Mỗi dòng phải thêm ý mới. Không có dòng tóm tắt lại 2–3 dòng trước, không hai
+    dòng cùng một ý.
+
+    5. Không đọc nguồn, phương pháp nghiên cứu, năm xuất bản hay tên cơ quan trong
+    lời thoại. Nguồn để chữ nhỏ trên màn hình và trong mô tả/bình luận ghim; bằng
+    chứng vẫn phải đủ trong ledger.
+
+    6. Giữ ít nhất một cú bẻ lái phá hiểu lầm phổ biến ở giữa video (kiểu "tinh thể
+    hình kim nhưng không phải nó đâm làm đau").
+
+    7. Khái niệm mới phải nối từ hệ quả của ý trước, không đưa vào đột ngột. Câu chữ
+    gãy gọn, không đuôi rào đón kiểu học thuật.
+
+    8. Gần cuối quay lại câu hỏi mở đầu (callback), kết luận cân bằng, không đổ hết
+    tội cho một nguyên nhân.
+
+    9. BOFU: một câu người xem nên hỏi bác sĩ khi đi khám, một lời kêu gọi cụ thể
+    (lưu video, bình luận chỉ số của mình), nhắc dùng thuốc phải có bác sĩ khám. Không
+    kết bằng câu miễn trừ khô cứng.
+
+    10. Câu kết cố định của kênh: "Trên đây chỉ là thông tin tổng hợp, không phải
+    là lời khuyên y khoa. Nếu thấy hay và thích video, xin hãy để lại 1 lượt like
+    và subscribe cho chúng mình. Cảm ơn bạn đã xem video!"'
+  items: []
