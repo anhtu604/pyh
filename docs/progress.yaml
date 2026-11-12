@@ -2,7 +2,7 @@
 # Kế hoạch chi tiết từng việc: CLAUDE.md mục 5. status: todo | doing | done | blocked.
 # Claude sửa file này ở checkout chính khi bắt đầu và khi xong mỗi việc (CLAUDE.md mục 3).
 version: 1
-updated: '2026-11-11'
+updated: '2026-11-12'
 phases:
 - id: P0
   title: Giữ an toàn dữ liệu và môi trường
@@ -30,8 +30,8 @@ phases:
 - id: P3
   title: Tinh gọn kết cấu
   tasks:
-  - {id: '3.1', title: Xóa khu nghiệm thu 4 giai đoạn đã bỏ, status: todo, owner: agy}
-  - {id: '3.2', title: Xóa giọng ElevenLabs và module ASR không dùng, status: todo, owner: agy}
+  - {id: '3.1', title: Xóa khu nghiệm thu 4 giai đoạn đã bỏ, status: doing, owner: agy, note: brief sẵn ở cache/briefs, bác sĩ giao qua agy IDE trên nhánh chore/p3-cleanup}
+  - {id: '3.2', title: Xóa giọng ElevenLabs và module ASR không dùng, status: todo, owner: agy, note: chờ P1 vào master vì cùng sửa produce.py}
   - {id: '3.3', title: Bỏ các skill agent không vai nào dùng, status: todo, owner: agy}
   - {id: '3.4', title: Gọn tài liệu, một nguồn tiến độ duy nhất, status: todo, owner: agy}
   - {id: '3.5', title: Xóa worktree và nhánh cũ, status: todo, owner: claude, note: cần bác sĩ xác nhận danh sách}
