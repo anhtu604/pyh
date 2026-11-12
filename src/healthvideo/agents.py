@@ -20,6 +20,8 @@ QUOTA_FILE = Path("cache/agent-quota.yaml")
 ACTIVITY_FILE = Path("topics/logs/activity.jsonl")
 # A CLI that does not say when its quota resets rests this long.
 DEFAULT_REST = timedelta(hours=5)
+# Prompts longer than this reach argv-only CLIs (agy) through a file.
+MAX_ARGV_PROMPT = 8000
 
 
 @dataclass(frozen=True)
@@ -234,17 +236,22 @@ def invoke(
     runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
 ) -> AgentResult:
     """Invoke a single agent CLI and capture its output to a UTF-8 log file."""
+    log_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%f")
+    log_path = log_dir / f"{timestamp}-{agent.name}.log"
     if agent.prompt_via_stdin:
         argv = list(agent.argv)
         stdin_input: str | None = prompt
     else:
+        if len(prompt) > MAX_ARGV_PROMPT:
+            # Windows caps a command line at 32,767 chars; long prompts go through a file.
+            prompt_path = (log_dir / f"{timestamp}-{agent.name}-prompt.md").resolve()
+            prompt_path.write_text(prompt, encoding="utf-8")
+            prompt = f"Đọc và làm đúng theo toàn bộ nội dung file {prompt_path}"
         argv = [prompt if token == "{prompt}" else token for token in agent.argv]
         stdin_input = None
 
     env = child_env()
-    log_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%f")
-    log_path = log_dir / f"{timestamp}-{agent.name}.log"
     marker = log_dir / RUNNING_MARKER
     marker.write_text(f"{agent.name}\n{datetime.now(UTC).isoformat()}\n", encoding="utf-8")
 

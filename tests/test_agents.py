@@ -357,3 +357,23 @@ def test_invoke_prepares_windows_launcher(tmp_path, monkeypatch):
 
     _failover(tmp_path, [CODEX_SLOT], runner)
     assert calls[0][0] == 'C:/tools/codex.exe'
+
+
+def test_long_argv_prompt_goes_through_file(tmp_path, monkeypatch):
+    from healthvideo import agents, process
+    monkeypatch.setattr(process.shutil, 'which', lambda command: 'C:/tools/agy.exe')
+    calls = []
+
+    def runner(argv, **kwargs):
+        calls.append(argv)
+        return _completed()
+
+    long_prompt = 'ghi chú bác sĩ ' * 3000
+    agents.invoke(agents.AGY, long_prompt, cwd=tmp_path, log_dir=tmp_path / 'logs', runner=runner)
+    agents.invoke(agents.AGY, 'ngắn', cwd=tmp_path, log_dir=tmp_path / 'logs', runner=runner)
+    passed = calls[0][calls[0].index('-p') + 1]
+    assert len(passed) < agents.MAX_ARGV_PROMPT
+    (prompt_file,) = (tmp_path / 'logs').glob('*-agy-prompt.md')
+    assert str(prompt_file) in passed
+    assert prompt_file.read_text(encoding='utf-8') == long_prompt
+    assert calls[1][calls[1].index('-p') + 1] == 'ngắn'
