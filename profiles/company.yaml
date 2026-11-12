@@ -2,11 +2,11 @@
 # Mỗi chuỗi được thử theo thứ tự; mục hết lượt thì "nghỉ" và chuyển sang mục kế tiếp.
 # skills: tên thư mục trong .agents/skills/ (spec 5.3), tối đa 3.
 tiers:
-  hard:  # 2026-11-12: agy còn ít lượt Opus (không đủ nửa video) nên Opus chỉ còn dự phòng cuối
+  hard:  # 2026-11-12 bác sĩ: dùng model vừa phải, không dùng Opus hay astra
     - {cli: agy, model: gemini-4-carbon-high}
     - {cli: codex, model: gpt-6.1-sol}
-    - {cli: claude, model: claude-opus-5-5}
-    - {cli: agy, model: claude-opus-5-5-high}
+    - {cli: claude, model: claude-sonnet-5-5}
+    - {cli: codex, model: gpt-6.1-terra}
   medium:  # agy trước; Gemini 4 Carbon thay Argon từ 2026-11-11 (đã thử headless)
     - {cli: agy, model: gemini-4-carbon-medium}
     - {cli: codex, model: gpt-6.1-sol}
@@ -45,9 +45,9 @@ roles:
     tier: hard
     models:  # bắt đầu từ nhà cung cấp khác với biên kịch
       - {cli: codex, model: gpt-6.1-sol}
-      - {cli: claude, model: claude-opus-5-5}
+      - {cli: claude, model: claude-sonnet-5-5}
       - {cli: agy, model: gemini-4-carbon-high}
-      - {cli: agy, model: claude-opus-5-5-high}
+      - {cli: codex, model: gpt-6.1-terra}
   art_director:
     name: Đạo diễn hình
     skills: [scripting-and-storyboarding, visual-style]
