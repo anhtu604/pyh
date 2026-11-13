@@ -40,12 +40,11 @@ Hai nhân viên:
 
 | Nhân viên | Model | Giao việc gì |
 | --- | --- | --- |
-| `agy` | `gemini-4-carbon-high` | Giao diện app (`dashboard.html`), Remotion/TypeScript, xóa code hàng loạt, việc cần nhìn ảnh hay khung hình |
-| `agy` | `gemini-4-carbon-medium` | Tài liệu, sửa nhỏ, việc lặp |
+| `agy` | `gemini-pro-orchestrator` | Giao diện app (`dashboard.html`), Remotion/TypeScript, xóa code hàng loạt, việc cần nhìn ảnh hay khung hình |
 | `codex` | `gpt-6.1-sol` | Dự phòng khi Carbon làm sai hai vòng liền (bác sĩ 2026-11-12: dùng model vừa phải, không dùng Opus hay astra) |
 | `codex` | `gpt-6.1-sol` | Python có bất biến cần giữ: cổng duyệt, hash, timing, retry, storage |
 
-`gemini-4-carbon` có từ 2026-11-11, đã thử chạy headless được. Việc đầu tiên giao cho nó
+Từ 2026-11-13 mọi việc giao agy (tay hay trong xưởng) dùng `gemini-pro-orchestrator`: agy tự chọn model theo độ khó; đã thử headless (trả lời trong 22 giây). Trước khi đọc nhiều file, hỏi đồ thị code bằng `graphify query "<câu hỏi>"` (đồ thị ở `graphify-out/`, dựng lại bằng `/graphify . --update`). Thiết kế giao diện dùng skill `impeccable` (đã cài mức người dùng). Việc đầu tiên giao cho nó
 phải đọc diff kỹ hơn thường lệ. Trong xưởng, `profiles/company.yaml` đã dùng
 `gemini-4-carbon-medium` đầu bậc `medium` và `gemini-4-carbon-high` cho vai Đạo diễn hình;
 vai `editor` còn `gemini-4-argon-medium`. Nếu Carbon cho kết quả kém Argon ở một vai, đổi
@@ -54,8 +53,8 @@ lại đúng dòng đó. Không dùng `gpt-6-astra` (tốn token).
 Lệnh giao việc (chạy từ PowerShell, trong worktree của việc đó, chạy nền):
 
 ```powershell
-agy -p "Đọc và làm đúng theo file <đường dẫn brief.md>" --model gemini-4-carbon-high --mode accept-edits --print-timeout 0s
-agy -c -p "<yêu cầu sửa>" --model gemini-4-carbon-high --mode accept-edits --print-timeout 0s
+agy -p "Đọc và làm đúng theo file <đường dẫn brief.md>" --model gemini-pro-orchestrator --mode accept-edits --print-timeout 0s
+agy -c -p "<yêu cầu sửa>" --model gemini-pro-orchestrator --mode accept-edits --print-timeout 0s
 Get-Content -Raw <brief.md> | codex exec -m gpt-6.1-sol --dangerously-bypass-approvals-and-sandbox -
 ```
 

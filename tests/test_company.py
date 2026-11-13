@@ -63,8 +63,10 @@ def test_unknown_cli_rejected(tmp_path):
 def test_bulk_roles_never_start_on_hard_tier():
     company = load_company()
     for role_id in ('copywriter', 'scout'):
-        assert company.chain(role_id)[0] in company.tiers['bulk']
-        assert company.chain(role_id)[0] not in company.tiers['hard']
+        first = company.chain(role_id)[0]
+        assert first in company.tiers['bulk']
+        # agy's Orchestrator sizes the model itself (2026-11-13); any other first slot stays light.
+        assert first.model == 'gemini-pro-orchestrator' or first not in company.tiers['hard']
 
 
 def test_missing_agent_step_rejected(tmp_path):

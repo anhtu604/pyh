@@ -1,19 +1,20 @@
 # Bậc model và bảng vai của xưởng (spec 2026-11-08 mục 5.1).
 # Mỗi chuỗi được thử theo thứ tự; mục hết lượt thì "nghỉ" và chuyển sang mục kế tiếp.
 # skills: tên thư mục trong .agents/skills/ (spec 5.3), tối đa 3.
+# 2026-11-13 bác sĩ: mọi chỗ dùng agy đều qua Orchestrator (gemini-pro-orchestrator) để agy tự chọn model.
 tiers:
   hard:  # 2026-11-12 bác sĩ: dùng model vừa phải, không dùng Opus hay astra
-    - {cli: agy, model: gemini-4-carbon-high}
+    - {cli: agy, model: gemini-pro-orchestrator}
     - {cli: codex, model: gpt-6.1-sol}
     - {cli: claude, model: claude-sonnet-5-5}
     - {cli: codex, model: gpt-6.1-terra}
   medium:  # agy trước; Gemini 4 Carbon thay Argon từ 2026-11-11 (đã thử headless)
-    - {cli: agy, model: gemini-4-carbon-medium}
+    - {cli: agy, model: gemini-pro-orchestrator}
     - {cli: codex, model: gpt-6.1-sol}
     - {cli: claude, model: claude-sonnet-5-5}
     - {cli: codex, model: gpt-6.1-terra}
   bulk:  # agy trước: Claude đang ít token (2026-11-08)
-    - {cli: agy, model: gemini-3.8-flash-medium}
+    - {cli: agy, model: gemini-pro-orchestrator}
     - {cli: codex, model: gpt-6-luna}
     - {cli: claude, model: claude-haiku-5-5}
     - {cli: codex, model: gpt-6.1-terra}
@@ -27,6 +28,10 @@ roles:
     name: Điều phối viên chuyên sâu
     steps: [chat_deep]
     tier: medium
+    models:  # khác nhà cung cấp với Điều phối viên để vòng chuyên sâu thật sự khác
+      - {cli: codex, model: gpt-6.1-sol}
+      - {cli: claude, model: claude-sonnet-5-5}
+      - {cli: agy, model: gemini-pro-orchestrator}
   scout:
     name: Trinh sát chủ đề
     skills: [content-strategy]
@@ -50,7 +55,7 @@ roles:
     models:  # bắt đầu từ nhà cung cấp khác với biên kịch
       - {cli: codex, model: gpt-6.1-sol}
       - {cli: claude, model: claude-sonnet-5-5}
-      - {cli: agy, model: gemini-4-carbon-high}
+      - {cli: agy, model: gemini-pro-orchestrator}
       - {cli: codex, model: gpt-6.1-terra}
   art_director:
     name: Đạo diễn hình
@@ -58,7 +63,7 @@ roles:
     steps: [visual_review]
     tier: medium
     models:  # nhìn ảnh tốt
-      - {cli: agy, model: gemini-4-carbon-high}
+      - {cli: agy, model: gemini-pro-orchestrator}
       - {cli: claude, model: claude-sonnet-5-5}
       - {cli: codex, model: gpt-6.1-sol}
       - {cli: codex, model: gpt-6.1-terra}
@@ -68,7 +73,7 @@ roles:
     steps: [revise_production, revise_product]
     tier: medium
     models:  # quen repo video
-      - {cli: agy, model: gemini-4-argon-medium}
+      - {cli: agy, model: gemini-pro-orchestrator}
       - {cli: claude, model: claude-sonnet-5-5}
       - {cli: codex, model: gpt-6.1-sol}
       - {cli: codex, model: gpt-6.1-terra}
@@ -77,6 +82,10 @@ roles:
     skills: [video-understand, character-animation-qa]
     steps: [product_review]
     tier: hard
+    models:  # khác Thợ dựng (agy) để không tự chấm bài mình
+      - {cli: claude, model: claude-sonnet-5-5}
+      - {cli: codex, model: gpt-6.1-sol}
+      - {cli: agy, model: gemini-pro-orchestrator}
   copywriter:
     name: Viết bài đăng
     skills: [social]
