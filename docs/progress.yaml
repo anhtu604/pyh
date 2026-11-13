@@ -2,7 +2,7 @@
 # Kế hoạch chi tiết từng việc: CLAUDE.md mục 5. status: todo | doing | done | blocked.
 # Claude sửa file này ở checkout chính khi bắt đầu và khi xong mỗi việc (CLAUDE.md mục 3).
 version: 1
-updated: '2026-11-12'
+updated: '2026-11-13'
 phases:
 - id: P0
   title: Giữ an toàn dữ liệu và môi trường
@@ -37,6 +37,8 @@ phases:
   - {id: '3.4', title: Gọn tài liệu, một nguồn tiến độ duy nhất, status: done, owner: agy, note: README còn 93 dòng, HANDOFF đã xóa}
   - {id: '3.5', title: Xóa worktree và nhánh cũ, status: todo, owner: claude, note: cần bác sĩ xác nhận danh sách}
   - {id: '3.6', title: Gộp tab Ý kiến vào khung chat, status: todo, owner: agy, note: làm sau khi gout xong}
+  - {id: '3.7', title: Nghiên cứu các agent và chuẩn hoá skill từng vai, status: doing, owner: agy, note: agy Orchestrator đang làm trong worktree p3-skills}
+  - {id: '3.8', title: Xưởng 3D, agent thành nhân viên đang làm việc, status: doing, owner: agy, note: agy Orchestrator dùng skill impeccable trong worktree p3-workshop-3d}
 - id: P4
   title: Chủ đề thứ hai và bàn giao
   tasks:
