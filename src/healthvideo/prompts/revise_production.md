@@ -18,7 +18,6 @@
 ## Lệnh được dùng
 - `healthvideo step resume {project} --gate video --to production_in_progress`
 - `healthvideo step draft {project} --script <path> --storyboard <path> --assets <path>`
-- `healthvideo step submit-medical {project}`
 - `healthvideo status {project}`
 
 ## Đầu ra
