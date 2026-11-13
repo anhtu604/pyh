@@ -11,7 +11,7 @@ phases:
   - {id: '0.2', title: Merge nhánh kế hoạch vào master và push lên GitHub, status: done, owner: claude}
   - {id: '0.3', title: Cài pnpm 11 để dựng video chạy lại được, status: done, owner: claude, note: pnpm 11.28.11, doctor báo OK pnpm}
   - {id: '0.4', title: Dọn file lạc ở gốc repo và ignore .remotion, status: done, owner: claude, note: m4a và api-docs.zip đã chuyển vào cache/}
-  - {id: '0.5', title: Khởi động lại app bằng code mới, status: doing, owner: bác sĩ, note: chờ bác sĩ tắt app và mở lại bằng lối tắt Xưởng video}
+  - {id: '0.5', title: Khởi động lại app bằng code mới, status: done, owner: claude, note: app mở lại 2026-11-13 22:09 với code mới}
 - id: P1
   title: Bắt lỗi bố cục trước cổng y khoa
   tasks:
