@@ -321,7 +321,8 @@ def invoke_with_failover(
 
     def log(slot: ModelSlot, event: str, ok: bool | None) -> None:
         row = {"at": now().isoformat(timespec="seconds"), "role": role, "cli": slot.cli,
-               "model": slot.model, "slug": slug, "step": step, "event": event, "ok": ok}
+               "model": slot.model, "slug": slug, "step": step, "event": event, "ok": ok,
+               "pid": os.getpid()}
         activity.parent.mkdir(parents=True, exist_ok=True)
         with activity.open("a", encoding="utf-8") as stream:
             stream.write(json.dumps(row, ensure_ascii=False) + "\n")

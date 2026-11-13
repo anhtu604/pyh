@@ -1,4 +1,5 @@
 import json
+import os
 import threading
 from http.client import HTTPConnection
 
@@ -520,6 +521,22 @@ def test_overview_shape(tmp_path):
         assert len(data['resting']) == 1
 
     _with_server(tmp_path, check)
+
+
+def test_activity_drops_job_whose_process_died(tmp_path):
+    from healthvideo.workflows.dashboard import activity
+    log = tmp_path / 'topics/logs/activity.jsonl'
+    log.parent.mkdir(parents=True, exist_ok=True)
+    rows = [
+        {'at': '2026-11-13T22:08:56+07:00', 'role': 'coordinator', 'cli': 'agy', 'model': 'm',
+         'slug': 'chung', 'step': 'coordinator', 'event': 'start', 'ok': None, 'pid': 2 ** 30},
+        {'at': '2026-11-13T22:09:00+07:00', 'role': 'writer', 'cli': 'agy', 'model': 'm',
+         'slug': 'gout', 'step': 'draft', 'event': 'start', 'ok': None, 'pid': os.getpid()},
+    ]
+    log.write_text('\n'.join(json.dumps(r) for r in rows) + '\n', encoding='utf-8')
+    data = activity(tmp_path)
+    assert [item['step'] for item in data['running']] == ['draft']
+    assert data['recent'][0]['interrupted'] is True
 
 
 def test_activity_running_job_listed(tmp_path):

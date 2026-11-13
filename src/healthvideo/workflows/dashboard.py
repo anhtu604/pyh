@@ -270,8 +270,16 @@ def activity(
                     'duration_s': 0.0,
                     'running': False,
                 })
+    from healthvideo.workflows.factory import _process_token
+
     running: list[dict] = []
     for start_row, start_dt in open_starts.values():
+        pid = start_row.get('pid')
+        if isinstance(pid, int) and _process_token(pid) is None:
+            # The process that started this job died (app or factory restarted): not running.
+            history.append({**start_row, 'started_at': start_row.get('at'), 'duration_s': 0.0,
+                            'running': False, 'ok': False, 'interrupted': True})
+            continue
         duration_s = 0.0
         if start_dt is not None:
             duration_s = round(max(0.0, (current_now - start_dt).total_seconds()), 1)
