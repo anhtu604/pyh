@@ -181,7 +181,7 @@ def test_run_reviews_fixes_rerenders_then_submits_without_approving(tmp_path):
     report = run_queue(tmp_path, _deps(project, state, invoke))
 
     # product_critic starts on claude, the editor who fixes the cut on agy.
-    assert calls == [('agy', 'review'), ('agy', 'fix'), ('agy', 'review')]
+    assert calls == [('claude', 'review'), ('agy', 'fix'), ('claude', 'review')]
     assert state['renders'] == 2
     assert state['value'] == WorkflowState.AWAITING_VIDEO_REVIEW
     assert report.at_gate == [SLUG]
