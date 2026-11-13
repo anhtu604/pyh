@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Xưởng video · Protect Your Health</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2317cfaa' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 21s-7-4.4-9.3-9A5.2 5.2 0 0 1 12 6.6 5.2 5.2 0 0 1 21.3 12C19 16.6 12 21 12 21z'/%3E%3Cpath d='M8 12h2l1.2-2.4L13 14l1.2-2H16'/%3E%3C/svg%3E">
 <meta name="description" content="Bảng điều khiển xưởng-công ty video y tế dự phòng: KPI, thẻ quyết định, tiến độ 7 bước, hoạt động agent và khung chat điều phối.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -264,6 +265,147 @@ pre.md{white-space:pre-wrap;word-break:break-word;font-family:'Be Vietnam Pro',s
 .ops-assets{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-top:14px}
 .ops-asset{border:1px solid var(--line-strong);border-radius:10px;overflow:hidden;padding:10px;min-width:0}
 .ops-asset img{width:100%;height:150px;object-fit:contain;background:var(--bg2);border-radius:6px}
+
+/* ---------- 3D Isometric Workshop ---------- */
+:root{
+  --ws-floor-top:#0d172c; --ws-floor-bot:#081020; --ws-slab-front:#182746; --ws-slab-side:#0b1326;
+  --ws-grid:rgba(148,173,255,.08);
+  --ws-counter-bg:linear-gradient(180deg,rgba(20,32,58,.62),rgba(12,20,38,.42));
+  --ws-station-bg:rgba(16,26,49,.86); --ws-station-hover:rgba(24,39,72,.98);
+  --ws-desk-top:#243760; --ws-desk-left:#182747; --ws-desk-right:#101b33; --ws-desk-stroke:rgba(170,192,255,.36);
+  --ws-doc-top:#4c3818; --ws-doc-left:#36270f; --ws-doc-right:#251a0a; --ws-doc-stroke:rgba(251,191,36,.56);
+  --ws-c-work:hsl(168 82% 62%); --ws-c-gate:hsl(38 96% 68%); --ws-c-err:hsl(350 92% 74%);
+  --ws-pop-bg:#101a31; --ws-track:rgba(148,173,255,.22);
+}
+html[data-theme="light"]{
+  --ws-floor-top:#edf3fb; --ws-floor-bot:#e1eaf7; --ws-slab-front:#c4d3e8; --ws-slab-side:#b0c3de;
+  --ws-grid:rgba(15,23,42,.06);
+  --ws-counter-bg:linear-gradient(180deg,rgba(255,255,255,.78),rgba(235,242,252,.64));
+  --ws-station-bg:rgba(255,255,255,.97); --ws-station-hover:#ffffff;
+  --ws-desk-top:#ffffff; --ws-desk-left:#d9e4f4; --ws-desk-right:#c1d1ea; --ws-desk-stroke:rgba(15,23,42,.28);
+  --ws-doc-top:#fef3c7; --ws-doc-left:#f3d280; --ws-doc-right:#dfb556; --ws-doc-stroke:rgba(180,83,9,.56);
+  --ws-c-work:hsl(168 84% 24%); --ws-c-gate:hsl(32 94% 29%); --ws-c-err:hsl(350 84% 38%);
+  --ws-pop-bg:#ffffff; --ws-track:rgba(15,23,42,.18);
+}
+.ws-shell{margin:6px 0 22px;position:relative}
+.ws-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.ws-head h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.ws-summary{font-size:14px;color:var(--muted);margin-top:2px}
+.ws-legend{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.ws-leg{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;color:var(--muted);padding:4px 10px;border-radius:999px;background:rgba(148,173,255,.08);border:1px solid var(--line)}
+.ws-leg svg{width:13px;height:13px;flex-shrink:0}
+.ws-leg.work{color:var(--ws-c-work)}
+.ws-leg.gate{color:var(--ws-c-gate)}
+.ws-leg.err{color:var(--ws-c-err)}
+
+/* Quầy điều phối & ý kiến riêng (tầng lửng tách khỏi dây chuyền) */
+.ws-counter-zone{padding:12px 14px 14px;border-radius:14px;background:var(--ws-counter-bg);border:1px solid var(--line-strong);margin-bottom:14px;position:relative}
+.ws-zone-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.ws-zone-title{font-size:13.5px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:7px}
+.ws-zone-hint{font-size:12.5px;color:var(--muted)}
+.ws-counter-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+
+/* Sàn dây chuyền 3D cắt lớp */
+.ws-floor-wrap{position:relative;overflow:hidden;padding:14px 14px 18px;border-radius:16px;border:1px solid var(--line-strong);
+  background:linear-gradient(155deg,var(--ws-floor-top) 0%,var(--ws-floor-bot) 100%);
+  box-shadow:0 12px 0 -2px var(--ws-slab-front),0 22px 34px -16px rgba(0,0,0,.45);
+  margin-bottom:8px;perspective:1400px}
+.ws-floor-grid{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;opacity:.85}
+.ws-floor-inner{position:relative;z-index:1}
+.ws-row{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;position:relative;transform-style:preserve-3d}
+.ws-row-prod{grid-template-columns:repeat(3,minmax(0,1fr))}
+.ws-turn-bridge{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 8px;margin:4px 0;font-size:12.5px;font-weight:600;color:var(--muted)}
+.ws-turn-track{flex:1;height:4px;border-radius:99px;background:var(--ws-track);position:relative;overflow:hidden}
+.ws-turn-track::after{content:"";position:absolute;top:0;left:-30%;width:30%;height:100%;border-radius:99px;background:linear-gradient(90deg,transparent,var(--teal),transparent);animation:ws-flow 2.8s linear infinite}
+.ws-turn-pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;background:var(--ws-station-bg);border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+
+/* Bàn làm việc / Trạm */
+.ws-station{position:relative;display:flex;flex-direction:column;justify-content:space-between;gap:6px;width:100%;min-width:0;min-height:178px;padding:9px 10px 10px;overflow:hidden;
+  border-radius:13px;background:var(--ws-station-bg);border:1px solid var(--line);text-align:left;color:var(--text);
+  transition:transform .2s var(--ease),border-color .2s,box-shadow .2s,background .2s}
+.ws-station:hover{transform:translateY(-3px);border-color:var(--line-strong);background:var(--ws-station-hover);box-shadow:0 12px 24px -12px rgba(0,0,0,.48)}
+.ws-station:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+.ws-station.is-selected{border:1.5px solid var(--sky);box-shadow:0 14px 26px -12px rgba(0,0,0,.55)}
+.ws-station.is-working{border:1.5px solid hsl(168 78% 48% / .82);box-shadow:0 10px 22px -12px rgba(0,0,0,.48)}
+.ws-station.is-gate{border:1.5px solid hsl(38 90% 58% / .52)}
+.ws-station.is-gate-waiting{border:2px solid hsl(38 96% 56% / .95);background:linear-gradient(170deg,hsl(38 96% 55% / .16),var(--ws-station-bg));box-shadow:0 14px 26px -12px rgba(0,0,0,.5)}
+.ws-station.has-error{border:1.5px solid hsl(350 88% 64% / .78)}
+
+.ws-st-top{display:flex;align-items:center;justify-content:space-between;gap:6px;width:100%;min-width:0}
+.ws-st-num{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--muted);padding:1px 6px;border-radius:6px;background:rgba(148,173,255,.1)}
+.ws-st-badge{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;padding:2px 8px;border-radius:999px;background:rgba(148,173,255,.1);color:var(--muted);white-space:nowrap}
+.ws-st-badge.work{background:hsl(168 78% 52% / .16);color:var(--ws-c-work)}
+.ws-st-badge.gate{background:hsl(38 96% 55% / .2);color:var(--ws-c-gate)}
+.ws-st-badge.err{background:hsl(350 88% 64% / .18);color:var(--ws-c-err)}
+
+.ws-iso-stage{width:100%;height:96px;display:grid;place-items:center;position:relative;overflow:hidden;border-radius:9px}
+.ws-iso-svg{width:100%;height:96px;max-width:176px;display:block}
+.ws-st-info{display:flex;flex-direction:column;gap:3px;width:100%;min-width:0}
+.ws-st-name{font-size:14px;font-weight:700;line-height:1.25;color:var(--text)}
+.ws-st-task{font-size:12.5px;line-height:1.35;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:17px}
+.ws-st-task strong{color:var(--ws-c-work);font-weight:700}
+.ws-st-files{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px;min-width:0;max-width:100%}
+.ws-doc-pill{display:inline-flex;align-items:center;gap:4px;max-width:100%;min-width:0;padding:5px 10px;border-radius:7px;font-size:12px;font-weight:600;line-height:1.35;border:1px solid var(--line);background:rgba(148,173,255,.08);color:var(--text);white-space:normal;word-break:break-word}
+.ws-doc-pill.gate{border-color:hsl(38 96% 55% / .5);background:hsl(38 96% 55% / .16);color:var(--ws-c-gate)}
+.ws-doc-pill.err{border-color:hsl(350 88% 64% / .5);background:hsl(350 88% 64% / .14);color:var(--ws-c-err)}
+.ws-doc-pill.done{border-color:hsl(168 78% 52% / .45);background:hsl(168 78% 52% / .14);color:var(--ws-c-work)}
+
+/* Hoạt hoạ Isometric SVG */
+.ws-station.is-working .ws-arm-l{transform-origin:92px 44px;animation:ws-type-l .42s ease-in-out infinite alternate}
+.ws-station.is-working .ws-arm-r{transform-origin:108px 44px;animation:ws-type-r .42s ease-in-out .21s infinite alternate}
+.ws-station.is-working .ws-dossier-active{animation:ws-dossier-bob 1.8s ease-in-out infinite}
+.ws-station.is-working .ws-scr-bar{transform-origin:left center;animation:ws-screen-pulse 1.3s ease-in-out infinite alternate}
+.ws-station.is-gate-waiting .ws-spotlight{animation:ws-spot-pulse 2.2s ease-in-out infinite}
+.ws-station.is-working .ws-mach-led{animation:ws-led-blink 1.1s ease-in-out infinite alternate}
+.ws-station.is-working .ws-mach-wave{transform-origin:center bottom;animation:ws-wave-eq .65s ease-in-out infinite alternate}
+@keyframes ws-type-l{0%{transform:translateY(0) rotate(0deg)}100%{transform:translateY(2.2px) rotate(-6deg)}}
+@keyframes ws-type-r{0%{transform:translateY(0) rotate(0deg)}100%{transform:translateY(2.2px) rotate(6deg)}}
+@keyframes ws-dossier-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-2.5px)}}
+@keyframes ws-screen-pulse{0%{transform:scaleX(.55);opacity:.72}100%{transform:scaleX(1);opacity:1}}
+@keyframes ws-led-blink{0%{opacity:.45}100%{opacity:1}}
+@keyframes ws-wave-eq{0%{transform:scaleY(.55)}100%{transform:scaleY(1.08)}}
+@keyframes ws-flow{0%{left:-30%}100%{left:105%}}
+@keyframes ws-spot-pulse{0%,100%{opacity:.55}50%{opacity:.95}}
+
+/* Khung chi tiết nhân viên */
+.ws-popover{position:fixed;z-index:12;width:min(400px,calc(100vw - 24px));max-height:min(78vh,560px);overflow-y:auto;padding:16px;border-radius:16px;
+  background:var(--ws-pop-bg);border:1px solid var(--line-strong);box-shadow:0 22px 54px -14px rgba(0,0,0,.62);
+  scrollbar-width:thin;scrollbar-color:var(--line-strong) transparent}
+.ws-popover[hidden]{display:none}
+.ws-pop-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.ws-pop-head h3{font-size:16.5px;font-weight:800;line-height:1.3}
+.ws-pop-close{min-width:36px;min-height:36px;border-radius:9px;background:rgba(148,173,255,.1);border:1px solid var(--line);display:grid;place-items:center;font-size:17px;font-weight:700;color:var(--text)}
+.ws-pop-close:hover{background:rgba(148,173,255,.2)}
+.ws-pop-sec{margin-top:12px}
+.ws-pop-label{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:6px}
+.ws-pop-box{padding:10px 12px;border-radius:11px;background:rgba(148,173,255,.06);border:1px solid var(--line);font-size:14px}
+.ws-pop-list{display:grid;gap:6px}
+.ws-pop-item{padding:9px 11px;border-radius:10px;background:rgba(148,173,255,.05);border:1px solid var(--line);font-size:13.5px}
+.ws-pop-item-top{display:flex;align-items:center;justify-content:space-between;gap:8px;font-weight:600}
+.ws-pop-models{display:flex;flex-wrap:wrap;gap:6px}
+.ws-pop-model{font-family:'JetBrains Mono',monospace;font-size:12px;padding:4px 8px;border-radius:8px;background:rgba(148,173,255,.1);border:1px solid var(--line);color:var(--text)}
+
+@media (max-width:1120px){
+  .ws-counter-grid{grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
+  .ws-row{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .ws-turn-bridge{display:none}
+}
+@media (max-width:680px){
+  .ws-shell{margin:4px 0 18px}
+  .ws-counter-zone{padding:10px}
+  .ws-counter-grid,.ws-row,.ws-row-prod{grid-template-columns:1fr;gap:8px}
+  .ws-floor-wrap{padding:10px;box-shadow:0 8px 0 -2px var(--ws-slab-front),0 14px 24px -14px rgba(0,0,0,.4)}
+  .ws-station{display:grid;grid-template-columns:108px minmax(0,1fr);grid-template-rows:auto 1fr;column-gap:10px;row-gap:4px;min-height:92px;padding:9px}
+  .ws-st-top{grid-column:2;grid-row:1}
+  .ws-iso-stage{grid-column:1;grid-row:1 / 3;height:84px}
+  .ws-iso-svg{height:84px}
+  .ws-st-info{grid-column:2;grid-row:2}
+  .ws-popover{left:12px !important;right:12px !important;bottom:12px !important;top:auto !important;width:auto;max-height:74vh}
+}
+@media (prefers-reduced-motion: reduce){
+  .ws-shell *,.ws-shell *::before,.ws-shell *::after{animation:none !important;transition-duration:0.01ms !important}
+  .ws-turn-track::after{display:none}
+}
 </style>
 </head>
 <body>
@@ -308,6 +450,60 @@ pre.md{white-space:pre-wrap;word-break:break-word;font-family:'Be Vietnam Pro',s
 
   <!-- 2. "Cần bạn quyết" strip -->
   <section class="decisions-strip" id="decisions" aria-live="polite"></section>
+
+  <!-- 2b. Xưởng 3D -->
+  <section class="ws-shell" id="workshop" aria-labelledby="ws-title">
+    <div class="ws-head">
+      <div>
+        <h2 id="ws-title">Xưởng sản xuất 3D</h2>
+        <p class="ws-summary" id="ws-summary">Đang tải sơ đồ xưởng và nhân viên…</p>
+      </div>
+      <div class="ws-legend" aria-label="Chú giải trạng thái xưởng">
+        <span class="ws-leg work"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="8" cy="8" r="5"/></svg>Đang làm</span>
+        <span class="ws-leg gate"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 1.5l1.9 4 4.4.6-3.2 3.1.8 4.3L8 11.4 4.1 13.5l.8-4.3L1.7 6.1l4.4-.6z"/></svg>Cổng bác sĩ</span>
+        <span class="ws-leg err"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 2L14.5 13.5h-13L8 2zm-.7 4.2v3.6h1.4V6.2H7.3zm0 4.6v1.4h1.4v-1.4H7.3z"/></svg>Lỗi gần nhất</span>
+        <span class="ws-leg"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="8" cy="8" r="4.5"/></svg>Đang nghỉ</span>
+      </div>
+    </div>
+
+    <div class="ws-counter-zone" aria-label="Quầy điều phối và phân tích ý kiến">
+      <div class="ws-zone-bar">
+        <span class="ws-zone-title">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          Quầy điều phối &amp; ý kiến riêng
+        </span>
+        <span class="ws-zone-hint">Hỗ trợ bác sĩ qua chat và tổng hợp góp ý</span>
+      </div>
+      <div class="ws-counter-grid" id="ws-counters"></div>
+    </div>
+
+    <div class="ws-floor-wrap" aria-label="Dây chuyền sản xuất 11 trạm">
+      <svg class="ws-floor-grid" aria-hidden="true">
+        <defs>
+          <pattern id="ws-iso-pat" width="52" height="30" patternUnits="userSpaceOnUse">
+            <path d="M0 15L26 0L52 15L26 30Z" fill="none" stroke="currentColor" stroke-opacity=".06" stroke-width="1"/>
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#ws-iso-pat)"/>
+      </svg>
+      <div class="ws-floor-inner">
+        <div class="ws-zone-bar">
+          <span class="ws-zone-title">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 17h18M5 12h14l2 5H3l2-5zM8 12V7h8v5"/></svg>
+            Dây chuyền sản xuất (Trạm 01 → 11)
+          </span>
+          <span class="ws-zone-hint">Bấm vào từng trạm, máy dựng hoặc cổng bác sĩ để xem chi tiết</span>
+        </div>
+        <div class="ws-row" id="ws-row-1"></div>
+        <div class="ws-turn-bridge" aria-hidden="true">
+          <span class="ws-turn-pill">05 Cổng y khoa đã duyệt</span>
+          <div class="ws-turn-track"></div>
+          <span class="ws-turn-pill">Chuyển sang 06 Máy dựng (xưởng tự chạy) →</span>
+        </div>
+        <div class="ws-row ws-row-prod" id="ws-row-2"></div>
+      </div>
+    </div>
+  </section>
 
   <!-- 3. Project cards -->
   <div class="section-title">Dự án video (7 bước)</div>
@@ -528,10 +724,22 @@ pre.md{white-space:pre-wrap;word-break:break-word;font-family:'Be Vietnam Pro',s
   </form>
 </div>
 
+<div class="ws-popover" id="ws-popover" role="dialog" aria-modal="false" aria-labelledby="ws-pop-title" hidden>
+  <div class="ws-pop-head">
+    <div>
+      <h3 id="ws-pop-title">Nhân viên</h3>
+      <div class="meta" id="ws-pop-meta"></div>
+    </div>
+    <button class="ws-pop-close" id="ws-pop-close" type="button" aria-label="Đóng khung chi tiết">×</button>
+  </div>
+  <div id="ws-pop-body"></div>
+</div>
+
 <script>
 const TOKEN = '__TOKEN__';
 const $ = (id) => document.getElementById(id);
-let state = null, overviewData = null, activityData = null, busy = false, logFull = false;
+let state = null, overviewData = null, activityData = null, companyData = null, busy = false, logFull = false;
+let wsSelectedId = null, wsStationMap = new Map();
 let chatCtx = {slug: null, revision: null, view: 'overview', scene: null, time_s: null};
 
 /* Theme toggle */
@@ -809,21 +1017,25 @@ function render(d){
 }
 async function refresh(){
   try{
-    const [rStatus, rOv, rAct, rProg] = await Promise.all([
+    const [rStatus, rOv, rAct, rProg, rComp] = await Promise.all([
       fetch('/api/status',{cache:'no-store'}),
       fetch('/api/overview',{cache:'no-store'}),
       fetch('/api/activity?limit=10',{cache:'no-store'}),
       fetch('/api/progress',{cache:'no-store'}),
+      fetch('/api/company',{cache:'no-store'}),
     ]);
     const d = await rStatus.json();
     if(!rStatus.ok) throw new Error(d.error||rStatus.status);
     const ov = rOv.ok ? await rOv.json() : null;
     const actData = rAct.ok ? await rAct.json() : null;
+    const compData = rComp.ok ? await rComp.json() : null;
     $('offline').classList.remove('show');
     if(ov) renderOverview(ov);
     if(actData) renderActivityFeed(actData);
+    if(compData) companyData = compData;
     if(rProg.ok) renderProgress(await rProg.json());
     state=d; render(d);
+    renderWorkshop();
     if(!busy) document.querySelectorAll('main button, header button').forEach(b=>b.disabled=false);
     syncStartGate();
   }catch(e){$('offline').classList.add('show')}
@@ -1300,7 +1512,10 @@ $('dlg-cancel').onclick=closeReview;
 $('dlg').addEventListener('mousedown',e=>{if(e.target===$('dlg')) closeReview()});
 document.addEventListener('keydown',e=>{
   if(e.key!=='Escape') return;
-  if(current) closeReview(); else if(isOpen('sv')) closeStandards(); else if(isOpen('pv')) closeProduct();
+  if(current) closeReview();
+  else if(wsSelectedId && !$('ws-popover').hidden) closeWorkshopPopover(true);
+  else if(isOpen('sv')) closeStandards();
+  else if(isOpen('pv')) closeProduct();
 });
 $('dlg-form').onsubmit=async(e)=>{
   e.preventDefault(); if(!current) return;
@@ -1321,6 +1536,658 @@ $('btn-review').onclick=()=>{const p=state&&state.projects.find(x=>x.gate);if(p)
 $('btn-quit').onclick=()=>act('/api/app/quit','Tắt app? Xưởng nền vẫn chạy nếu đang bật.');
 
 refresh(); loadChat(); setInterval(refresh,3000);
+
+/* ---------- 3D Isometric Workshop Renderer ---------- */
+const WS_LINE_1 = [
+  {id:'scout', num:'01', short:'Trinh sát'},
+  {id:'medical_expert', num:'02', short:'Chuyên gia y học'},
+  {id:'writer', num:'03', short:'Biên kịch'},
+  {id:'script_critic', num:'04', short:'Kiểm duyệt kịch bản'},
+  {id:'gate_medical', num:'05', short:'Cổng y khoa', isGate:true, gateKind:'medical',
+    title:'Cổng y khoa (bác sĩ)', desc:'Bác sĩ kiểm chứng bằng chứng y văn, kịch bản và storyboard trước khi dựng video.'},
+];
+const WS_LINE_2 = [
+  {id:'render_machine', num:'06', short:'Máy dựng (xưởng tự chạy)', isMachine:true,
+    title:'Máy dựng (xưởng tự chạy)',
+    desc:'Tự động tổng hợp giọng đọc (TTS), vẽ ảnh ứng viên (FLUX) và kết xuất video (Remotion) bằng Python khi dự án ở trạng thái Đã duyệt y khoa hoặc Đang sản xuất video.'},
+  {id:'art_director', num:'07', short:'Đạo diễn hình'},
+  {id:'editor', num:'08', short:'Thợ dựng'},
+  {id:'product_critic', num:'09', short:'Kiểm định sản phẩm'},
+  {id:'gate_video', num:'10', short:'Cổng video', isGate:true, gateKind:'video',
+    title:'Cổng video (bác sĩ)', desc:'Bác sĩ xem video, nghe phát âm và duyệt đóng gói xuất bản.'},
+  {id:'copywriter', num:'11', short:'Viết bài đăng'},
+];
+const WS_COUNTER_BASE = ['coordinator', 'coordinator_senior', 'feedback_analyst'];
+const WS_SHIRTS = {
+  scout:'#38bdf8', medical_expert:'#f8fafc', writer:'#2dd4bf', script_critic:'#a78bfa',
+  art_director:'#c084fc', editor:'#60a5fa', product_critic:'#fb7185', copywriter:'#34d399',
+  coordinator:'#2dd4bf', coordinator_senior:'#818cf8', feedback_analyst:'#fbbf24',
+  gate_medical:'#fef3c7', gate_video:'#fef3c7',
+};
+
+function wsStepOwner(step, roleMap){
+  if(!step) return null;
+  if(step === 'produce') return 'render_machine';
+  for(const r of roleMap.values()){
+    if((r.steps || []).includes(step)) return r.id;
+  }
+  return null;
+}
+
+function wsBlockedStep(blockedText){
+  const s = String(blockedText || '');
+  const m = s.match(/(?:ở bước|bước)\s+([a-z_]+)/i) || s.match(/^([a-z_]+)\s+lỗi:/i);
+  return m ? m[1].toLowerCase() : '';
+}
+
+function wsMapProjectsToStations(projects, roleMap, runningByStation){
+  const folders = new Map();
+  const push = (sid, item) => {
+    if(!folders.has(sid)) folders.set(sid, []);
+    folders.get(sid).push(item);
+  };
+  const stageFallback = ['scout','medical_expert','writer','gate_medical','render_machine','gate_video','copywriter'];
+
+  (projects || []).forEach(p => {
+    const slug = p.slug;
+    let target = null;
+    let tone = 'work';
+    let tag = p.state_label || p.state || '';
+
+    for(const [sid, runs] of runningByStation.entries()){
+      if(runs.some(r => r.slug === slug)){ target = sid; break; }
+    }
+    if(!target && (p.gate === 'medical' || p.state === 'awaiting_medical_review')){
+      target = 'gate_medical'; tone = 'gate'; tag = 'Chờ bác sĩ';
+    } else if(!target && (p.gate === 'video' || p.state === 'awaiting_video_review')){
+      target = 'gate_video'; tone = 'gate'; tag = 'Chờ bác sĩ';
+    }
+    if(p.blocked || p.state === 'blocked'){
+      tone = 'err';
+      tag = 'Bị chặn';
+      if(!target){
+        const bStep = wsBlockedStep(p.blocked);
+        target = wsStepOwner(bStep, roleMap);
+      }
+    }
+    if(!target){
+      const st = p.state;
+      if(st === 'idea' || st === 'topic_rejected') target = 'scout';
+      else if(st === 'topic_selected' || st === 'research_in_progress') target = 'medical_expert';
+      else if(st === 'evidence_ready' || st === 'needs_medical_revision') target = 'writer';
+      else if(st === 'draft_ready') target = 'script_critic';
+      else if(st === 'medically_approved' || st === 'production_in_progress') target = 'render_machine';
+      else if(st === 'needs_production_revision') target = 'editor';
+      else if(st === 'video_approved' || st === 'packaged' || st === 'published_manual'){
+        target = 'copywriter'; tone = 'done'; tag = p.state_label || 'Đã đóng gói';
+      } else {
+        target = stageFallback[p.stage_index ?? p.stage ?? 0] || 'scout';
+      }
+    }
+    push(target, {slug, title: p.title || slug, tone, tag, gate: p.gate, blocked: p.blocked || '', state: p.state});
+  });
+  return folders;
+}
+
+function wsFmtDur(sec){
+  if(sec == null) return '';
+  const n = Math.round(Number(sec));
+  if(Number.isNaN(n)) return '';
+  if(n < 60) return n + ' giây';
+  const m = Math.floor(n / 60), s = n % 60;
+  if(m < 60) return s ? `${m} phút ${s} giây` : `${m} phút`;
+  const h = Math.floor(m / 60), rm = m % 60;
+  return rm ? `${h} giờ ${rm} phút` : `${h} giờ`;
+}
+
+function wsPropSvg(id, isWorking){
+  if(id === 'gate_medical'){
+    return `<g>
+      <rect x="44" y="42" width="18" height="12" rx="3" fill="#f59e0b" opacity=".95"/>
+      <path d="M53 45v6M50 48h6" stroke="#1f1404" stroke-width="2.1" stroke-linecap="round"/>
+      <polygon points="108,52 121,46 130,50 117,56" fill="#fde68a" stroke="#b45309" stroke-width="1"/>
+    </g>`;
+  }
+  if(id === 'gate_video'){
+    return `<g>
+      <polygon points="52,27 83,13 83,35 52,49" fill="#0f172a" stroke="#f59e0b" stroke-width="1.4"/>
+      <polygon points="64,28 74,29 64,37" fill="#fbbf24"/>
+      <polygon points="108,52 121,46 130,50 117,56" fill="#fde68a" stroke="#b45309" stroke-width="1"/>
+    </g>`;
+  }
+  if(id === 'medical_expert'){
+    return `<path d="M93 38c0 5 4 7 7 6s5-3 4-7" fill="none" stroke="#38bdf8" stroke-width="1.8" stroke-linecap="round"/>`;
+  }
+  if(id === 'art_director' || id === 'editor'){
+    return `<path d="M90 25c0-6 20-6 20 0" fill="none" stroke="#94a3b8" stroke-width="2.3" stroke-linecap="round"/>
+      <circle cx="90" cy="27" r="2.6" fill="#38bdf8"/><circle cx="110" cy="27" r="2.6" fill="#38bdf8"/>`;
+  }
+  if(id === 'coordinator' || id === 'coordinator_senior'){
+    return `<path d="M90 25c0-6 20-6 20 0" fill="none" stroke="#2dd4bf" stroke-width="2.2" stroke-linecap="round"/>
+      <path d="M110 28l-5 5" stroke="#2dd4bf" stroke-width="1.6" stroke-linecap="round"/>`;
+  }
+  if(id === 'script_critic' || id === 'product_critic'){
+    return `<circle cx="118" cy="54" r="4.8" fill="none" stroke="#c084fc" stroke-width="1.7"/>
+      <path d="M121.5 57.5l4.5 4" stroke="#c084fc" stroke-width="1.8" stroke-linecap="round"/>`;
+  }
+  if(id === 'scout'){
+    return `<circle cx="48" cy="48" r="6.8" fill="none" stroke="${isWorking?'#38bdf8':'#64748b'}" stroke-width="1.6"/>
+      <circle cx="48" cy="48" r="2.4" fill="#38bdf8"/>`;
+  }
+  return '';
+}
+
+function wsIsoSvg(st){
+  const isGate = Boolean(st.isGate);
+  const isMachine = Boolean(st.isMachine);
+  const isWorking = st.isWorking;
+  const isWaiting = st.isGate && st.folders.length > 0;
+  const hasErr = st.hasError;
+  const shirt = WS_SHIRTS[st.id] || '#60a5fa';
+  const topC = isGate ? 'var(--ws-doc-top)' : 'var(--ws-desk-top)';
+  const leftC = isGate ? 'var(--ws-doc-left)' : 'var(--ws-desk-left)';
+  const rightC = isGate ? 'var(--ws-doc-right)' : 'var(--ws-desk-right)';
+  const strokeC = isGate ? 'var(--ws-doc-stroke)' : 'var(--ws-desk-stroke)';
+  const scrFill = hasErr ? '#4c1122' : (isWorking ? '#0d3b3e' : '#131d36');
+  const scrAccent = hasErr ? '#fb7185' : (isWorking ? '#2dd4bf' : (isWaiting ? '#fbbf24' : '#64748b'));
+
+  const dossierToneColor = {work:'#2dd4bf', gate:'#fbbf24', err:'#fb7185', done:'#34d399'};
+  const docsSvg = st.folders.slice(0, 3).map((f, idx) => {
+    const dy = -idx * 3.8;
+    const c = dossierToneColor[f.tone] || '#38bdf8';
+    return `<g transform="translate(0,${dy})" class="${isWorking && idx === 0 ? 'ws-dossier-active' : ''}">
+      <polygon points="104,61 124,51 136,57 116,67" fill="${c}" stroke="rgba(15,23,42,.55)" stroke-width="1"/>
+      <polygon points="104,61 116,67 116,70 104,64" fill="rgba(0,0,0,.28)"/>
+    </g>`;
+  }).join('');
+
+  const errBadgeSvg = hasErr ? `
+    <g transform="translate(142,10)">
+      <polygon points="11,0 22,19 0,19" fill="#f43f5e" stroke="#fff" stroke-width="1.2"/>
+      <rect x="10" y="6" width="2" height="6.8" rx=".9" fill="#fff"/>
+      <rect x="10" y="14.2" width="2" height="2.2" rx=".9" fill="#fff"/>
+    </g>` : '';
+
+  if(isMachine){
+    const ledA = hasErr ? '#fb7185' : (isWorking ? '#2dd4bf' : '#64748b');
+    const ledB = isWorking ? '#38bdf8' : '#475569';
+    return `<svg class="ws-iso-svg" viewBox="0 0 180 112" aria-hidden="true">
+      <polygon points="90,22 168,61 90,100 12,61" fill="rgba(148,173,255,.08)" stroke="${strokeC}" stroke-width=".9"/>
+      <polygon points="12,61 90,100 90,108 12,69" fill="rgba(15,23,42,.36)"/>
+      <polygon points="168,61 90,100 90,108 168,69" fill="rgba(15,23,42,.52)"/>
+      <polygon points="90,45 144,71 90,97 36,71" fill="${topC}" stroke="${strokeC}" stroke-width="1.2"/>
+      <polygon points="36,71 90,97 90,106 36,80" fill="${leftC}" stroke="${strokeC}" stroke-width="1"/>
+      <polygon points="144,71 90,97 90,106 144,80" fill="${rightC}" stroke="${strokeC}" stroke-width="1"/>
+      <g>
+        <polygon points="104,19 128,31 104,43 80,31" fill="#334155" stroke="${strokeC}" stroke-width="1.1"/>
+        <polygon points="80,31 104,43 104,74 80,62" fill="#1e293b" stroke="${strokeC}" stroke-width="1.1"/>
+        <polygon points="128,31 104,43 104,74 128,62" fill="#0f172a" stroke="${strokeC}" stroke-width="1.1"/>
+        <circle class="ws-mach-led" cx="89" cy="40" r="2.2" fill="${ledA}"/>
+        <circle class="ws-mach-led" cx="96" cy="43.5" r="2.2" fill="${ledB}"/>
+        <line x1="86" y1="50" x2="99" y2="56.5" stroke="#475569" stroke-width="1.6" stroke-linecap="round"/>
+        <line x1="86" y1="55" x2="99" y2="61.5" stroke="#475569" stroke-width="1.6" stroke-linecap="round"/>
+      </g>
+      <g>
+        <polygon points="44,41 78,24 78,49 44,66" fill="#0f172a" stroke="${strokeC}" stroke-width="1.2"/>
+        <polygon points="46.5,42.8 75.5,28 75.5,47.5 46.5,62" fill="${scrFill}"/>
+        <rect class="ws-mach-wave" x="51" y="45" width="2.6" height="8" rx="1" fill="${scrAccent}"/>
+        <rect class="ws-mach-wave" x="56" y="40" width="2.6" height="11" rx="1" fill="#38bdf8"/>
+        <rect class="ws-mach-wave" x="61" y="41" width="2.6" height="7" rx="1" fill="${scrAccent}"/>
+        <line class="ws-scr-bar" x1="50" y1="56" x2="72" y2="45" stroke="${scrAccent}" stroke-width="2.2" stroke-linecap="round"/>
+      </g>
+      ${docsSvg}
+      ${errBadgeSvg}
+    </svg>`;
+  }
+
+  /* Góc front-3/4 isometric: nhân vật đặt ở phía sau-phải (cx=100) để không bị màn hình lệch trái che khuất */
+  const personSvg = (!isGate || isWaiting) ? `
+    <g>
+      <rect x="86" y="33" width="28" height="17" rx="5" fill="#1e293b" opacity=".82"/>
+      <path d="M87 49c0-8 26-8 26 0l2 13H85z" fill="${shirt}" stroke="rgba(15,23,42,.38)" stroke-width="1.1"/>
+      <circle cx="100" cy="28" r="8.6" fill="#f3c6a5" stroke="rgba(15,23,42,.32)" stroke-width="1"/>
+      <path d="M91.8 26.2c2-6 14.4-6 16.4 0" fill="#1e293b"/>
+      <circle cx="97" cy="28.5" r="1" fill="#0f172a"/><circle cx="103" cy="28.5" r="1" fill="#0f172a"/>
+      <path class="ws-arm-l" d="M91 45l-6 11 10 3" fill="none" stroke="${shirt}" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round"/>
+      <path class="ws-arm-r" d="M109 45l5 11-10 3" fill="none" stroke="${shirt}" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>` : `
+    <g opacity=".78">
+      <rect x="86" y="36" width="28" height="19" rx="5" fill="#475569" stroke="rgba(15,23,42,.42)" stroke-width="1"/>
+      <circle cx="100" cy="30" r="6.5" fill="none" stroke="#f59e0b" stroke-width="1.6" stroke-dasharray="3 2.2"/>
+    </g>`;
+
+  const screenSvg = isGate && st.id === 'gate_video' ? '' : `
+    <g>
+      <polygon points="50,43 76,30 76,51 50,64" fill="#0f172a" stroke="${strokeC}" stroke-width="1.2"/>
+      <polygon points="52.5,44.5 73.5,33.5 73.5,49.5 52.5,60.5" fill="${scrFill}"/>
+      <line class="ws-scr-bar" x1="55" y1="48" x2="70" y2="40.5" stroke="${scrAccent}" stroke-width="2.2" stroke-linecap="round"/>
+      <line x1="55" y1="53" x2="66" y2="47.5" stroke="${scrAccent}" stroke-width="1.6" stroke-linecap="round" opacity=".75"/>
+    </g>`;
+
+  const spotlightSvg = isWaiting ? `
+    <polygon class="ws-spotlight" points="64,0 124,0 148,78 40,78" fill="url(#ws-spot-grad)" opacity=".82"/>` : '';
+
+  const coffeeSvg = (!isWorking && !isGate) ? `
+    <g transform="translate(122,60)">
+      <ellipse cx="0" cy="3.2" rx="3.8" ry="2" fill="#cbd5e1"/>
+      <rect x="-2.8" y="-2" width="5.6" height="4.8" rx="1.4" fill="#e2e8f0" stroke="#64748b" stroke-width=".8"/>
+    </g>` : '';
+
+  const deskLampGlow = isWorking ? `<polygon points="54,48 98,58 84,78 44,64" fill="#2dd4bf" opacity=".12"/>` : '';
+
+  return `<svg class="ws-iso-svg" viewBox="0 0 180 112" aria-hidden="true">
+    <defs>
+      <linearGradient id="ws-spot-grad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#fbbf24" stop-opacity=".46"/>
+        <stop offset="100%" stop-color="#fbbf24" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
+    <polygon points="90,22 168,61 90,100 12,61" fill="rgba(148,173,255,.08)" stroke="${strokeC}" stroke-width=".9"/>
+    <polygon points="12,61 90,100 90,108 12,69" fill="rgba(15,23,42,.36)"/>
+    <polygon points="168,61 90,100 90,108 168,69" fill="rgba(15,23,42,.52)"/>
+    ${spotlightSvg}
+    ${personSvg}
+    <polygon points="90,45 144,71 90,97 36,71" fill="${topC}" stroke="${strokeC}" stroke-width="1.2"/>
+    <polygon points="36,71 90,97 90,106 36,80" fill="${leftC}" stroke="${strokeC}" stroke-width="1"/>
+    <polygon points="144,71 90,97 90,106 144,80" fill="${rightC}" stroke="${strokeC}" stroke-width="1"/>
+    ${deskLampGlow}
+    ${screenSvg}
+    <polygon points="80,68 97,60 106,64.5 89,72.5" fill="#0f172a" stroke="${strokeC}" stroke-width=".8"/>
+    ${wsPropSvg(st.id, isWorking)}
+    ${coffeeSvg}
+    ${docsSvg}
+    ${errBadgeSvg}
+  </svg>`;
+}
+
+function wsStationHtml(st){
+  const badge = st.isWorking
+    ? `<span class="ws-st-badge work">${st.isMachine ? '● Đang chạy' : '● Đang làm'}</span>`
+    : (st.isGate && st.folders.length
+      ? `<span class="ws-st-badge gate">★ Chờ duyệt (${st.folders.length})</span>`
+      : (st.hasError
+        ? `<span class="ws-st-badge err">▲ Lỗi gần nhất</span>`
+        : (st.isGate
+          ? `<span class="ws-st-badge gate">★ Bác sĩ</span>`
+          : `<span class="ws-st-badge">○ Nghỉ</span>`)));
+
+  const roleHint = (st.stepLabels && st.stepLabels[0]) ? st.stepLabels[0].replace(/^Đang\s+/i, '') : '';
+  let taskLine = st.isGate
+    ? (st.folders.length ? `<strong>${st.folders.length} hồ sơ</strong> đang chờ PIN bác sĩ` : 'Chờ hồ sơ tới cổng')
+    : (roleHint ? roleHint.charAt(0).toUpperCase() + roleHint.slice(1) : 'Sẵn sàng');
+  if(st.isMachine){
+    if(st.isWorking && st.machineProjects.length){
+      const p0 = st.machineProjects[0];
+      const more = st.machineProjects.length > 1 ? ` (+${st.machineProjects.length - 1})` : '';
+      taskLine = `<strong>Đang chạy:</strong> ${esc(p0.title || p0.slug)}${esc(more)}`;
+    } else if(st.hasError){
+      taskLine = 'Bị chặn ở bước dựng video';
+    } else {
+      taskLine = 'TTS · FLUX · Remotion';
+    }
+  } else if(st.isWorking && st.running[0]){
+    const r = st.running[0];
+    const topicText = r.slug && !['chung','chat'].includes(r.slug) ? ` · ${r.slug}` : '';
+    taskLine = `<strong>${esc(r.step_label || r.step)}</strong>${esc(topicText)}`;
+  } else if(st.hasError && st.recent[0]){
+    taskLine = `Lỗi: ${esc((st.recent[0].step_label || st.recent[0].step).replace(/^Đang\s+/i, ''))}`;
+  }
+
+  const folderChips = st.folders.slice(0, 2).map(f =>
+    `<span class="ws-doc-pill ${esc(f.tone)}" title="${esc(f.title)} (${esc(f.tag)})">${esc(f.slug)} · ${esc(f.tag)}</span>`
+  ).join('') + (st.folders.length > 2 ? `<span class="ws-doc-pill">+${st.folders.length - 2} hồ sơ</span>` : '');
+
+  const cls = [
+    'ws-station',
+    st.isWorking ? 'is-working' : '',
+    st.isGate ? 'is-gate' : '',
+    (st.isGate && st.folders.length) ? 'is-gate-waiting' : '',
+    st.hasError ? 'has-error' : '',
+    wsSelectedId === st.id ? 'is-selected' : '',
+  ].filter(Boolean).join(' ');
+
+  const ariaStatus = st.isWorking
+    ? (st.isMachine ? 'đang chạy tự động' : 'đang làm việc')
+    : (st.hasError ? 'có lỗi gần nhất' : (st.isGate && st.folders.length ? 'đang chờ bác sĩ duyệt' : 'đang nghỉ'));
+  return `<button type="button" class="${cls}" data-station-id="${esc(st.id)}"
+      aria-haspopup="dialog" aria-expanded="${wsSelectedId === st.id ? 'true' : 'false'}"
+      aria-label="${esc(st.displayName)} — ${ariaStatus}${st.folders.length ? `, ${st.folders.length} hồ sơ trên bàn` : ''}">
+    <div class="ws-st-top">
+      <span class="ws-st-num">${esc(st.num)}</span>
+      ${badge}
+    </div>
+    <div class="ws-iso-stage">${wsIsoSvg(st)}</div>
+    <div class="ws-st-info">
+      <div class="ws-st-name">${esc(st.displayName)}</div>
+      <div class="ws-st-task">${taskLine}</div>
+      ${folderChips ? `<div class="ws-st-files">${folderChips}</div>` : ''}
+    </div>
+  </button>`;
+}
+
+function renderWorkshop(){
+  const roles = companyData?.roles || [];
+  const roleMap = new Map();
+  roles.forEach(r => roleMap.set(r.id, r));
+
+  const runningByStation = new Map();
+  roleMap.forEach((r, id) => {
+    if(Array.isArray(r.running) && r.running.length) runningByStation.set(id, r.running);
+  });
+
+  const projects = (overviewData && overviewData.projects && overviewData.projects.length)
+    ? overviewData.projects
+    : (state?.projects || []);
+  const folderMap = wsMapProjectsToStations(projects, roleMap, runningByStation);
+
+  const buildStation = (def, fallbackNum) => {
+    if(def.isMachine){
+      const activeProjs = (projects || []).filter(
+        p => (p.state === 'medically_approved' || p.state === 'production_in_progress') && !p.blocked
+      );
+      const rawFolders = folderMap.get(def.id) || [];
+      const seenSlugs = new Set(rawFolders.map(f => f.slug));
+      const mergedFolders = [...rawFolders];
+      activeProjs.forEach(p => {
+        if(!seenSlugs.has(p.slug)){
+          mergedFolders.push({
+            slug: p.slug,
+            title: p.title || p.slug,
+            tone: 'work',
+            tag: p.state_label || 'Đang dựng tự động',
+            gate: p.gate,
+            blocked: p.blocked || '',
+            state: p.state,
+          });
+        }
+      });
+      return {
+        id: def.id,
+        num: def.num,
+        displayName: def.title,
+        isGate: false,
+        isMachine: true,
+        desc: def.desc,
+        isWorking: activeProjs.length > 0,
+        hasError: mergedFolders.some(f => f.tone === 'err'),
+        running: [],
+        recent: [],
+        modelsUsed: [],
+        configuredModels: [],
+        machineProjects: activeProjs,
+        folders: mergedFolders,
+      };
+    }
+    if(def.isGate){
+      const folders = folderMap.get(def.id) || [];
+      return {
+        id: def.id,
+        num: def.num,
+        displayName: def.title,
+        isGate: true,
+        gateKind: def.gateKind,
+        desc: def.desc,
+        isWorking: false,
+        hasError: false,
+        running: [],
+        recent: [],
+        modelsUsed: [],
+        configuredModels: [],
+        folders,
+      };
+    }
+    const r = roleMap.get(def.id) || {id: def.id, name: def.short || def.id, running: [], recent: [], models_used: [], configured_models: [], steps: [], step_labels: [], last_error: false};
+    const folders = folderMap.get(def.id) || [];
+    const hasBlockedHere = folders.some(f => f.tone === 'err');
+    const running = r.running || [];
+    return {
+      id: r.id,
+      num: def.num || fallbackNum || 'Quầy',
+      displayName: def.short ? `${def.short}` : r.name,
+      fullName: r.name,
+      tier: r.tier || '',
+      steps: r.steps || [],
+      stepLabels: r.step_labels || [],
+      isGate: false,
+      isMachine: false,
+      isWorking: running.length > 0,
+      hasError: Boolean(r.last_error || hasBlockedHere),
+      running,
+      recent: r.recent || [],
+      modelsUsed: r.models_used || [],
+      configuredModels: r.configured_models || [],
+      folders,
+    };
+  };
+
+  const extraIds = roles.map(r => r.id).filter(id =>
+    !WS_LINE_1.some(d => d.id === id) && !WS_LINE_2.some(d => d.id === id) && !WS_COUNTER_BASE.includes(id)
+  );
+  const counterStations = [...WS_COUNTER_BASE, ...extraIds].map(id => {
+    const r = roleMap.get(id);
+    return buildStation({id, num:'Quầy', short: r ? r.name : id}, 'Quầy');
+  });
+  const row1Stations = WS_LINE_1.map(def => buildStation(def));
+  const row2Stations = WS_LINE_2.map(def => buildStation(def));
+
+  wsStationMap = new Map();
+  [...counterStations, ...row1Stations, ...row2Stations].forEach(st => wsStationMap.set(st.id, st));
+
+  const activeEl = document.activeElement;
+  const focusedStationId = activeEl && activeEl.dataset ? activeEl.dataset.stationId : null;
+
+  $('ws-counters').innerHTML = counterStations.map(wsStationHtml).join('');
+  $('ws-row-1').innerHTML = row1Stations.map(wsStationHtml).join('');
+  $('ws-row-2').innerHTML = row2Stations.map(wsStationHtml).join('');
+
+  const agentWorkingCount = [...wsStationMap.values()].filter(s => !s.isGate && !s.isMachine && s.isWorking).length;
+  const machineSt = wsStationMap.get('render_machine');
+  const gateWaitCount = [...wsStationMap.values()].filter(s => s.isGate).reduce((sum, s) => sum + (s.folders?.length || 0), 0);
+  const errCount = [...wsStationMap.values()].filter(s => s.hasError).length;
+  const parts = [`${agentWorkingCount} nhân viên đang làm`];
+  if(machineSt && machineSt.isWorking) parts.push(`Máy dựng đang chạy (${machineSt.machineProjects.length} chủ đề)`);
+  if(gateWaitCount) parts.push(`${gateWaitCount} hồ sơ chờ bác sĩ duyệt`);
+  if(errCount) parts.push(`${errCount} trạm có lỗi gần nhất`);
+  parts.push(`${projects.length} chủ đề trên sàn`);
+  $('ws-summary').textContent = parts.join(' · ');
+
+  $('workshop').querySelectorAll('[data-station-id]').forEach(btn => {
+    btn.onclick = (ev) => openWorkshopPopover(btn.dataset.stationId, ev.currentTarget);
+  });
+
+  if(focusedStationId){
+    const restore = $('workshop').querySelector(`[data-station-id="${CSS.escape(focusedStationId)}"]`);
+    if(restore) restore.focus({preventScroll: true});
+  }
+  if(wsSelectedId && !$('ws-popover').hidden){
+    const currentSt = wsStationMap.get(wsSelectedId);
+    if(currentSt) renderWorkshopPopoverContent(currentSt);
+  }
+}
+
+function renderWorkshopPopoverContent(st){
+  $('ws-pop-title').textContent = st.fullName || st.displayName;
+  if(st.isMachine){
+    $('ws-pop-meta').textContent = `Trạm ${st.num} · Python tự chạy · TTS · FLUX · Remotion`;
+    const activeHtml = st.machineProjects.length
+      ? `<div class="ws-pop-list">${st.machineProjects.map(p => `<div class="ws-pop-item" style="border-color:hsl(168 78% 52% / .45)">
+          <div class="ws-pop-item-top"><span style="color:var(--ws-c-work)">● Đang chạy</span><span class="chip work">${esc(p.state_label || p.state)}</span></div>
+          <div style="font-weight:700;margin-top:4px">${esc(p.title || p.slug)}</div>
+          <div class="meta">${esc(p.slug)}</div>
+          <div style="margin-top:8px"><button type="button" class="btn" data-ws-open-proj="${esc(p.slug)}">Xem dự án</button></div>
+        </div>`).join('')}</div>`
+      : `<div class="ws-pop-box">${st.hasError ? '<span style="color:var(--ws-c-err);font-weight:700">▲ Có dự án đang bị chặn ở bước dựng video.</span>' : 'Đang nghỉ — hiện chưa có dự án nào ở bước dựng tự động.'}</div>`;
+    const blockedFolders = st.folders.filter(f => f.tone === 'err');
+    const blockedHtml = blockedFolders.length
+      ? `<div class="ws-pop-sec"><div class="ws-pop-label">Hồ sơ đang bị chặn (${blockedFolders.length})</div><div class="ws-pop-list">${blockedFolders.map(f =>
+          `<div class="ws-pop-item"><div class="ws-pop-item-top"><span>${esc(f.title)}</span><button type="button" class="btn-link" data-ws-open-proj="${esc(f.slug)}">Mở</button></div><div class="meta">${esc(f.slug)} · ${esc(f.tag)}</div></div>`
+        ).join('')}</div></div>` : '';
+    $('ws-pop-body').innerHTML = `
+      <div class="ws-pop-sec">
+        <div class="ws-pop-label">Cơ chế hoạt động</div>
+        <div class="ws-pop-box">${esc(st.desc)}</div>
+      </div>
+      <div class="ws-pop-sec">
+        <div class="ws-pop-label">Chủ đề đang dựng tự động (${st.machineProjects.length})</div>
+        ${activeHtml}
+      </div>
+      ${blockedHtml}
+      <div class="ws-pop-sec">
+        <div class="ws-pop-label">Trạng thái kích hoạt</div>
+        <div class="ws-pop-models"><span class="ws-pop-model">medically_approved</span><span class="ws-pop-model">production_in_progress</span></div>
+      </div>`;
+  } else if(st.isGate){
+    $('ws-pop-meta').textContent = `Trạm ${st.num} · Cổng duyệt của bác sĩ`;
+    const listHtml = st.folders.length
+      ? st.folders.map(f => `<div class="ws-pop-item">
+          <div class="ws-pop-item-top"><span>${esc(f.title)}</span><span class="chip gate">Chờ PIN</span></div>
+          <div class="meta">${esc(f.slug)}</div>
+          <div style="margin-top:8px"><button type="button" class="btn warn" data-ws-open-proj="${esc(f.slug)}">Mở xem &amp; quyết định</button></div>
+        </div>`).join('')
+      : `<div class="ws-pop-box">Hiện chưa có hồ sơ nào chờ tại cổng này.</div>`;
+    $('ws-pop-body').innerHTML = `
+      <div class="ws-pop-sec">
+        <div class="ws-pop-label">Vai trò bác sĩ</div>
+        <div class="ws-pop-box">${esc(st.desc)}<div class="meta" style="margin-top:6px">Duyệt bằng PIN trực tiếp trên máy này, agent không bao giờ vượt cổng.</div></div>
+      </div>
+      <div class="ws-pop-sec">
+        <div class="ws-pop-label">Hồ sơ đang chờ ở cổng (${st.folders.length})</div>
+        <div class="ws-pop-list">${listHtml}</div>
+      </div>`;
+  } else {
+    const stepText = (st.stepLabels || []).join(' · ') || '—';
+    $('ws-pop-meta').textContent = `${st.num === 'Quầy' ? 'Quầy riêng' : 'Trạm ' + st.num} · ${st.id} · bậc ${st.tier || '—'}`;
+    const currentHtml = st.isWorking
+      ? st.running.map(r => `<div class="ws-pop-box" style="border-color:hsl(168 78% 52% / .5)">
+          <div><b style="color:var(--ws-c-work)">● Đang làm:</b> ${esc(r.step_label || r.step)}</div>
+          ${r.slug ? `<div class="meta" style="margin-top:4px">Chủ đề: ${esc(r.slug)} · ${esc(ago(r.started_at || r.at))}</div>` : ''}
+          <div class="meta">Model: ${esc(r.cli)} / ${esc(r.model)}</div>
+          ${r.slug && !['chung','chat'].includes(r.slug) ? `<div style="margin-top:8px"><button type="button" class="btn" data-ws-open-proj="${esc(r.slug)}">Xem dự án</button></div>` : ''}
+        </div>`).join('')
+      : `<div class="ws-pop-box">Đang nghỉ — hiện không có việc nào đang chạy.${st.hasError ? '<div style="margin-top:6px;color:var(--ws-c-err);font-weight:700">▲ Lần gần nhất ở bước này gặp lỗi hoặc đang bị chặn.</div>' : ''}</div>`;
+
+    const recentHtml = st.recent.length
+      ? `<div class="ws-pop-list">${st.recent.slice(0, 5).map(it => {
+          const stChip = it.event === 'quota' ? '<span class="chip gate">Đổi model</span>'
+            : (it.ok === false ? '<span class="chip bad">Lỗi</span>' : '<span class="chip done">Xong</span>');
+          return `<div class="ws-pop-item">
+            <div class="ws-pop-item-top"><span>${esc(it.step_label || it.step)}</span>${stChip}</div>
+            <div class="meta">${it.slug ? esc(it.slug) + ' · ' : ''}${it.duration_s != null ? wsFmtDur(it.duration_s) + ' · ' : ''}${esc(ago(it.at))}</div>
+            <div class="meta">${esc(it.cli)} / ${esc(it.model)}</div>
+          </div>`;
+        }).join('')}</div>`
+      : `<div class="ws-pop-box">Chưa có lịch sử chạy cho vai này.</div>`;
+
+    const usedHtml = st.modelsUsed.length
+      ? st.modelsUsed.map(m => `<span class="ws-pop-model">${esc(m.cli)}/${esc(m.model)} (${m.count})</span>`).join('')
+      : `<span class="sub">Chưa dùng model nào</span>`;
+    const cfgHtml = st.configuredModels.length
+      ? `<div class="meta" style="margin-top:6px">Chuỗi cấu hình: ${st.configuredModels.map(m => `${esc(m.cli)}/${esc(m.model)}`).join(' → ')}</div>`
+      : '';
+
+    const deskFoldersHtml = st.folders.length
+      ? `<div class="ws-pop-sec"><div class="ws-pop-label">Hồ sơ đang ở bàn (${st.folders.length})</div><div class="ws-pop-list">${st.folders.map(f =>
+          `<div class="ws-pop-item"><div class="ws-pop-item-top"><span>${esc(f.title)}</span><button type="button" class="btn-link" data-ws-open-proj="${esc(f.slug)}">Mở</button></div><div class="meta">${esc(f.slug)} · ${esc(f.tag)}</div></div>`
+        ).join('')}</div></div>` : '';
+
+    $('ws-pop-body').innerHTML = `
+      <div class="ws-pop-sec">
+        <div class="ws-pop-label">Vai &amp; nhiệm vụ</div>
+        <div class="ws-pop-box">${esc(stepText)}</div>
+      </div>
+      <div class="ws-pop-sec">
+        <div class="ws-pop-label">Việc đang làm</div>
+        ${currentHtml}
+      </div>
+      ${deskFoldersHtml}
+      <div class="ws-pop-sec">
+        <div class="ws-pop-label">5 việc gần nhất</div>
+        ${recentHtml}
+      </div>
+      <div class="ws-pop-sec">
+        <div class="ws-pop-label">Model đã dùng</div>
+        <div class="ws-pop-models">${usedHtml}</div>
+        ${cfgHtml}
+      </div>`;
+  }
+  $('ws-pop-body').querySelectorAll('[data-ws-open-proj]').forEach(b => {
+    b.onclick = () => {
+      const slug = b.dataset.wsOpenProj;
+      closeWorkshopPopover(false);
+      openProduct(slug);
+    };
+  });
+}
+
+function positionWorkshopPopover(anchor){
+  const pop = $('ws-popover');
+  if(!anchor || window.innerWidth <= 680){
+    pop.style.left = ''; pop.style.top = '';
+    return;
+  }
+  const rect = anchor.getBoundingClientRect();
+  const chatRight = window.innerWidth > 980 ? 358 : 12;
+  const maxRight = window.innerWidth - chatRight;
+  const popW = Math.min(390, maxRight - 12);
+  let left = Math.min(Math.max(12, rect.left), Math.max(12, maxRight - popW));
+  pop.style.left = left + 'px';
+  pop.style.top = '12px';
+  const popH = Math.min(pop.scrollHeight || 420, window.innerHeight * 0.78);
+  let top = rect.bottom + 8;
+  if(top + popH > window.innerHeight - 12){
+    top = Math.max(12, rect.top - popH - 8);
+  }
+  pop.style.top = top + 'px';
+}
+
+function openWorkshopPopover(id, anchor){
+  const st = wsStationMap.get(id);
+  if(!st) return;
+  if(wsSelectedId === id && !$('ws-popover').hidden){
+    closeWorkshopPopover(false);
+    return;
+  }
+  wsSelectedId = id;
+  renderWorkshopPopoverContent(st);
+  const pop = $('ws-popover');
+  pop.hidden = false;
+  positionWorkshopPopover(anchor);
+  $('workshop').querySelectorAll('[data-station-id]').forEach(b => {
+    const on = b.dataset.stationId === id;
+    b.classList.toggle('is-selected', on);
+    b.setAttribute('aria-expanded', String(on));
+  });
+  $('ws-pop-close').focus({preventScroll: true});
+}
+
+function closeWorkshopPopover(restoreFocus = false){
+  const prevId = wsSelectedId;
+  wsSelectedId = null;
+  $('ws-popover').hidden = true;
+  $('workshop').querySelectorAll('[data-station-id]').forEach(b => {
+    b.classList.remove('is-selected');
+    b.setAttribute('aria-expanded', 'false');
+  });
+  if(restoreFocus && prevId){
+    const btn = $('workshop').querySelector(`[data-station-id="${CSS.escape(prevId)}"]`);
+    if(btn) btn.focus({preventScroll: true});
+  }
+}
+
+$('ws-pop-close').onclick = () => closeWorkshopPopover(true);
+document.addEventListener('click', (e) => {
+  const pop = $('ws-popover');
+  if(pop.hidden) return;
+  if(pop.contains(e.target)) return;
+  if(e.target.closest && e.target.closest('[data-station-id]')) return;
+  closeWorkshopPopover(false);
+});
+window.addEventListener('resize', () => {
+  if(wsSelectedId && !$('ws-popover').hidden){
+    const btn = $('workshop').querySelector(`[data-station-id="${CSS.escape(wsSelectedId)}"]`);
+    if(btn) positionWorkshopPopover(btn);
+  }
+});
 </script>
 <script>
 /* Package C: app operations inside Quản trị menu */

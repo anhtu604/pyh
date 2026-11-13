@@ -670,3 +670,102 @@ def test_progress_counts_tasks_and_lists_work_in_progress(tmp_path):
     assert [task["id"] for task in result["doing"]] == ["0.2"]
     assert result["phases"][0]["done"] == 1
     assert result["phases"][0]["tasks"][2]["status"] == "todo"
+
+
+def test_company_route_returns_all_roles_recent_five_and_drops_dead_pid(tmp_path):
+    log = tmp_path / 'topics/logs/activity.jsonl'
+    log.parent.mkdir(parents=True, exist_ok=True)
+    rows = [
+        # Dead-pid orphaned start for writer on gout at 09:00; 10:05 end is newer & ok=True.
+        {'at': '2026-11-12T09:00:00+07:00', 'role': 'writer', 'cli': 'codex',
+         'model': 'gpt-6.1-sol', 'slug': 'gout', 'step': 'draft', 'event': 'start',
+         'ok': None, 'pid': 2 ** 30},
+        {'at': '2026-11-12T10:00:00+07:00', 'role': 'writer', 'cli': 'agy',
+         'model': 'gemini-4-carbon-high', 'slug': 'gout', 'step': 'draft', 'event': 'start', 'ok': None},
+        {'at': '2026-11-12T10:05:00+07:00', 'role': 'writer', 'cli': 'agy',
+         'model': 'gemini-4-carbon-high', 'slug': 'gout', 'step': 'draft', 'event': 'end', 'ok': True},
+    ]
+    for i in range(6):
+        t_start = f'2026-11-12T10:{10 + i * 2:02d}:00+07:00'
+        t_end = f'2026-11-12T10:{11 + i * 2:02d}:00+07:00'
+        rows.append({'at': t_start, 'role': 'medical_expert', 'cli': 'claude',
+                     'model': 'claude-sonnet-5-5', 'slug': f'topic-{i}', 'step': 'research',
+                     'event': 'start', 'ok': None})
+        rows.append({'at': t_end, 'role': 'medical_expert', 'cli': 'claude',
+                     'model': 'claude-sonnet-5-5', 'slug': f'topic-{i}', 'step': 'research',
+                     'event': 'end', 'ok': i != 5})
+    rows.append({'at': '2026-11-12T11:00:00+07:00', 'role': 'copywriter', 'cli': 'agy',
+                 'model': 'gemini-pro-orchestrator', 'slug': 'gout', 'step': 'posts',
+                 'event': 'start', 'ok': None, 'pid': os.getpid()})
+    log.write_text('\n'.join(json.dumps(r) for r in rows) + '\n', encoding='utf-8')
+
+    def check(srv):
+        status, body = request(srv, 'GET', '/api/company')
+        assert status == 200
+        data = json.loads(body)
+        by_id = {role['id']: role for role in data['roles']}
+        expected_roles = {
+            'scout', 'medical_expert', 'writer', 'script_critic', 'art_director',
+            'editor', 'product_critic', 'copywriter', 'coordinator',
+            'coordinator_senior', 'feedback_analyst',
+        }
+        assert expected_roles <= set(by_id)
+        assert by_id['writer']['running'] == []
+        assert by_id['writer']['last_error'] is False
+        assert len(by_id['copywriter']['running']) == 1
+        assert by_id['copywriter']['running'][0]['step'] == 'posts'
+        assert len(by_id['medical_expert']['recent']) == 5
+        assert by_id['medical_expert']['recent'][0]['slug'] == 'topic-5'
+        assert by_id['medical_expert']['last_error'] is True
+        assert by_id['medical_expert']['models_used'] == [
+            {'cli': 'claude', 'model': 'claude-sonnet-5-5', 'count': 6}
+        ]
+        assert by_id['scout']['name']
+        assert by_id['scout']['configured_models']
+        assert by_id['scout']['recent'] == []
+        assert by_id['scout']['models_used'] == []
+        assert by_id['scout']['last_error'] is False
+
+    _with_server(tmp_path, check)
+
+
+def test_company_route_keeps_both_roles_running_on_same_topic(tmp_path):
+    log = tmp_path / 'topics/logs/activity.jsonl'
+    log.parent.mkdir(parents=True, exist_ok=True)
+    rows = [
+        {'at': '2026-11-12T10:00:00+07:00', 'role': 'writer', 'cli': 'agy',
+         'model': 'gemini-4-carbon-high', 'slug': 'gout', 'step': 'draft',
+         'event': 'start', 'ok': None, 'pid': os.getpid()},
+        {'at': '2026-11-12T10:01:00+07:00', 'role': 'copywriter', 'cli': 'agy',
+         'model': 'gemini-pro-orchestrator', 'slug': 'gout', 'step': 'posts',
+         'event': 'start', 'ok': None, 'pid': os.getpid()},
+    ]
+    log.write_text('\n'.join(json.dumps(r) for r in rows) + '\n', encoding='utf-8')
+
+    def check(srv):
+        status, body = request(srv, 'GET', '/api/company')
+        assert status == 200
+        by_id = {role['id']: role for role in json.loads(body)['roles']}
+        assert len(by_id['writer']['running']) == 1
+        assert by_id['writer']['running'][0]['running'] is True
+        assert by_id['writer']['running'][0]['slug'] == 'gout'
+        assert len(by_id['copywriter']['running']) == 1
+        assert by_id['copywriter']['running'][0]['running'] is True
+        assert by_id['copywriter']['running'][0]['slug'] == 'gout'
+
+    _with_server(tmp_path, check)
+
+
+def test_html_includes_workshop_3d_and_preserves_section_order():
+    html = dashboard.HTML_PATH.read_text(encoding='utf-8')
+    positions = [
+        html.index(f'id="{sec}"')
+        for sec in ('tiles', 'decisions', 'workshop', 'projects', 'activity', 'channel')
+    ]
+    assert positions == sorted(positions)
+    assert 'prefers-reduced-motion: reduce' in html
+    assert 'Máy dựng (xưởng tự chạy)' in html
+    assert 'medically_approved' in html
+    assert 'production_in_progress' in html
+    assert html.count('https://fonts.googleapis.com') <= 2
+    assert 'cdn.' not in html.lower() and 'unpkg' not in html.lower() and 'jsdelivr' not in html.lower()

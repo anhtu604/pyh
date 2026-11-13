@@ -15,8 +15,9 @@ import sys
 import threading
 import time
 import webbrowser
+from collections import Counter
 from collections.abc import Callable
-from datetime import datetime
+from datetime import UTC, datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -26,7 +27,7 @@ from urllib.request import urlopen
 
 from healthvideo.agents import ACTIVITY_FILE, QUOTA_FILE, RUNNING_MARKER, QuotaBook
 from healthvideo.approver_pin import pin_path, verify_pin
-from healthvideo.company import REPO_ROOT, load_company
+from healthvideo.company import COMPANY_PATH, REPO_ROOT, load_company
 from healthvideo.domain.gate_review import GateKind
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.env import child_env
@@ -135,6 +136,7 @@ def running_agents(root: Path) -> list[str]:
 
 STEP_LABELS: dict[str, str] = {
     'create': 'Đang tạo dự án',
+    'scout': 'Đang trinh sát chủ đề',
     'research': 'Đang nghiên cứu y văn',
     'draft': 'Đang viết kịch bản',
     'script_review': 'Đang chấm kịch bản',
@@ -145,6 +147,8 @@ STEP_LABELS: dict[str, str] = {
     'revise_medical': 'Đang sửa theo góp ý y khoa',
     'revise_production': 'Đang sửa hình/nhịp video',
     'revise_product': 'Đang sửa lỗi sản phẩm',
+    'chat': 'Đang trả lời chat',
+    'chat_deep': 'Đang phân tích chuyên sâu',
     'coordinator': 'Đang điều phối chat',
     'feedback_inbox': 'Đang phân tích ý kiến',
 }
@@ -295,6 +299,54 @@ def activity(
         'recent': recent,
         'items': [*running, *recent],
     }
+
+
+def company_roster(
+    root: Path,
+    *,
+    per_role_limit: int = 5,
+    now: Callable[[], datetime] = lambda: datetime.now().astimezone(),
+) -> dict:
+    """Read-only company roster from profiles/company.yaml enriched with per-role activity."""
+    cfg_path = root / 'profiles/company.yaml'
+    company = load_company(cfg_path if cfg_path.is_file() else COMPANY_PATH)
+    act = activity(root, limit=10_000, now=now)
+    running_by_role: dict[str, list[dict]] = {}
+    recent_by_role: dict[str, list[dict]] = {}
+    for item in act['running']:
+        running_by_role.setdefault(str(item.get('role') or ''), []).append(item)
+    for item in act['recent']:
+        recent_by_role.setdefault(str(item.get('role') or ''), []).append(item)
+
+    cap = max(1, int(per_role_limit))
+    epoch = datetime.min.replace(tzinfo=UTC)
+    roles_payload: list[dict] = []
+    for role_id, role in company.roles.items():
+        role_running = running_by_role.get(role_id, [])
+        all_recent = sorted(
+            recent_by_role.get(role_id, []),
+            key=lambda it: _parse_iso(it.get('at')) or epoch,
+            reverse=True,
+        )
+        counts = Counter(
+            (str(it.get('cli') or ''), str(it.get('model') or ''))
+            for it in [*role_running, *all_recent]
+            if it.get('cli') or it.get('model')
+        )
+        roles_payload.append({
+            'id': role.id,
+            'name': role.name,
+            'tier': role.tier,
+            'steps': list(role.steps),
+            'step_labels': [STEP_LABELS.get(s, s) for s in role.steps],
+            'skills': list(role.skills),
+            'configured_models': [{'cli': m.cli, 'model': m.model} for m in company.chain(role.id)],
+            'running': role_running,
+            'recent': all_recent[:cap],
+            'models_used': [{'cli': c, 'model': m, 'count': n} for (c, m), n in counts.items()],
+            'last_error': bool(all_recent and all_recent[0].get('ok') is False),
+        })
+    return {'roles': roles_payload}
 
 
 def _project_preview_url(path: Path, project: ProjectManifestV2) -> str | None:
@@ -857,6 +909,8 @@ class _Handler(BaseHTTPRequestHandler):
                 self._json(snapshot(self.server.root, agents=self.server.agents))
             elif path == '/api/overview':
                 self._json(overview(self.server.root))
+            elif path == '/api/company':
+                self._json(company_roster(self.server.root))
             elif path == '/api/progress':
                 self._json(progress(self.server.root))
             elif path == '/api/activity':
