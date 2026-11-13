@@ -13,7 +13,7 @@ Rút từ trang Wikipedia "Signs of AI writing" (WikiProject AI Cleanup), chuy�
 9. **Song song phủ định.** "Không chỉ… mà còn", "không phải X mà là Y", "chứ không phải", "thay vì" chỉ dùng khi thật sự đang bác một hiểu lầm cụ thể, tối đa 1–2 lần cả video.
 10. **Bộ ba.** Không gom ba tính từ hay ba cụm cho có vẻ đầy đủ ("nhanh, mạnh và bền"). Hai ý thật hơn ba ý độn.
 11. **Lời đáp chatbot.** Không "Câu hỏi hay!", "Tất nhiên rồi", "Hy vọng giúp ích", "Nếu bạn có thắc mắc…" trong thân bài.
-12. **Rào đón về nguồn.** Không "cần lưu ý rằng", "điều quan trọng là", "thông tin còn hạn chế", "chưa được ghi nhận rộng rãi". Kiểu mới hơn: chêm liên tục "không nên nhầm với", "không đồng nghĩa với", "điều này không chứng minh". Giới hạn bằng chứng gom 1–2 câu ở chương nguồn.
+12. **Rào đón về nguồn.** Không "cần lưu ý rằng", "điều quan trọng là", "thông tin còn hạn chế", "chưa được ghi nhận rộng rãi". Kiểu mới hơn: chêm liên tục "không nên nhầm với", "không đồng nghĩa với", "điều này không chứng minh". Không đọc tên nguồn, phương pháp nghiên cứu hay năm xuất bản trong lời thoại; để trên thẻ nguồn/mô tả và diễn đạt đúng mức chắc chắn của bằng chứng.
 13. **Tóm tắt cuối đoạn.** Không "Tóm lại", "Nói tóm lại", "Tổng kết lại", "Kết luận lại". Kết bằng một câu có hình ảnh hoặc hành động.
 14. **Đổi tên chủ thể liên tục.** Đã gọi "urat" thì giữ "urat"; không xoay vòng "chất này / hợp chất ấy / nhân vật chính / phân tử đó" chỉ để khỏi lặp.
 15. **Dấu và định dạng.** Lời đọc là văn nói cho máy đọc: không markdown (`*`, `#`, `` ` ``), không emoji, không ngoặc vuông giữ chỗ, không gạch ngang dài thay dấu phẩy.

@@ -42,6 +42,7 @@ def test_fast_coordinator_escalates_hard_question_once(tmp_path, project):
 
     def invoke(slots, prompt, **kwargs):
         roles.append((kwargs['role'], slots[0].model))
+        assert '.agents/skills/pyh-coordinator/SKILL.md' in prompt
         reply = ({'reply': 'Em đang kiểm kỹ.', 'action': 'status', 'escalate': True}
                  if len(roles) == 1 else
                  {'reply': 'Đã kiểm: bản sửa có ở N15.', 'action': 'status', 'escalate': True})

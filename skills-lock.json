@@ -165,6 +165,72 @@
       "skillPath": "plugins/narrow-react-prop-types/skills/narrow-react-prop-types/SKILL.md",
       "computedHash": "8330b9071e7c479be104efedbed34e3af87edda40600598302d944ccc43a8636"
     },
+    "pyh-art-director": {
+      "source": "local",
+      "sourceType": "local",
+      "skillPath": ".agents/skills/pyh-art-director/SKILL.md",
+      "computedHash": "02f9952f07763c7aa2e2595296a8095507df824938faf12253d2b6daf7b5b4c8"
+    },
+    "pyh-coordinator": {
+      "source": "local",
+      "sourceType": "local",
+      "skillPath": ".agents/skills/pyh-coordinator/SKILL.md",
+      "computedHash": "7a326ccf007529c621ae260fa25ff21faa514b15d8bc97ccce43e92e451e23e7"
+    },
+    "pyh-coordinator-senior": {
+      "source": "local",
+      "sourceType": "local",
+      "skillPath": ".agents/skills/pyh-coordinator-senior/SKILL.md",
+      "computedHash": "9368d701389522cdc12f8263b3991f0edd4f85ca6bd1c7c149bd58adca81fbe1"
+    },
+    "pyh-copywriter": {
+      "source": "local",
+      "sourceType": "local",
+      "skillPath": ".agents/skills/pyh-copywriter/SKILL.md",
+      "computedHash": "bb64e959d2bf02c6312a01b56673a01bc13b3b1d5d78754e146e6fe4c5622c5a"
+    },
+    "pyh-editor": {
+      "source": "local",
+      "sourceType": "local",
+      "skillPath": ".agents/skills/pyh-editor/SKILL.md",
+      "computedHash": "b1c1e4bcd52c6a8f96c7966a8e094711fe9572e1f9d978ae092475008bb4f8dd"
+    },
+    "pyh-feedback-analyst": {
+      "source": "local",
+      "sourceType": "local",
+      "skillPath": ".agents/skills/pyh-feedback-analyst/SKILL.md",
+      "computedHash": "c8d4594ef82edea01ccd2f22de44425898033d4259e6a67928100aef50d29585"
+    },
+    "pyh-medical-expert": {
+      "source": "local",
+      "sourceType": "local",
+      "skillPath": ".agents/skills/pyh-medical-expert/SKILL.md",
+      "computedHash": "fae7b0bcbae6112f18cab741ce9feddbdae0cbc1cd2dd956de12143b3b2ab062"
+    },
+    "pyh-product-critic": {
+      "source": "local",
+      "sourceType": "local",
+      "skillPath": ".agents/skills/pyh-product-critic/SKILL.md",
+      "computedHash": "7fd0b9e1f8a6cb557f75d86cd7531b718e438d2baf88aa0e7d92fd949dcea83e"
+    },
+    "pyh-scout": {
+      "source": "local",
+      "sourceType": "local",
+      "skillPath": ".agents/skills/pyh-scout/SKILL.md",
+      "computedHash": "c4739178e361a6d183c43f30e2467fff8fef175747fc8c3737b955cbdb635bd5"
+    },
+    "pyh-script-critic": {
+      "source": "local",
+      "sourceType": "local",
+      "skillPath": ".agents/skills/pyh-script-critic/SKILL.md",
+      "computedHash": "4ace95ead2584f68307617644e24f4c7bfe8ca87be4aae7b24c1e83d7e08bbe8"
+    },
+    "pyh-writer": {
+      "source": "local",
+      "sourceType": "local",
+      "skillPath": ".agents/skills/pyh-writer/SKILL.md",
+      "computedHash": "53a3c0f0acbac965e8ff61d2a51ba49152e927abc56efbfa0c3d902a56e7d6bc"
+    },
     "remotion-best-practices": {
       "source": "remotion-dev/skills",
       "sourceType": "github",

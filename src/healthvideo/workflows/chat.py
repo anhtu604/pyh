@@ -165,6 +165,7 @@ def _input(root: Path, slug: str | None, message: dict) -> dict:
 
 
 def run_coordinator(root: Path, message_id: str, *, invoke=invoke_with_failover) -> dict:
+    from healthvideo.company import role_skill_block
     from healthvideo.workflows.runner import HARD_RULES
 
     # Threads wait here in posting order; the file lock also serializes multiple app processes.
@@ -185,7 +186,9 @@ def run_coordinator(root: Path, message_id: str, *, invoke=invoke_with_failover)
             company = load_company()
             # A fast model answers first; it may hand a hard question to a stronger chain once.
             for role_id in ('coordinator', 'coordinator_senior'):
-                result = invoke(company.chain(role_id), prompt, cwd=root, log_dir=log_dir,
+                skills = role_skill_block(role_id, company)
+                role_prompt = f'{prompt}\n{skills}' if skills else prompt
+                result = invoke(company.chain(role_id), role_prompt, cwd=root, log_dir=log_dir,
                                 role=role_id, slug=slug or 'chung', step='coordinator')
                 if not result.ok:
                     raise ValueError('Điều phối viên chưa trả lời được; hãy gửi lại.')

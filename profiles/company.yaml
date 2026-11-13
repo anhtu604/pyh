@@ -22,10 +22,12 @@ tiers:
 roles:
   coordinator:  # 2026-11-12 bác sĩ: model nhẹ để trả lời nhanh; câu khó escalate lên vai dưới
     name: Điều phối viên
+    skills: [pyh-coordinator]
     steps: [chat]
     tier: bulk
   coordinator_senior:
     name: Điều phối viên chuyên sâu
+    skills: [pyh-coordinator, pyh-coordinator-senior]
     steps: [chat_deep]
     tier: medium
     models:  # khác nhà cung cấp với Điều phối viên để vòng chuyên sâu thật sự khác
@@ -34,22 +36,22 @@ roles:
       - {cli: agy, model: gemini-pro-orchestrator}
   scout:
     name: Trinh sát chủ đề
-    skills: [content-strategy]
+    skills: [content-strategy, pyh-scout]
     steps: [scout]
     tier: bulk
   medical_expert:  # spec 5.8: thay vai researcher
     name: Chuyên gia y học
-    skills: [systematic-literature-review]
+    skills: [pyh-medical-expert]
     steps: [research]
     tier: hard
   writer:
     name: Biên kịch viral
-    skills: [youtube-scriptwriting, short-form-video]
+    skills: [youtube-scriptwriting, short-form-video, pyh-writer]
     steps: [draft, revise_medical]
     tier: hard
   script_critic:
     name: Kiểm duyệt kịch bản
-    skills: [copy-editing]
+    skills: [copy-editing, pyh-script-critic]
     steps: [script_review]
     tier: hard
     models:  # bắt đầu từ nhà cung cấp khác với biên kịch
@@ -59,7 +61,7 @@ roles:
       - {cli: codex, model: gpt-6.1-terra}
   art_director:
     name: Đạo diễn hình
-    skills: [scripting-and-storyboarding, visual-style]
+    skills: [pyh-art-director]
     steps: [visual_review]
     tier: medium
     models:  # nhìn ảnh tốt
@@ -69,7 +71,7 @@ roles:
       - {cli: codex, model: gpt-6.1-terra}
   editor:
     name: Thợ dựng
-    skills: [remotion-best-practices, motion-design]
+    skills: [remotion-best-practices, motion-design, pyh-editor]
     steps: [revise_production, revise_product]
     tier: medium
     models:  # quen repo video
@@ -79,7 +81,7 @@ roles:
       - {cli: codex, model: gpt-6.1-terra}
   product_critic:
     name: Kiểm định sản phẩm
-    skills: [video-understand, character-animation-qa]
+    skills: [character-animation-qa, pyh-product-critic]
     steps: [product_review]
     tier: hard
     models:  # khác Thợ dựng (agy) để không tự chấm bài mình
@@ -88,10 +90,11 @@ roles:
       - {cli: agy, model: gemini-pro-orchestrator}
   copywriter:
     name: Viết bài đăng
-    skills: [social]
+    skills: [social, pyh-copywriter]
     steps: [posts]
     tier: bulk
   feedback_analyst:
     name: Phân tích ý kiến
+    skills: [pyh-feedback-analyst]
     steps: [feedback_inbox]
     tier: medium

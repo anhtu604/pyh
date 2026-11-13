@@ -99,22 +99,23 @@ def test_every_role_skill_exists():
 
 
 def test_role_skills_follow_spec_table():
-    # Spec 2026-11-08 §5.3 + §5.8: researcher became medical_expert.
+    # Standardized skills per role (task 3.7): each role has 1-3 skills tailored to its step.
     expected = {
-        'coordinator': [],
-        'coordinator_senior': [],
-        'scout': ['content-strategy'],
-        'medical_expert': ['systematic-literature-review'],
-        'writer': ['youtube-scriptwriting', 'short-form-video'],
-        'script_critic': ['copy-editing'],
-        'art_director': ['scripting-and-storyboarding', 'visual-style'],
-        'editor': ['remotion-best-practices', 'motion-design'],
-        'product_critic': ['video-understand', 'character-animation-qa'],
-        'copywriter': ['social'],
-        'feedback_analyst': [],
+        'coordinator': ['pyh-coordinator'],
+        'coordinator_senior': ['pyh-coordinator', 'pyh-coordinator-senior'],
+        'scout': ['content-strategy', 'pyh-scout'],
+        'medical_expert': ['pyh-medical-expert'],
+        'writer': ['youtube-scriptwriting', 'short-form-video', 'pyh-writer'],
+        'script_critic': ['copy-editing', 'pyh-script-critic'],
+        'art_director': ['pyh-art-director'],
+        'editor': ['remotion-best-practices', 'motion-design', 'pyh-editor'],
+        'product_critic': ['character-animation-qa', 'pyh-product-critic'],
+        'copywriter': ['social', 'pyh-copywriter'],
+        'feedback_analyst': ['pyh-feedback-analyst'],
     }
     company = load_company()
     assert {role_id: role.skills for role_id, role in company.roles.items()} == expected
+    assert all(1 <= len(skills) <= 3 for skills in expected.values())
 
 
 def test_split_script_roles_have_new_names():
@@ -126,7 +127,9 @@ def test_split_script_roles_have_new_names():
 
 
 def test_role_without_skills_has_no_block():
-    assert role_skill_block('coordinator') == ''
+    company = load_company()
+    company.roles['coordinator'].skills = []
+    assert role_skill_block('coordinator', company) == ''
 
 
 def test_role_skill_block_lists_skill_paths():
@@ -134,7 +137,15 @@ def test_role_skill_block_lists_skill_paths():
     assert block.startswith('## Skill của vai: Biên kịch viral')
     assert '- .agents/skills/youtube-scriptwriting/SKILL.md' in block
     assert '- .agents/skills/short-form-video/SKILL.md' in block
+    assert '- .agents/skills/pyh-writer/SKILL.md' in block
     assert SKILL_RULE in block
+
+
+def test_writer_and_critic_skills_reference_doctor_principles():
+    for skill in ('pyh-writer', 'pyh-script-critic'):
+        text = (REPO_ROOT / '.agents/skills' / skill / 'SKILL.md').read_text(encoding='utf-8')
+        assert 'profiles/doctor-feedback.yaml' in text
+        assert 'slug: chung' in text
 
 
 @pytest.mark.parametrize('skills', [['../evil'], ['a/b'], ['a', 'b', 'c', 'd']])
