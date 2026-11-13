@@ -27,6 +27,7 @@ phases:
   - {id: '2.4', title: Bác sĩ xem và duyệt cổng video, status: todo, owner: bác sĩ}
   - {id: '2.5', title: Ghi điều bác sĩ chấp nhận thành kiểm tự động, status: todo, owner: claude}
   - {id: '2.6', title: Đóng gói và bác sĩ đăng tay, status: todo, owner: bác sĩ}
+  - {id: '2.7', title: Thử một phong cách Lemo-Opuscar cho hình (ví dụ cảnh S07), status: todo, owner: agy, note: 'làm sau khi gout duyệt; học cách làm rồi tự viết lại vào skill visual-style, không chép STYLE.md (giấy phép CC BY-NC), giữ Remotion và model vừa phải'}
 - id: P3
   title: Tinh gọn kết cấu
   tasks:
