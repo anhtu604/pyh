@@ -100,6 +100,7 @@ def test_role_skills_follow_spec_table():
     # Spec 2026-11-08 §5.3 + §5.8: researcher became medical_expert.
     expected = {
         'coordinator': [],
+        'coordinator_senior': [],
         'scout': ['content-strategy'],
         'medical_expert': ['systematic-literature-review'],
         'writer': ['youtube-scriptwriting', 'short-form-video'],

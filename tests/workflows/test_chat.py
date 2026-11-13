@@ -36,6 +36,26 @@ def reply_to(root, slug, text, action='edit_production', brief='Đổi hình S07
     return chat.run_coordinator(root, message['id'], invoke=invoke)
 
 
+def test_fast_coordinator_escalates_hard_question_once(tmp_path, project):
+    message = chat.post(tmp_path, project.name, 'Sao không thấy sửa theo góp ý?', {})
+    roles = []
+
+    def invoke(slots, prompt, **kwargs):
+        roles.append((kwargs['role'], slots[0].model))
+        reply = ({'reply': 'Em đang kiểm kỹ.', 'action': 'status', 'escalate': True}
+                 if len(roles) == 1 else
+                 {'reply': 'Đã kiểm: bản sửa có ở N15.', 'action': 'status', 'escalate': True})
+        write_yaml_atomic(kwargs['log_dir'] / f"{message['id']}.yaml", reply)
+        return AgentResult('fake', True, False, kwargs['log_dir'] / 'fake.log')
+
+    result = chat.run_coordinator(tmp_path, message['id'], invoke=invoke)
+    assert [role for role, _ in roles] == ['coordinator', 'coordinator_senior']
+    assert roles[0][1] != roles[1][1]
+    assert result['text'] == 'Đã kiểm: bản sửa có ở N15.'
+    replies = [row['text'] for row in chat.load(tmp_path, project.name) if row['who'] == 'coordinator']
+    assert replies == ['Em đang kiểm kỹ.', 'Đã kiểm: bản sửa có ở N15.']
+
+
 @pytest.mark.parametrize('brief', ['đổi 6 mg/dL thành 5', 'sửa claim C01', 'sửa N14', 'đổi số liệu', 'đổi 6%', 'đổi 2 mmol/L', 'đổi 6 thành 5', 'replace 6 with 5'])
 def test_guard_downgrades_number_change(brief):
     assert chat.guard(chat.CoordinatorReply(reply='OK', action='edit_production', brief=brief)).action == 'edit_script'

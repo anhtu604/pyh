@@ -38,6 +38,7 @@ class CoordinatorReply(BaseModel):
     brief: str = ''
     options: list[dict] = Field(default_factory=list)
     topic: dict | None = None
+    escalate: bool = False
 
     @model_validator(mode='after')
     def valid_action(self):
@@ -181,11 +182,21 @@ def run_coordinator(root: Path, message_id: str, *, invoke=invoke_with_failover)
             prompt = text.replace('{report}', str(report)).replace(
                 '{input}', json.dumps(_input(root, slug, message), ensure_ascii=False))
             prompt += '\n\n## Quy tắc cứng\n' + '\n'.join(f'- {rule}' for rule in HARD_RULES) + '\n'
-            result = invoke(load_company().chain('coordinator'), prompt, cwd=root,
-                            log_dir=log_dir, role='coordinator', slug=slug or 'chung', step='coordinator')
-            if not result.ok:
-                raise ValueError('Điều phối viên chưa trả lời được; hãy gửi lại.')
-            reply = guard(CoordinatorReply.model_validate(read_yaml(report)))
+            company = load_company()
+            # A fast model answers first; it may hand a hard question to a stronger chain once.
+            for role_id in ('coordinator', 'coordinator_senior'):
+                result = invoke(company.chain(role_id), prompt, cwd=root, log_dir=log_dir,
+                                role=role_id, slug=slug or 'chung', step='coordinator')
+                if not result.ok:
+                    raise ValueError('Điều phối viên chưa trả lời được; hãy gửi lại.')
+                reply = guard(CoordinatorReply.model_validate(read_yaml(report)))
+                if not reply.escalate or role_id == 'coordinator_senior':
+                    break
+                with locked(root):
+                    _append(root, slug, _message('coordinator', reply.reply, message['context'],
+                                                 action='none', in_reply_to=message_id, status='done'))
+                report.unlink(missing_ok=True)
+                prompt += '\n## Vòng chuyên sâu\nĐiều tra kỹ rồi trả lời; escalate không còn tác dụng.\n'
             # Also guard against medical changes mentioned by the doctor but omitted in brief.
             if reply.action == 'edit_production' and _NUMBER_CHANGE.search(message['text']):
                 reply = reply.model_copy(update={'action': 'edit_script'})

@@ -19,9 +19,13 @@ tiers:
     - {cli: codex, model: gpt-6.1-terra}
 
 roles:
-  coordinator:
+  coordinator:  # 2026-11-12 bác sĩ: model nhẹ để trả lời nhanh; câu khó escalate lên vai dưới
     name: Điều phối viên
     steps: [chat]
+    tier: bulk
+  coordinator_senior:
+    name: Điều phối viên chuyên sâu
+    steps: [chat_deep]
     tier: medium
   scout:
     name: Trinh sát chủ đề
