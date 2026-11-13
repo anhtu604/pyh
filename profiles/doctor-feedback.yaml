@@ -409,3 +409,11 @@ entries:
     là lời khuyên y khoa. Nếu thấy hay và thích video, xin hãy để lại 1 lượt like
     và subscribe cho chúng mình. Cảm ơn bạn đã xem video!"'
   items: []
+- at: '2026-11-12T23:15:12+07:00'
+  slug: gout-tinh-the-urat
+  gate: medical
+  revision: '001'
+  kind: reject
+  reviewer: Tu
+  text: 'Ý khác: ngắn quá, độ dài video vào khoảng 10 phút'
+  items: []
