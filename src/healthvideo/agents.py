@@ -89,6 +89,10 @@ QUOTA_PATTERNS: tuple[str, ...] = (
 
 PERMISSION_DENIED_PATTERNS: tuple[str, ...] = ("auto-denied",)
 
+# Provider overload (seen 2026-11-13: agy 503 "No capacity available for model ...").
+BUSY_PATTERNS: tuple[str, ...] = ("no capacity available", "high traffic", "code 503", "overloaded")
+BUSY_REST = timedelta(minutes=10)
+
 
 @dataclass(frozen=True)
 class AgentResult:
@@ -331,6 +335,13 @@ def invoke_with_failover(
                         runner=runner)
         result = replace(result, model=slot.model)
         log(slot, "end", result.ok)
+        if not result.ok and not result.quota_exhausted:
+            output = result.log_path.read_text(encoding="utf-8", errors="replace").lower()
+            if any(pattern in output for pattern in BUSY_PATTERNS):
+                # Server overload is not our quota: rest briefly and try the next model.
+                log(slot, "busy", False)
+                quota.rest(slot, now() + BUSY_REST, "máy chủ quá tải")
+                continue
         if result.ok or not result.quota_exhausted:
             return result
         log(slot, "quota", False)

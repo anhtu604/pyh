@@ -362,6 +362,33 @@ def test_invoke_prepares_windows_launcher(tmp_path, monkeypatch):
     assert calls[0][0] == 'C:/tools/codex.exe'
 
 
+def test_server_overload_fails_over_and_rests_briefly(tmp_path):
+    calls = []
+
+    def runner(argv, **kwargs):
+        calls.append(argv)
+        if len(calls) == 1:
+            return _completed(1, stderr='UNAVAILABLE (code 503): No capacity available for model x')
+        return _completed()
+
+    book = QuotaBook(tmp_path / 'quota.yaml')
+    result = _failover(tmp_path, [AGY_SLOT, CODEX_SLOT], runner, quota=book)
+    assert result.ok and result.model == CODEX_SLOT.model
+    assert book.resting(AGY_SLOT, NOW + timedelta(minutes=5))
+    assert not book.resting(AGY_SLOT, NOW + timedelta(minutes=11))
+
+
+def test_plain_failure_does_not_fail_over(tmp_path):
+    calls = []
+
+    def runner(argv, **kwargs):
+        calls.append(argv)
+        return _completed(1, stderr='Traceback: boom')
+
+    result = _failover(tmp_path, [AGY_SLOT, CODEX_SLOT], runner)
+    assert not result.ok and len(calls) == 1
+
+
 def test_long_argv_prompt_goes_through_file(tmp_path, monkeypatch):
     from healthvideo import agents, process
     monkeypatch.setattr(process.shutil, 'which', lambda command: 'C:/tools/agy.exe')
