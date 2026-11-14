@@ -10,8 +10,9 @@ phases:
   - {id: 'R1.1', title: Dừng và lưu trữ toàn bộ pilot cũ, status: done, owner: codex, note: '2026-11-14 theo yêu cầu bác sĩ: xưởng dừng, queue rỗng; hai project và log riêng giữ ở cache/pilot-archive/2026-11-14; không xóa dữ liệu'}
   - {id: 'R1.2', title: Chuẩn hóa skill và hợp đồng công việc từng agent, status: done, owner: codex, note: '11 skill và 6 prompt đồng bộ; kiểm độc lập 5 nhóm tình huống, review đạt; 117 test liên quan đạt và Ruff sạch; chưa nghiệm thu runtime/video'}
   - {id: 'R1.3', title: Phân model ban đầu và kiểm mẫu biên kịch/kiểm duyệt, status: done, owner: codex, note: 'Sol viết, Carbon high y khoa, Carbon medium kiểm duyệt/hình/dựng, Hydrogen việc nhẹ, Sonnet chấm sản phẩm; 2 mẫu viết và 1 mẫu critic thật; vai khác chưa benchmark, không Opus/astra'}
-  - {id: 'R1.4', title: Sửa khả năng phục hồi lỗi và giới hạn nội dung cứng của xưởng, status: todo, owner: codex, note: 'sau chuẩn hóa agent: lỗi tool phải có chẩn đoán và retry hữu hạn; xem lại khung explain-first, thời lượng và việc giao writer cả code dựng'}
+  - {id: 'R1.4', title: Sửa khả năng phục hồi lỗi và giới hạn nội dung cứng của xưởng, status: doing, owner: codex, note: 'đang sửa timeout/process tree, retry agent bền vững và cô lập lỗi theo chủ đề; khung nội dung xử lý riêng sau đợt này'}
   - {id: 'R1.5', title: Kiểm model trên bộ tình huống riêng từng vai trước sản xuất, status: todo, owner: codex, note: 'mở rộng nhiều đề và chấm ẩn danh; kiểm nguồn, ảnh, sửa component, phân loại log và failover độc lập; chưa bật xưởng/pilot'}
+  - {id: 'R1.6', title: Hoạt cảnh nhân viên theo trạng thái làm việc và nghỉ thật, status: doing, owner: agy, note: 'giữ xưởng isometric; sửa false-busy, dáng làm/nghỉ theo vai, chờ model/lỗi/offline, hỗ trợ giảm chuyển động'}
 - id: P0
   title: Giữ an toàn dữ liệu và môi trường
   tasks:
