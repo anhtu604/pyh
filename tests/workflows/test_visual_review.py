@@ -1,5 +1,5 @@
-
 import json
+import shutil
 from pathlib import Path
 from subprocess import CompletedProcess
 
@@ -165,3 +165,24 @@ def test_contact_sheets_sample_each_scene_and_beat_and_bind_final_render(tmp_pat
     assert final['render_sha256'] == sha256_file(tmp_path / 'renders/video.mp4')
     assert final['render_manifest_sha256'] == sha256_file(tmp_path / 'renders/render-manifest.json')
     assert (tmp_path / CANDIDATES).read_bytes() == index_bytes
+
+
+@pytest.mark.skipif(shutil.which('ffmpeg') is None, reason='needs ffmpeg')
+def test_contact_sheet_survives_more_than_100_sampled_frames(tmp_path):
+    """Regression 2026-11-13: gout's beats produced >100 select terms and FFmpeg refused them."""
+    import subprocess
+
+    from healthvideo.workflows.visual_review import CANDIDATES, prepare_contact_sheet
+
+    (tmp_path / 'renders').mkdir()
+    subprocess.run(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi',
+                    '-i', 'testsrc=size=160x90:rate=30', '-t', '20', str(tmp_path / 'renders/video.mp4')],
+                   check=True)
+    beats = [{'start_frame': frame} for frame in range(0, 560, 4)]
+    (tmp_path / 'renders/render-input.json').write_text(json.dumps({'fps': 30, 'scenes': [
+        {'start_frame': 0, 'duration_frames': 600, 'beats': beats}]}))
+    write_yaml_atomic(tmp_path / CANDIDATES, {'assets': []})
+
+    prepare_contact_sheet(tmp_path)
+
+    assert len(list((tmp_path / 'reviews/visual').glob('contact-sheet-*.jpg'))) == 6

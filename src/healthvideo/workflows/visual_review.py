@@ -216,7 +216,12 @@ def prepare_contact_sheet(root: Path, *, runner=None, final: bool = False) -> No
         frames.update(start + min(duration-1, b['start_frame'] + round(.3*rendered['fps']))
                       for b in scene.get('beats', []) if b.get('start_frame') is not None)
     # A short opening illustration always receives its own frame, independent of duration.
-    expression = '+'.join(f'eq(n\\,{frame})' for frame in sorted(frames))
+    ordered = sorted(frames)
+    # FFmpeg's expression parser rejects more than 100 chained terms (gout hit this on
+    # 2026-11-13); grouping 50 per parenthesis keeps every level short.
+    # ponytail: fine up to 5,000 sampled frames; nest one more level if a video ever needs more.
+    expression = '+'.join('(' + '+'.join(f'eq(n\\,{frame})' for frame in ordered[i:i + 50]) + ')'
+                          for i in range(0, len(ordered), 50))
     prefix = 'final-contact-sheet' if final else 'contact-sheet'
     pattern = root / 'reviews/visual' / f'{prefix}-%03d.jpg'
     for old in pattern.parent.glob(f'{prefix}-*.jpg'):
