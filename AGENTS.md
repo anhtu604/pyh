@@ -10,3 +10,4 @@
 6. Chạy các test liên quan và lint trước commit; không tự commit trừ khi brief yêu cầu;
    tiến độ do Claude ghi ở `docs/progress.yaml`.
 7. Chỉ sửa các file brief nêu tên; cần đụng file khác thì dừng và báo lại.
+8. Đang có bàn giao: đọc `docs/handoff-codex.md` trước tiên.
