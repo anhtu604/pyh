@@ -76,7 +76,19 @@ def _run_render_argv(argv: list[str]) -> int:
         if argv[0] == "pnpm"
         else prepare_subprocess_argv(argv)
     )
-    return subprocess.run(resolved, check=False, shell=False).returncode
+    # The background factory discards stdout, so keep each render's output for diagnosis
+    # (gout CL01 failed three times on 2026-11-14 with no trace).
+    log_dir = REPO_ROOT / "topics" / "logs" / "render"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log = log_dir / f"{datetime.now().astimezone():%Y%m%dT%H%M%S%f}.log"
+    with log.open("w", encoding="utf-8", errors="replace") as stream:
+        stream.write(" ".join(map(str, resolved)) + "\n\n")
+        stream.flush()
+        code = subprocess.run(resolved, check=False, shell=False,
+                              stdout=stream, stderr=subprocess.STDOUT).returncode
+    if code == 0:
+        log.unlink(missing_ok=True)
+    return code
 
 
 def build_tts_provider(
