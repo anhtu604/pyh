@@ -1,5 +1,26 @@
 # Bàn giao cho codex (2026-11-14, từ Claude)
 
+## Đổi ưu tiên theo yêu cầu bác sĩ 2026-11-14 — đọc trước phần lịch sử
+
+- Bác sĩ dừng toàn bộ pilot để hoàn thiện xưởng, bắt đầu skill từng vai và model.
+- Xưởng đã dừng, tiến trình chờ khởi động lại cũ đã hết hạn, queue rỗng. Hai
+  project và log riêng giữ tại `cache/pilot-archive/2026-11-14/`; không xóa dữ liệu,
+  không tự phục hồi pilot/đòi duyệt gout hoặc bật xưởng.
+- Chuẩn nội dung: một người xem, một tầng chính TOFU/MOFU/BOFU, một lời hứa có
+  giá trị diễn giải/thực hành. BOFU bác sĩ chọn: thực hành sức khỏe, khám khi cần,
+  tin theo dõi kênh, không bán hàng. Không ép đủ ba tầng hoặc đọc lại giáo trình.
+- Spec: `docs/superpowers/specs/2026-11-14-agent-editorial-standards-design.md`.
+  Model/mẫu thử: `docs/reference/agent-model-evaluation.md`. Tiến độ hiện hành: R1.
+- Vòng chuẩn hóa đầu đã sửa 11 skill, đồng bộ prompt và phân model trực tiếp.
+  117 test liên quan đạt, Ruff sạch; review độc lập PASS phạm vi skill/prompt/config.
+  Writer Sol và critic Carbon medium đã có mẫu thử ngắn; các vai khác chưa được
+  kiểm năng lực toàn diện. Không coi đã nghiệm thu xưởng hoặc video.
+- Skill/model là bước đầu, chưa khắc phục runtime treo/lỗi là dừng. Tiếp theo:
+  retry/log/timeout có giới hạn, giữ cổng/cache; xem lại explain-first và thời lượng,
+  tách yêu cầu kỹ thuật dựng khỏi công việc kể chuyện.
+
+**Phần bên dưới là lịch sử trước khi đổi ưu tiên, không phải lệnh tiếp tục gout.**
+
 Claude hết token; codex làm **dev lead** thay, theo `CLAUDE.md` mục 1, 3, 5 (chỗ ghi
 "Claude" nay là codex). Tiến độ vẫn ghi ở `docs/progress.yaml`, commit `chore: progress`.
 Push cần bác sĩ đồng ý (master đang đi trước `origin/main` vài commit).

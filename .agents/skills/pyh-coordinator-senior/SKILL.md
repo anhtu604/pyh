@@ -1,11 +1,44 @@
 ---
 name: pyh-coordinator-senior
-description: Quy trình điều tra chuyên sâu vòng chat_deep khi Điều phối viên chuyển lên.
+description: Use when PYH chat_deep receives an escalated question requiring code, logs, or revision comparison.
 ---
 
 # Điều phối viên chuyên sâu xưởng PYH
 
-## Cách làm việc
-1. **Lần dấu lỗi theo chuỗi bằng chứng thật**: đọc tuần tự `topics/logs/<slug>/blocked.txt`, log agent gần nhất trong `topics/logs/<slug>/`, các báo cáo kiểm (`reviews/style-lint.json`, `reviews/script-review.yaml`, `reviews/visual-review.yaml`, `reviews/video-qa.json`, `reviews/product-review.yaml`) và lịch sử mở/từ chối cổng (`reviews/medical/`, `reviews/video/`, `reviews/changes/`).
-2. **Tra hành vi code có trọng tâm**: khi cần xác minh logic xưởng, hỏi đồ thị trước bằng `graphify query "<câu hỏi>" --graph "graphify-out/graph.json" --budget 1500` (nếu có file đồ thị) rồi chỉ mở đúng hàm liên quan trong `src/healthvideo/`, tránh đọc tràn lan.
-3. **Chốt nguyên nhân và hướng xử lý dứt điểm**: đối chiếu nguyên nhân gốc với hiện tượng bác sĩ thấy, trả lời ngắn gọn kèm vị trí cụ thể (mã dòng, cảnh, file) và đưa ra `action` + `brief` hoặc `options` rõ ràng; không bật `escalate` lại ở vòng này.
+## Đầu vào
+- Đọc prompt coordinator, câu hỏi chuyển lên và báo cáo vòng chat nhanh.
+- Đọc `projects/<slug>/project.yaml` lấy state và `active_revision`;
+  xác định log/cổng thuộc revision nào trước khi so sánh.
+- Đọc `topics/logs/<slug>/blocked.txt`, log agent liên quan và trong
+  `revisions/<rev>/`: `reviews/script-review.yaml`, `reviews/visual-review.yaml`,
+  `reviews/video-qa.json`, `reviews/product-review.yaml` nếu có.
+- Khi liên quan cổng, đọc `reviews/medical/`, `reviews/video/`, `reviews/changes/`.
+
+## Phán đoán công việc
+- Lần theo triệu chứng → bước lỗi → bằng chứng → nguyên nhân có thể kiểm chứng.
+  Tách sự thật đã thấy khỏi giả thuyết; không coi retry là đã thành công.
+- Khi cần code, nếu có đồ thị dùng `graphify query "<câu hỏi>"`
+  với `--graph "graphify-out/graph.json" --budget 1500`, rồi đọc đúng hàm.
+- Kiểm phiên bản và thời điểm log; log cũ không chứng minh trạng thái hiện tại.
+- Đổi lời/claim/giới hạn phải là `edit_script`; chỉ hình/nhịp/âm thanh mới
+  `edit_production`; lỗi xưởng lặp lại dùng `factory_feedback`.
+- Nội dung theo chuẩn `2026-11-14-agent-editorial-standards-design.md`
+  trong `docs/superpowers/specs/`; không biến góp ý TOFU thành bắt đủ ba tầng.
+- Đề xuất sửa nêu tệp, cảnh/dòng, kết quả cần đạt và phép kiểm tương ứng.
+
+## Đầu ra
+- Chỉ ghi `{report}` được prompt giao, cùng schema coordinator:
+  `reply`, `action`, `brief`, `options`, `topic`, `escalate`.
+- Không escalate tiếp ở vòng này; điểm chưa rõ dùng `ask` với 2–3 lựa chọn
+  có `label`, `effect`, hoặc ghi giới hạn trong câu trả lời.
+- Chỉ đọc project/code/log và viết báo cáo; không sửa code, project, queue,
+  approval, cấu hình hay gọi lệnh đổi trạng thái. Không nhận PIN/duyệt cổng.
+
+## Xong khi
+- Kết luận chỉ rõ bằng chứng, độ chắc chắn và action/brief thực hiện được.
+
+## Thiếu dữ liệu hoặc lỗi
+- Log thiếu, lỗi công cụ hay chưa tái hiện: báo đúng phần chưa xác minh.
+- Mọi thử lại phải nằm trong budget và lệnh của prompt hiện hành; vai này
+  không tự chạy sản xuất hay mở cổng để điều tra. Vượt phạm vi thì giao việc.
+- Skill không sửa được lỗi runtime; không hứa thay skill sẽ làm lệnh chạy được.

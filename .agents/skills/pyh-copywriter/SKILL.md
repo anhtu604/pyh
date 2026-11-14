@@ -1,16 +1,49 @@
 ---
 name: pyh-copywriter
-description: Quy trình viết tiêu đề, mô tả, caption clip ngắn, bài cộng đồng và prompt nền thumbnail cho Viết bài đăng (posts).
+description: Use when the PYH posts step needs titles, descriptions, clip captions, community copy, or thumbnail text.
 ---
 
 # Viết bài đăng xưởng PYH
 
-## Chắt lọc từ `social`
-- Chỉ áp dụng kỹ thuật viết hook mở đầu, tách nội dung thành caption độc lập cho clip ngắn và bộ lọc *No AI Tells* (tránh broetry mỗi câu một dòng, "Không phải X mà là Y", rải emoji đầu dòng, câu mồi tương tác rỗng).
-- **Bỏ qua** toàn bộ phần kết nối MCP đặt lịch tự động (Typefully/Buffer/Marky) và quy trình bình luận/nhắn tin B2B.
+## Đầu vào
+- Đọc prompt `posts.md`, doctor_note; lấy `active_revision` từ `{project}/project.yaml`.
+- Đọc `revisions/<rev>/script/script.yaml`, `script/outline.yaml`,
+  `script/clip-plan.yaml` đã duyệt, `evidence/ledger.yaml`,
+  `reviews/medical-approval.yaml` cùng revision.
+- Xác định audience/intent từ `evidence/expert-brief.md` nếu cần; đọc `title`
+  và `chapters[].goal` trong outline để giữ lời hứa, tiến triển/payoff/CTA
+  đã chốt; đối chiếu script thực có, không phụ thuộc scratch của writer.
 
-## Cách làm việc cho `posts.yaml`
-1. **`youtube_titles`**: kết hợp 1 tiêu đề bám từ khóa người bệnh hay tìm và 1–2 tiêu đề đánh vào hiểu lầm đời thường trong bài; gợi tò mò đúng cơ chế đã duyệt, không giật tít dọa dẫm hay hứa chữa khỏi.
-2. **`clip_captions` (`tiktok`/`shorts`/`reels`)**: mỗi clip phải tự đứng vững cho người chưa xem video dài, mở bằng câu chạm vấn đề ngay dòng đầu và giữ nguyên ý giới hạn an toàn (caveat) của clip đó.
-3. **`facebook_post` & `youtube_community`**: giọng chia sẻ gần gũi, dễ hiểu cho người đọc phổ thông; kết bằng câu hỏi gợi suy ngẫm hoặc nhắc lưu thông tin mang đi khám.
-4. **`thumbnail`**: `headline` ngắn gọn đọc rõ trên điện thoại; `background_prompt` tả minh họa phẳng 2D theo phong cách kênh, đặt chủ thể lệch phải để chừa khoảng thoáng bên trái cho Remotion vẽ chữ/logo, tuyệt đối không mô tả chữ, số hay ký hiệu chữ trong ảnh nền.
+## Phán đoán công việc
+- Title, thumbnail và mở video cùng một lời hứa; nội dung phải trả được nó.
+  Tò mò từ góc nhìn thật, không giấu đáp án để hứa bí mật hay hù người đang khỏe.
+- `youtube_titles`: 2–3 phương án, từ khóa tự nhiên và góc đáng nghe có căn cứ;
+  không bắt mọi tiêu đề phải có bệnh/triệu chứng hay một ngộ nhận tự bịa.
+- CTA theo tầng chính: TOFU gợi khám phá/quan sát/theo dõi;
+  MOFU gợi cân hiểu/lựa chọn; BOFU thực hành sức khỏe, khám khi cần,
+  tin và theo dõi kênh. Không bán hàng, không nhồi CTA khám/thuốc vào mọi bài.
+- Caption từng clip tự đứng vững, chỉ hứa điều có trong chính clip,
+  giữ caveat; không lấy kết luận video dài nếu clip thiếu phần hỗ trợ.
+- Không thêm claim, số liệu, quan điểm hay trải nghiệm cá nhân bác sĩ ngoài đầu vào.
+  Dùng giọng chia sẻ, không cam kết viral/chữa khỏi hay mồi tương tác rỗng.
+- `social` chỉ hỗ trợ hook/caption và soi văn AI; bỏ MCP đặt lịch,
+  bình luận/nhắn tin B2B, không tự publish.
+
+## Đầu ra
+- Chỉ `revisions/<rev>/posts/posts.yaml` theo `PostSet`:
+  `youtube_titles`, `youtube_description`, `youtube_tags`, `clip_captions`
+  (`tiktok`, `shorts`, `reels` từng clip), `facebook_post`, `youtube_community`, `thumbnail`.
+- Chương đúng giờ/tên từ outline, nguồn đúng title record trong ledger;
+  câu có chữ số gắn `[claim:<id>]` trừ mốc giờ đầu dòng chương như prompt.
+- Thumbnail `headline` 1–60 ký tự kể cả dấu claim, `background_prompt`,
+  `seed` nguyên không âm. Nền phẳng 2D, chủ thể bên phải, thoáng trái,
+  không chữ/số/nhãn/logo; renderer vẽ chữ/logo, không bịa ảnh nguồn.
+
+## Xong khi
+- `healthvideo step posts-check {project}` exit 0 và lời hứa khớp payoff;
+  đúng schema chưa đủ nếu tiêu đề vẫn hứa điều video không có.
+
+## Thiếu dữ liệu hoặc lỗi
+- Thiếu approval/script/clip hay thông tin nguồn thì báo phần thiếu, không đoán.
+- Lỗi posts-check: sửa trong phạm vi và budget bước; ghi lỗi thật khi chưa xong,
+  không đổi script/ledger/approval để bài đăng vượt kiểm, không tự đổi trạng thái.

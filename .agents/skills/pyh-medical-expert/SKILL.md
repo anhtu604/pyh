@@ -1,12 +1,50 @@
 ---
 name: pyh-medical-expert
-description: Quy trình tìm kiếm, sàng lọc, phân tầng bằng chứng và lập bản đồ cơ chế cho Chuyên gia y học (research) của xưởng PYH.
+description: Use when the PYH research step needs verified evidence or answers to a writer's medical questions.
 ---
 
 # Chuyên gia y học xưởng PYH
 
-## Cách làm việc
-1. **Tách truy vấn tiếng Anh chuẩn**: chuyển câu hỏi đời thường sang khung PICO/cơ chế sinh học thành 3–6 truy vấn tiếng Anh ngắn gọn (từ khóa MeSH/lâm sàng, tách nhóm cơ chế sinh lý–bệnh sinh và nhóm hướng dẫn/tổng quan). Máy hiện bị NCBI chặn IP nên chỉ tìm qua CLI của xưởng (Europe PMC / Elsevier API chính thức); không tự viết script cào web hoặc gọi arXiv.
-2. **Phân tầng độ mạnh bằng chứng**: ưu tiên theo thứ tự Guideline hội chuyên khoa > Tổng quan hệ thống / Phân tích gộp (SR/MA) > Thử nghiệm đối chứng ngẫu nhiên (RCT) > Nghiên cứu quan sát > Tiền lâm sàng (`in vitro`, động vật — chỉ dùng đỡ cơ chế phân tử khi thiếu dữ liệu người và phải ghi rõ giới hạn trong `expert-brief.md` để biên kịch không nói quá).
-3. **Thiết kế ẩn dụ cơ chế (`explainer.yaml`)**: chọn hình ảnh quen thuộc trong đời sống Việt Nam (cốc nước đường, ống nước, đội bảo vệ, chuông báo cháy…) và luôn khai báo rõ giới hạn sai khác (`limits`) nơi ẩn dụ không còn giống sinh học thật.
-4. **Tổng hợp chéo cho biên kịch**: trong `expert-brief.md`, làm rõ điểm đồng thuận, điểm còn tranh cãi, khoảng trống dữ liệu, các ngộ nhận phổ biến cần bác bỏ và những câu tuyệt đối không được nói quá; mọi ý trỏ tới `claim_id` trong ledger.
+## Đầu vào
+- Đọc prompt `research.md`, câu hỏi, doctor_note; lấy `active_revision`
+  từ `{project}/project.yaml`. Mọi tệp dưới đây thuộc `revisions/<rev>/`.
+- Đọc `evidence/records.yaml`, `evidence/claims.yaml`, `evidence/ledger.yaml`
+  nếu có và `script/questions.yaml` khi writer hỏi bổ sung.
+- Hiểu người xem, intent và câu hỏi được giao; không tự đổi thành giáo trình.
+  Ghi khán giả/intent/câu hỏi và góc bằng chứng có thể hỗ trợ trong `expert-brief.md`;
+  không tự quyết lời hứa marketing hoặc sửa sự thật để hợp góc kể.
+
+## Phán đoán công việc
+- Dùng 3–6 truy vấn tiếng Anh phù hợp câu hỏi qua CLI của prompt;
+  máy bị NCBI chặn nên dùng Europe PMC/Elsevier API chính thức, không lách chặn.
+- Ưu tiên guideline, SR/MA, RCT theo độ phù hợp câu hỏi; phân biệt cơ chế,
+  liên hệ và nhân quả. Tiền lâm sàng không đủ để hứa lợi ích điều trị ở người.
+- Mỗi insight phải có claim, điểm bất ngờ được bằng chứng hỗ trợ, hệ quả
+  với câu hỏi người xem và giới hạn. Không bịa sự ngạc nhiên hay số liệu.
+- `expert-brief.md` nêu đồng thuận, tranh cãi, điều không được nói quá,
+  hiểu lầm có căn cứ và chi tiết nào thật sự giúp trả lời lời hứa; mỗi ý trỏ claim.
+- Bản đồ `explainer/explainer.yaml` vẫn phải qua explain-first hiện hành:
+  tầng bình thường → bệnh, `skipped_layers`, claim mechanism, ẩn dụ có `limits`.
+  Đây là hợp đồng dữ liệu, không buộc lời đọc kể hết mọi tầng/ẩn dụ.
+- Chỉ dùng nguồn xác minh, locator thật; trích tối đa 25 từ mỗi nguồn.
+  Abstract thì ghi `Abstract`, không nhận đã đọc toàn văn.
+- Toàn văn chỉ ở `cache/fulltext/`; không chép vào project/Git, không lộ khóa.
+
+## Đầu ra
+- Dữ liệu ứng viên/sàng lọc, `evidence/records.yaml`, `evidence/claims.yaml`,
+  `evidence/ledger.yaml` hợp lệ qua lệnh search/screen/ingest/build-ledger
+  đã nêu trong prompt; không tự tạo schema hay trạng thái.
+- `evidence/expert-brief.md` và `explainer/explainer.yaml` của đúng revision.
+- Ở `draft_ready` chỉ xử lý câu hỏi: bổ sung bằng chứng cần thiết, giữ id claim
+  đang dùng, build-ledger lại và ghi `answer`, `claim_ids` trong `script/questions.yaml`.
+  Không sửa kịch bản hay tự duyệt cổng.
+
+## Xong khi
+- `healthvideo status {project}` xác nhận `evidence_ready` và brief đã có;
+  hoặc mọi câu hỏi đã có answer đúng giới hạn khi đang `draft_ready`.
+
+## Thiếu dữ liệu hoặc lỗi
+- Không đủ bằng chứng: ghi `{project}/blocked-reason.md`, dừng theo prompt.
+  Nguồn missing ghi DOI/tên PDF thật cần bác sĩ cung cấp, không bịa locator.
+- Lỗi công cụ ghi lệnh/log thật; chỉ retry trong budget bước, không coi lệnh
+  đã gọi là đã thành công, không mở cổng hay đổi claim để né lỗi validator.

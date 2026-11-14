@@ -1,17 +1,52 @@
 ---
 name: pyh-script-critic
-description: Chuẩn chấm kịch bản cho Kiểm duyệt kịch bản (script_review) đối chiếu theo 10 nguyên tắc của bác sĩ và expert-brief.md.
+description: Use when independently evaluating a PYH script at script_review before the doctor's medical gate.
 ---
 
 # Kiểm duyệt kịch bản xưởng PYH
 
-## Chấm theo 10 nguyên tắc của bác sĩ (bắt buộc)
-Đọc mục `slug: chung` mới nhất (ngày `2026-11-12`) trong `profiles/doctor-feedback.yaml` để soi lỗi nhất quán với người viết, ánh xạ vào 6 tiêu chí chấm:
-- **`giong_nguoi_that` & `hinh_anh`** (Nguyên tắc 2, 3, 5): soi nửa sau có bị "sách giáo khoa hóa" không; thuật ngữ phân tử/cơ chế hay từ dịch sát tiếng Anh có lọt vào lời thoại thay vì đặt trên màn hình không; có dòng nào đọc tên nguồn, phương pháp nghiên cứu (`in vitro`), năm xuất bản hay tên cơ quan trong lời đọc không (có thì bắt buộc ghi `issues` yêu cầu bỏ khỏi lời nói, đưa lên màn hình/mô tả).
-- **`khong_lap_y`** (Nguyên tắc 4): bắt mọi dòng chỉ tóm tắt lại 2–3 dòng trước hoặc hai dòng liền nhau trùng ý; chỉ rõ dòng cần cắt hoặc gộp trong `fix`.
-- **`nhip_cau` & `ca_tinh`** (Nguyên tắc 1, 6, 7, 8): kiểm hook 3 giây đầu có chạm nỗi đau + câu phán xét đời thường + nét hài nhẹ không; có cú bẻ lái phá hiểu lầm giữa bài không; chuyển ý có nối từ hệ quả thay vì đột ngột và có đuôi rào đón học thuật không; gần cuối có callback cân bằng về câu hỏi mở đầu không.
-- **`dung_yeu_cau`** (Nguyên tắc 9, 10 + `expert-brief.md`): kiểm BOFU có câu hỏi đi khám + CTA cụ thể + nhắc dùng thuốc phải có bác sĩ khám chưa; có câu kết cố định của kênh chưa; có dòng nào nói quá mức bằng chứng trong `expert-brief.md` không.
+## Đầu vào
+- Đọc prompt `script_review.md`, doctor_note/reject_note và `active_revision`
+  từ `{project}/project.yaml`; đọc toàn bộ `revisions/<rev>/script/script.yaml`.
+- Đối chiếu `evidence/ledger.yaml`, `evidence/expert-brief.md`,
+  `reviews/style-lint.json` cùng revision, không chấm dựa bản cũ.
+- Đọc `script/outline.yaml`: `title` giữ lời hứa, `chapters[].goal` giữ
+  tiến triển/payoff/CTA; khán giả/intent/câu hỏi ở expert brief. Đối chiếu
+  script thực trả được gì, không phụ thuộc scratch của writer.
+- Đọc `profiles/doctor-feedback.yaml` mục `slug: chung`; chuẩn mới tại
+  `docs/superpowers/specs/2026-11-14-agent-editorial-standards-design.md`
+  ưu tiên về funnel/CTA, không ép hài, ẩn dụ hay cú twist khi không hợp.
 
-## Điều chỉnh từ `copy-editing`
-- Dùng *Seven Sweeps* và *AI-Tell Check* để phát hiện lỗi và viết hướng dẫn sửa vào `issues`; **không sửa trực tiếp `script.yaml`**.
-- Bỏ qua các loại bằng chứng marketing trong `copy-editing` (testimonial, logo khách hàng, cam kết hoàn tiền); mọi gợi ý trong `fix` và `decisions` chỉ được dựa trên claim có trong `ledger.yaml` và `expert-brief.md`.
+## Phán đoán công việc
+- Đúng y khoa chưa đủ hay: người xem nào, lời hứa gì, điều mới nào,
+  phần nào trả lời được lời hứa, CTA có hợp ý định không? Ánh xạ vào sáu key sẵn.
+- `giong_nguoi_that`: nói được thành tiếng, rõ với audience; không đọc nguồn,
+  phương pháp, năm/cơ quan hay ngôn ngữ quản trị bằng chứng vào lời đọc.
+- `nhip_cau`: nhịp câu và chuỗi phát hiện/hệ quả dẫn tới payoff, không giậm chân,
+  không lặp khuôn nêu ý → rào lại → đi khám. Hook phải được nội dung trả lời.
+- `khong_lap_y`: mỗi đoạn thêm ý; chỉ rõ đoạn định nghĩa/danh sách có thể cắt
+  mà không mất đáp án, không bắt nhắc lại ý khó chỉ vì skill ngoài khuyên vậy.
+- `hinh_anh`: ví dụ/hình dung giúp hiểu điểm đáng nghe; không thưởng ẩn dụ
+  khó hiểu hay trừ điểm chỉ vì không nhân hóa khi không cần.
+- `ca_tinh`: góc nhìn sắc và ấm, không sáo rỗng/giật gân; không ép đùa hoặc twist.
+  Không châm biếm người bệnh, không tự bịa retention hay bảo đảm viral.
+- `dung_yeu_cau`: audience, intent, promise, payoff, CTA và ghi chú bác sĩ khớp;
+  không nói quá brief/ledger, giữ câu kết chuẩn chưa được thay.
+- TOFU gợi khám phá; MOFU gỡ hiểu lầm/cân lựa chọn; BOFU thực hành, khám khi cần,
+  tin/theo dõi kênh. Một tầng chính, có thể chạm tầng khác có chủ đích;
+  không đòi đủ ba tầng hay bắt CTA thuốc/khám ở mọi video.
+
+## Đầu ra
+- Chỉ ghi `revisions/<rev>/reviews/script-review.yaml`, không sửa script.
+- Giữ `scores` sáu key trên, `summary`, `issues`, `checked`, `decisions`;
+  điểm 1–10 theo prompt; mỗi tiêu chí dưới 7 phải có issue tương ứng.
+- Issue có `line` thật, `criterion`, `problem`, `fix`; nêu phản ví dụ cụ thể:
+  trích chỗ hứa rồi chỉ đoạn chưa trả lời, gợi cách cắt/nối bằng claim hiện có.
+- `decisions` đúng loại điểm khó và schema prompt, một `keep: true`,
+  tối đa một `recommended: true`; không đưa lỗi biên tập thường thành câu hỏi cổng.
+  `copy-editing` chỉ giúp soi lỗi, không thêm testimonial hay bằng chứng marketing.
+
+## Xong khi / Thiếu dữ liệu hoặc lỗi
+- Báo cáo đủ điểm, nhận xét kiểm chứng được; `checked` chỉ ghi điều đã kiểm.
+- Thiếu brief/ledger hoặc không đọc được file: báo thiếu, không tự suy ra claim;
+  lỗi công cụ ghi đúng lỗi. Không đổi workflow, duyệt cổng hay tự sửa để chấm đạt.

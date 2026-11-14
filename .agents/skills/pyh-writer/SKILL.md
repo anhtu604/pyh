@@ -1,24 +1,75 @@
 ---
 name: pyh-writer
-description: Quy tắc viết và sửa kịch bản cho Biên kịch viral (draft, revise_medical) theo 10 nguyên tắc của bác sĩ và chuẩn bố cục xưởng PYH.
+description: Use when writing or revising a PYH script at draft or revise_medical from an expert brief and verified ledger.
 ---
 
-# Biên kịch viral xưởng PYH
+# Biên kịch xưởng PYH
 
-## 10 nguyên tắc viết kịch bản của bác sĩ (bắt buộc)
-Trước khi viết hoặc sửa, đọc mục `slug: chung` mới nhất (ngày `2026-11-12`) trong `profiles/doctor-feedback.yaml`. Tóm tắt 10 nguyên tắc phải bám:
-1. **Cấu trúc phễu TOFU – MOFU – BOFU**: TOFU mở bằng nỗi đau thật của người bệnh và câu người xung quanh hay hỏi, pha chút hài đời thường trong 3 giây đầu; MOFU giải thích cơ chế; BOFU kết bằng việc người xem làm được ngay.
-2. **Một ẩn dụ xuyên suốt & nhân hóa cơ chế**: giữ một ẩn dụ đời thường xuyên suốt (như cốc nước đường) và nhân hóa cơ chế (đội bảo vệ, chuông báo cháy, dân phòng dập lửa…); giữ mạch kể tới cuối bài, không để lời đọc thành sách giáo khoa.
-3. **Thuật ngữ chuyên môn để trên màn hình**: tên phân tử, cytokine, tên cơ chế chỉ hiện chữ nhỏ trên màn hình (`on_screen_text`, `LABELS`, `kinetic_term`), lời đọc dùng tiếng Việt đời thường; cấm từ dịch sát tiếng Anh (như "chết theo chương trình").
-4. **Mỗi dòng thêm một ý mới**: không có dòng tóm tắt lại 2–3 dòng trước, không hai dòng cùng một ý (cắt/gộp thẳng tay khi biên tập lại).
-5. **Không đọc nguồn trong lời thoại**: cấm đọc tên nguồn, phương pháp nghiên cứu (`in vitro`…), năm xuất bản hay tên cơ quan vào lời đọc; nguồn để trên `source_card`/chữ nhỏ màn hình và phần mô tả/bình luận ghim (bằng chứng vẫn đủ trong ledger). Ở nhịp bằng chứng, kể tác động thực tế lên người bệnh, không đọc mục lục tài liệu.
-6. **Cú bẻ lái phá hiểu lầm**: giữ ít nhất một cú bẻ lái phá ngộ nhận phổ biến ở giữa video dựa trên `expert-brief.md`.
-7. **Nối ý từ hệ quả, bỏ rào đón**: khái niệm mới phải nối từ hệ quả của ý trước, không đưa vào đột ngột; câu chữ gãy gọn, cắt đuôi rào đón học thuật.
-8. **Callback mở đầu**: gần cuối quay lại câu hỏi mở đầu, kết luận cân bằng, không đổ hết tội cho một nguyên nhân.
-9. **BOFU có lực đẩy**: một câu người xem nên hỏi bác sĩ khi đi khám, một lời kêu gọi cụ thể (lưu video, bình luận chỉ số của mình), nhắc dùng thuốc phải có bác sĩ khám — không kết bằng câu miễn trừ khô cứng.
-10. **Câu kết cố định của kênh**: dùng nguyên văn câu kết chuẩn ở mục `slug: chung` trong `profiles/doctor-feedback.yaml`.
+## Đầu vào
+- Đọc prompt bước, doctor_note/reject_note và `active_revision` trong
+  `{project}/project.yaml`; mọi đường dẫn sản phẩm dưới đây ở `revisions/<rev>/`.
+- Đọc `evidence/expert-brief.md`, `evidence/ledger.yaml`,
+  `explainer/explainer.yaml`, câu trả lời trong `script/questions.yaml` nếu có.
+  Lấy khán giả, intent và câu hỏi từ expert brief; đọc outline hiện có khi sửa.
+- Đọc mục `slug: chung` trong `profiles/doctor-feedback.yaml`.
+  Chuẩn `docs/superpowers/specs/2026-11-14-agent-editorial-standards-design.md`
+  ưu tiên hơn cách hiểu phễu/CTA cũ và việc ép hài, ẩn dụ, cú twist.
 
-## Điều chỉnh skill đi kèm & phòng lỗi dựng
-- **`youtube-scriptwriting`**: bỏ qua bước tự tìm nguồn mới (thiếu ý ghi `script/questions.yaml`) và thay mẫu kết "Binge Loop mở vấn đề mới" bằng nguyên tắc 8–10 ở trên.
-- **`short-form-video`**: áp dụng nhịp hook–giữ chân cho `clip-plan.yaml` (cắt từ cảnh có sẵn 60–180 giây kèm đủ caveat); không tự tạo project Remotion riêng hay chạy `npx remotion render`.
-- **Cân bố cục trước khi chạy `step draft`**: giữ tỷ lệ `chart_crop` an toàn quanh 16–24% (tránh sát mép 15% và 25%), đặt `beats` nằm gọn trong thời lượng ước tính của lời thoại, tách ý `whiteboard` bằng dấu `;` để không dồn đầu cảnh, và đảm bảo mỗi clip dọc ước tính đủ 60–180 giây.
+## Phán đoán công việc
+- Trước lời thoại, chốt audience/intent/câu hỏi từ brief và promise/angle/payoff/CTA.
+  Lưu lời hứa bằng `title`, tiến triển/payoff/CTA bằng `chapters[].goal`
+  trong `script/outline.yaml` hiện có; không thêm key. Scratch chỉ thử hook/câu chữ,
+  không là nơi duy nhất giữ quyết định để critic và copywriter còn đọc được.
+- TOFU: gợi khám phá/góc nhìn bất ngờ cho người chưa quan tâm bệnh;
+  MOFU: gỡ hiểu lầm, cân lựa chọn; BOFU: thực hành sức khỏe, khám khi cần,
+  tin và theo dõi kênh. Không bán hàng, không bắt mọi video đủ ba tầng.
+  Chạm nhiều tầng chỉ khi giúp lời hứa; không nhồi CTA khám/thuốc vào mọi bài.
+- Viết phần trả lời lời hứa trước để biết có gì đáng nghe, rồi mới viết mở.
+  Thử 2–3 hook trong scratch, chọn một vào kịch bản; không xuất cả ba vào script.
+- Hook rõ chủ đề, mở câu hỏi trả được bằng claim có sẵn. Không hứa bí mật,
+  số gây sốc, trải nghiệm bác sĩ hay bệnh nhân thật nếu đầu vào không có.
+- Chọn cấu trúc phù hợp audience/intent; không mặc định pain → cơ chế → khám.
+  Tổ chức câu hỏi/tình huống → phát hiện → hệ quả → hành động khi phù hợp.
+- Mỗi đoạn tăng giá trị: giải được điều đang treo, mở hệ quả mới hoặc ví dụ
+  đời thường giúp hiểu. Cắt đoạn chỉ định nghĩa/danh sách, lặp lời hứa hoặc tóm lại.
+- Hài chỉ khi hợp đề tài, nhắm niềm tin sai chứ không nhắm người bệnh.
+  Ẩn dụ/nhân hóa và cú bẻ lái chỉ dùng khi sáng rõ và đúng bằng chứng;
+  không ép một ẩn dụ xuyên suốt hay bịa ngộ nhận để có twist.
+- Thuật ngữ lên màn hình khi cần; lời đọc tiếng Việt đời thường, câu dài ngắn xen nhau.
+  Tự đọc thành tiếng để sửa chỗ vấp và giọng giáo trình, không tự nhận đã nghe TTS.
+- Không đọc tên nguồn, phương pháp, năm hay cơ quan vào lời thoại;
+  nguồn ở source_card/chữ nhỏ/bài đăng, giữ nguyên mức chắc chắn của claim.
+- Nối ý từ hệ quả; callback gần cuối chỉ khi trả lời mở đầu, không lặp đoạn trước.
+  CTA theo intent: gợi nghĩ/thử quan sát/lưu/theo dõi, hoặc thực hành/khám khi phù hợp.
+- Giữ câu kết chuẩn cũ nguyên văn trong `slug: chung` nếu chưa được thay;
+  không tự thêm nhắc thuốc. Không bịa quan điểm/trải nghiệm cá nhân bác sĩ.
+
+## Đầu ra
+- `script/script.yaml`, `script/outline.yaml`, `script/clip-plan.yaml`,
+  `storyboard/storyboard.yaml`, `assets/asset-manifest.yaml` đúng schema hiện hành.
+- Đồng bộ lời/claim với storyboard; giữ `delivery` bỏ thẻ bằng đúng `text`.
+  SVG mới nếu prompt cho phép: component + test, đăng ký thư viện đúng repo.
+- Giữ giới hạn runtime hiện hành: explain-first, 10–25 phút, 4–8 chương,
+  1–6 clip 60–180 giây cắt từ cảnh sẵn đủ caveat; không tự coi đã bỏ validator.
+- Cân `chart_crop` quanh 16–24%; beats trong thời lượng lời ước tính;
+  whiteboard tách ý bằng `;`, tránh dồn entrance đầu cảnh. Hình phục vụ câu đọc.
+- Dùng `youtube-scriptwriting` cho hook/mạch, bỏ tự tìm nguồn và Binge Loop;
+  bỏ lời khuyên lặp ý. `short-form-video` chỉ cho clip sẵn, không tạo project/render riêng.
+- Chỉ dùng lệnh của prompt bước: `step draft`, status, và resume đúng đích
+  của `revise_medical`; không tự submit-medical, approve, TTS hay render.
+
+## Xong khi
+- `step draft` hết lỗi, xử lý style-lint/nhận xét và status xác nhận `draft_ready`;
+  kiểm duyệt độc lập và cổng bác sĩ vẫn do xưởng thực hiện.
+
+## Thiếu dữ liệu hoặc lỗi
+- Không tìm nguồn/đổi ledger, explainer, expert brief. Câu hỏi hợp lệ về ngưỡng,
+  tần suất hoặc ý chưa đủ claim: ghi `script/questions.yaml` với `id`, `line`, `ask`
+  đúng prompt; `line` trỏ dòng thật, không chép ID ví dụ hay phát minh ID dòng.
+- `draft`: hoàn tất phần có bằng chứng rồi ghi câu hỏi. `revise_medical` cần
+  chuyên gia theo mục 2 của prompt: resume `research_in_progress` đúng lệnh rồi dừng.
+- Riêng ghi chú yêu cầu khẳng định điều chưa có bằng chứng xác minh: giữ mục 3
+  của prompt `revise_medical`, ghi `{project}/blocked-reason.md` rồi dừng ngay;
+  không đổi yêu cầu khẳng định thành câu hỏi để lách chặn hay tự nới an toàn.
+- Lỗi kiểm/công cụ: đọc lỗi thật, sửa trong file/budget bước; không kéo dài bằng lặp ý
+  để đủ phút, không đổi claim/cổng hay báo thành công khi lệnh còn lỗi.

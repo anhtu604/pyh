@@ -25,8 +25,15 @@ bác sĩ, bác sĩ tự đăng. Cách dùng: `README.md`. Thiết kế hiện h�
 `docs/superpowers/specs/2026-11-08-factory-company-design.md` (đọc trước khi đổi workflow
 hoặc schema). Bản đánh giá đầy đủ: `docs/superpowers/plans/2026-11-11-completion-plan.md`.
 
-Xưởng đã đủ chức năng nhưng chưa video thật nào qua cổng duyệt video. Từ giờ tới khi video
-gout được duyệt: **không thêm tính năng xưởng**, chỉ sửa thứ gout đang vấp và xóa thứ thừa.
+**Ưu tiên mới của bác sĩ 2026-11-14:** dừng toàn bộ video pilot, hoàn thiện xưởng
+trước khi làm video mới. Hai pilot đã lưu ở `cache/pilot-archive/2026-11-14/`,
+queue rỗng và xưởng dừng. Không tự khởi động lại, yêu cầu duyệt gout hay làm pilot mới.
+Việc đầu: chuẩn hóa skill/hợp đồng từng agent và chọn model phù hợp. Tiến độ R1 ở
+`docs/progress.yaml`; thiết kế hiện hành bổ sung:
+`docs/superpowers/specs/2026-11-14-agent-editorial-standards-design.md`.
+Nội dung bắt đầu từ điều thú vị người xem muốn nghe; mỗi video có khán giả, tầng
+chính TOFU/MOFU/BOFU và lời hứa cụ thể. BOFU: thực hành sức khỏe, khám khi cần,
+tin và theo dõi kênh; không bán hàng. Không ép mọi video đủ ba tầng hay đọc giáo trình.
 
 Số liệu kiểm ngày 2026-11-11 trên `master` `7ad3cc4`: pytest 1800 đạt, 1 bỏ qua; Ruff sạch;
 Vitest 251 đạt; `tsc` sạch. `gout-tinh-the-urat` ở `needs_medical_revision`;
@@ -40,21 +47,22 @@ Hai nhân viên:
 
 | Nhân viên | Model | Giao việc gì |
 | --- | --- | --- |
-| `agy` | `gemini-pro-orchestrator` | Giao diện app (`dashboard.html`), Remotion/TypeScript, xóa code hàng loạt, việc cần nhìn ảnh hay khung hình |
+| `agy` | `gemini-4-carbon-medium` | Giao diện app (`dashboard.html`), Remotion/TypeScript, xóa code hàng loạt, việc cần nhìn ảnh hay khung hình |
 | `codex` | `gpt-6.1-sol` | Dự phòng khi Carbon làm sai hai vòng liền (bác sĩ 2026-11-12: dùng model vừa phải, không dùng Opus hay astra) |
 | `codex` | `gpt-6.1-sol` | Python có bất biến cần giữ: cổng duyệt, hash, timing, retry, storage |
 
-Từ 2026-11-13 mọi việc giao agy (tay hay trong xưởng) dùng `gemini-pro-orchestrator`: agy tự chọn model theo độ khó; đã thử headless (trả lời trong 22 giây). Trước khi đọc nhiều file, hỏi đồ thị code bằng `graphify query "<câu hỏi>"` (đồ thị ở `graphify-out/`, dựng lại bằng `/graphify . --update`). Thiết kế giao diện dùng skill `impeccable` (đã cài mức người dùng). Việc đầu tiên giao cho nó
-phải đọc diff kỹ hơn thường lệ. Trong xưởng, `profiles/company.yaml` đã dùng
-`gemini-4-carbon-medium` đầu bậc `medium` và `gemini-4-carbon-high` cho vai Đạo diễn hình;
-vai `editor` còn `gemini-4-argon-medium`. Nếu Carbon cho kết quả kém Argon ở một vai, đổi
-lại đúng dòng đó. Không dùng `gpt-6-astra` (tốn token).
+Từ 2026-11-14, model từng vai tra `profiles/company.yaml`; không mặc định dùng
+orchestrator cho mọi việc. Biên kịch Sol, y khoa Carbon high, kiểm duyệt/hình/dựng
+Carbon medium, việc nhẹ Hydrogen medium; chưa coi các vai chưa đo là đã chứng minh
+năng lực. Xem `docs/reference/agent-model-evaluation.md` cho mẫu thử và giới hạn.
+Không dùng Opus/astra. Trước khi đọc nhiều file, hỏi đồ thị bằng
+`graphify query "<câu hỏi>"` (ở `graphify-out/`). Giao diện dùng `impeccable`.
 
 Lệnh giao việc (chạy từ PowerShell, trong worktree của việc đó, chạy nền):
 
 ```powershell
-agy -p "Đọc và làm đúng theo file <đường dẫn brief.md>" --model gemini-pro-orchestrator --mode accept-edits --print-timeout 0s
-agy -c -p "<yêu cầu sửa>" --model gemini-pro-orchestrator --mode accept-edits --print-timeout 0s
+agy -p "Đọc và làm đúng theo file <đường dẫn brief.md>" --model gemini-4-carbon-medium --mode accept-edits --print-timeout 0s
+agy -c -p "<yêu cầu sửa>" --model gemini-4-carbon-medium --mode accept-edits --print-timeout 0s
 Get-Content -Raw <brief.md> | codex exec -m gpt-6.1-sol --dangerously-bypass-approvals-and-sandbox -
 ```
 
@@ -117,6 +125,11 @@ Cố ý **không** làm, đừng đề xuất lại:
 - Không dựng framework frontend, không thêm dependency cho app.
 
 ## 5. Kế hoạch chi tiết
+
+**Kế hoạch dưới đây là lịch cũ.** Từ 2026-11-14, R1 trong progress.yaml đi trước:
+chuẩn hóa agent/model → sửa phục hồi lỗi và ràng buộc nội dung → đánh giá lại
+trước video mới. P2 gout dừng, không phải điều kiện để tiếp tục hoàn thiện xưởng.
+Kế hoạch đang thực hiện: `docs/superpowers/plans/2026-11-14-agent-editorial-standards.md`.
 
 Thứ tự: P0 trước. Sau đó P1 (codex) và các việc 3.1–3.4 (agy) chạy song song. P2 cần P0 và
 P1. Việc 3.5, 3.6 và P4 sau P2.
@@ -246,7 +259,7 @@ hạng mục đó với bác sĩ, không vá lẻ tiếp.
 
 ## 6. Hoàn thiện là khi
 
-1. Video gout được bác sĩ duyệt và đăng.
+1. Bộ agent tạo nội dung đúng nhu cầu người xem, có giá trị đáng nghe và đúng bằng chứng.
 2. Một chủ đề thật đi từ hàng đợi tới `packaged` mà không ai sửa tay ngoài bác sĩ.
 3. Cài mới trên checkout sạch, `doctor` không có FAIL ở mục bắt buộc.
 4. `master` đã push, còn một worktree, `docs/progress.yaml` toàn `done`.

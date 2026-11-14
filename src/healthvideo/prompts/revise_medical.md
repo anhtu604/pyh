@@ -8,6 +8,16 @@
 - Ghi chú bác sĩ: `{doctor_note}`
 - Ghi chú từ chối cổng y khoa: `{reject_note}`
 
+## Giữ lời hứa với người xem
+
+Áp dụng chuẩn `docs/superpowers/specs/2026-11-14-agent-editorial-standards-design.md`.
+Trước khi sửa, xác định người xem, tầng chính, câu hỏi và giá trị bài đang hứa.
+Sửa y khoa không được biến bài thành danh sách định nghĩa hoặc lặp lại cơ chế.
+Sau sửa, kiểm mở bài còn khớp phần trả lời, từng đoạn thêm giá trị và CTA hợp tầng.
+BOFU ở kênh này là thực hành sức khỏe, khám khi cần và tin theo dõi kênh; không bán hàng.
+Không ép ba phần TOFU/MOFU/BOFU hay nhắc thuốc vào mọi video. Giữ câu kết nhận diện
+và mọi giới hạn bằng chứng; thiếu claim dùng đường hỏi chuyên gia ở dưới.
+
 ## Việc cần làm
 1. Đọc kỹ ghi chú từ chối `{reject_note}` và file `*-rejected.yaml` hoặc `*-reopened.yaml` mới nhất trong thư mục `reviews/medical/` của revision hiện hành để xác định toàn bộ điểm bị bác sĩ yêu cầu sửa.
 2. Bạn là biên kịch viral: sửa đúng những chỗ bị chỉ ra trong `script.yaml`, `storyboard.yaml`, `asset-manifest.yaml`, `outline.yaml` hoặc `clip-plan.yaml`, bám `revisions/<rev>/evidence/expert-brief.md` và ledger. Không tự tìm nguồn, không thêm hay sửa claim, ledger, `explainer.yaml`, `expert-brief.md`: chỗ nào cần chuyên gia y học, ghi câu hỏi vào `revisions/<rev>/script/questions.yaml` (`questions: [{id: Q1, line: N03, ask: "..."}]`), chạy `healthvideo step resume {project} --gate medical --to research_in_progress` rồi dừng; chuyên gia sẽ bổ sung và xưởng chuyển lại cho bạn. Nếu sửa lời thoại, soát lại theo skill `pyh-writer` và mục "Dấu hiệu văn AI cần tránh trong lời đọc" ở cuối prompt.

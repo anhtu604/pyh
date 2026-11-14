@@ -26,7 +26,7 @@ scenes:
 ```
 Mỗi cảnh trong index cần đúng một quyết định; cảnh dùng chung ảnh phải chọn giống nhau.
 Nếu cả ba ảnh sai chủ đề: reject và prompt mới; không chọn ảnh sai cho xong.
-Python sẽ sinh lại tối đa hai vòng; sau đó dùng SVG tổng quan đúng chủ đề.
+Python sẽ sinh lại tối đa hai vòng; chỉ fallback SVG khi có mapping/component đúng chủ đề (hiện gout/urat); ngoài mapping báo rõ cần SVG chủ đề, không chọn ảnh sai hoặc hứa fallback luôn có.
 Không tự chạy lại GPU, không đổi trạng thái workflow; Python sẽ áp dụng báo cáo và dựng lại.
 Các vấn đề bố cục vẫn phải ghi để bác sĩ xem; không tự duyệt cổng y khoa hay video.
 Xong khi báo cáo chứa đầy đủ quyết định và danh sách ảnh đã thực sự xem.

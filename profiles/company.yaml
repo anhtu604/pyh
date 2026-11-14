@@ -1,16 +1,18 @@
 # Bậc model và bảng vai của xưởng (spec 2026-11-08 mục 5.1).
 # Mỗi chuỗi được thử theo thứ tự; mục hết lượt thì "nghỉ" và chuyển sang mục kế tiếp.
 # skills: tên thư mục trong .agents/skills/ (spec 5.3), tối đa 3.
-# 2026-11-14 cân bằng chất lượng/thời gian: vai sai là tốn kém (y khoa, chấm kịch bản, hình, code video)
-# dùng Orchestrator Carbon; biên kịch dùng codex; việc nhẹ dùng Hydrogen medium. Không dùng Opus, astra.
+# 2026-11-14 chuẩn hóa agent: gọi model trực tiếp cho nhiệm vụ hữu hạn.
+# Mẫu thử và giới hạn đánh giá: docs/reference/agent-model-evaluation.md.
+# Biên kịch Sol; y khoa Carbon high; kiểm duyệt/hình/dựng Carbon medium;
+# việc nhẹ Hydrogen medium. Không dùng Opus, astra; không tự bật lại pilot.
 tiers:
   hard:  # 2026-11-12 bác sĩ: dùng model vừa phải, không dùng Opus hay astra
-    - {cli: agy, model: gemini-pro-orchestrator}
+    - {cli: agy, model: gemini-4-carbon-high}
     - {cli: codex, model: gpt-6.1-sol}
     - {cli: claude, model: claude-sonnet-5-5}
     - {cli: codex, model: gpt-6.1-terra}
-  medium:  # agy trước; Gemini 4 Carbon thay Argon từ 2026-11-11 (đã thử headless)
-    - {cli: agy, model: gemini-pro-orchestrator}
+  medium:  # nhiệm vụ có ranh rõ, không mặc định giao orchestrator
+    - {cli: agy, model: gemini-4-carbon-medium}
     - {cli: codex, model: gpt-6.1-sol}
     - {cli: claude, model: claude-sonnet-5-5}
     - {cli: codex, model: gpt-6.1-terra}
@@ -39,7 +41,7 @@ roles:
     models:  # khác nhà cung cấp với Điều phối viên để vòng chuyên sâu thật sự khác
       - {cli: codex, model: gpt-6.1-sol}
       - {cli: claude, model: claude-sonnet-5-5}
-      - {cli: agy, model: gemini-pro-orchestrator}
+      - {cli: agy, model: gemini-4-carbon-medium}
   scout:
     name: Trinh sát chủ đề
     skills: [content-strategy, pyh-scout]
@@ -55,9 +57,9 @@ roles:
     skills: [youtube-scriptwriting, short-form-video, pyh-writer]
     steps: [draft, revise_medical]
     tier: hard
-    models:  # 2026-11-14 phương án A: codex viết nhanh hơn Gemini mức cao 4–5 lần (đo 12–14/11)
+    models:  # mẫu ngắn 2026-11-14: Sol 45s, Carbon medium 125s; chưa đo video dài
       - {cli: codex, model: gpt-6.1-sol}
-      - {cli: agy, model: gemini-pro-orchestrator}
+      - {cli: agy, model: gemini-4-carbon-medium}
       - {cli: claude, model: claude-sonnet-5-5}
   script_critic:
     name: Kiểm duyệt kịch bản
@@ -65,7 +67,7 @@ roles:
     steps: [script_review]
     tier: hard
     models:  # bắt đầu từ nhà cung cấp khác với biên kịch (biên kịch dùng codex)
-      - {cli: agy, model: gemini-pro-orchestrator}
+      - {cli: agy, model: gemini-4-carbon-medium}
       - {cli: claude, model: claude-sonnet-5-5}
       - {cli: codex, model: gpt-6.1-sol}
   art_director:
@@ -73,8 +75,8 @@ roles:
     skills: [pyh-art-director]
     steps: [visual_review]
     tier: medium
-    models:  # nhìn ảnh tốt
-      - {cli: agy, model: gemini-pro-orchestrator}
+    models:  # phân công tạm thời; cần đánh giá bằng bộ ảnh trước sản xuất
+      - {cli: agy, model: gemini-4-carbon-medium}
       - {cli: claude, model: claude-sonnet-5-5}
       - {cli: codex, model: gpt-6.1-sol}
       - {cli: codex, model: gpt-6.1-terra}
@@ -83,8 +85,8 @@ roles:
     skills: [remotion-best-practices, motion-design, pyh-editor]
     steps: [revise_production, revise_product]
     tier: medium
-    models:  # quen repo video
-      - {cli: agy, model: gemini-pro-orchestrator}
+    models:  # phân công tạm thời; cần kiểm sửa component trước sản xuất
+      - {cli: agy, model: gemini-4-carbon-medium}
       - {cli: claude, model: claude-sonnet-5-5}
       - {cli: codex, model: gpt-6.1-sol}
       - {cli: codex, model: gpt-6.1-terra}
@@ -96,7 +98,7 @@ roles:
     models:  # khác Thợ dựng (agy) để không tự chấm bài mình
       - {cli: claude, model: claude-sonnet-5-5}
       - {cli: codex, model: gpt-6.1-sol}
-      - {cli: agy, model: gemini-pro-orchestrator}
+      - {cli: agy, model: gemini-4-carbon-medium}
   copywriter:
     name: Viết bài đăng
     skills: [social, pyh-copywriter]

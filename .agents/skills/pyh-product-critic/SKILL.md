@@ -1,19 +1,47 @@
 ---
 name: pyh-product-critic
-description: Quy trình kiểm định sản phẩm cuối qua contact sheet, timing, QA và bài đăng cho Kiểm định sản phẩm (product_review).
+description: Use when PYH product_review independently evaluates the final video and posts before the doctor's video gate.
 ---
 
 # Kiểm định sản phẩm xưởng PYH
 
-## Ghi đè từ `character-animation-qa`
-- Không mở Playwright/trình duyệt và không chạy script ngoài; lấy khung hình bằng `healthvideo step review-frames`, đọc `index.json` rồi mở xem trực tiếp toàn bộ contact sheet.
+## Đầu vào
+- Đọc prompt `product_review.md`, lấy `active_revision` từ `{project}/project.yaml`.
+  Mọi sản phẩm dưới đây thuộc `revisions/<rev>/`.
+- Chạy `healthvideo step review-frames {project} --every 4` theo prompt;
+  đọc index.json trong thư mục lệnh trả về, mở từng contact sheet thực tế.
+- Đối chiếu `script/script.yaml`, `storyboard/storyboard.yaml`,
+  `renders/scene-timing.json`, `reviews/video-qa.json`, `posts/posts.yaml`.
+- Đọc `profiles/pronunciation.vi.yaml`; không mở Playwright/trình duyệt
+  hay chạy script ngoài theo `character-animation-qa`.
 
-## Quy trình đối chiếu 4 nguồn
-1. **Contact sheet ↔ `renders/scene-timing.json` & `storyboard.yaml`**: kiểm cảnh mở đầu có chuyển động ngay không; phát hiện đoạn giữ một hình đứng yên quá 6 giây (`nhip_dung`); đối chiếu hình giải phẫu/biểu đồ có khớp đúng câu đang đọc không (`hinh_khop_loi`); kiểm nhãn tiếng Việt và phụ đề có chồng lấn, tràn mép hay quá nhỏ không (`hinh_ro`).
-2. **`reviews/video-qa.json` & `profiles/pronunciation.vi.yaml`**: kiểm tra lỗi kỹ thuật tự động và rà mọi thuật ngữ tiếng Anh/Latin/viết tắt trong `script.yaml` xem đã có phiên âm trong `pronunciation.vi.yaml` chưa (`am_thanh_phu_de`).
-3. **Mở và kết (`mo_ket`)**: kiểm hook khung đầu cuốn hút và thẻ nhận diện/câu kết cuối video rõ ràng.
-4. **`posts/posts.yaml` (`bai_dang`)**: đối chiếu tiêu đề, chương, nguồn, caption clip dọc và `thumbnail` có khớp nội dung đã duyệt và tránh hứa hẹn quá đà không.
+## Phán đoán công việc
+- `hinh_khop_loi`: hình/nhãn/cơ chế đúng câu ở đúng cảnh và thời điểm.
+- `hinh_ro`: đọc được trên khung nhỏ, không chồng/cắt, đủ khoảng thở.
+- `nhip_dung`: điểm nhấn đến đúng câu và giúp hiểu, không đòi hiệu ứng máy móc;
+  đoạn giữ hình lâu là dấu hiệu cần xem trong ngữ cảnh, không tiêu chí duy nhất.
+  Giữ QA/timing hiện hành, không tự bỏ giới hạn 6 giây bằng cách chấm điểm.
+- `am_thanh_phu_de`: dựa QA và từ điển; thuật ngữ thiếu phiên âm là nguy cơ,
+  không khẳng định đã nghe sai. Contact sheet chỉ xác nhận hình;
+  không nhận đã nghe giọng/nhạc hoặc kiểm được toàn bộ chuyển động giữa khung lấy mẫu.
+- `mo_ket`: hook và payoff khớp lời hứa; kết nhận diện rõ, CTA theo intent chính.
+  TOFU khám phá, MOFU cân hiểu/lựa chọn, BOFU thực hành/khám khi cần/theo dõi;
+  không yêu cầu mọi video có đủ ba tầng hay nhắc thuốc.
+- `bai_dang`: title/thumbnail/caption hứa đúng phần video trả lời, không hù dọa,
+  clickbait, hứa chữa khỏi hoặc thêm claim chưa duyệt.
 
-## Phân loại `fixable` chính xác
-- `fixable: true`: chỉ khi sửa trọn vẹn được trong `video/src/anatomy/` hoặc `posts/posts.yaml`.
-- `fixable: false`: khi gốc lỗi nằm ở lời đọc, thứ tự/thời lượng cảnh, ảnh FLUX hoặc `profiles/pronunciation.vi.yaml` (để bác sĩ xem và quyết định mở lại cổng).
+## Đầu ra
+- Chỉ ghi `revisions/<rev>/reviews/product-review.yaml`, không sửa/render.
+- Giữ sáu key `scores` trên, `summary`, `issues`, `checked`, `decisions`;
+  điểm 1–10, dưới 7 phải có issue với `at`, `criterion`, `problem`, `fix`, `fixable`.
+- `fixable: true` chỉ nếu sửa trọn bằng SVG trong `video/src/anatomy/`
+  hoặc `posts/posts.yaml`; phải đổi lời/cảnh/thời lượng/FLUX/profiles là false.
+- `decisions` đúng loại và schema prompt: một `keep: true`, tối đa một
+  `recommended: true`, mọi phương án bám ledger; lỗi thường ở `issues`.
+- `checked` chỉ ghi phép kiểm đã thực hiện; nêu giới hạn âm thanh trong summary.
+
+## Xong khi / Thiếu dữ liệu hoặc lỗi
+- Báo cáo đủ sáu tiêu chí với vị trí và hướng sửa cụ thể, không tự duyệt cổng.
+- Thiếu contact sheet/QA/timing: chỉ rõ phần chưa kiểm, không chấm như đã xem đủ.
+  Lỗi công cụ ghi log thật, retry đúng budget prompt; không sửa trạng thái/hash
+  hoặc giả bước lấy khung hình lỗi đã thành công.

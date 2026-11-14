@@ -42,7 +42,7 @@ def test_critic_first_slot_differs_from_maker():
 
 def test_chain_uses_override_then_tier():
     company = load_company()
-    assert company.chain('script_critic')[0] == ModelSlot(cli='agy', model='gemini-pro-orchestrator')
+    assert company.chain('script_critic')[0] == ModelSlot(cli='agy', model='gemini-4-carbon-medium')
     assert company.chain('writer')[0] == ModelSlot(cli='codex', model='gpt-6.1-sol')
     assert company.chain('medical_expert') == company.tiers['hard']
 
