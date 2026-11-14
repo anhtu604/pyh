@@ -8,9 +8,10 @@ phases:
   title: Hoàn thiện xưởng trước khi làm video mới
   tasks:
   - {id: 'R1.1', title: Dừng và lưu trữ toàn bộ pilot cũ, status: done, owner: codex, note: '2026-11-14 theo yêu cầu bác sĩ: xưởng dừng, queue rỗng; hai project và log riêng giữ ở cache/pilot-archive/2026-11-14; không xóa dữ liệu'}
-  - {id: 'R1.2', title: Chuẩn hóa skill và hợp đồng công việc từng agent, status: doing, owner: codex, note: 'mỗi video một nhu cầu người xem và lời hứa nội dung; BOFU là thực hành sức khỏe, khám khi cần và tin theo dõi kênh; không bán hàng'}
-  - {id: 'R1.3', title: Đánh giá và phân model theo vai, status: doing, owner: codex, note: 'kiểm model thật từ CLI, so bài mẫu ngắn; không dùng tốc độ thay cho chất lượng, không Opus/astra'}
+  - {id: 'R1.2', title: Chuẩn hóa skill và hợp đồng công việc từng agent, status: done, owner: codex, note: '11 skill và 6 prompt đồng bộ; kiểm độc lập 5 nhóm tình huống, review đạt; 117 test liên quan đạt và Ruff sạch; chưa nghiệm thu runtime/video'}
+  - {id: 'R1.3', title: Phân model ban đầu và kiểm mẫu biên kịch/kiểm duyệt, status: done, owner: codex, note: 'Sol viết, Carbon high y khoa, Carbon medium kiểm duyệt/hình/dựng, Hydrogen việc nhẹ, Sonnet chấm sản phẩm; 2 mẫu viết và 1 mẫu critic thật; vai khác chưa benchmark, không Opus/astra'}
   - {id: 'R1.4', title: Sửa khả năng phục hồi lỗi và giới hạn nội dung cứng của xưởng, status: todo, owner: codex, note: 'sau chuẩn hóa agent: lỗi tool phải có chẩn đoán và retry hữu hạn; xem lại khung explain-first, thời lượng và việc giao writer cả code dựng'}
+  - {id: 'R1.5', title: Kiểm model trên bộ tình huống riêng từng vai trước sản xuất, status: todo, owner: codex, note: 'mở rộng nhiều đề và chấm ẩn danh; kiểm nguồn, ảnh, sửa component, phân loại log và failover độc lập; chưa bật xưởng/pilot'}
 - id: P0
   title: Giữ an toàn dữ liệu và môi trường
   tasks:
@@ -30,11 +31,11 @@ phases:
   tasks:
   - {id: '2.1', title: 'Một vòng sửa gộp: biểu đồ, beat S02, clip CL02, hình kim S07', status: done, owner: xưởng, note: qua kiểm bố cục trước cổng; hình kim S07 nằm ở code hình, xem lại ở cổng video}
   - {id: '2.2', title: Bác sĩ duyệt cổng y khoa, status: blocked, owner: codex, note: 'đã dừng pilot theo yêu cầu bác sĩ; không tiếp tục yêu cầu duyệt gout, dữ liệu giữ trong cache/pilot-archive/2026-11-14'}
-  - {id: '2.3', title: Dựng video và agent duyệt sản phẩm, status: todo, owner: xưởng}
-  - {id: '2.4', title: Bác sĩ xem và duyệt cổng video, status: todo, owner: bác sĩ}
-  - {id: '2.5', title: Ghi điều bác sĩ chấp nhận thành kiểm tự động, status: todo, owner: claude}
-  - {id: '2.6', title: Đóng gói và bác sĩ đăng tay, status: todo, owner: bác sĩ}
-  - {id: '2.7', title: Thử một phong cách Lemo-Opuscar cho hình (ví dụ cảnh S07), status: todo, owner: agy, note: 'làm sau khi gout duyệt; học cách làm rồi tự viết lại vào skill visual-style, không chép STYLE.md (giấy phép CC BY-NC), giữ Remotion và model vừa phải'}
+  - {id: '2.3', title: Dựng video và agent duyệt sản phẩm, status: blocked, owner: codex, note: 'pilot đã dừng theo yêu cầu bác sĩ 2026-11-14'}
+  - {id: '2.4', title: Bác sĩ xem và duyệt cổng video, status: blocked, owner: codex, note: 'pilot đã dừng, không yêu cầu bác sĩ duyệt tiếp'}
+  - {id: '2.5', title: Ghi điều bác sĩ chấp nhận thành kiểm tự động, status: blocked, owner: codex, note: 'pilot đã dừng; chuẩn kênh mới xử lý trong R1'}
+  - {id: '2.6', title: Đóng gói và bác sĩ đăng tay, status: blocked, owner: codex, note: 'pilot đã dừng, không đóng gói hay đăng'}
+  - {id: '2.7', title: Thử một phong cách Lemo-Opuscar cho hình (ví dụ cảnh S07), status: blocked, owner: codex, note: 'dừng cùng pilot, không thử hình trên gout; giữ ghi chú lịch sử về giấy phép CC BY-NC'}
 - id: P3
   title: Tinh gọn kết cấu
   tasks:
