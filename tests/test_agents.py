@@ -266,11 +266,15 @@ def test_claude_runs_with_a_tool_allowlist_not_a_permission_bypass():
 def test_factory_uses_moderate_models_and_critics_away_from_the_author():
     from healthvideo.workflows.factory_deps import default_run_deps
     company = default_run_deps(Path('.')).company
-    for step in ('research', 'draft', 'revise_medical'):
-        # Doctor 2026-11-13: agy always runs through its Orchestrator, which picks the model.
-        assert company.chain(company.role_for_step(step).id)[0].model == 'gemini-pro-orchestrator'
+    # Doctor 2026-11-13: agy runs through its Orchestrator; 2026-11-14 (plan A): the writer
+    # starts on codex for speed and only the chat coordinator uses a fast Flash model.
+    assert company.chain('medical_expert')[0].model == 'gemini-pro-orchestrator'
+    for step in ('draft', 'revise_medical'):
+        assert company.chain(company.role_for_step(step).id)[0].model == 'gpt-6.1-sol'
+    assert company.chain('coordinator')[0].model == 'gemini-3.8-flash-medium'
     assert all(slot.model == 'gemini-pro-orchestrator'
-               for role in company.roles for slot in company.chain(role) if slot.cli == 'agy')
+               for role in company.roles if role != 'coordinator'
+               for slot in company.chain(role) if slot.cli == 'agy')
     # Doctor 2026-11-12: moderate models only, no Opus or astra anywhere.
     for role in company.roles:
         for slot in company.chain(role):

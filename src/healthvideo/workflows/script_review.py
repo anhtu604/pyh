@@ -17,7 +17,7 @@ from healthvideo.workflows.decision_card import (
 REPORT = 'reviews/script-review.yaml'
 LOG = 'reviews/script-review-log.yaml'
 PASS_SCORE = 7
-MAX_REVIEWS = 3  # one first read plus two rewrites, then the doctor sees the score
+MAX_REVIEWS = 2  # one first read plus one rewrite, then the doctor sees the score (2026-11-14: speed)
 CRITERIA: dict[str, str] = {
     'giong_nguoi_that': 'Giọng người thật, không lộ ngôn ngữ rào đón nguồn',
     'nhip_cau': 'Nhịp câu đa dạng, không lặp khuôn rào đón',

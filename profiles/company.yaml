@@ -25,6 +25,10 @@ roles:
     skills: [pyh-coordinator]
     steps: [chat]
     tier: bulk
+    models:  # 2026-11-14 bác sĩ (phương án A): chat cần nhanh, nên dùng model nhanh thay Orchestrator
+      - {cli: agy, model: gemini-3.8-flash-medium}
+      - {cli: codex, model: gpt-6-luna}
+      - {cli: claude, model: claude-haiku-5-5}
   coordinator_senior:
     name: Điều phối viên chuyên sâu
     skills: [pyh-coordinator, pyh-coordinator-senior]
@@ -49,16 +53,19 @@ roles:
     skills: [youtube-scriptwriting, short-form-video, pyh-writer]
     steps: [draft, revise_medical]
     tier: hard
+    models:  # 2026-11-14 phương án A: codex viết nhanh hơn Gemini mức cao 4–5 lần (đo 12–14/11)
+      - {cli: codex, model: gpt-6.1-sol}
+      - {cli: agy, model: gemini-pro-orchestrator}
+      - {cli: claude, model: claude-sonnet-5-5}
   script_critic:
     name: Kiểm duyệt kịch bản
     skills: [copy-editing, pyh-script-critic]
     steps: [script_review]
     tier: hard
-    models:  # bắt đầu từ nhà cung cấp khác với biên kịch
-      - {cli: codex, model: gpt-6.1-sol}
-      - {cli: claude, model: claude-sonnet-5-5}
+    models:  # bắt đầu từ nhà cung cấp khác với biên kịch (biên kịch dùng codex)
       - {cli: agy, model: gemini-pro-orchestrator}
-      - {cli: codex, model: gpt-6.1-terra}
+      - {cli: claude, model: claude-sonnet-5-5}
+      - {cli: codex, model: gpt-6.1-sol}
   art_director:
     name: Đạo diễn hình
     skills: [pyh-art-director]

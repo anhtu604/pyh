@@ -150,7 +150,7 @@ def test_excess_decisions_require_bounded_rewrite(tmp_path, gate):
         assert not entry['passed']
         if gate == 'medical':
             action = sr.next_script_action(project)
-            assert action == ('submit_medical' if entry['round'] == 3 else 'draft')
+            assert action == ('submit_medical' if entry['round'] >= sr.MAX_REVIEWS else 'draft')
         else:
             action = pr.next_product_action(project)
             assert action == ('submit_video' if entry['round'] == 3 else 'revise_product')
