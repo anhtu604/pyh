@@ -266,16 +266,14 @@ def test_claude_runs_with_a_tool_allowlist_not_a_permission_bypass():
 def test_factory_uses_moderate_models_and_critics_away_from_the_author():
     from healthvideo.workflows.factory_deps import default_run_deps
     company = default_run_deps(Path('.')).company
-    # Doctor 2026-11-13: agy runs through its Orchestrator; 2026-11-14 (plan A): the writer
-    # starts on codex for speed and only the chat coordinator uses a fast Flash model.
-    assert company.chain('medical_expert')[0].model == 'gemini-pro-orchestrator'
+    # 2026-11-14: costly-to-get-wrong roles stay on the Carbon Orchestrator, the writer on
+    # codex for speed, light roles (chat, scouting, posts, feedback) on fast Hydrogen.
+    for role in ('medical_expert', 'script_critic', 'art_director', 'editor'):
+        assert company.chain(role)[0].model == 'gemini-pro-orchestrator'
     for step in ('draft', 'revise_medical'):
         assert company.chain(company.role_for_step(step).id)[0].model == 'gpt-6.1-sol'
-    assert company.chain('coordinator')[0].model == 'gemini-3.8-flash-medium'
-    assert all(slot.model == 'gemini-pro-orchestrator'
-               for role in company.roles if role != 'coordinator'
-               for slot in company.chain(role) if slot.cli == 'agy')
-    # Doctor 2026-11-12: moderate models only, no Opus or astra anywhere.
+    for role in ('coordinator', 'scout', 'copywriter', 'feedback_analyst'):
+        assert company.chain(role)[0].model == 'gemini-4-hydrogen-medium'
     for role in company.roles:
         for slot in company.chain(role):
             assert 'opus' not in slot.model and 'astra' not in slot.model, (role, slot)

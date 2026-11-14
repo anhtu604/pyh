@@ -1,7 +1,8 @@
 # Bậc model và bảng vai của xưởng (spec 2026-11-08 mục 5.1).
 # Mỗi chuỗi được thử theo thứ tự; mục hết lượt thì "nghỉ" và chuyển sang mục kế tiếp.
 # skills: tên thư mục trong .agents/skills/ (spec 5.3), tối đa 3.
-# 2026-11-13 bác sĩ: mọi chỗ dùng agy đều qua Orchestrator (gemini-pro-orchestrator) để agy tự chọn model.
+# 2026-11-14 cân bằng chất lượng/thời gian: vai sai là tốn kém (y khoa, chấm kịch bản, hình, code video)
+# dùng Orchestrator Carbon; biên kịch dùng codex; việc nhẹ dùng Hydrogen medium. Không dùng Opus, astra.
 tiers:
   hard:  # 2026-11-12 bác sĩ: dùng model vừa phải, không dùng Opus hay astra
     - {cli: agy, model: gemini-pro-orchestrator}
@@ -13,8 +14,8 @@ tiers:
     - {cli: codex, model: gpt-6.1-sol}
     - {cli: claude, model: claude-sonnet-5-5}
     - {cli: codex, model: gpt-6.1-terra}
-  bulk:  # agy trước: Claude đang ít token (2026-11-08)
-    - {cli: agy, model: gemini-pro-orchestrator}
+  bulk:  # 2026-11-14 đo cùng việc nhẹ: Hydrogen medium 16s, Flash 18s, Orchestrator Argon 30s, Carbon 45s
+    - {cli: agy, model: gemini-4-hydrogen-medium}
     - {cli: codex, model: gpt-6-luna}
     - {cli: claude, model: claude-haiku-5-5}
     - {cli: codex, model: gpt-6.1-terra}
@@ -25,7 +26,8 @@ roles:
     skills: [pyh-coordinator]
     steps: [chat]
     tier: bulk
-    models:  # 2026-11-14 bác sĩ (phương án A): chat cần nhanh, nên dùng model nhanh thay Orchestrator
+    models:  # 2026-11-14 bác sĩ: chat cần nhanh; Hydrogen nhanh nhất, Flash hay quá tải (503)
+      - {cli: agy, model: gemini-4-hydrogen-medium}
       - {cli: agy, model: gemini-3.8-flash-medium}
       - {cli: codex, model: gpt-6-luna}
       - {cli: claude, model: claude-haiku-5-5}
@@ -104,4 +106,4 @@ roles:
     name: Phân tích ý kiến
     skills: [pyh-feedback-analyst]
     steps: [feedback_inbox]
-    tier: medium
+    tier: bulk  # việc nhẹ, ưu tiên nhanh
