@@ -4,6 +4,7 @@ import json
 import os
 import re
 import subprocess
+import uuid
 from collections.abc import Callable, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
@@ -12,7 +13,13 @@ from pathlib import Path
 
 from healthvideo.company import REPO_ROOT, ModelSlot
 from healthvideo.env import child_env
-from healthvideo.process import prepare_subprocess_argv
+from healthvideo.process import (
+    UnsafeBatchLauncherError,
+    prepare_subprocess_argv,
+    process_token,
+    run_with_deadline,
+    timeout_diagnostic,
+)
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 
 RUNNING_MARKER = ".agent-running"
@@ -22,6 +29,13 @@ ACTIVITY_FILE = Path("topics/logs/activity.jsonl")
 DEFAULT_REST = timedelta(hours=5)
 # Prompts longer than this reach argv-only CLIs (agy) through a file.
 MAX_ARGV_PROMPT = 8000
+AGENT_TIMEOUT = 15 * 60
+STEP_TIMEOUTS = {
+    'chat': 120, 'chat_deep': 300, 'posts': 600, 'feedback_inbox': 300,
+    'script_review': 900, 'visual_review': 900, 'product_review': 900,
+    'research': 1800, 'draft': 1800, 'revise_medical': 1800,
+    'revise_production': 1800, 'revise_product': 1800,
+}
 
 
 @dataclass(frozen=True)
@@ -103,6 +117,7 @@ class AgentResult:
     quota_exhausted: bool
     log_path: Path
     model: str = ""
+    failure_kind: str | None = None
 
 
 class AllAgentsExhausted(RuntimeError):
@@ -238,6 +253,8 @@ def invoke(
     cwd: Path,
     log_dir: Path,
     runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+    timeout: float = AGENT_TIMEOUT,
+    job_id: str | None = None,
 ) -> AgentResult:
     """Invoke a single agent CLI and capture its output to a UTF-8 log file."""
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -257,11 +274,16 @@ def invoke(
 
     env = child_env()
     marker = log_dir / RUNNING_MARKER
-    marker.write_text(f"{agent.name}\n{datetime.now(UTC).isoformat()}\n", encoding="utf-8")
+    started_at = datetime.now(UTC).isoformat()
+    identity = {'job_id': job_id or uuid.uuid4().hex, 'pid': os.getpid(),
+                'process_token': process_token(os.getpid()), 'started_at': started_at}
+    marker.write_text(f"{agent.name}\n{started_at}\n{json.dumps(identity)}\n", encoding="utf-8")
 
     try:
-        completed = runner(
+        completed = run_with_deadline(
             prepare_subprocess_argv(argv),
+            timeout=timeout,
+            runner=runner,
             cwd=cwd,
             input=stdin_input,
             capture_output=True,
@@ -270,13 +292,18 @@ def invoke(
             errors="replace",
             env=env,
         )
-    except FileNotFoundError as exc:
-        log_path.write_text(f"{type(exc).__name__}: {exc}\n", encoding="utf-8")
+    except Exception as exc:  # noqa: BLE001 -- persist unexpected tool failures; never catch Ctrl+C.
+        detail = timeout_diagnostic(exc) if isinstance(exc, subprocess.TimeoutExpired) else str(exc)
+        log_path.write_text(f"{type(exc).__name__}: {detail}\n", encoding="utf-8")
+        kind = ('transient' if isinstance(exc, (subprocess.TimeoutExpired, ConnectionError, TimeoutError))
+                else 'configuration' if isinstance(exc, (FileNotFoundError, PermissionError, UnsafeBatchLauncherError))
+                else 'agent_error')
         return AgentResult(
             agent=agent.name,
             ok=False,
             quota_exhausted=False,
             log_path=log_path,
+            failure_kind=kind,
         )
     finally:
         marker.unlink(missing_ok=True)
@@ -290,11 +317,19 @@ def invoke(
     quota_exhausted = (not ok) and any(
         pattern.lower() in lower_output for pattern in QUOTA_PATTERNS
     )
+    configuration = ('auto-denied', 'permission denied', 'access is denied', 'unauthorized',
+                     'authentication failed', 'not logged in', 'invalid api key')
+    transient = (*BUSY_PATTERNS, 'connection reset', 'connection refused', 'connection timed out',
+                 'network error', 'network is unreachable', 'temporary failure',
+                 'timed out', 'econnreset', 'enotfound', 'http 502', 'http 504')
+    failure_kind = (None if ok else 'configuration' if any(p in lower_output for p in configuration)
+                    else 'transient' if any(p in lower_output for p in transient) else 'agent_error')
     return AgentResult(
         agent=agent.name,
         ok=ok,
         quota_exhausted=quota_exhausted,
         log_path=log_path,
+        failure_kind=failure_kind,
     )
 
 
@@ -311,18 +346,24 @@ def invoke_with_failover(
     now: Callable[[], datetime] = lambda: datetime.now().astimezone(),
     quota: QuotaBook | None = None,
     activity: Path | None = None,
+    timeout: float | None = None,
 ) -> AgentResult:
-    """Try each non-resting slot in order, failing over only on quota exhaustion.
+    """Try each non-resting slot once on quota, overload or transient tool failures.
 
     ``quota`` and ``activity`` default to ``cache/`` and ``topics/logs/`` under ``cwd``.
     """
     quota = quota or QuotaBook(cwd / QUOTA_FILE)
     activity = activity or cwd / ACTIVITY_FILE
+    deadline = timeout if timeout is not None else STEP_TIMEOUTS.get(step, AGENT_TIMEOUT)
+    last_transient = None
+
+    job_id = ''
+    caller_token = process_token(os.getpid())
 
     def log(slot: ModelSlot, event: str, ok: bool | None) -> None:
         row = {"at": now().isoformat(timespec="seconds"), "role": role, "cli": slot.cli,
                "model": slot.model, "slug": slug, "step": step, "event": event, "ok": ok,
-               "pid": os.getpid()}
+               "pid": os.getpid(), "job_id": job_id, "process_token": caller_token}
         activity.parent.mkdir(parents=True, exist_ok=True)
         with activity.open("a", encoding="utf-8") as stream:
             stream.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -331,17 +372,27 @@ def invoke_with_failover(
         if quota.resting(slot, now()):
             continue
         cli, argv = argv_for(slot)
+        job_id = uuid.uuid4().hex
         log(slot, "start", None)
-        result = invoke(replace(cli, argv=tuple(argv)), prompt, cwd=cwd, log_dir=log_dir,
-                        runner=runner)
-        result = replace(result, model=slot.model)
-        log(slot, "end", result.ok)
+        result = None
+        try:
+            result = invoke(replace(cli, argv=tuple(argv)), prompt, cwd=cwd, log_dir=log_dir,
+                            runner=runner, timeout=deadline, job_id=job_id)
+            result = replace(result, model=slot.model)
+        finally:
+            log(slot, "end", result.ok if result is not None else False)
         if not result.ok and not result.quota_exhausted:
             output = result.log_path.read_text(encoding="utf-8", errors="replace").lower()
             if any(pattern in output for pattern in BUSY_PATTERNS):
                 # Server overload is not our quota: rest briefly and try the next model.
                 log(slot, "busy", False)
                 quota.rest(slot, now() + BUSY_REST, "máy chủ quá tải")
+                last_transient = result
+                continue
+            if result.failure_kind == 'transient':
+                # No in-call loop/backoff: each configured slot gets one attempt.
+                # Returning failure after the chain lets the queue own its durable cap.
+                last_transient = result
                 continue
         if result.ok or not result.quota_exhausted:
             return result
@@ -353,4 +404,6 @@ def invoke_with_failover(
         rested = ModelSlot(cli=slot.cli, model="*") if _ACCOUNT.search(output) else slot
         quota.rest(rested, until, _quota_reason(output))
 
+    if last_transient is not None:
+        return last_transient
     raise AllAgentsExhausted(quota.earliest_return(slots, now()))

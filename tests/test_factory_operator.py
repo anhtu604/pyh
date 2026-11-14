@@ -30,6 +30,47 @@ def invoke(operator, text):
     return CliRunner().invoke(cli.app, ['duyet', '--root', str(operator[0])], input=text)
 
 
+def test_factory_failure_does_not_invite_doctor_to_review(tmp_path, monkeypatch):
+    project = create_v2_project_fixture(tmp_path / 'projects', state='awaiting_medical_review')
+    note = tmp_path / 'topics/logs' / project.name / 'blocked.txt'
+    note.parent.mkdir(parents=True)
+    note.write_text('tool timeout; log_path: failure.log', encoding='utf-8')
+    monkeypatch.setattr(factory, 'run_queue', lambda *args: RunReport(blocked=[project.name]))
+    lines = []
+    factory.run_factory(tmp_path, object(), once=True, notify=lambda *args: None, echo=lines.append)
+    assert lines and 'tool timeout' in lines[0]
+    assert 'healthvideo duyet' not in '\n'.join(lines)
+
+
+def test_factory_wakes_for_retry_and_reports_wait_without_gate_invitation(tmp_path, monkeypatch):
+    from datetime import date
+
+    from healthvideo.domain.queue import QueueEntry
+    from healthvideo.storage.queue import add_to_queue
+    from healthvideo.workflows import production_retry
+
+    add_to_queue(tmp_path, QueueEntry(slug='muoi-va-huyet-ap-v2', title='Topic', question='Question', added=date(2026, 11, 14)))
+    project = create_v2_project_fixture(tmp_path / 'projects', state='draft_ready')
+    now = datetime.now(UTC)
+    monkeypatch.setattr(production_retry, '_now', lambda: now)
+    class Clock:
+        @staticmethod
+        def now(tz):
+            return now
+    monkeypatch.setattr(factory, 'datetime', Clock)
+    production_retry.record_agent_failure(tmp_path, project, 'research', 'fp', 'transient', TimeoutError('network'))
+    monkeypatch.setattr(factory, 'run_queue', lambda *args: RunReport(blocked=[project.name]))
+    waits, lines = [], []
+    def sleep(seconds):
+        waits.append(seconds)
+        raise KeyboardInterrupt
+    factory.run_factory(tmp_path, object(), interval=600, sleep=sleep,
+                        notify=lambda *args: None, echo=lines.append)
+    assert waits == [120]
+    assert 'đang chờ thử lại' in lines[0]
+    assert 'healthvideo duyet' not in lines[0]
+
+
 def test_duyet_approve_flow(operator):
     result = invoke(operator, 'Doctor\nA\n\n')
     assert result.exit_code == 0, result.output

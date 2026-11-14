@@ -87,3 +87,26 @@ def test_provider_identity_rejects_nonpublic_aliases(unsafe: str) -> None:
     )
     with pytest.raises(ValueError, match="identity"):
         provider_identity(adapter)
+def test_local_command_uses_finite_deadline(monkeypatch):
+    from healthvideo.tts import command
+
+    def bounded(argv, *, timeout, **kwargs):
+        assert timeout > 0
+        return type('Completed', (), {'returncode': 0})()
+
+    monkeypatch.setattr(command, 'run_bounded', bounded, raising=False)
+    assert command._run(['isolated-tts']) == 0
+
+
+def test_local_command_timeout_keeps_partial_diagnostic(monkeypatch):
+    import subprocess
+
+    from healthvideo.tts import command
+
+    def bounded(argv, *, timeout, **kwargs):
+        assert kwargs['capture_output'] is True
+        raise subprocess.TimeoutExpired(argv, timeout, output=b'partial local TTS')
+
+    monkeypatch.setattr(command, 'run_bounded', bounded)
+    with pytest.raises(RuntimeError, match='Command TTS timed out.*partial local TTS'):
+        command._run(['isolated-tts'])

@@ -1,4 +1,5 @@
 import json
+import subprocess
 import wave
 from pathlib import Path
 from types import SimpleNamespace
@@ -6,6 +7,28 @@ from types import SimpleNamespace
 import pytest
 
 from healthvideo.audio.align import align_lines, map_words, pronunciation_qa
+
+
+def test_alignment_timeout_uses_estimated_timing_and_cleans_staging(tmp_path, monkeypatch):
+    from healthvideo.audio import align
+
+    python = tmp_path / 'python.exe'
+    python.touch()
+    monkeypatch.setattr(align, 'whisper_python', lambda: python)
+    monkeypatch.setattr(align, 'model_ready', lambda: True)
+    wav = tmp_path / 'line.wav'
+    with wave.open(str(wav), 'wb') as stream:
+        stream.setparams((1, 2, 8000, 0, 'NONE', ''))
+        stream.writeframes(b'\x01\x00' * 8000)
+
+    def hang(argv, **kwargs):
+        assert kwargs['timeout'] > 0
+        raise subprocess.TimeoutExpired(argv, kwargs['timeout'], stderr=b'loading ASR')
+
+    with pytest.warns(UserWarning, match='Whisper.*timed out.*loading ASR'):
+        assert align_lines({'LN01': wav}, {'LN01': 'Urat'}, out_dir=tmp_path / 'out',
+                           cache_dir=tmp_path / 'cache', runner=hang) == {}
+    assert not list((tmp_path / 'cache').iterdir())
 
 
 def words(*texts):

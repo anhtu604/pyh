@@ -8,6 +8,8 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from healthvideo.agents import AgentResult
 from healthvideo.domain.gate_review import GateKind
 from healthvideo.domain.project_v2 import WorkflowState
@@ -253,3 +255,20 @@ def test_reject_note_reads_latest_reopen(tmp_path: Path) -> None:
     write_yaml_atomic(project_dir / "revisions/001/reviews/medical/99991231T000000000000-reopened.yaml",
                       {"reason": "Viết lại theo văn phong mới."})
     assert deps.reject_note(project_dir) == "Viết lại theo văn phong mới."
+def test_render_timeout_retains_step_log(tmp_path, monkeypatch):
+    from healthvideo.workflows import factory_deps
+
+    monkeypatch.setattr(factory_deps, 'REPO_ROOT', tmp_path)
+    monkeypatch.setattr(factory_deps, 'prepare_subprocess_argv', lambda argv: argv)
+
+    def hang(argv, **kwargs):
+        assert kwargs['timeout'] > 0
+        kwargs['stdout'].write('partial render diagnostic\n')
+        raise subprocess.TimeoutExpired(argv, kwargs['timeout'])
+
+    monkeypatch.setattr(factory_deps.subprocess, 'run', hang)
+    with pytest.raises(subprocess.TimeoutExpired):
+        factory_deps._run_render_argv(['isolated-render'])
+    (log,) = (tmp_path / 'topics/logs/render').glob('*.log')
+    assert 'partial render diagnostic' in log.read_text()
+    assert 'TimeoutExpired' in log.read_text()

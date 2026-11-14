@@ -1,13 +1,504 @@
-"""HTTP dashboard contract; no Playwright dependency is present in the lockfile."""
+"""HTTP and JS runtime dashboard contracts; no Playwright dependency in lockfile."""
 import json
+import re
+import shutil
+import subprocess
 import threading
 from http.client import HTTPConnection
+from pathlib import Path
 
 import pytest
 
 from healthvideo.approver_pin import set_pin
 from healthvideo.workflows import dashboard, factory
 from tests.helpers import create_v2_project_fixture
+
+DASHBOARD_HTML = Path(__file__).resolve().parents[2] / 'src/healthvideo/workflows/dashboard.html'
+
+
+def _extract_dashboard_scripts() -> list[str]:
+    html = DASHBOARD_HTML.read_text(encoding='utf-8')
+    return re.findall(r'<script\b[^>]*>(.*?)</script>', html, re.DOTALL)
+
+
+def _run_workshop_js(test_body: str, *, pre_storage: dict[str, str] | None = None) -> None:
+    node = shutil.which('node')
+    assert node is not None, 'Node.js is required to run dashboard UI runtime tests'
+    scripts = _extract_dashboard_scripts()
+    assert len(scripts) >= 1
+    instrumented_script = (
+        scripts[0]
+        + '\n;globalThis.__pyh = {'
+        ' wsNormalizeWorkState, wsResolveRoleState, wsResolveMachineState,'
+        ' wsSvgSig, renderWorkshop, refresh, openWorkshopPopover,'
+        ' renderWorkshopPopoverContent,'
+        ' getState: () => ({'
+        '   wsOffline, wsPageHidden, wsInView, wsMotionEnabled,'
+        '   wsHasActiveExecution, wsSelectedId, companyData, overviewData, state'
+        ' }),'
+        ' setState: (patch) => {'
+        '   if ("companyData" in patch) companyData = patch.companyData;'
+        '   if ("overviewData" in patch) overviewData = patch.overviewData;'
+        '   if ("state" in patch) state = patch.state;'
+        '   if ("wsOffline" in patch) wsOffline = patch.wsOffline;'
+        ' },'
+        '};'
+    )
+    runner = r'''
+const fs = require('fs');
+const vm = require('vm');
+const payload = JSON.parse(fs.readFileSync(0, 'utf8'));
+
+const VOID_TAGS = new Set([
+  'area','base','br','col','embed','hr','img','input','link','meta',
+  'param','source','track','wbr','path','rect','circle','ellipse',
+  'line','polygon','polyline','stop','animate','animatetransform',
+]);
+
+function kebab(s) {
+  return s.replace(/[A-Z]/g, m => '-' + m.toLowerCase());
+}
+function camel(s) {
+  return s.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+}
+
+function parseAttrs(raw) {
+  const attrs = {};
+  const re = /([a-zA-Z0-9_:-]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>/]+)))?/g;
+  let m;
+  while ((m = re.exec(raw)) !== null) {
+    const key = m[1];
+    if (key === '/') continue;
+    const val = m[2] ?? m[3] ?? m[4] ?? '';
+    attrs[key] = val;
+  }
+  return attrs;
+}
+
+function parseHtml(html, doc) {
+  const root = doc.createElement('fragment');
+  const stack = [root];
+  const tagRe = /<!--[\s\S]*?-->|<\/([a-zA-Z0-9_-]+)\s*>|<([a-zA-Z0-9_-]+)([^>]*)>|([^<]+)/g;
+  let m;
+  while ((m = tagRe.exec(String(html || ''))) !== null) {
+    const top = stack[stack.length - 1];
+    if (m[1]) {
+      const closeName = m[1].toUpperCase();
+      for (let i = stack.length - 1; i > 0; i--) {
+        if (stack[i].tagName === closeName) {
+          stack.length = i;
+          break;
+        }
+      }
+    } else if (m[2]) {
+      const tag = m[2];
+      const rawAttrs = m[3] || '';
+      const selfClosing = rawAttrs.trimEnd().endsWith('/') || VOID_TAGS.has(tag.toLowerCase());
+      const el = doc.createElement(tag);
+      const attrs = parseAttrs(rawAttrs.replace(/\/\s*$/, ''));
+      for (const [k, v] of Object.entries(attrs)) {
+        el.attrs[k] = v;
+      }
+      top.appendChild(el);
+      if (!selfClosing) stack.push(el);
+    } else if (m[4]) {
+      top._text += m[4];
+    }
+  }
+  return [...root.children];
+}
+
+function matchSingleSelector(el, sel) {
+  const s = sel.trim();
+  if (!s) return false;
+  let rem = s;
+  const tagMatch = rem.match(/^([a-zA-Z0-9_-]+)/);
+  if (tagMatch) {
+    if (el.tagName !== tagMatch[1].toUpperCase()) return false;
+    rem = rem.slice(tagMatch[1].length);
+  }
+  while (rem.length) {
+    if (rem[0] === '#') {
+      const m = rem.match(/^#([a-zA-Z0-9_-]+)/);
+      if (!m || el.attrs.id !== m[1]) return false;
+      rem = rem.slice(m[0].length);
+    } else if (rem[0] === '.') {
+      const m = rem.match(/^\.([a-zA-Z0-9_-]+)/);
+      if (!m) return false;
+      const cls = String(el.attrs['class'] || '').split(/\s+/).filter(Boolean);
+      if (!cls.includes(m[1])) return false;
+      rem = rem.slice(m[0].length);
+    } else if (rem[0] === '[') {
+      const m = rem.match(/^\[([a-zA-Z0-9_-]+)(?:=(?:"([^"]*)"|'([^']*)'|([^\]]*)))?\]/);
+      if (!m) return false;
+      const attrName = m[1];
+      if (!(attrName in el.attrs)) return false;
+      const expected = m[2] ?? m[3] ?? m[4];
+      if (expected !== undefined && el.attrs[attrName] !== expected) return false;
+      rem = rem.slice(m[0].length);
+    } else {
+      return false;
+    }
+  }
+  return true;
+}
+
+function matchSelector(el, selector) {
+  for (const branch of selector.split(',')) {
+    const parts = branch.trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) continue;
+    if (!matchSingleSelector(el, parts[parts.length - 1])) continue;
+    let cur = el.parentNode;
+    let idx = parts.length - 2;
+    while (idx >= 0 && cur) {
+      if (matchSingleSelector(cur, parts[idx])) idx--;
+      cur = cur.parentNode;
+    }
+    if (idx < 0) return true;
+  }
+  return false;
+}
+
+class FakeElement {
+  constructor(tag, doc, id = '') {
+    this.tagName = String(tag || 'div').toUpperCase();
+    this._doc = doc;
+    this.attrs = {};
+    if (id) this.attrs.id = id;
+    this.children = [];
+    this.parentNode = null;
+    this._text = '';
+    this._innerHtml = '';
+    this._innerHtmlWrites = 0;
+    this.style = {};
+    this.scrollTop = 0;
+    this.scrollHeight = 120;
+    this.clientHeight = 120;
+    this.disabled = false;
+    this.value = '';
+    this.elements = new Proxy({}, { get: () => ({ value: '', focus() {} }) });
+    const self = this;
+    this.dataset = new Proxy({}, {
+      get(_, prop) {
+        return self.attrs['data-' + kebab(String(prop))];
+      },
+      set(_, prop, val) {
+        self.attrs['data-' + kebab(String(prop))] = String(val);
+        return true;
+      },
+    });
+    this.classList = {
+      add(...names) {
+        const cur = new Set(String(self.attrs['class'] || '').split(/\s+/).filter(Boolean));
+        names.forEach(n => cur.add(n));
+        self.attrs['class'] = [...cur].join(' ');
+      },
+      remove(...names) {
+        const cur = new Set(String(self.attrs['class'] || '').split(/\s+/).filter(Boolean));
+        names.forEach(n => cur.delete(n));
+        self.attrs['class'] = [...cur].join(' ');
+      },
+      toggle(name, force) {
+        const has = this.contains(name);
+        const next = force === undefined ? !has : Boolean(force);
+        if (next) this.add(name);
+        else this.remove(name);
+        return next;
+      },
+      contains(name) {
+        return String(self.attrs['class'] || '').split(/\s+/).filter(Boolean).includes(name);
+      },
+    };
+  }
+  get id() { return this.attrs.id || ''; }
+  set id(v) { this.attrs.id = String(v); }
+  get className() { return this.attrs['class'] || ''; }
+  set className(v) { this.attrs['class'] = String(v); }
+  get hidden() { return 'hidden' in this.attrs; }
+  set hidden(v) {
+    if (v) this.attrs.hidden = '';
+    else delete this.attrs.hidden;
+  }
+  get firstChild() { return this.children[0] || null; }
+  get textContent() {
+    if (!this.children.length) return this._text;
+    return this._text + this.children.map(c => c.textContent).join('');
+  }
+  set textContent(v) {
+    this.children = [];
+    this._text = String(v ?? '');
+  }
+  get innerHTML() {
+    const ser = (n) => {
+      const a = Object.entries(n.attrs).map(([k, v]) => (v === '' ? k : `${k}="${v}"`)).join(' ');
+      const tag = n.tagName.toLowerCase();
+      const open = a ? `<${tag} ${a}>` : `<${tag}>`;
+      const body = n.children.length ? n.children.map(ser).join('') : (n._text || '');
+      return `${open}${body}</${tag}>`;
+    };
+    if (this.children.length) return this.children.map(ser).join('');
+    return this._innerHtml || this._text;
+  }
+  set innerHTML(html) {
+    this._innerHtmlWrites++;
+    this._innerHtml = String(html ?? '');
+    this._text = '';
+    this.children = [];
+    for (const child of parseHtml(this._innerHtml, this._doc)) {
+      this.appendChild(child);
+    }
+  }
+  setAttribute(k, v) { this.attrs[String(k)] = String(v); }
+  getAttribute(k) { return (String(k) in this.attrs) ? this.attrs[String(k)] : null; }
+  hasAttribute(k) { return String(k) in this.attrs; }
+  removeAttribute(k) { delete this.attrs[String(k)]; }
+  appendChild(node) {
+    if (node.parentNode) node.remove();
+    node.parentNode = this;
+    this.children.push(node);
+    return node;
+  }
+  insertBefore(node, ref) {
+    if (node.parentNode) node.remove();
+    node.parentNode = this;
+    if (!ref) {
+      this.children.push(node);
+      return node;
+    }
+    const idx = this.children.indexOf(ref);
+    if (idx === -1) this.children.push(node);
+    else this.children.splice(idx, 0, node);
+    return node;
+  }
+  remove() {
+    if (!this.parentNode) return;
+    const idx = this.parentNode.children.indexOf(this);
+    if (idx >= 0) this.parentNode.children.splice(idx, 1);
+    this.parentNode = null;
+  }
+  contains(target) {
+    let cur = target;
+    while (cur) {
+      if (cur === this) return true;
+      cur = cur.parentNode;
+    }
+    return false;
+  }
+  closest(sel) {
+    let cur = this;
+    while (cur) {
+      if (matchSelector(cur, sel)) return cur;
+      cur = cur.parentNode;
+    }
+    return null;
+  }
+  querySelectorAll(sel) {
+    const out = [];
+    const walk = (node) => {
+      for (const ch of node.children) {
+        if (matchSelector(ch, sel)) out.push(ch);
+        walk(ch);
+      }
+    };
+    walk(this);
+    return out;
+  }
+  querySelector(sel) {
+    return this.querySelectorAll(sel)[0] || null;
+  }
+  focus() {}
+  pause() {}
+  scrollIntoView() {}
+  addEventListener() {}
+  getBoundingClientRect() {
+    return { left: 20, top: 20, right: 200, bottom: 180, width: 180, height: 160 };
+  }
+}
+
+const byId = new Map();
+const listeners = {};
+const doc = {
+  hidden: false,
+  title: '',
+  createElement(tag) { return new FakeElement(tag, doc); },
+  getElementById(id) {
+    if (!byId.has(id)) {
+      const el = new FakeElement('div', doc, id);
+      byId.set(id, el);
+    }
+    return byId.get(id);
+  },
+  querySelectorAll(sel) {
+    const out = [];
+    for (const el of byId.values()) {
+      if (matchSelector(el, sel)) out.push(el);
+      out.push(...el.querySelectorAll(sel));
+    }
+    return [...new Set(out)];
+  },
+  querySelector(sel) { return this.querySelectorAll(sel)[0] || null; },
+  addEventListener(ev, fn) {
+    if (!listeners[ev]) listeners[ev] = [];
+    listeners[ev].push(fn);
+  },
+  dispatch(ev) {
+    for (const fn of (listeners[ev] || [])) fn({ type: ev });
+  },
+};
+doc.documentElement = doc.getElementById('__html__');
+doc.body = doc.getElementById('__body__');
+
+// Build workshop DOM skeleton matching dashboard.html
+const wsEl = doc.getElementById('workshop');
+wsEl.dataset.motion = 'on';
+wsEl.dataset.paused = 'false';
+wsEl.dataset.liveFlow = 'false';
+const btnMotion = doc.getElementById('btn-ws-motion');
+btnMotion.innerHTML = '<span class="ws-motion-label">Hoạt cảnh: Bật</span>';
+wsEl.appendChild(btnMotion);
+wsEl.appendChild(doc.getElementById('ws-counters'));
+wsEl.appendChild(doc.getElementById('ws-row-1'));
+wsEl.appendChild(doc.getElementById('ws-row-2'));
+
+const wsPop = doc.getElementById('ws-popover');
+wsPop.hidden = true;
+wsPop.appendChild(doc.getElementById('ws-pop-title'));
+wsPop.appendChild(doc.getElementById('ws-pop-meta'));
+wsPop.appendChild(doc.getElementById('ws-pop-close'));
+wsPop.appendChild(doc.getElementById('ws-pop-body'));
+
+const storageMap = new Map(Object.entries(payload.preStorage || {}));
+const localStorage = {
+  getItem(k) { return storageMap.has(String(k)) ? storageMap.get(String(k)) : null; },
+  setItem(k, v) { storageMap.set(String(k), String(v)); },
+  removeItem(k) { storageMap.delete(String(k)); },
+};
+
+const observers = [];
+class FakeIntersectionObserver {
+  constructor(cb) {
+    this.cb = cb;
+    this.observed = [];
+    observers.push(this);
+  }
+  observe(el) { this.observed.push(el); }
+  trigger(entries) { this.cb(entries, this); }
+}
+
+let fetchHandler = (url) => {
+  if (url.startsWith('/api/status')) {
+    return {
+      ok: true, status: 200,
+      async json() {
+        return {
+          factory: { running: false, pid: null },
+          waiting: 0,
+          projects: [],
+          stages: ['1','2','3','4','5','6','7'],
+          log: [],
+          agents: [],
+          now: '2026-11-14T10:00:00Z',
+          standards: 0,
+        };
+      },
+    };
+  }
+  if (url.startsWith('/api/company')) {
+    return {
+      ok: true, status: 200,
+      async json() { return { roles: [], production_running: [], production: { work_state: 'idle' } }; },
+    };
+  }
+  if (url.startsWith('/api/overview')) {
+    return { ok: true, status: 200, async json() { return { tiles: {}, projects: [], decisions: [], resting: [] }; } };
+  }
+  if (url.startsWith('/api/activity')) {
+    return { ok: true, status: 200, async json() { return { items: [] }; } };
+  }
+  if (url.startsWith('/api/progress')) {
+    return { ok: true, status: 200, async json() { return { phases: [], doing: [], total: 0, done: 0 }; } };
+  }
+  if (url.startsWith('/api/chat')) {
+    return { ok: true, status: 200, async json() { return { messages: [] }; } };
+  }
+  return { ok: true, status: 200, async json() { return {}; } };
+};
+
+let fetchCalls = 0;
+const win = {
+  innerWidth: 1280,
+  innerHeight: 800,
+  matchMedia: () => ({ matches: false }),
+  addEventListener() {},
+};
+
+const sandbox = {
+  window: win,
+  document: doc,
+  localStorage,
+  IntersectionObserver: FakeIntersectionObserver,
+  CSS: { escape: (s) => String(s) },
+  fetch: async (url, opts) => {
+    fetchCalls++;
+    return fetchHandler(String(url), opts);
+  },
+  setInterval: () => 1,
+  setTimeout: () => 1,
+  clearTimeout: () => {},
+  URLSearchParams,
+  Date,
+  Math,
+  Map,
+  Set,
+  Array,
+  Object,
+  JSON,
+  Promise,
+  Error,
+  Number,
+  String,
+  Boolean,
+  encodeURIComponent,
+  confirm: () => true,
+  FormData: class { constructor() {} get() { return ''; } },
+};
+sandbox.globalThis = sandbox;
+
+vm.runInNewContext(payload.script, sandbox);
+
+const AsyncFn = Object.getPrototypeOf(async function(){}).constructor;
+const fn = new AsyncFn(
+  'ctx',
+  payload.test
+);
+fn({
+  pyh: sandbox.__pyh,
+  doc,
+  localStorage,
+  observers,
+  setFetchHandler(h) { fetchHandler = h; },
+  getFetchCalls() { return fetchCalls; },
+  resetFetchCalls() { fetchCalls = 0; },
+}).then(
+  () => process.exit(0),
+  (err) => { console.error(err && err.stack ? err.stack : err); process.exit(1); }
+);
+'''
+    payload = json.dumps({
+        'script': instrumented_script,
+        'test': test_body,
+        'preStorage': pre_storage or {},
+    })
+    res = subprocess.run(
+        [node, '-e', runner],
+        input=payload,
+        capture_output=True,
+        text=True,
+        encoding='utf-8',
+        timeout=20,
+        check=False,
+    )
+    assert res.returncode == 0, f'Node harness failed:\nSTDOUT:\n{res.stdout}\nSTDERR:\n{res.stderr}'
 
 
 @pytest.fixture
@@ -68,3 +559,397 @@ def test_gate_decide_five_attempt_lockout(app):
         assert request(app, gate_url, gate)[0] == 403
     assert app.limiter.locked_until > 0
     assert request(app, gate_url, {**gate, 'pin': '918273'})[0] == 403
+
+
+def test_workshop_company_contract_and_motion_controls_are_read_only(app):
+    status, raw_page = request(app, '/')
+    assert status == 200
+    page = raw_page.decode('utf-8')
+    assert 'id="btn-ws-motion"' in page
+    assert 'prefers-reduced-motion: reduce' in page
+    assert 'Chưa xác minh' in page
+    assert 'Đang nghỉ' in page
+
+    status, company = request(app, '/api/company')
+    assert status == 200, company
+    assert company['production_running'] == []
+    assert company['production']['work_state'] == 'idle'
+    for role in company['roles']:
+        assert role['work_state'] == 'idle'
+        assert role['work_label']
+
+    status, ov = request(app, '/api/overview')
+    assert status == 200, ov
+    assert ov['tiles']['running'] == 0
+    assert ov['tiles']['waiting_doctor'] == 1
+
+
+def test_workshop_html_contract_and_responsive_styles():
+    html = DASHBOARD_HTML.read_text(encoding='utf-8')
+    assert html.count('https://fonts.googleapis.com') <= 2
+    assert 'cdn.' not in html and 'unpkg' not in html and 'jsdelivr' not in html
+    assert 'id="btn-ws-motion"' in html
+    assert "'pyh-ws-motion'" in html
+    assert 'data-motion="on"' in html
+    assert 'data-live-flow="false"' in html
+    assert 'visibilitychange' in html
+    assert 'IntersectionObserver' in html
+    assert 'prefers-reduced-motion: reduce' in html
+
+    # All 9 role action classes must exist in CSS and JS
+    for cls in (
+        'ws-act-scout',
+        'ws-act-medical',
+        'ws-act-writer',
+        'ws-act-critic',
+        'ws-act-art',
+        'ws-act-editor',
+        'ws-act-copywriter',
+        'ws-act-coordinator',
+        'ws-act-analyst',
+    ):
+        assert cls in html
+
+    # All 7 distinct Vietnamese state labels
+    for label in (
+        'Đang làm',
+        'Đang nghỉ',
+        'Chờ duyệt',
+        'Chờ model',
+        'Chờ thử lại',
+        'Dừng do lỗi',
+        'Chưa xác minh',
+    ):
+        assert label in html
+
+    # Live flow belt animation must be gated on data-live-flow="true"
+    assert '.ws-turn-track::after{' in html
+    assert 'animation:none' in html
+    assert '#workshop[data-live-flow="true"] .ws-turn-track::after{' in html
+
+    # Banned render_machine heuristic must be gone; doc copy retained
+    assert (
+        "p => (p.state === 'medically_approved' || p.state === 'production_in_progress') && !p.blocked"
+        not in html
+    )
+    assert 'Máy dựng (xưởng tự chạy)' in html
+    assert 'medically_approved' in html
+    assert 'production_in_progress' in html
+
+    # Responsive CSS guards for narrow viewports & mobile popover
+    assert '@media (max-width: 680px)' in html or '@media (max-width:680px)' in html
+    assert '@media (max-width:420px)' in html or '@media (max-width: 420px)' in html
+    assert 'overflow-wrap:anywhere' in html or 'overflow-wrap: anywhere' in html
+    assert 'max-width:calc(100vw - 24px)' in html or 'max-width: calc(100vw - 24px)' in html
+
+
+def test_workshop_js_work_state_and_render_machine_contracts():
+    _run_workshop_js(r'''
+    const assert = (cond, msg) => { if (!cond) throw new Error(msg); };
+    const { pyh, doc } = ctx;
+
+    // 1. State normalization & last_error isolation
+    assert(pyh.wsNormalizeWorkState('waiting') === 'waiting_gate', 'waiting -> waiting_gate');
+    assert(pyh.wsNormalizeWorkState('retrying') === 'waiting_retry', 'retrying -> waiting_retry');
+    assert(pyh.wsNormalizeWorkState('waiting_model') === 'waiting_model', 'waiting_model');
+    assert(pyh.wsNormalizeWorkState('unknown') === 'unknown', 'unknown');
+
+    assert(
+      pyh.wsResolveRoleState({ id: 'scout', work_state: 'idle', last_error: 'Old timeout', running: [] }, true, false) === 'idle',
+      'last_error must NOT coerce idle role into error state'
+    );
+    assert(
+      pyh.wsResolveRoleState({ id: 'scout', work_state: 'error', last_error: 'Crash' }, true, false) === 'error',
+      'error work_state must resolve to error'
+    );
+    assert(
+      pyh.wsResolveRoleState({ id: 'scout', work_state: 'working' }, true, true) === 'unknown',
+      'offline mode must force unknown'
+    );
+
+    // 2. render_machine never infers working from project.state alone
+    const machineBlocked = pyh.wsResolveMachineState({
+      production: { work_state: 'idle', running: [] },
+      production_running: [],
+    }, false);
+    assert(machineBlocked === 'idle', 'render_machine stays idle when no verified production PID');
+
+    const machineWorking = pyh.wsResolveMachineState({
+      production: { work_state: 'working', running: [] },
+      production_running: [],
+    }, false);
+    assert(machineWorking === 'working', 'production.work_state === working activates machine');
+
+    const machineWorkingPid = pyh.wsResolveMachineState({
+      production: { work_state: 'idle', running: [] },
+      production_running: [{ slug: 'hypertension', title: 'Hypertension', duration_s: 12 }],
+    }, false);
+    assert(machineWorkingPid === 'working', 'non-empty production_running activates machine');
+
+    // 3. Full role rendering: all 9 ws-act-* classes when working; idle has coffee cup & no ws-act-*
+    const allRoleIds = [
+      'scout', 'medical_expert', 'writer', 'script_critic', 'art_director',
+      'editor', 'product_critic', 'copywriter', 'coordinator', 'coordinator_senior', 'feedback_analyst',
+    ];
+    pyh.setState({
+      wsOffline: false,
+      overviewData: {
+        projects: [
+          { slug: 'p1', title: 'P1', state: 'medically_approved', blocked: '' },
+          { slug: 'p2', title: 'P2', state: 'production_in_progress', blocked: '' },
+        ],
+      },
+      companyData: {
+        production: { work_state: 'idle', work_label: 'Đang nghỉ' },
+        production_running: [],
+        roles: allRoleIds.map((id) => ({
+          id,
+          short: id,
+          name: id,
+          work_state: 'working',
+          work_label: 'Đang làm',
+          running: [{ step: 'draft', step_label: 'Đang xử lý', slug: 'p1', duration_s: 8, cli: 'claude', model: 'm' }],
+          recent: [],
+          models_used: [],
+          configured_models: [],
+          steps: [],
+          step_labels: ['Xử lý'],
+          tier: 'main',
+        })),
+      },
+    });
+    pyh.renderWorkshop();
+
+    const machineBtn = doc.querySelector('[data-station-id="render_machine"]');
+    assert(machineBtn && machineBtn.classList.contains('is-idle'), 'render_machine must stay is-idle despite medically_approved/production_in_progress');
+    assert(!machineBtn.classList.contains('is-working'), 'render_machine must NOT be is-working');
+
+    pyh.openWorkshopPopover('render_machine', machineBtn);
+    const popText = doc.getElementById('ws-pop-body').innerHTML;
+    assert(popText.includes('medically_approved') && popText.includes('production_in_progress'), 'machine popover must retain pipeline copy');
+    assert(doc.getElementById('ws-pop-title').textContent.includes('Máy dựng (xưởng tự chạy)'), 'machine popover title check');
+
+    const expectedActs = [
+      'ws-act-scout', 'ws-act-medical', 'ws-act-writer', 'ws-act-critic',
+      'ws-act-art', 'ws-act-editor', 'ws-act-copywriter', 'ws-act-coordinator', 'ws-act-analyst',
+    ];
+    const stationBtns = doc.querySelectorAll('[data-station-id]');
+    for (const act of expectedActs) {
+      assert(stationBtns.some((b) => b.classList.contains(act)), 'Missing active role class: ' + act);
+    }
+
+    // 4. Verify non-working labels & distinct idle coffee cup vs working pose
+    const curComp = pyh.getState().companyData;
+    curComp.roles = [
+      { id: 'scout', name: 'Scout', work_state: 'idle', work_label: 'Đang nghỉ', last_error: 'Stale error', running: [], recent: [], models_used: [], configured_models: [], steps: [], step_labels: [], tier: 'helper' },
+      { id: 'medical_expert', name: 'Med', work_state: 'waiting_model', work_label: 'Chờ model', running: [], recent: [], models_used: [], configured_models: [], steps: [], step_labels: [], tier: 'main' },
+      { id: 'writer', name: 'Writer', work_state: 'retrying', work_label: 'Chờ thử lại', running: [], recent: [], models_used: [], configured_models: [], steps: [], step_labels: [], tier: 'main' },
+      { id: 'editor', name: 'Editor', work_state: 'error', work_label: 'Dừng do lỗi', running: [], recent: [], models_used: [], configured_models: [], steps: [], step_labels: [], tier: 'main' },
+    ];
+    pyh.renderWorkshop();
+
+    const scoutBtn = doc.querySelector('[data-station-id="scout"]');
+    assert(scoutBtn.classList.contains('is-idle') && !scoutBtn.classList.contains('has-error'), 'scout with last_error must remain is-idle');
+    assert(!scoutBtn.classList.contains('ws-act-scout'), 'idle scout must not have ws-act-scout');
+    assert(scoutBtn.querySelector('.ws-iso-stage').innerHTML.includes('translate(124,64)'), 'idle station must render coffee cup at (124,64)');
+    assert(scoutBtn.textContent.includes('Đang nghỉ'), 'idle station label');
+
+    const medBtn = doc.querySelector('[data-station-id="medical_expert"]');
+    assert(medBtn.classList.contains('is-waiting-model') && medBtn.textContent.includes('Chờ model'), 'waiting_model label & class');
+
+    const writerBtn = doc.querySelector('[data-station-id="writer"]');
+    assert(writerBtn.classList.contains('is-waiting-retry') && writerBtn.textContent.includes('Chờ thử lại'), 'waiting_retry label & class');
+
+    const editorBtn = doc.querySelector('[data-station-id="editor"]');
+    assert(editorBtn.classList.contains('has-error') && editorBtn.textContent.includes('Dừng do lỗi'), 'error label & class');
+    ''')
+
+
+def test_workshop_js_keyed_reconciliation_and_duration_independence():
+    _run_workshop_js(r'''
+    const assert = (cond, msg) => { if (!cond) throw new Error(msg); };
+    const { pyh, doc } = ctx;
+
+    const makeRole = (dur) => ({
+      id: 'scout',
+      name: 'Scout',
+      work_state: 'working',
+      work_label: 'Đang làm',
+      running: [{ step: 'research', step_label: 'Quét chủ đề', slug: 'sleep-debt', duration_s: dur, cli: 'claude', model: 'm' }],
+      recent: [],
+      models_used: [],
+      configured_models: [],
+      steps: ['research'],
+      step_labels: ['Quét chủ đề'],
+      tier: 'helper',
+    });
+
+    const sig3 = pyh.wsSvgSig({ id: 'scout', workState: 'working', actClass: 'ws-act-scout', folders: [{ slug: 'a', tone: 'work' }], running: [{ duration_s: 3 }] });
+    const sig15 = pyh.wsSvgSig({ id: 'scout', workState: 'working', actClass: 'ws-act-scout', folders: [{ slug: 'a', tone: 'work' }], running: [{ duration_s: 15 }] });
+    assert(sig3 === sig15, 'wsSvgSig must ignore duration_s changes');
+
+    pyh.setState({
+      wsOffline: false,
+      overviewData: { projects: [{ slug: 'sleep-debt', title: 'Sleep Debt', state: 'in_progress', blocked: '' }] },
+      companyData: { production: { work_state: 'idle' }, production_running: [], roles: [makeRole(3)] },
+    });
+    pyh.renderWorkshop();
+
+    const scoutBtn = doc.querySelector('[data-station-id="scout"]');
+    const stageEl = scoutBtn.querySelector('.ws-iso-stage');
+    const svgRef = stageEl.firstChild;
+    const durEl = scoutBtn.querySelector('[data-ws-dur]');
+    assert(durEl.textContent === '3s', 'initial duration badge should be 3s');
+
+    // Open popover to also check popover duration updates without body wipe
+    pyh.openWorkshopPopover('scout', scoutBtn);
+    const popBody = doc.getElementById('ws-pop-body');
+    const popBodyWritesBefore = popBody._innerHtmlWrites;
+    const stageWritesBefore = stageEl._innerHtmlWrites;
+
+    // Simulate 3s poll ticks updating duration_s 3 -> 9 -> 15
+    for (const nextDur of [9, 15]) {
+      pyh.getState().companyData.roles = [makeRole(nextDur)];
+      pyh.renderWorkshop();
+      assert(doc.querySelector('[data-station-id="scout"]') === scoutBtn, 'button node must be reconciled in-place');
+      assert(stageEl.firstChild === svgRef, 'SVG node reference must not be recreated when duration_s changes');
+      assert(stageEl._innerHtmlWrites === stageWritesBefore, 'stage innerHTML must not be rewritten on duration tick');
+      assert(durEl.textContent === nextDur + 's', 'duration badge should update to ' + nextDur + 's');
+    }
+    assert(popBody._innerHtmlWrites === popBodyWritesBefore, 'open popover body must not wipe on duration tick');
+    assert(popBody.querySelector('[data-ws-pop-dur]').textContent === '15 giây', 'open popover duration span should update in place');
+    ''')
+
+
+def test_workshop_js_offline_503_motion_toggle_visibility_and_observer():
+    _run_workshop_js(r'''
+    const assert = (cond, msg) => { if (!cond) throw new Error(msg); };
+    const { pyh, doc, localStorage, observers, setFetchHandler, getFetchCalls, resetFetchCalls } = ctx;
+
+    let compStatus = 200;
+    let throwFetch = false;
+    let roleState = 'working';
+
+    setFetchHandler((url) => {
+      if (throwFetch) throw new Error('network error');
+      if (url.startsWith('/api/company')) {
+        if (compStatus !== 200) {
+          return { ok: false, status: compStatus, async json() { return { error: 'unavailable' }; } };
+        }
+        return {
+          ok: true, status: 200,
+          async json() {
+            return {
+              production: { work_state: 'idle' },
+              production_running: [],
+              roles: [{
+                id: 'scout',
+                name: 'Scout',
+                work_state: roleState,
+                work_label: roleState === 'working' ? 'Đang làm' : 'Đang nghỉ',
+                running: roleState === 'working'
+                  ? [{ step: 'research', step_label: 'Quét', slug: 't1', duration_s: 5, cli: 'claude', model: 'm' }]
+                  : [],
+                recent: [], models_used: [], configured_models: [], steps: [], step_labels: [], tier: 'helper',
+              }],
+            };
+          },
+        };
+      }
+      if (url.startsWith('/api/status')) {
+        return {
+          ok: true, status: 200,
+          async json() {
+            return {
+              factory: { running: true, pid: 101 },
+              waiting: 0, projects: [], stages: ['1','2','3','4','5','6','7'],
+              log: [], agents: [], now: '2026-11-14T10:00:00Z', standards: 0,
+            };
+          },
+        };
+      }
+      if (url.startsWith('/api/overview')) return { ok: true, status: 200, async json() { return { tiles: {}, projects: [], decisions: [], resting: [] }; } };
+      if (url.startsWith('/api/activity')) return { ok: true, status: 200, async json() { return { items: [] }; } };
+      if (url.startsWith('/api/progress')) return { ok: true, status: 200, async json() { return { phases: [], doing: [], total: 0, done: 0 }; } };
+      return { ok: true, status: 200, async json() { return { messages: [] }; } };
+    });
+
+    const ws = doc.getElementById('workshop');
+    const offlineBanner = doc.getElementById('offline');
+    const btnMotion = doc.getElementById('btn-ws-motion');
+
+    // 1. Online + working -> liveFlow true
+    await pyh.refresh();
+    assert(pyh.getState().wsOffline === false, 'should be online');
+    assert(ws.dataset.offline === 'false', 'dataset.offline false');
+    assert(ws.dataset.paused === 'false', 'dataset.paused false');
+    assert(ws.dataset.liveFlow === 'true', 'dataset.liveFlow true while role is working');
+
+    // 2. HTTP 503 on /api/company -> offline mode, liveFlow false, stations Chưa xác minh
+    compStatus = 503;
+    await pyh.refresh();
+    assert(pyh.getState().wsOffline === true, '503 sets wsOffline = true');
+    assert(offlineBanner.classList.contains('show'), '503 shows offline banner');
+    assert(ws.dataset.offline === 'true', '503 sets dataset.offline = true');
+    assert(ws.dataset.paused === 'true', '503 pauses motion');
+    assert(ws.dataset.liveFlow === 'false', '503 disables liveFlow');
+    const scout503 = doc.querySelector('[data-station-id="scout"]');
+    assert(scout503.classList.contains('is-unknown') && scout503.textContent.includes('Chưa xác minh'), '503 flips station to Chưa xác minh');
+
+    // 3. Recovery then fetch exception -> offline again
+    compStatus = 200;
+    await pyh.refresh();
+    assert(pyh.getState().wsOffline === false && ws.dataset.liveFlow === 'true', 'recovers after 200');
+
+    throwFetch = true;
+    await pyh.refresh();
+    assert(pyh.getState().wsOffline === true && ws.dataset.liveFlow === 'false', 'fetch throw triggers offline & stops flow');
+
+    // Restore online working for motion/visibility/observer tests
+    throwFetch = false;
+    await pyh.refresh();
+    assert(ws.dataset.liveFlow === 'true', 'back online with liveFlow true');
+
+    // 4. Motion toggle button is read-only & persists localStorage 'pyh-ws-motion'
+    resetFetchCalls();
+    btnMotion.onclick();
+    assert(getFetchCalls() === 0, 'motion toggle must not make any network call');
+    assert(localStorage.getItem('pyh-ws-motion') === 'off', 'persists off to localStorage');
+    assert(ws.dataset.motion === 'off', 'dataset.motion = off');
+    assert(ws.dataset.paused === 'true' && ws.dataset.liveFlow === 'false', 'motion off pauses animations and flow');
+    assert(btnMotion.getAttribute('aria-pressed') === 'false', 'aria-pressed updates to false');
+    assert(btnMotion.querySelector('.ws-motion-label').textContent === 'Hoạt cảnh: Tắt', 'button label updates');
+
+    btnMotion.onclick();
+    assert(localStorage.getItem('pyh-ws-motion') === 'on', 'persists on to localStorage');
+    assert(ws.dataset.motion === 'on' && ws.dataset.paused === 'false' && ws.dataset.liveFlow === 'true', 'motion back on');
+    assert(btnMotion.getAttribute('aria-pressed') === 'true', 'aria-pressed updates back to true');
+
+    // 5. visibilitychange pauses and resumes
+    doc.hidden = true;
+    doc.dispatch('visibilitychange');
+    assert(ws.dataset.paused === 'true' && ws.dataset.liveFlow === 'false', 'hidden tab pauses workshop');
+    doc.hidden = false;
+    doc.dispatch('visibilitychange');
+    assert(ws.dataset.paused === 'false' && ws.dataset.liveFlow === 'true', 'visible tab resumes workshop');
+
+    // 6. IntersectionObserver pauses offscreen and resumes onscreen
+    assert(observers.length >= 1, 'IntersectionObserver must observe #workshop');
+    observers[0].trigger([{ isIntersecting: false }]);
+    assert(ws.dataset.paused === 'true' && ws.dataset.liveFlow === 'false', 'offscreen workshop pauses');
+    observers[0].trigger([{ isIntersecting: true }]);
+    assert(ws.dataset.paused === 'false' && ws.dataset.liveFlow === 'true', 'onscreen workshop resumes');
+    ''')
+
+    # Also verify persisted 'off' state in localStorage initializes button & dataset off on fresh load
+    _run_workshop_js(
+        r'''
+        const assert = (cond, msg) => { if (!cond) throw new Error(msg); };
+        const ws = ctx.doc.getElementById('workshop');
+        const btn = ctx.doc.getElementById('btn-ws-motion');
+        assert(ws.dataset.motion === 'off', 'initializes off from localStorage');
+        assert(ws.dataset.paused === 'true', 'starts paused when motion preference is off');
+        assert(btn.getAttribute('aria-pressed') === 'false', 'aria-pressed starts false');
+        ''',
+        pre_storage={'pyh-ws-motion': 'off'},
+    )

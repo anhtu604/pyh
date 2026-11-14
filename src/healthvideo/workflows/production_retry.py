@@ -230,3 +230,215 @@ def record_failure(
 def clear_retry(root: Path, slug: str) -> None:
     """Remove only the production retry record, preserving unrelated block notes."""
     _retry_path(root, slug).unlink(missing_ok=True)
+
+
+# Agent budgets are independent of the existing production budget. Only a clearly
+# classified transient CLI failure can spend another automatic attempt.
+AGENT_RETRY_FILE = "agent-retry.yaml"
+_AGENT_FAILURE_KINDS = {"transient", "validation", "configuration", "agent_error"}
+_AGENT_INPUTS = {
+    "research": ("script/questions.yaml", "script/script.yaml"),
+    "draft": ("evidence/**", "explainer/**", "script/questions.yaml", "reviews/script-review-log.yaml"),
+    "revise_medical": ("evidence/**", "explainer/**", "script/questions.yaml"),
+    "script_review": ("script/**", "storyboard/**", "evidence/**", "explainer/**", "assets/*.yaml"),
+    "posts": ("script/**", "storyboard/**", "evidence/**"),
+    "visual_review": ("storyboard/**", "assets/*.yaml", "reviews/visual/candidates.yaml"),
+    "product_review": ("script/**", "storyboard/**", "posts/**", "renders/render-manifest.json",
+                       "renders/scene-timing.json", "renders/render-input.json", "reviews/video-qa.json"),
+    "revise_product": ("script/**", "storyboard/**", "evidence/**", "explainer/**",
+                       "reviews/product-review-log.yaml", "renders/render-input*.json"),
+    "revise_production": ("script/**", "evidence/**", "explainer/**"),
+}
+
+
+def agent_fingerprint(root: Path, project_dir: Path, step: str, prompt: str) -> str:
+    """Hash consumed inputs, excluding the step's own mutable output and logs.
+
+    A research retry must not receive a fresh budget for writing a partial ledger;
+    similarly a writer's partial script is an output, not a new writing brief.
+    Questions are normalized because the expert writes their answer in that file.
+    """
+    manifest = project_dir / "project.yaml"
+    revision = str(read_yaml(manifest).get("active_revision", "001")) if manifest.exists() else "001"
+    if not re.fullmatch(r"\d{3}", revision):
+        raise ValueError("Invalid active_revision for agent retry fingerprint")
+    revision_dir = project_dir / "revisions" / revision
+    paths: set[Path] = set()
+    for pattern in _AGENT_INPUTS.get(step, ()):
+        # pathlib's terminal ** matches directories; append * to include all files.
+        paths.update(revision_dir.glob(pattern + "/*" if pattern.endswith("/**") else pattern))
+    for pattern in ("reviews/**/*rejected*.yaml", "reviews/**/*reopened*.yaml",
+                    "reviews/changes/*requested.yaml", "workflow.yaml"):
+        paths.update(revision_dir.glob(pattern))
+    code_root = Path(__file__).resolve().parents[3]
+    for base in {root, code_root}:
+        for folder, pattern in (("profiles", "*.yaml"), ("src/healthvideo/prompts", "*.md"),
+                                (".agents/skills", "SKILL.md")):
+            paths.update((base / folder).rglob(pattern))
+    files: dict[str, Any] = {}
+    for path in sorted(paths):
+        if not path.is_file():
+            continue
+        if path == revision_dir / "script/questions.yaml" and step in {"research", "draft", "revise_medical"}:
+            data = read_yaml(path)
+            questions = data.get("questions", [])
+            if not isinstance(questions, list) or not all(isinstance(q, dict) for q in questions):
+                raise ValueError("Invalid writer questions for agent retry fingerprint")
+            if step == "research":
+                questions = [{key: value for key, value in question.items()
+                              if key not in {"answer", "claim_ids"}} for question in questions]
+            else:
+                questions = [question for question in questions if str(question.get("answer") or "").strip()]
+            # An absent questions file and no consumed questions are equivalent.
+            if questions:
+                files[str(path.resolve())] = questions
+        elif path == revision_dir / "workflow.yaml":
+            reason = read_yaml(path).get("reason")
+            if reason:
+                files[str(path.resolve())] = {"reason": reason}
+        elif path in {revision_dir / "reviews/product-review-log.yaml",
+                      revision_dir / "reviews/script-review-log.yaml"}:
+            rounds = read_yaml(path).get("rounds", [])
+            if not isinstance(rounds, list) or not all(isinstance(item, dict) for item in rounds):
+                raise ValueError("Invalid product review history for agent retry fingerprint")
+            if rounds:
+                files[str(path.resolve())] = {key: value for key, value in rounds[-1].items()
+                                             if key != "fix_attempted"}
+        else:
+            files[str(path.resolve())] = _hash_path(path, cacheable=False)
+    return canonical_json_hash({"step": step, "revision": revision, "prompt": prompt, "files": files})
+
+
+def _agent_path(root: Path, slug: str) -> Path:
+    return root / "topics" / "logs" / slug / AGENT_RETRY_FILE
+
+
+def _agent_records(path: Path) -> dict[str, dict[str, Any]]:
+    if not path.exists():
+        return {}
+    try:
+        data = read_yaml(path)
+        steps = data["steps"]
+        if data.get("version") != 1 or not isinstance(steps, dict):
+            raise ValueError("invalid agent retry schema")
+        for step, record in steps.items():
+            if step not in _AGENT_INPUTS or not isinstance(record, dict):
+                raise ValueError("invalid agent retry step")
+            if (not isinstance(record.get("fingerprint"), str) or not record["fingerprint"]
+                    or record.get("kind") not in _AGENT_FAILURE_KINDS
+                    or type(record.get("attempts")) is not int or record["attempts"] < 1
+                    or not isinstance(record.get("reason"), str) or not record["reason"]):
+                raise ValueError("invalid agent retry record")
+            deadline = record.get("retry_after")
+            if deadline is not None and (not isinstance(deadline, str)
+                                         or datetime.fromisoformat(deadline).tzinfo is None):
+                raise ValueError("invalid agent retry deadline")
+            if (record["kind"] == "transient" and record["attempts"] < MAX_TRANSIENT_ATTEMPTS
+                    and deadline is None):
+                raise ValueError("missing agent retry deadline")
+        return steps
+    except (OSError, ValueError, TypeError, KeyError, yaml.YAMLError) as exc:
+        raise ValueError(f"Invalid agent retry record in {path}; restore or remove it before retrying") from exc
+
+
+def agent_retry_status(root: Path, project_dir: Path, step: str, fingerprint: str) -> dict[str, Any]:
+    """Read a persisted budget before invoking a paid agent; corrupt records hold."""
+    records = _agent_records(_agent_path(root, project_dir.name))
+    record = records.get(step)
+    if record is None or record["fingerprint"] != fingerprint:
+        if record is not None:
+            clear_agent_retry(root, project_dir.name, step)
+        return {"allowed": True, "kind": None, "attempts": 0, "reason": None, "retry_after": None}
+    allowed = (record["kind"] == "transient" and record["attempts"] < MAX_TRANSIENT_ATTEMPTS
+               and _now() >= datetime.fromisoformat(record["retry_after"]))
+    return {**record, "allowed": allowed}
+
+
+def record_agent_failure(root: Path, project_dir: Path, step: str, fingerprint: str,
+                         kind: str | None, error: Exception, *,
+                         observed_fingerprint: str | None = None) -> None:
+    path = _agent_path(root, project_dir.name)
+    records = _agent_records(path)
+    previous = records.get(step)
+    attempts = (previous["attempts"] if previous and previous["fingerprint"] == fingerprint else 0) + 1
+    kind = kind if kind in _AGENT_FAILURE_KINDS else "agent_error"
+    deadline = None
+    if kind == "transient" and attempts < MAX_TRANSIENT_ATTEMPTS:
+        deadline = (_now() + timedelta(seconds=TRANSIENT_BACKOFF_SECONDS[attempts])).isoformat()
+    records[step] = {"fingerprint": observed_fingerprint or fingerprint, "kind": kind, "attempts": attempts,
+                     "reason": _sanitize_reason(error), "retry_after": deadline}
+    write_yaml_atomic(path, {"version": 1, "steps": records})
+
+
+def outstanding_agent_retry(root: Path, project_dir: Path,
+                            brief_context: str) -> tuple[str, dict[str, Any]] | None:
+    """Guard a failed step before its partial outputs can select a different role."""
+    for step in _agent_records(_agent_path(root, project_dir.name)):
+        fingerprint = agent_fingerprint(root, project_dir, step, brief_context)
+        status = agent_retry_status(root, project_dir, step, fingerprint)
+        if status["kind"] is not None:
+            return step, status
+    return None
+
+
+def _model_resume_path(root: Path, slug: str) -> Path:
+    return root / "topics" / "logs" / slug / "waiting-model-step.yaml"
+
+
+def model_resume_step(root: Path, project_dir: Path, brief_context: str) -> str | None:
+    """Bind quota resumption to the original task without spending a retry."""
+    path = _model_resume_path(root, project_dir.name)
+    if not path.exists():
+        return None
+    try:
+        data = read_yaml(path)
+        step, fingerprint = data["step"], data["fingerprint"]
+        if (data.get("version") != 1 or step not in _AGENT_INPUTS
+                or not isinstance(fingerprint, str) or not fingerprint):
+            raise ValueError("invalid model resumption")
+    except (OSError, ValueError, TypeError, KeyError, yaml.YAMLError) as exc:
+        raise ValueError(f"Invalid model resume record in {path}; restore or remove it before retrying") from exc
+    if agent_fingerprint(root, project_dir, step, brief_context) != fingerprint:
+        path.unlink()
+        return None
+    return step
+
+
+def record_model_resume(root: Path, project_dir: Path, step: str, brief_context: str) -> None:
+    """Observe quota-attempt writes while keeping an existing budget unchanged."""
+    model_resume_step(root, project_dir, brief_context)  # corrupt metadata always fails closed
+    fingerprint = agent_fingerprint(root, project_dir, step, brief_context)
+    path = _agent_path(root, project_dir.name)
+    records = _agent_records(path)
+    if step in records:
+        records[step]["fingerprint"] = fingerprint
+        write_yaml_atomic(path, {"version": 1, "steps": records})
+    write_yaml_atomic(_model_resume_path(root, project_dir.name),
+                      {"version": 1, "step": step, "fingerprint": fingerprint})
+
+
+def clear_model_resume(root: Path, slug: str) -> None:
+    _model_resume_path(root, slug).unlink(missing_ok=True)
+
+
+def clear_agent_retry(root: Path, slug: str, step: str) -> None:
+    path = _agent_path(root, slug)
+    records = _agent_records(path)
+    records.pop(step, None)
+    if records:
+        write_yaml_atomic(path, {"version": 1, "steps": records})
+    else:
+        path.unlink(missing_ok=True)
+
+
+def retry_deadlines(root: Path, slug: str) -> list[datetime]:
+    """Future retry wakeups; bad records remain held by the runner."""
+    try:
+        records = list(_agent_records(_agent_path(root, slug)).values())
+        production = _retry_path(root, slug)
+        if production.exists():
+            records.append(_read_retry_record(production))
+        return [moment for record in records if record.get("retry_after")
+                and (moment := datetime.fromisoformat(record["retry_after"])) > _now()]
+    except ValueError:
+        return []

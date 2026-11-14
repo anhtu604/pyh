@@ -21,7 +21,7 @@ from healthvideo.storage.queue import load_queue
 from healthvideo.storage.revisions import create_revision
 from healthvideo.workflows.gate_review import resume_gate
 from healthvideo.workflows.package import package_project
-from healthvideo.workflows.production_retry import clear_retry
+from healthvideo.workflows.production_retry import clear_retry, retry_deadlines
 from healthvideo.workflows.runner import RunDeps, run_queue, waiting_until
 
 GATES = {
@@ -309,11 +309,12 @@ def run_factory(root: Path, deps: RunDeps, *, interval: float = 120, once: bool 
         logger.propagate = False
         logger.addHandler(handler)
         previous = {}
-        def announce(key, title, event, signature, current):
+        def announce(key, title, event, signature, current, *, gate=False):
             current[key] = signature
             if previous.get(key) == signature:
                 return
-            echo(f'{title}: {event} — Chạy: healthvideo duyet')
+            invitation = ' — Chạy: healthvideo duyet' if gate else ''
+            echo(f'{title}: {event}{invitation}')
             logger.info('%s: %s', title, event)
             try:
                 notify(title, event)
@@ -328,6 +329,8 @@ def run_factory(root: Path, deps: RunDeps, *, interval: float = 120, once: bool 
                     report = run_queue(root, deps)
                     backs = [back for slug in report.waiting_model
                              if (back := waiting_until(root, slug)) is not None]
+                    backs.extend(back for entry in load_queue(root)
+                                 for back in retry_deadlines(root, entry.slug))
                     if backs:  # wake when the first paused topic's model returns
                         wait = (min(backs) - datetime.now(UTC)).total_seconds()
                         delay = min(interval, max(1.0, wait))
@@ -345,11 +348,15 @@ def run_factory(root: Path, deps: RunDeps, *, interval: float = 120, once: bool 
                             event = 'đã đóng gói'
                         elif project.state == WorkflowState.BLOCKED or path.name in report.blocked:
                             note = logs / path.name / 'blocked.txt'
-                            event = 'bị chặn: ' + (note.read_text(encoding='utf-8') if note.exists() else project.state.value)
+                            deadlines = retry_deadlines(root, path.name)
+                            label = (f'đang chờ thử lại lúc {min(deadlines).isoformat()}: '
+                                     if deadlines else 'bị chặn: ')
+                            event = label + (note.read_text(encoding='utf-8') if note.exists() else project.state.value)
                         if event:
                             if event == 'đã đóng gói':
                                 signature = project.active_revision
-                            announce(path.name, project_title(path, project), event, (event, signature), current)
+                            announce(path.name, project_title(path, project), event, (event, signature), current,
+                                     gate=event == GATES.get(project.state))
                     previous = current
                 except (OSError, TypeError, ValueError, RuntimeError) as error:
                     announce('__factory__', 'Xưởng', f'bị chặn: {error}', str(error), current)

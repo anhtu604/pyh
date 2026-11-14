@@ -59,6 +59,92 @@ def _completed(
     )
 
 
+@pytest.mark.parametrize('error,kind', [
+    (subprocess.TimeoutExpired('codex', 2, output=b'partial output'), 'transient'),
+    (PermissionError('permission denied'), 'configuration'),
+    (FileNotFoundError('missing'), 'configuration'),
+    (RuntimeError('unexpected runner failure'), 'agent_error'),
+])
+def test_failure_is_logged_classified_and_activity_terminated(tmp_path, error, kind):
+    def runner(*args, **kwargs):
+        raise error
+
+    result = _failover(tmp_path, [CODEX_SLOT], runner)
+    assert not result.ok and result.failure_kind == kind
+    assert type(error).__name__ in result.log_path.read_text(encoding='utf-8')
+    if isinstance(error, subprocess.TimeoutExpired):
+        assert 'partial output' in result.log_path.read_text(encoding='utf-8')
+    assert not (tmp_path / 'logs/.agent-running').exists()
+    rows = [json.loads(line) for line in
+            (tmp_path / 'topics/logs/activity.jsonl').read_text().splitlines()]
+    assert [row['event'] for row in rows] == ['start', 'end']
+    assert rows[1]['ok'] is False
+    assert rows[0]['job_id'] == rows[1]['job_id']
+    assert rows[0]['process_token'] == rows[1]['process_token']
+    assert rows[0]['process_token']
+
+
+def test_running_marker_keeps_legacy_lines_and_adds_identity(tmp_path):
+    def runner(*args, **kwargs):
+        lines = (tmp_path / 'logs/.agent-running').read_text().splitlines()
+        assert lines[0] == 'codex'
+        datetime.fromisoformat(lines[1])
+        identity = json.loads(lines[2])
+        assert identity['pid'] > 0 and identity['process_token'] and identity['job_id']
+        assert kwargs['timeout'] > 0
+        return _completed()
+
+    assert _failover(tmp_path, [CODEX_SLOT], runner).ok
+
+
+def test_interrupt_still_emits_terminal_activity_and_propagates(tmp_path):
+    def runner(*args, **kwargs):
+        raise KeyboardInterrupt()
+
+    with pytest.raises(KeyboardInterrupt):
+        _failover(tmp_path, [CODEX_SLOT], runner)
+    rows = [json.loads(line) for line in
+            (tmp_path / 'topics/logs/activity.jsonl').read_text().splitlines()]
+    assert [row['event'] for row in rows] == ['start', 'end']
+    assert rows[1]['ok'] is False
+    assert not (tmp_path / 'logs/.agent-running').exists()
+
+
+@pytest.mark.parametrize('message,kind', [('connection reset by peer', 'transient'),
+                                        ('permission denied', 'configuration'),
+                                        ('unexpected failure', 'agent_error')])
+def test_failed_agent_output_classification(tmp_path, message, kind):
+    result = _failover(tmp_path, [CODEX_SLOT], lambda *a, **kw: _completed(1, stderr=message))
+    assert result.failure_kind == kind
+
+
+@pytest.mark.parametrize(('step', 'expected'), [('chat', 120), ('chat_deep', 300),
+    ('posts', 600), ('feedback_inbox', 300), ('script_review', 900),
+    ('research', 1800), ('draft', 1800), ('unknown', 900)])
+def test_deadline_is_bounded_for_the_assigned_step(tmp_path, step, expected):
+    def runner(*args, **kwargs):
+        assert kwargs['timeout'] == expected
+        return _completed()
+
+    result = invoke_with_failover([CODEX_SLOT], 'prompt', cwd=tmp_path,
+                                  log_dir=tmp_path / 'logs', role='writer', slug='gout',
+                                  step=step, runner=runner)
+    assert result.ok
+
+
+def test_transient_failover_is_bounded_and_returns_last_failure(tmp_path):
+    calls = []
+
+    def runner(argv, **kwargs):
+        calls.append(argv[0])
+        raise subprocess.TimeoutExpired(argv, kwargs['timeout'], output='network timeout')
+
+    result = _failover(tmp_path, [CODEX_SLOT, AGY_SLOT], runner, timeout=.01)
+    assert result.failure_kind == 'transient'
+    assert calls == ['codex', 'agy']
+    assert not QuotaBook(tmp_path / 'cache/agent-quota.yaml').snapshot(NOW)
+
+
 def test_quota_switches_to_next_agent(tmp_path: Path) -> None:
     calls: list[list[str]] = []
 
@@ -266,10 +352,10 @@ def test_claude_runs_with_a_tool_allowlist_not_a_permission_bypass():
 def test_factory_uses_moderate_models_and_critics_away_from_the_author():
     from healthvideo.workflows.factory_deps import default_run_deps
     company = default_run_deps(Path('.')).company
-    # 2026-11-14: costly-to-get-wrong roles stay on the Carbon Orchestrator, the writer on
-    # codex for speed, light roles (chat, scouting, posts, feedback) on fast Hydrogen.
-    for role in ('medical_expert', 'script_critic', 'art_director', 'editor'):
-        assert company.chain(role)[0].model == 'gemini-pro-orchestrator'
+    # 2026-11-14 editorial standards use Carbon high for evidence, medium for reviews.
+    assert company.chain('medical_expert')[0].model == 'gemini-4-carbon-high'
+    for role in ('script_critic', 'art_director', 'editor'):
+        assert company.chain(role)[0].model == 'gemini-4-carbon-medium'
     for step in ('draft', 'revise_medical'):
         assert company.chain(company.role_for_step(step).id)[0].model == 'gpt-6.1-sol'
     for role in ('coordinator', 'scout', 'copywriter', 'feedback_analyst'):
@@ -278,6 +364,7 @@ def test_factory_uses_moderate_models_and_critics_away_from_the_author():
         for slot in company.chain(role):
             assert 'opus' not in slot.model and 'astra' not in slot.model, (role, slot)
     assert company.chain('script_critic')[0].cli != company.chain('writer')[0].cli
+    assert company.chain('product_critic')[0].cli != company.chain('editor')[0].cli
 
 
 def test_resting_slot_is_skipped(tmp_path):
@@ -381,6 +468,24 @@ def test_server_overload_fails_over_and_rests_briefly(tmp_path):
     assert result.ok and result.model == CODEX_SLOT.model
     assert book.resting(AGY_SLOT, NOW + timedelta(minutes=5))
     assert not book.resting(AGY_SLOT, NOW + timedelta(minutes=11))
+
+
+def test_all_busy_slots_return_transient_failure_for_durable_retry_budget(tmp_path):
+    calls = []
+
+    def runner(argv, **kwargs):
+        calls.append(argv[0])
+        return _completed(1, stderr='UNAVAILABLE (code 503): overloaded')
+
+    book = QuotaBook(tmp_path / 'quota.yaml')
+    result = _failover(tmp_path, [AGY_SLOT, CODEX_SLOT], runner, quota=book)
+    assert not result.ok and not result.quota_exhausted
+    assert result.failure_kind == 'transient'
+    assert result.agent == 'codex'
+    assert calls == ['agy', 'codex']
+    for slot in (AGY_SLOT, CODEX_SLOT):
+        assert book.resting(slot, NOW + timedelta(minutes=5))
+        assert not book.resting(slot, NOW + timedelta(minutes=11))
 
 
 def test_plain_failure_does_not_fail_over(tmp_path):

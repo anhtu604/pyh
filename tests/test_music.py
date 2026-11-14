@@ -10,6 +10,18 @@ import pytest
 from healthvideo.audio import music
 
 
+def test_music_timeout_preserves_output_and_cleans_staging(tmp_path):
+    def hang(argv, **kwargs):
+        assert kwargs['timeout'] > 0
+        raise subprocess.TimeoutExpired(argv, kwargs['timeout'], output=b'loading weights')
+
+    with pytest.raises(RuntimeError, match='ACE-Step.*timed out.*loading weights'):
+        music.generate_music('calm', seconds=30, seed=42, out=tmp_path / 'out.wav',
+                             cache_dir=tmp_path / 'cache', runner=hang)
+    assert not (tmp_path / 'out.wav').exists()
+    assert not list((tmp_path / 'cache').iterdir())
+
+
 def write_wav(path: Path, seconds: float = 0.25, *, channels: int = 2) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with wave.open(str(path), "wb") as audio:

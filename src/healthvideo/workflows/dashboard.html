@@ -275,6 +275,7 @@ pre.md{white-space:pre-wrap;word-break:break-word;font-family:'Be Vietnam Pro',s
   --ws-desk-top:#243760; --ws-desk-left:#182747; --ws-desk-right:#101b33; --ws-desk-stroke:rgba(170,192,255,.36);
   --ws-doc-top:#4c3818; --ws-doc-left:#36270f; --ws-doc-right:#251a0a; --ws-doc-stroke:rgba(251,191,36,.56);
   --ws-c-work:hsl(168 82% 62%); --ws-c-gate:hsl(38 96% 68%); --ws-c-err:hsl(350 92% 74%);
+  --ws-c-wait-model:hsl(234 92% 78%); --ws-c-wait-retry:hsl(28 96% 68%); --ws-c-unknown:#b0bed9;
   --ws-pop-bg:#101a31; --ws-track:rgba(148,173,255,.22);
 }
 html[data-theme="light"]{
@@ -285,21 +286,29 @@ html[data-theme="light"]{
   --ws-desk-top:#ffffff; --ws-desk-left:#d9e4f4; --ws-desk-right:#c1d1ea; --ws-desk-stroke:rgba(15,23,42,.28);
   --ws-doc-top:#fef3c7; --ws-doc-left:#f3d280; --ws-doc-right:#dfb556; --ws-doc-stroke:rgba(180,83,9,.56);
   --ws-c-work:hsl(168 84% 24%); --ws-c-gate:hsl(32 94% 29%); --ws-c-err:hsl(350 84% 38%);
+  --ws-c-wait-model:hsl(236 68% 44%); --ws-c-wait-retry:hsl(24 88% 34%); --ws-c-unknown:#475569;
   --ws-pop-bg:#ffffff; --ws-track:rgba(15,23,42,.18);
 }
-.ws-shell{margin:6px 0 22px;position:relative}
+.ws-shell{margin:6px 0 22px;position:relative;max-width:100%}
 .ws-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
 .ws-head h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
-.ws-summary{font-size:14px;color:var(--muted);margin-top:2px}
-.ws-legend{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.ws-leg{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;color:var(--muted);padding:4px 10px;border-radius:999px;background:rgba(148,173,255,.08);border:1px solid var(--line)}
-.ws-leg svg{width:13px;height:13px;flex-shrink:0}
+.ws-summary{font-size:14px;color:var(--muted);margin-top:2px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.ws-head-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;max-width:100%}
+.ws-legend{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.ws-leg{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:var(--muted);padding:4px 9px;border-radius:999px;background:rgba(148,173,255,.08);border:1px solid var(--line)}
+.ws-leg svg{width:12px;height:12px;flex-shrink:0}
 .ws-leg.work{color:var(--ws-c-work)}
 .ws-leg.gate{color:var(--ws-c-gate)}
+.ws-leg.wait{color:var(--ws-c-wait-model)}
 .ws-leg.err{color:var(--ws-c-err)}
+.ws-leg.unknown{color:var(--ws-c-unknown);border-style:dashed}
+.ws-motion-btn{min-height:32px;padding:5px 11px;border-radius:999px;font-size:12.5px;font-weight:700;gap:6px;border-color:var(--line-strong)}
+.ws-motion-btn[aria-pressed="true"]{color:var(--ws-c-work);border-color:hsl(168 78% 52% / .45);background:hsl(168 78% 52% / .09)}
+.ws-motion-btn:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+.ws-motion-btn svg{width:13px;height:13px;flex-shrink:0}
 
 /* Quầy điều phối & ý kiến riêng (tầng lửng tách khỏi dây chuyền) */
-.ws-counter-zone{padding:12px 14px 14px;border-radius:14px;background:var(--ws-counter-bg);border:1px solid var(--line-strong);margin-bottom:14px;position:relative}
+.ws-counter-zone{padding:12px 14px 14px;border-radius:14px;background:var(--ws-counter-bg);border:1px solid var(--line-strong);margin-bottom:14px;position:relative;max-width:100%}
 .ws-zone-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px}
 .ws-zone-title{font-size:13.5px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:7px}
 .ws-zone-hint{font-size:12.5px;color:var(--muted)}
@@ -309,14 +318,16 @@ html[data-theme="light"]{
 .ws-floor-wrap{position:relative;overflow:hidden;padding:14px 14px 18px;border-radius:16px;border:1px solid var(--line-strong);
   background:linear-gradient(155deg,var(--ws-floor-top) 0%,var(--ws-floor-bot) 100%);
   box-shadow:0 12px 0 -2px var(--ws-slab-front),0 22px 34px -16px rgba(0,0,0,.45);
-  margin-bottom:8px;perspective:1400px}
+  margin-bottom:8px;perspective:1400px;max-width:100%}
 .ws-floor-grid{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;opacity:.85}
-.ws-floor-inner{position:relative;z-index:1}
+.ws-floor-inner{position:relative;z-index:1;min-width:0}
 .ws-row{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;position:relative;transform-style:preserve-3d}
 .ws-row-prod{grid-template-columns:repeat(3,minmax(0,1fr))}
 .ws-turn-bridge{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 8px;margin:4px 0;font-size:12.5px;font-weight:600;color:var(--muted)}
 .ws-turn-track{flex:1;height:4px;border-radius:99px;background:var(--ws-track);position:relative;overflow:hidden}
-.ws-turn-track::after{content:"";position:absolute;top:0;left:-30%;width:30%;height:100%;border-radius:99px;background:linear-gradient(90deg,transparent,var(--teal),transparent);animation:ws-flow 2.8s linear infinite}
+.ws-turn-track::after{content:"";position:absolute;top:0;left:0;width:32%;height:100%;border-radius:99px;
+  background:linear-gradient(90deg,transparent,var(--teal),transparent);transform:translateX(-120%);opacity:0;animation:none}
+#workshop[data-live-flow="true"] .ws-turn-track::after{opacity:1;animation:ws-flow 2.8s linear infinite}
 .ws-turn-pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;background:var(--ws-station-bg);border:1px solid var(--line);color:var(--muted);white-space:nowrap}
 
 /* Bàn làm việc / Trạm */
@@ -326,46 +337,95 @@ html[data-theme="light"]{
 .ws-station:hover{transform:translateY(-3px);border-color:var(--line-strong);background:var(--ws-station-hover);box-shadow:0 12px 24px -12px rgba(0,0,0,.48)}
 .ws-station:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
 .ws-station.is-selected{border:1.5px solid var(--sky);box-shadow:0 14px 26px -12px rgba(0,0,0,.55)}
-.ws-station.is-working{border:1.5px solid hsl(168 78% 48% / .82);box-shadow:0 10px 22px -12px rgba(0,0,0,.48)}
-.ws-station.is-gate{border:1.5px solid hsl(38 90% 58% / .52)}
-.ws-station.is-gate-waiting{border:2px solid hsl(38 96% 56% / .95);background:linear-gradient(170deg,hsl(38 96% 55% / .16),var(--ws-station-bg));box-shadow:0 14px 26px -12px rgba(0,0,0,.5)}
-.ws-station.has-error{border:1.5px solid hsl(350 88% 64% / .78)}
+.ws-station.is-working{border:1.5px solid hsl(168 78% 48% / .84);box-shadow:0 10px 22px -12px rgba(0,0,0,.48)}
+.ws-station.is-idle{border:1px solid var(--line)}
+.ws-station.is-gate{border:1.5px solid hsl(38 90% 58% / .48)}
+.ws-station.is-gate-waiting,.ws-station.is-waiting-gate{border:2px solid hsl(38 96% 56% / .95);background:linear-gradient(170deg,hsl(38 96% 55% / .16),var(--ws-station-bg));box-shadow:0 14px 26px -12px rgba(0,0,0,.5)}
+.ws-station.is-waiting-model{border:1.5px dashed hsl(234 88% 70% / .78);background:linear-gradient(170deg,hsl(234 88% 68% / .08),var(--ws-station-bg))}
+.ws-station.is-waiting-retry{border:1.5px dashed hsl(28 92% 60% / .82);background:linear-gradient(170deg,hsl(28 92% 58% / .09),var(--ws-station-bg))}
+.ws-station.has-error{border:1.5px solid hsl(350 88% 64% / .88);background:linear-gradient(170deg,hsl(350 88% 60% / .11),var(--ws-station-bg))}
+.ws-station.is-unknown{border:1.5px dashed var(--line-strong);background:var(--ws-station-bg)}
+.ws-station.is-unknown .ws-iso-stage{opacity:.74}
 
-.ws-st-top{display:flex;align-items:center;justify-content:space-between;gap:6px;width:100%;min-width:0}
-.ws-st-num{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--muted);padding:1px 6px;border-radius:6px;background:rgba(148,173,255,.1)}
-.ws-st-badge{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;padding:2px 8px;border-radius:999px;background:rgba(148,173,255,.1);color:var(--muted);white-space:nowrap}
+.ws-st-top{display:flex;align-items:center;justify-content:space-between;gap:5px;width:100%;min-width:0}
+.ws-st-num{font-family:'JetBrains Mono',monospace;font-size:11.5px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--muted);padding:1px 6px;border-radius:6px;background:rgba(148,173,255,.1);flex-shrink:0}
+.ws-st-top-r{display:inline-flex;align-items:center;gap:4px;min-width:0;max-width:100%;margin-left:auto}
+.ws-st-dur{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--ws-c-work);padding:1px 5px;border-radius:6px;background:hsl(168 78% 52% / .12);white-space:nowrap;flex-shrink:0}
+.ws-st-dur[hidden]{display:none}
+.ws-st-badge{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:999px;background:rgba(148,173,255,.1);color:var(--muted);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .ws-st-badge.work{background:hsl(168 78% 52% / .16);color:var(--ws-c-work)}
 .ws-st-badge.gate{background:hsl(38 96% 55% / .2);color:var(--ws-c-gate)}
+.ws-st-badge.wait-model{background:hsl(234 90% 68% / .16);color:var(--ws-c-wait-model)}
+.ws-st-badge.wait-retry{background:hsl(28 92% 58% / .18);color:var(--ws-c-wait-retry)}
 .ws-st-badge.err{background:hsl(350 88% 64% / .18);color:var(--ws-c-err)}
+.ws-st-badge.unknown{background:rgba(148,173,255,.12);color:var(--ws-c-unknown)}
 
 .ws-iso-stage{width:100%;height:96px;display:grid;place-items:center;position:relative;overflow:hidden;border-radius:9px}
 .ws-iso-svg{width:100%;height:96px;max-width:176px;display:block}
 .ws-st-info{display:flex;flex-direction:column;gap:3px;width:100%;min-width:0}
-.ws-st-name{font-size:14px;font-weight:700;line-height:1.25;color:var(--text)}
-.ws-st-task{font-size:12.5px;line-height:1.35;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:17px}
+.ws-st-name{font-size:14px;font-weight:700;line-height:1.25;color:var(--text);overflow-wrap:anywhere}
+.ws-st-task{font-size:12.5px;line-height:1.35;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:17px;overflow-wrap:anywhere}
 .ws-st-task strong{color:var(--ws-c-work);font-weight:700}
 .ws-st-files{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px;min-width:0;max-width:100%}
-.ws-doc-pill{display:inline-flex;align-items:center;gap:4px;max-width:100%;min-width:0;padding:5px 10px;border-radius:7px;font-size:12px;font-weight:600;line-height:1.35;border:1px solid var(--line);background:rgba(148,173,255,.08);color:var(--text);white-space:normal;word-break:break-word}
+.ws-st-files[hidden]{display:none}
+.ws-doc-pill{display:inline-flex;align-items:center;gap:4px;max-width:100%;min-width:0;padding:4px 8px;border-radius:7px;font-size:11.5px;font-weight:600;line-height:1.35;border:1px solid var(--line);background:rgba(148,173,255,.08);color:var(--text);white-space:normal;overflow-wrap:anywhere}
 .ws-doc-pill.gate{border-color:hsl(38 96% 55% / .5);background:hsl(38 96% 55% / .16);color:var(--ws-c-gate)}
 .ws-doc-pill.err{border-color:hsl(350 88% 64% / .5);background:hsl(350 88% 64% / .14);color:var(--ws-c-err)}
 .ws-doc-pill.done{border-color:hsl(168 78% 52% / .45);background:hsl(168 78% 52% / .14);color:var(--ws-c-work)}
 
-/* Hoạt hoạ Isometric SVG */
-.ws-station.is-working .ws-arm-l{transform-origin:92px 44px;animation:ws-type-l .42s ease-in-out infinite alternate}
-.ws-station.is-working .ws-arm-r{transform-origin:108px 44px;animation:ws-type-r .42s ease-in-out .21s infinite alternate}
-.ws-station.is-working .ws-dossier-active{animation:ws-dossier-bob 1.8s ease-in-out infinite}
-.ws-station.is-working .ws-scr-bar{transform-origin:left center;animation:ws-screen-pulse 1.3s ease-in-out infinite alternate}
-.ws-station.is-gate-waiting .ws-spotlight{animation:ws-spot-pulse 2.2s ease-in-out infinite}
-.ws-station.is-working .ws-mach-led{animation:ws-led-blink 1.1s ease-in-out infinite alternate}
-.ws-station.is-working .ws-mach-wave{transform-origin:center bottom;animation:ws-wave-eq .65s ease-in-out infinite alternate}
+/* Hoạt họa Isometric SVG — chỉ chạy khi working, bật hoạt cảnh, tab hiện & trong khung nhìn; chỉ animate transform/opacity */
+#workshop[data-motion="on"][data-paused="false"] .ws-station.is-working .ws-dossier-active{animation:ws-dossier-bob 1.8s ease-in-out infinite}
+#workshop[data-motion="on"][data-paused="false"] .ws-station.is-working .ws-scr-bar{transform-origin:left center;animation:ws-screen-pulse 1.3s ease-in-out infinite alternate}
+#workshop[data-motion="on"][data-paused="false"] .ws-station.is-working .ws-mach-led{animation:ws-led-blink 1.1s ease-in-out infinite alternate}
+#workshop[data-motion="on"][data-paused="false"] .ws-station.is-working .ws-mach-wave{transform-origin:center bottom;animation:ws-wave-eq .65s ease-in-out infinite alternate}
+#workshop[data-motion="on"][data-paused="false"] .ws-station.is-working .ws-mach-wave-b{transform-origin:center bottom;animation:ws-wave-eq .65s ease-in-out .22s infinite alternate}
+#workshop[data-motion="on"][data-paused="false"] .ws-station.is-working .ws-mach-wave-c{transform-origin:center bottom;animation:ws-wave-eq .65s ease-in-out .44s infinite alternate}
+#workshop[data-motion="on"][data-paused="false"] .ws-station.is-working.ws-act-scout .ws-scout-sweep{transform-origin:58px 74px;animation:ws-radar-spin 3.2s linear infinite}
+#workshop[data-motion="on"][data-paused="false"] .ws-station.is-working.ws-act-scout .ws-scout-ping{transform-origin:58px 74px;animation:ws-ping-dot 1.5s ease-in-out infinite alternate}
+#workshop[data-motion="on"][data-paused="false"] .ws-station.is-working.ws-act-medical .ws-med-stamp{transform-origin:118px 52px;animation:ws-med-check 1.6s ease-in-out infinite alternate}
+#workshop[data-motion="on"][data-paused="false"] .ws-station.is-working.ws-act-medical .ws-med-scan{animation:ws-med-read 2.1s ease-in-out infinite alternate}
+#workshop[data-motion="on"][data-paused="false"] .ws-station.is-working.ws-act-writer .ws-arm-l{transform-origin:92px 44px;animation:ws-type-l .38s ease-in-out infinite alternate}
+#workshop[data-motion="on"][data-paused="false"] .ws-station.is-working.ws-act-writer .ws-arm-r{transform-origin:108px 44px;animation:ws-type-r .38s ease-in-out .19s infinite alternate}
+#workshop[data-motion="on"][data-paused="false"] .ws-station.is-working.ws-act-writer .ws-writer-scroll{animation:ws-script-scroll 2.2s ease-in-out infinite alternate}
+#workshop[data-motion="on"][data-paused="false"] .ws-station.is-working.ws-act-critic .ws-critic-loupe{transform-origin:118px 54px;animation:ws-critic-scan 2.0s ease-in-out infinite alternate}
+#workshop[data-motion="on"][data-paused="false"] .ws-station.is-working.ws-act-critic .ws-critic-tick{animation:ws-tick-glow 1.4s ease-in-out infinite alternate}
+#workshop[data-motion="on"][data-paused="false"] .ws-station.is-working.ws-act-art .ws-art-stylus{transform-origin:116px 52px;animation:ws-stylus-draw 1.6s ease-in-out infinite alternate}
+#workshop[data-motion="on"][data-paused="false"] .ws-station.is-working.ws-act-art .ws-art-glow{animation:ws-art-pulse 1.8s ease-in-out infinite alternate}
+#workshop[data-motion="on"][data-paused="false"] .ws-station.is-working.ws-act-editor .ws-editor-playhead{animation:ws-playhead-glide 2.2s linear infinite}
+#workshop[data-motion="on"][data-paused="false"] .ws-station.is-working.ws-act-editor .ws-editor-clip{animation:ws-clip-nudge 1.4s ease-in-out infinite alternate}
+#workshop[data-motion="on"][data-paused="false"] .ws-station.is-working.ws-act-copywriter .ws-arm-l{transform-origin:92px 44px;animation:ws-type-l .44s ease-in-out infinite alternate}
+#workshop[data-motion="on"][data-paused="false"] .ws-station.is-working.ws-act-copywriter .ws-arm-r{transform-origin:108px 44px;animation:ws-type-r .44s ease-in-out .22s infinite alternate}
+#workshop[data-motion="on"][data-paused="false"] .ws-station.is-working.ws-act-copywriter .ws-copy-card-top{animation:ws-card-glide 2.1s ease-in-out infinite alternate}
+#workshop[data-motion="on"][data-paused="false"] .ws-station.is-working.ws-act-coordinator .ws-coord-wave{transform-origin:100px 26px;animation:ws-signal-ring 1.9s cubic-bezier(.16,1,.3,1) infinite}
+#workshop[data-motion="on"][data-paused="false"] .ws-station.is-working.ws-act-coordinator .ws-coord-beacon{animation:ws-beacon-hop 1.7s ease-in-out infinite alternate}
+#workshop[data-motion="on"][data-paused="false"] .ws-station.is-working.ws-act-analyst .ws-analyst-bar{transform-origin:112px 62px;animation:ws-bar-rise 1.3s ease-in-out infinite alternate}
+#workshop[data-motion="on"][data-paused="false"] .ws-station.is-working.ws-act-analyst .ws-analyst-bar-b{transform-origin:118px 60px;animation:ws-bar-rise 1.3s ease-in-out .25s infinite alternate}
+#workshop[data-motion="on"][data-paused="false"] .ws-station.is-working.ws-act-analyst .ws-analyst-bar-c{transform-origin:124px 58px;animation:ws-bar-rise 1.3s ease-in-out .5s infinite alternate}
+#workshop[data-motion="on"][data-paused="false"] .ws-station.is-working.ws-act-analyst .ws-analyst-loupe{animation:ws-loupe-inspect 2.0s ease-in-out infinite alternate}
+
 @keyframes ws-type-l{0%{transform:translateY(0) rotate(0deg)}100%{transform:translateY(2.2px) rotate(-6deg)}}
 @keyframes ws-type-r{0%{transform:translateY(0) rotate(0deg)}100%{transform:translateY(2.2px) rotate(6deg)}}
-@keyframes ws-dossier-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-2.5px)}}
-@keyframes ws-screen-pulse{0%{transform:scaleX(.55);opacity:.72}100%{transform:scaleX(1);opacity:1}}
+@keyframes ws-dossier-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-2.4px)}}
+@keyframes ws-screen-pulse{0%{transform:scaleX(.62);opacity:.74}100%{transform:scaleX(1);opacity:1}}
 @keyframes ws-led-blink{0%{opacity:.45}100%{opacity:1}}
-@keyframes ws-wave-eq{0%{transform:scaleY(.55)}100%{transform:scaleY(1.08)}}
-@keyframes ws-flow{0%{left:-30%}100%{left:105%}}
-@keyframes ws-spot-pulse{0%,100%{opacity:.55}50%{opacity:.95}}
+@keyframes ws-wave-eq{0%{transform:scaleY(.52)}100%{transform:scaleY(1.08)}}
+@keyframes ws-radar-spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
+@keyframes ws-ping-dot{0%{transform:scale(.85);opacity:.45}100%{transform:scale(1.18);opacity:1}}
+@keyframes ws-med-check{0%{transform:translateY(0) rotate(-4deg)}100%{transform:translateY(3.2px) rotate(2deg)}}
+@keyframes ws-med-read{0%{transform:translateY(-1.5px);opacity:.72}100%{transform:translateY(3px);opacity:1}}
+@keyframes ws-script-scroll{0%{transform:translateY(1.5px);opacity:.75}100%{transform:translateY(-3.5px);opacity:1}}
+@keyframes ws-critic-scan{0%{transform:translate(-5px,1px) rotate(-6deg)}100%{transform:translate(5px,-3px) rotate(6deg)}}
+@keyframes ws-tick-glow{0%{opacity:.45}100%{opacity:1}}
+@keyframes ws-stylus-draw{0%{transform:translate(-5px,2px) rotate(-10deg)}100%{transform:translate(4px,-3px) rotate(8deg)}}
+@keyframes ws-art-pulse{0%{opacity:.55}100%{opacity:.95}}
+@keyframes ws-playhead-glide{0%{transform:translateX(-11px);opacity:.7}85%{transform:translateX(11px);opacity:1}100%{transform:translateX(-11px);opacity:.7}}
+@keyframes ws-clip-nudge{0%{transform:translateY(0);opacity:.75}100%{transform:translateY(-1.8px);opacity:1}}
+@keyframes ws-card-glide{0%{transform:translate(0,0);opacity:.8}100%{transform:translate(3px,-3px);opacity:1}}
+@keyframes ws-signal-ring{0%{transform:scale(.88);opacity:.9}100%{transform:scale(1.26);opacity:.15}}
+@keyframes ws-beacon-hop{0%{transform:translateX(-4px);opacity:.75}100%{transform:translateX(5px);opacity:1}}
+@keyframes ws-bar-rise{0%{transform:scaleY(.55)}100%{transform:scaleY(1.06)}}
+@keyframes ws-loupe-inspect{0%{transform:translate(-3px,1px)}100%{transform:translate(4px,-2px)}}
+@keyframes ws-flow{0%{transform:translateX(-120%)}100%{transform:translateX(360%)}}
 
 /* Khung chi tiết nhân viên */
 .ws-popover{position:fixed;z-index:12;width:min(400px,calc(100vw - 24px));max-height:min(78vh,560px);overflow-y:auto;padding:16px;border-radius:16px;
@@ -373,17 +433,18 @@ html[data-theme="light"]{
   scrollbar-width:thin;scrollbar-color:var(--line-strong) transparent}
 .ws-popover[hidden]{display:none}
 .ws-pop-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding-bottom:10px;border-bottom:1px solid var(--line)}
-.ws-pop-head h3{font-size:16.5px;font-weight:800;line-height:1.3}
-.ws-pop-close{min-width:36px;min-height:36px;border-radius:9px;background:rgba(148,173,255,.1);border:1px solid var(--line);display:grid;place-items:center;font-size:17px;font-weight:700;color:var(--text)}
+.ws-pop-head h3{font-size:16.5px;font-weight:800;line-height:1.3;overflow-wrap:anywhere}
+.ws-pop-close{min-width:36px;min-height:36px;border-radius:9px;background:rgba(148,173,255,.1);border:1px solid var(--line);display:grid;place-items:center;font-size:17px;font-weight:700;color:var(--text);flex-shrink:0}
 .ws-pop-close:hover{background:rgba(148,173,255,.2)}
+.ws-pop-close:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
 .ws-pop-sec{margin-top:12px}
 .ws-pop-label{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:6px}
-.ws-pop-box{padding:10px 12px;border-radius:11px;background:rgba(148,173,255,.06);border:1px solid var(--line);font-size:14px}
+.ws-pop-box{padding:10px 12px;border-radius:11px;background:rgba(148,173,255,.06);border:1px solid var(--line);font-size:14px;overflow-wrap:anywhere}
 .ws-pop-list{display:grid;gap:6px}
-.ws-pop-item{padding:9px 11px;border-radius:10px;background:rgba(148,173,255,.05);border:1px solid var(--line);font-size:13.5px}
-.ws-pop-item-top{display:flex;align-items:center;justify-content:space-between;gap:8px;font-weight:600}
+.ws-pop-item{padding:9px 11px;border-radius:10px;background:rgba(148,173,255,.05);border:1px solid var(--line);font-size:13.5px;overflow-wrap:anywhere}
+.ws-pop-item-top{display:flex;align-items:center;justify-content:space-between;gap:8px;font-weight:600;flex-wrap:wrap}
 .ws-pop-models{display:flex;flex-wrap:wrap;gap:6px}
-.ws-pop-model{font-family:'JetBrains Mono',monospace;font-size:12px;padding:4px 8px;border-radius:8px;background:rgba(148,173,255,.1);border:1px solid var(--line);color:var(--text)}
+.ws-pop-model{font-family:'JetBrains Mono',monospace;font-size:12px;padding:4px 8px;border-radius:8px;background:rgba(148,173,255,.1);border:1px solid var(--line);color:var(--text);overflow-wrap:anywhere}
 
 @media (max-width:1120px){
   .ws-counter-grid{grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
@@ -392,6 +453,7 @@ html[data-theme="light"]{
 }
 @media (max-width:680px){
   .ws-shell{margin:4px 0 18px}
+  .ws-head-actions{justify-content:flex-start}
   .ws-counter-zone{padding:10px}
   .ws-counter-grid,.ws-row,.ws-row-prod{grid-template-columns:1fr;gap:8px}
   .ws-floor-wrap{padding:10px;box-shadow:0 8px 0 -2px var(--ws-slab-front),0 14px 24px -14px rgba(0,0,0,.4)}
@@ -400,11 +462,17 @@ html[data-theme="light"]{
   .ws-iso-stage{grid-column:1;grid-row:1 / 3;height:84px}
   .ws-iso-svg{height:84px}
   .ws-st-info{grid-column:2;grid-row:2}
-  .ws-popover{left:12px !important;right:12px !important;bottom:12px !important;top:auto !important;width:auto;max-height:74vh}
+  .ws-popover{left:12px !important;right:12px !important;bottom:12px !important;top:auto !important;width:auto;max-width:calc(100vw - 24px);max-height:74vh}
+}
+@media (max-width:420px){
+  .wrap{padding:14px 12px 48px}
+  .ws-station{grid-template-columns:92px minmax(0,1fr);column-gap:8px;padding:8px}
+  .ws-iso-stage{height:76px}
+  .ws-iso-svg{height:76px}
 }
 @media (prefers-reduced-motion: reduce){
   .ws-shell *,.ws-shell *::before,.ws-shell *::after{animation:none !important;transition-duration:0.01ms !important}
-  .ws-turn-track::after{display:none}
+  .ws-turn-track::after{animation:none !important;display:none}
 }
 </style>
 </head>
@@ -452,17 +520,25 @@ html[data-theme="light"]{
   <section class="decisions-strip" id="decisions" aria-live="polite"></section>
 
   <!-- 2b. Xưởng 3D -->
-  <section class="ws-shell" id="workshop" aria-labelledby="ws-title">
+  <section class="ws-shell" id="workshop" aria-labelledby="ws-title" data-motion="on" data-paused="false" data-live-flow="false">
     <div class="ws-head">
       <div>
         <h2 id="ws-title">Xưởng sản xuất 3D</h2>
         <p class="ws-summary" id="ws-summary">Đang tải sơ đồ xưởng và nhân viên…</p>
       </div>
-      <div class="ws-legend" aria-label="Chú giải trạng thái xưởng">
-        <span class="ws-leg work"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="8" cy="8" r="5"/></svg>Đang làm</span>
-        <span class="ws-leg gate"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 1.5l1.9 4 4.4.6-3.2 3.1.8 4.3L8 11.4 4.1 13.5l.8-4.3L1.7 6.1l4.4-.6z"/></svg>Cổng bác sĩ</span>
-        <span class="ws-leg err"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 2L14.5 13.5h-13L8 2zm-.7 4.2v3.6h1.4V6.2H7.3zm0 4.6v1.4h1.4v-1.4H7.3z"/></svg>Lỗi gần nhất</span>
-        <span class="ws-leg"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="8" cy="8" r="4.5"/></svg>Đang nghỉ</span>
+      <div class="ws-head-actions">
+        <div class="ws-legend" aria-label="Chú giải trạng thái xưởng">
+          <span class="ws-leg work"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="8" cy="8" r="5"/></svg>Đang làm</span>
+          <span class="ws-leg gate"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 1.5l1.9 4 4.4.6-3.2 3.1.8 4.3L8 11.4 4.1 13.5l.8-4.3L1.7 6.1l4.4-.6z"/></svg>Chờ duyệt</span>
+          <span class="ws-leg wait"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2 1.4"/></svg>Chờ model / thử lại</span>
+          <span class="ws-leg err"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 2L14.5 13.5h-13L8 2zm-.7 4.2v3.6h1.4V6.2H7.3zm0 4.6v1.4h1.4v-1.4H7.3z"/></svg>Dừng do lỗi</span>
+          <span class="ws-leg unknown"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="8" cy="8" r="5.5"/><path d="M6.6 6.2a1.5 1.5 0 0 1 2.8.7c0 1-1.4 1.2-1.4 2.1"/><circle cx="8" cy="11.3" r=".7" fill="currentColor"/></svg>Chưa xác minh</span>
+          <span class="ws-leg"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="8" cy="8" r="4.5"/></svg>Đang nghỉ</span>
+        </div>
+        <button type="button" class="btn ghost ws-motion-btn" id="btn-ws-motion" aria-pressed="true" title="Bật hoặc tắt hoạt cảnh minh họa trạng thái trong xưởng (chỉ đổi hiển thị)">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><polygon points="5,3.5 12.5,8 5,12.5"/></svg>
+          <span class="ws-motion-label">Hoạt cảnh: Bật</span>
+        </button>
       </div>
     </div>
 
@@ -740,6 +816,7 @@ const TOKEN = '__TOKEN__';
 const $ = (id) => document.getElementById(id);
 let state = null, overviewData = null, activityData = null, companyData = null, busy = false, logFull = false;
 let wsSelectedId = null, wsStationMap = new Map();
+let wsOffline = false, wsPageHidden = Boolean(document.hidden), wsInView = true, wsHasActiveExecution = false, wsMotionEnabled = true;
 let chatCtx = {slug: null, revision: null, view: 'overview', scene: null, time_s: null};
 
 /* Theme toggle */
@@ -1024,21 +1101,29 @@ async function refresh(){
       fetch('/api/progress',{cache:'no-store'}),
       fetch('/api/company',{cache:'no-store'}),
     ]);
+    if(!rStatus.ok || !rComp.ok){
+      throw new Error('HTTP ' + (!rStatus.ok ? rStatus.status : rComp.status));
+    }
     const d = await rStatus.json();
-    if(!rStatus.ok) throw new Error(d.error||rStatus.status);
-    const ov = rOv.ok ? await rOv.json() : null;
-    const actData = rAct.ok ? await rAct.json() : null;
-    const compData = rComp.ok ? await rComp.json() : null;
+    const compData = await rComp.json();
+    const ov = rOv.ok ? await rOv.json().catch(()=>null) : null;
+    const actData = rAct.ok ? await rAct.json().catch(()=>null) : null;
+    const progData = rProg.ok ? await rProg.json().catch(()=>null) : null;
+    wsOffline = false;
     $('offline').classList.remove('show');
     if(ov) renderOverview(ov);
     if(actData) renderActivityFeed(actData);
-    if(compData) companyData = compData;
-    if(rProg.ok) renderProgress(await rProg.json());
+    companyData = compData;
+    if(progData) renderProgress(progData);
     state=d; render(d);
     renderWorkshop();
     if(!busy) document.querySelectorAll('main button, header button').forEach(b=>b.disabled=false);
     syncStartGate();
-  }catch(e){$('offline').classList.add('show')}
+  }catch(e){
+    wsOffline = true;
+    $('offline').classList.add('show');
+    renderWorkshop();
+  }
 }
 
 /* ---------- Project View: Nguồn / Kịch bản / Storyboard / Video / Nhật ký + Decision Card ---------- */
@@ -1535,8 +1620,6 @@ $('btn-stop').onclick=()=>act('/api/factory/stop', state&&state.agents.length?'A
 $('btn-review').onclick=()=>{const p=state&&state.projects.find(x=>x.gate);if(p) openProduct(p.slug)};
 $('btn-quit').onclick=()=>act('/api/app/quit','Tắt app? Xưởng nền vẫn chạy nếu đang bật.');
 
-refresh(); loadChat(); setInterval(refresh,3000);
-
 /* ---------- 3D Isometric Workshop Renderer ---------- */
 const WS_LINE_1 = [
   {id:'scout', num:'01', short:'Trinh sát'},
@@ -1549,7 +1632,7 @@ const WS_LINE_1 = [
 const WS_LINE_2 = [
   {id:'render_machine', num:'06', short:'Máy dựng (xưởng tự chạy)', isMachine:true,
     title:'Máy dựng (xưởng tự chạy)',
-    desc:'Tự động tổng hợp giọng đọc (TTS), vẽ ảnh ứng viên (FLUX) và kết xuất video (Remotion) bằng Python khi dự án ở trạng thái Đã duyệt y khoa hoặc Đang sản xuất video.'},
+    desc:'Tự động tổng hợp giọng đọc (TTS), vẽ ảnh ứng viên (FLUX) và kết xuất video (Remotion) bằng Python khi có tiến trình dựng thật (.production-running) cho dự án đã qua medically_approved hoặc production_in_progress.'},
   {id:'art_director', num:'07', short:'Đạo diễn hình'},
   {id:'editor', num:'08', short:'Thợ dựng'},
   {id:'product_critic', num:'09', short:'Kiểm định sản phẩm'},
@@ -1564,6 +1647,62 @@ const WS_SHIRTS = {
   coordinator:'#2dd4bf', coordinator_senior:'#818cf8', feedback_analyst:'#fbbf24',
   gate_medical:'#fef3c7', gate_video:'#fef3c7',
 };
+const WS_ROLE_ACT = {
+  scout:'ws-act-scout',
+  medical_expert:'ws-act-medical',
+  writer:'ws-act-writer',
+  script_critic:'ws-act-critic',
+  product_critic:'ws-act-critic',
+  art_director:'ws-act-art',
+  editor:'ws-act-editor',
+  copywriter:'ws-act-copywriter',
+  coordinator:'ws-act-coordinator',
+  coordinator_senior:'ws-act-coordinator',
+  feedback_analyst:'ws-act-analyst',
+};
+const WS_STATE_META = {
+  working:       {badgeClass:'work',       symbol:'●', label:'Đang làm',      machineLabel:'Đang chạy',     aria:'đang làm việc',          stationClass:'is-working'},
+  idle:          {badgeClass:'idle',       symbol:'○', label:'Đang nghỉ',     machineLabel:'Đang nghỉ',     aria:'đang nghỉ',              stationClass:'is-idle'},
+  waiting_gate:  {badgeClass:'gate',       symbol:'★', label:'Chờ duyệt',     machineLabel:'Chờ duyệt',     aria:'đang chờ bác sĩ duyệt',  stationClass:'is-waiting-gate'},
+  waiting_model: {badgeClass:'wait-model', symbol:'◷', label:'Chờ model',     machineLabel:'Chờ model',     aria:'đang chờ model',         stationClass:'is-waiting-model'},
+  waiting_retry: {badgeClass:'wait-retry', symbol:'↻', label:'Chờ thử lại',   machineLabel:'Chờ thử lại',   aria:'đang chờ thử lại',       stationClass:'is-waiting-retry'},
+  error:         {badgeClass:'err',        symbol:'▲', label:'Dừng do lỗi',   machineLabel:'Dừng do lỗi',   aria:'dừng do lỗi',            stationClass:'has-error'},
+  unknown:       {badgeClass:'unknown',    symbol:'?', label:'Chưa xác minh', machineLabel:'Chưa xác minh', aria:'chưa xác minh',          stationClass:'is-unknown'},
+};
+
+function wsNormalizeWorkState(raw, fallback = 'unknown'){
+  const s = String(raw || '').trim().toLowerCase();
+  if(s === 'working') return 'working';
+  if(s === 'idle') return 'idle';
+  if(s === 'waiting' || s === 'waiting_gate') return 'waiting_gate';
+  if(s === 'waiting_model') return 'waiting_model';
+  if(s === 'waiting_retry' || s === 'retrying') return 'waiting_retry';
+  if(s === 'error') return 'error';
+  if(s === 'unknown') return 'unknown';
+  return fallback;
+}
+
+function wsResolveRoleState(roleObj, hasVerifiedCompany, isOffline){
+  if(isOffline || !hasVerifiedCompany || !roleObj) return 'unknown';
+  if(typeof roleObj.work_state === 'string' && roleObj.work_state.trim()){
+    return wsNormalizeWorkState(roleObj.work_state, 'unknown');
+  }
+  if(Array.isArray(roleObj.running) && roleObj.running.length > 0) return 'working';
+  return 'idle';
+}
+
+function wsResolveMachineState(comp, isOffline){
+  if(isOffline || !comp) return 'unknown';
+  const prodObj = comp.production || null;
+  const prodRunning = Array.isArray(comp.production_running)
+    ? comp.production_running
+    : (Array.isArray(prodObj?.running) ? prodObj.running : []);
+  if(prodObj?.work_state === 'working' || prodRunning.length > 0) return 'working';
+  if(typeof prodObj?.work_state === 'string' && prodObj.work_state.trim()){
+    return wsNormalizeWorkState(prodObj.work_state, 'unknown');
+  }
+  return 'idle';
+}
 
 function wsStepOwner(step, roleMap){
   if(!step) return null;
@@ -1640,39 +1779,127 @@ function wsFmtDur(sec){
   return rm ? `${h} giờ ${rm} phút` : `${h} giờ`;
 }
 
-function wsPropSvg(id, isWorking){
+function wsFmtDurCompact(sec){
+  if(sec == null) return '';
+  const n = Math.max(0, Math.round(Number(sec)));
+  if(Number.isNaN(n)) return '';
+  if(n < 60) return n + 's';
+  const m = Math.floor(n / 60), s = n % 60;
+  if(m < 60) return s ? `${m}m${String(s).padStart(2,'0')}s` : `${m}m`;
+  const h = Math.floor(m / 60), rm = m % 60;
+  return rm ? `${h}h${String(rm).padStart(2,'0')}m` : `${h}h`;
+}
+
+function wsPropSvg(id, workState){
+  const isWorking = workState === 'working';
+  const dim = isWorking ? '1' : '.48';
   if(id === 'gate_medical'){
-    return `<g>
+    return `<g opacity="${workState === 'unknown' ? '.5' : '1'}">
       <rect x="44" y="42" width="18" height="12" rx="3" fill="#f59e0b" opacity=".95"/>
       <path d="M53 45v6M50 48h6" stroke="#1f1404" stroke-width="2.1" stroke-linecap="round"/>
       <polygon points="108,52 121,46 130,50 117,56" fill="#fde68a" stroke="#b45309" stroke-width="1"/>
     </g>`;
   }
   if(id === 'gate_video'){
-    return `<g>
+    return `<g opacity="${workState === 'unknown' ? '.5' : '1'}">
       <polygon points="52,27 83,13 83,35 52,49" fill="#0f172a" stroke="#f59e0b" stroke-width="1.4"/>
       <polygon points="64,28 74,29 64,37" fill="#fbbf24"/>
       <polygon points="108,52 121,46 130,50 117,56" fill="#fde68a" stroke="#b45309" stroke-width="1"/>
     </g>`;
   }
+  if(id === 'scout'){
+    return `<g opacity="${dim}">
+      <ellipse cx="58" cy="74" rx="8.2" ry="4.6" fill="rgba(15,23,42,.55)" stroke="${isWorking?'#38bdf8':'#64748b'}" stroke-width="1.4"/>
+      <ellipse cx="58" cy="74" rx="4.2" ry="2.4" fill="none" stroke="${isWorking?'#38bdf8':'#64748b'}" stroke-width=".9" opacity=".65"/>
+      <line class="ws-scout-sweep" x1="58" y1="74" x2="58" y2="69.5" stroke="${isWorking?'#38bdf8':'#64748b'}" stroke-width="1.6" stroke-linecap="round"/>
+      <circle class="ws-scout-ping" cx="62" cy="72.5" r="1.5" fill="${isWorking?'#2dd4bf':'#64748b'}"/>
+      <circle cx="58" cy="74" r="1.6" fill="${isWorking?'#38bdf8':'#64748b'}"/>
+      <polygon points="111,53 126,46 134,50 119,57" fill="#1e293b" stroke="${isWorking?'#38bdf8':'#64748b'}" stroke-width=".9"/>
+    </g>`;
+  }
   if(id === 'medical_expert'){
-    return `<path d="M93 38c0 5 4 7 7 6s5-3 4-7" fill="none" stroke="#38bdf8" stroke-width="1.8" stroke-linecap="round"/>`;
+    return `<g opacity="${dim}">
+      <path d="M93 38c0 5 4 7 7 6s5-3 4-7" fill="none" stroke="#38bdf8" stroke-width="1.8" stroke-linecap="round"/>
+      <polygon points="109,54 127,45 137,50 119,59" fill="#e2e8f0" stroke="#475569" stroke-width=".9"/>
+      <line class="ws-med-scan" x1="115" y1="53" x2="127" y2="47.5" stroke="#0d9488" stroke-width="1.6" stroke-linecap="round"/>
+      <g class="ws-med-stamp">
+        <circle cx="118" cy="51" r="3.4" fill="${isWorking?'#2dd4bf':'#64748b'}" stroke="#0f172a" stroke-width=".8"/>
+        <path d="M116.5 51l1 1.1 2.2-2.2" fill="none" stroke="#042f2e" stroke-width="1.2" stroke-linecap="round"/>
+      </g>
+    </g>`;
   }
-  if(id === 'art_director' || id === 'editor'){
-    return `<path d="M90 25c0-6 20-6 20 0" fill="none" stroke="#94a3b8" stroke-width="2.3" stroke-linecap="round"/>
-      <circle cx="90" cy="27" r="2.6" fill="#38bdf8"/><circle cx="110" cy="27" r="2.6" fill="#38bdf8"/>`;
-  }
-  if(id === 'coordinator' || id === 'coordinator_senior'){
-    return `<path d="M90 25c0-6 20-6 20 0" fill="none" stroke="#2dd4bf" stroke-width="2.2" stroke-linecap="round"/>
-      <path d="M110 28l-5 5" stroke="#2dd4bf" stroke-width="1.6" stroke-linecap="round"/>`;
+  if(id === 'writer'){
+    return `<g opacity="${dim}">
+      ${isWorking ? `<g class="ws-writer-scroll">
+        <line x1="55.5" y1="45" x2="68.5" y2="38.5" stroke="#2dd4bf" stroke-width="1.6" stroke-linecap="round"/>
+        <line x1="55.5" y1="49" x2="70.5" y2="41.5" stroke="#5eead4" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="55.5" y1="53" x2="66.5" y2="47.5" stroke="#2dd4bf" stroke-width="1.5" stroke-linecap="round"/>
+      </g>` : ''}
+      <polygon points="110,56 123,49.5 131,53.5 118,60" fill="#134e4a" stroke="${isWorking?'#2dd4bf':'#64748b'}" stroke-width=".9"/>
+    </g>`;
   }
   if(id === 'script_critic' || id === 'product_critic'){
-    return `<circle cx="118" cy="54" r="4.8" fill="none" stroke="#c084fc" stroke-width="1.7"/>
-      <path d="M121.5 57.5l4.5 4" stroke="#c084fc" stroke-width="1.8" stroke-linecap="round"/>`;
+    return `<g opacity="${dim}">
+      <polygon points="108,55 125,46.5 135,51.5 118,60" fill="#1e1b4b" stroke="#a78bfa" stroke-width=".9"/>
+      <path class="ws-critic-tick" d="M115 54l1.6 1.5 3.4-3.4" fill="none" stroke="#34d399" stroke-width="1.4" stroke-linecap="round"/>
+      <g class="ws-critic-loupe">
+        <circle cx="118" cy="54" r="4.6" fill="rgba(192,132,252,.14)" stroke="#c084fc" stroke-width="1.6"/>
+        <path d="M121.3 57.3l4.2 3.8" stroke="#fb7185" stroke-width="1.8" stroke-linecap="round"/>
+      </g>
+    </g>`;
   }
-  if(id === 'scout'){
-    return `<circle cx="48" cy="48" r="6.8" fill="none" stroke="${isWorking?'#38bdf8':'#64748b'}" stroke-width="1.6"/>
-      <circle cx="48" cy="48" r="2.4" fill="#38bdf8"/>`;
+  if(id === 'art_director'){
+    return `<g opacity="${dim}">
+      <path d="M90 25c0-6 20-6 20 0" fill="none" stroke="#94a3b8" stroke-width="2.2" stroke-linecap="round"/>
+      <circle cx="90" cy="27" r="2.5" fill="#c084fc"/><circle cx="110" cy="27" r="2.5" fill="#c084fc"/>
+      <polygon points="106,54 127,43.5 138,49 117,59.5" fill="#1e1b4b" stroke="#c084fc" stroke-width="1"/>
+      <polygon class="ws-art-glow" points="110,53 124,46 131,49.5 117,56.5" fill="${isWorking?'#c084fc':'#475569'}" opacity="${isWorking?'.72':'.3'}"/>
+      <circle cx="129" cy="49" r="1.4" fill="#38bdf8"/><circle cx="132" cy="50.5" r="1.4" fill="#34d399"/>
+      <path class="ws-art-stylus" d="M114 48l6 5" stroke="#fde047" stroke-width="2" stroke-linecap="round"/>
+    </g>`;
+  }
+  if(id === 'editor'){
+    return `<g opacity="${dim}">
+      <path d="M90 25c0-6 20-6 20 0" fill="none" stroke="#94a3b8" stroke-width="2.2" stroke-linecap="round"/>
+      <circle cx="90" cy="27" r="2.5" fill="#38bdf8"/><circle cx="110" cy="27" r="2.5" fill="#38bdf8"/>
+      <polygon points="106,55 129,43.5 137,47.5 114,59" fill="#0f172a" stroke="#60a5fa" stroke-width="1"/>
+      <rect class="ws-editor-clip" x="112" y="51" width="7" height="3" rx="1" fill="#38bdf8"/>
+      <rect class="ws-editor-clip" x="121" y="47" width="8" height="3" rx="1" fill="#2dd4bf"/>
+      <line class="ws-editor-playhead" x1="121" y1="45" x2="121" y2="57" stroke="#fbbf24" stroke-width="1.6" stroke-linecap="round"/>
+    </g>`;
+  }
+  if(id === 'copywriter'){
+    return `<g opacity="${dim}">
+      <polygon points="110,56 125,48.5 134,53 119,60.5" fill="#064e3b" stroke="#34d399" stroke-width=".9"/>
+      <g class="ws-copy-card-top">
+        <polygon points="112,52 127,44.5 136,49 121,56.5" fill="#0f172a" stroke="#34d399" stroke-width="1.1"/>
+        <circle cx="118" cy="51.5" r="1.5" fill="#34d399"/>
+        <line x1="121" y1="50" x2="129" y2="46.5" stroke="#6ee7b7" stroke-width="1.3" stroke-linecap="round"/>
+      </g>
+    </g>`;
+  }
+  if(id === 'coordinator' || id === 'coordinator_senior'){
+    const clr = id === 'coordinator_senior' ? '#818cf8' : '#2dd4bf';
+    return `<g opacity="${dim}">
+      <path d="M90 25c0-6 20-6 20 0" fill="none" stroke="${clr}" stroke-width="2.2" stroke-linecap="round"/>
+      <path d="M110 28l-5 5" stroke="${clr}" stroke-width="1.6" stroke-linecap="round"/>
+      ${isWorking ? `<path class="ws-coord-wave" d="M86 19c4-5 24-5 28 0" fill="none" stroke="${clr}" stroke-width="1.4" stroke-linecap="round"/>` : ''}
+      <polygon points="109,55 127,46 135,50 117,59" fill="#0f172a" stroke="${clr}" stroke-width=".9"/>
+      <circle cx="116" cy="54" r="1.4" fill="#64748b"/><circle cx="122" cy="51" r="1.4" fill="#64748b"/><circle cx="128" cy="48" r="1.4" fill="#64748b"/>
+      <circle class="ws-coord-beacon" cx="122" cy="51" r="2.1" fill="${clr}"/>
+    </g>`;
+  }
+  if(id === 'feedback_analyst'){
+    return `<g opacity="${dim}">
+      <polygon points="107,56 128,45.5 137,50 116,60.5" fill="#1e293b" stroke="#fbbf24" stroke-width=".9"/>
+      <rect class="ws-analyst-bar" x="111" y="52" width="3.2" height="7" rx=".8" fill="#38bdf8"/>
+      <rect class="ws-analyst-bar-b" x="116.5" y="48.5" width="3.2" height="9.5" rx=".8" fill="#fbbf24"/>
+      <rect class="ws-analyst-bar-c" x="122" y="46.5" width="3.2" height="10" rx=".8" fill="#34d399"/>
+      <g class="ws-analyst-loupe">
+        <circle cx="125" cy="47" r="3.8" fill="rgba(251,191,36,.15)" stroke="#fbbf24" stroke-width="1.4"/>
+        <path d="M127.8 49.8l3.2 2.8" stroke="#fbbf24" stroke-width="1.5" stroke-linecap="round"/>
+      </g>
+    </g>`;
   }
   return '';
 }
@@ -1680,16 +1907,33 @@ function wsPropSvg(id, isWorking){
 function wsIsoSvg(st){
   const isGate = Boolean(st.isGate);
   const isMachine = Boolean(st.isMachine);
-  const isWorking = st.isWorking;
-  const isWaiting = st.isGate && st.folders.length > 0;
-  const hasErr = st.hasError;
+  const ws = st.workState || 'unknown';
+  const isWorking = ws === 'working';
+  const isIdle = ws === 'idle';
+  const isWaitGate = ws === 'waiting_gate';
+  const isWaitModel = ws === 'waiting_model';
+  const isWaitRetry = ws === 'waiting_retry';
+  const hasErr = ws === 'error';
+  const isUnknown = ws === 'unknown';
+
   const shirt = WS_SHIRTS[st.id] || '#60a5fa';
   const topC = isGate ? 'var(--ws-doc-top)' : 'var(--ws-desk-top)';
   const leftC = isGate ? 'var(--ws-doc-left)' : 'var(--ws-desk-left)';
   const rightC = isGate ? 'var(--ws-doc-right)' : 'var(--ws-desk-right)';
   const strokeC = isGate ? 'var(--ws-doc-stroke)' : 'var(--ws-desk-stroke)';
-  const scrFill = hasErr ? '#4c1122' : (isWorking ? '#0d3b3e' : '#131d36');
-  const scrAccent = hasErr ? '#fb7185' : (isWorking ? '#2dd4bf' : (isWaiting ? '#fbbf24' : '#64748b'));
+
+  const scrFill = hasErr ? '#4c1122'
+    : (isWorking ? '#0d3b3e'
+    : (isWaitGate ? '#2f2208'
+    : (isWaitModel ? '#1b1e3c'
+    : (isWaitRetry ? '#2e1a09'
+    : (isIdle ? '#0b1120' : '#131b2e')))));
+  const scrAccent = hasErr ? '#fb7185'
+    : (isWorking ? '#2dd4bf'
+    : (isWaitGate ? '#fbbf24'
+    : (isWaitModel ? '#95a6fa'
+    : (isWaitRetry ? '#fb923c'
+    : (isIdle ? '#475569' : '#94a3b8')))));
 
   const dossierToneColor = {work:'#2dd4bf', gate:'#fbbf24', err:'#fb7185', done:'#34d399'};
   const docsSvg = st.folders.slice(0, 3).map((f, idx) => {
@@ -1709,8 +1953,18 @@ function wsIsoSvg(st){
     </g>` : '';
 
   if(isMachine){
-    const ledA = hasErr ? '#fb7185' : (isWorking ? '#2dd4bf' : '#64748b');
-    const ledB = isWorking ? '#38bdf8' : '#475569';
+    const ledA = hasErr ? '#fb7185' : (isWorking ? '#2dd4bf' : (isWaitRetry ? '#fb923c' : (isWaitModel ? '#95a6fa' : '#475569')));
+    const ledB = isWorking ? '#38bdf8' : (isUnknown ? '#64748b' : '#334155');
+    const machScrContent = isWorking ? `
+      <rect class="ws-mach-wave" x="51" y="45" width="2.6" height="8" rx="1" fill="${scrAccent}"/>
+      <rect class="ws-mach-wave-b" x="56" y="40" width="2.6" height="11" rx="1" fill="#38bdf8"/>
+      <rect class="ws-mach-wave-c" x="61" y="41" width="2.6" height="7" rx="1" fill="${scrAccent}"/>
+      <line class="ws-scr-bar" x1="50" y1="56" x2="72" y2="45" stroke="${scrAccent}" stroke-width="2.2" stroke-linecap="round"/>`
+      : (hasErr ? `<path d="M55 41l10 5m0-10l-10 15" stroke="#fb7185" stroke-width="2.2" stroke-linecap="round"/>`
+      : (isWaitRetry ? `<path d="M55 47a5 5 0 1 1 8 3" fill="none" stroke="#fb923c" stroke-width="2" stroke-linecap="round"/><circle cx="60" cy="48" r="1.4" fill="#fb923c"/>`
+      : (isUnknown ? `<text x="61" y="50" text-anchor="middle" fill="#94a3b8" font-size="14" font-weight="800">?</text>`
+      : `<circle cx="61" cy="46" r="2.2" fill="#475569"/>`)));
+
     return `<svg class="ws-iso-svg" viewBox="0 0 180 112" aria-hidden="true">
       <polygon points="90,22 168,61 90,100 12,61" fill="rgba(148,173,255,.08)" stroke="${strokeC}" stroke-width=".9"/>
       <polygon points="12,61 90,100 90,108 12,69" fill="rgba(15,23,42,.36)"/>
@@ -1730,54 +1984,93 @@ function wsIsoSvg(st){
       <g>
         <polygon points="44,41 78,24 78,49 44,66" fill="#0f172a" stroke="${strokeC}" stroke-width="1.2"/>
         <polygon points="46.5,42.8 75.5,28 75.5,47.5 46.5,62" fill="${scrFill}"/>
-        <rect class="ws-mach-wave" x="51" y="45" width="2.6" height="8" rx="1" fill="${scrAccent}"/>
-        <rect class="ws-mach-wave" x="56" y="40" width="2.6" height="11" rx="1" fill="#38bdf8"/>
-        <rect class="ws-mach-wave" x="61" y="41" width="2.6" height="7" rx="1" fill="${scrAccent}"/>
-        <line class="ws-scr-bar" x1="50" y1="56" x2="72" y2="45" stroke="${scrAccent}" stroke-width="2.2" stroke-linecap="round"/>
+        ${machScrContent}
       </g>
       ${docsSvg}
       ${errBadgeSvg}
     </svg>`;
   }
 
-  /* Góc front-3/4 isometric: nhân vật đặt ở phía sau-phải (cx=100) để không bị màn hình lệch trái che khuất */
-  const personSvg = (!isGate || isWaiting) ? `
-    <g>
+  /* Tư thế nhân vật khác nhau rõ rệt: làm việc vs ngả nghỉ rời phím vs chờ model/retry vs lỗi vs chưa xác minh */
+  let personSvg = '';
+  if(isGate && !isWaitGate){
+    personSvg = `<g opacity="${isUnknown ? '.45' : '.78'}">
+      <rect x="86" y="36" width="28" height="19" rx="5" fill="#475569" stroke="rgba(15,23,42,.42)" stroke-width="1"/>
+      <circle cx="100" cy="30" r="6.5" fill="none" stroke="${isUnknown ? '#94a3b8' : '#f59e0b'}" stroke-width="1.6" stroke-dasharray="3 2.2"/>
+    </g>`;
+  } else {
+    const poseTransform = isIdle ? 'translate(5,-1) rotate(7 100 50)'
+      : (hasErr ? 'translate(3,-1)'
+      : (isWaitModel || isWaitRetry ? 'translate(2,0)' : ''));
+    const armL = isWorking
+      ? 'M91 45l-6 11 10 3'
+      : (isIdle ? 'M90 46l-5 11 5 3'
+      : (hasErr ? 'M90 46l-8 2-2-7'
+      : (isWaitModel || isWaitRetry || isWaitGate ? 'M91 46l3 9 6 1'
+      : 'M91 46l-3 11')));
+    const armR = isWorking
+      ? 'M109 45l5 11-10 3'
+      : (isIdle ? 'M111 46l9 8 4 3'
+      : (hasErr ? 'M110 46l8 2 2-7'
+      : (isWaitModel || isWaitRetry || isWaitGate ? 'M109 46l-3 9-6 1'
+      : 'M109 46l3 11')));
+    const mouthLine = isIdle
+      ? '<path d="M98 32c1.5 1 2.5 1 4 0" fill="none" stroke="#475569" stroke-width="1" stroke-linecap="round"/>'
+      : (hasErr ? '<path d="M98 33c1.5-1 2.5-1 4 0" fill="none" stroke="#991b1b" stroke-width="1" stroke-linecap="round"/>' : '');
+    personSvg = `<g transform="${poseTransform}" opacity="${isUnknown ? '.7' : '1'}">
       <rect x="86" y="33" width="28" height="17" rx="5" fill="#1e293b" opacity=".82"/>
       <path d="M87 49c0-8 26-8 26 0l2 13H85z" fill="${shirt}" stroke="rgba(15,23,42,.38)" stroke-width="1.1"/>
       <circle cx="100" cy="28" r="8.6" fill="#f3c6a5" stroke="rgba(15,23,42,.32)" stroke-width="1"/>
       <path d="M91.8 26.2c2-6 14.4-6 16.4 0" fill="#1e293b"/>
       <circle cx="97" cy="28.5" r="1" fill="#0f172a"/><circle cx="103" cy="28.5" r="1" fill="#0f172a"/>
-      <path class="ws-arm-l" d="M91 45l-6 11 10 3" fill="none" stroke="${shirt}" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round"/>
-      <path class="ws-arm-r" d="M109 45l5 11-10 3" fill="none" stroke="${shirt}" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round"/>
-    </g>` : `
-    <g opacity=".78">
-      <rect x="86" y="36" width="28" height="19" rx="5" fill="#475569" stroke="rgba(15,23,42,.42)" stroke-width="1"/>
-      <circle cx="100" cy="30" r="6.5" fill="none" stroke="#f59e0b" stroke-width="1.6" stroke-dasharray="3 2.2"/>
+      ${mouthLine}
+      <path class="ws-arm-l" d="${armL}" fill="none" stroke="${shirt}" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round"/>
+      <path class="ws-arm-r" d="${armR}" fill="none" stroke="${shirt}" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round"/>
     </g>`;
+  }
+
+  const scrMarkSvg = isWorking
+    ? `<line class="ws-scr-bar" x1="55" y1="48" x2="70" y2="40.5" stroke="${scrAccent}" stroke-width="2.2" stroke-linecap="round"/>
+       <line x1="55" y1="53" x2="66" y2="47.5" stroke="${scrAccent}" stroke-width="1.6" stroke-linecap="round" opacity=".75"/>`
+    : (isIdle
+      ? `<circle cx="63" cy="47" r="2.1" fill="#475569" opacity=".65"/>`
+      : (hasErr
+        ? `<line x1="63" y1="40" x2="63" y2="49" stroke="#fb7185" stroke-width="2.4" stroke-linecap="round"/>
+           <circle cx="63" cy="53" r="1.4" fill="#fb7185"/>`
+        : (isWaitModel
+          ? `<polygon points="59,41 67,41 63,46.5" fill="none" stroke="#95a6fa" stroke-width="1.3"/>
+             <polygon points="59,53 67,53 63,47.5" fill="none" stroke="#95a6fa" stroke-width="1.3"/>`
+          : (isWaitRetry
+            ? `<path d="M60 44a4.5 4.5 0 1 1-.5 5.5" fill="none" stroke="#fb923c" stroke-width="1.8" stroke-linecap="round"/>
+               <polygon points="58,43 62,43 60,46.5" fill="#fb923c"/>`
+            : (isWaitGate
+              ? `<rect x="59" y="42" width="8" height="10" rx="1.5" fill="none" stroke="#fbbf24" stroke-width="1.5"/>`
+              : `<text x="63" y="51" text-anchor="middle" fill="#94a3b8" font-size="13" font-weight="800">?</text>`)))));
 
   const screenSvg = isGate && st.id === 'gate_video' ? '' : `
     <g>
       <polygon points="50,43 76,30 76,51 50,64" fill="#0f172a" stroke="${strokeC}" stroke-width="1.2"/>
       <polygon points="52.5,44.5 73.5,33.5 73.5,49.5 52.5,60.5" fill="${scrFill}"/>
-      <line class="ws-scr-bar" x1="55" y1="48" x2="70" y2="40.5" stroke="${scrAccent}" stroke-width="2.2" stroke-linecap="round"/>
-      <line x1="55" y1="53" x2="66" y2="47.5" stroke="${scrAccent}" stroke-width="1.6" stroke-linecap="round" opacity=".75"/>
+      ${scrMarkSvg}
     </g>`;
 
-  const spotlightSvg = isWaiting ? `
-    <polygon class="ws-spotlight" points="64,0 124,0 148,78 40,78" fill="url(#ws-spot-grad)" opacity=".82"/>` : '';
+  const spotId = 'ws-spot-' + esc(st.id);
+  const spotlightSvg = isWaitGate ? `
+    <polygon class="ws-spotlight" points="64,0 124,0 148,78 40,78" fill="url(#${spotId})" opacity=".82"/>` : '';
 
-  const coffeeSvg = (!isWorking && !isGate) ? `
-    <g transform="translate(122,60)">
-      <ellipse cx="0" cy="3.2" rx="3.8" ry="2" fill="#cbd5e1"/>
-      <rect x="-2.8" y="-2" width="5.6" height="4.8" rx="1.4" fill="#e2e8f0" stroke="#64748b" stroke-width=".8"/>
+  const coffeeSvg = (isIdle && !isGate) ? `
+    <g transform="translate(124,64)">
+      <ellipse cx="0" cy="3.4" rx="4.2" ry="2.2" fill="#cbd5e1"/>
+      <rect x="-3" y="-2.2" width="6" height="5" rx="1.5" fill="#f8fafc" stroke="#64748b" stroke-width=".9"/>
+      <path d="M3 -1c2 0 2 3 0 3" fill="none" stroke="#94a3b8" stroke-width=".9"/>
+      <path d="M-1.2 -4.2c-.8-1.4 .8-2 0-3.2M1.4 -4c-.8-1.4 .8-2 0-3.2" fill="none" stroke="#cbd5e1" stroke-width=".9" stroke-linecap="round" opacity=".75"/>
     </g>` : '';
 
-  const deskLampGlow = isWorking ? `<polygon points="54,48 98,58 84,78 44,64" fill="#2dd4bf" opacity=".12"/>` : '';
+  const deskLampGlow = isWorking ? `<polygon points="54,48 98,58 84,78 44,64" fill="#2dd4bf" opacity=".13"/>` : '';
 
   return `<svg class="ws-iso-svg" viewBox="0 0 180 112" aria-hidden="true">
     <defs>
-      <linearGradient id="ws-spot-grad" x1="0" y1="0" x2="0" y2="1">
+      <linearGradient id="${spotId}" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0%" stop-color="#fbbf24" stop-opacity=".46"/>
         <stop offset="100%" stop-color="#fbbf24" stop-opacity="0"/>
       </linearGradient>
@@ -1793,44 +2086,68 @@ function wsIsoSvg(st){
     ${deskLampGlow}
     ${screenSvg}
     <polygon points="80,68 97,60 106,64.5 89,72.5" fill="#0f172a" stroke="${strokeC}" stroke-width=".8"/>
-    ${wsPropSvg(st.id, isWorking)}
-    ${coffeeSvg}
+    ${wsPropSvg(st.id, ws)}
     ${docsSvg}
+    ${coffeeSvg}
     ${errBadgeSvg}
   </svg>`;
 }
 
-function wsStationHtml(st){
-  const badge = st.isWorking
-    ? `<span class="ws-st-badge work">${st.isMachine ? '● Đang chạy' : '● Đang làm'}</span>`
-    : (st.isGate && st.folders.length
-      ? `<span class="ws-st-badge gate">★ Chờ duyệt (${st.folders.length})</span>`
-      : (st.hasError
-        ? `<span class="ws-st-badge err">▲ Lỗi gần nhất</span>`
-        : (st.isGate
-          ? `<span class="ws-st-badge gate">★ Bác sĩ</span>`
-          : `<span class="ws-st-badge">○ Nghỉ</span>`)));
+function wsSvgSig(st){
+  const folderSig = (st.folders || []).slice(0, 3).map(f => `${f.slug}:${f.tone}`).join(',');
+  return [
+    st.id,
+    st.isGate ? 'G' : (st.isMachine ? 'M' : 'R'),
+    st.workState || 'unknown',
+    st.actClass || '',
+    folderSig,
+  ].join('|');
+}
+
+function wsStationPresentation(st){
+  const ws = st.workState || 'unknown';
+  const meta = WS_STATE_META[ws] || WS_STATE_META.unknown;
+  let badgeText = st.isMachine ? meta.machineLabel : meta.label;
+  if(st.isGate && ws === 'waiting_gate' && st.folders.length){
+    badgeText = `Chờ duyệt (${st.folders.length})`;
+  } else if(st.isGate && ws === 'idle'){
+    badgeText = 'Bác sĩ';
+  }
+  const badgeHtml = `${meta.symbol} ${badgeText}`;
+  const badgeClass = `ws-st-badge ${meta.badgeClass}`;
+
+  let durText = '';
+  if(ws === 'working'){
+    const rawDur = st.isMachine ? st.machineProjects[0]?.duration_s : st.running[0]?.duration_s;
+    durText = wsFmtDurCompact(rawDur);
+  }
 
   const roleHint = (st.stepLabels && st.stepLabels[0]) ? st.stepLabels[0].replace(/^Đang\s+/i, '') : '';
-  let taskLine = st.isGate
-    ? (st.folders.length ? `<strong>${st.folders.length} hồ sơ</strong> đang chờ PIN bác sĩ` : 'Chờ hồ sơ tới cổng')
-    : (roleHint ? roleHint.charAt(0).toUpperCase() + roleHint.slice(1) : 'Sẵn sàng');
-  if(st.isMachine){
-    if(st.isWorking && st.machineProjects.length){
+  let taskHtml = '';
+  if(ws === 'unknown'){
+    taskHtml = esc(st.workLabel || 'Chưa xác minh trạng thái');
+  } else if(st.isGate){
+    taskHtml = st.folders.length
+      ? `<strong>${st.folders.length} hồ sơ</strong> đang chờ PIN bác sĩ`
+      : 'Chờ hồ sơ tới cổng';
+  } else if(st.isMachine){
+    if(ws === 'working' && st.machineProjects.length){
       const p0 = st.machineProjects[0];
       const more = st.machineProjects.length > 1 ? ` (+${st.machineProjects.length - 1})` : '';
-      taskLine = `<strong>Đang chạy:</strong> ${esc(p0.title || p0.slug)}${esc(more)}`;
-    } else if(st.hasError){
-      taskLine = 'Bị chặn ở bước dựng video';
+      taskHtml = `<strong>Đang chạy:</strong> ${esc(p0.title || p0.slug)}${esc(more)}`;
+    } else if(ws === 'error' || ws === 'waiting_retry' || ws === 'waiting_model'){
+      taskHtml = esc(st.workLabel || meta.machineLabel);
     } else {
-      taskLine = 'TTS · FLUX · Remotion';
+      taskHtml = 'Đang nghỉ · TTS · FLUX · Remotion';
     }
-  } else if(st.isWorking && st.running[0]){
+  } else if(ws === 'working' && st.running[0]){
     const r = st.running[0];
     const topicText = r.slug && !['chung','chat'].includes(r.slug) ? ` · ${r.slug}` : '';
-    taskLine = `<strong>${esc(r.step_label || r.step)}</strong>${esc(topicText)}`;
-  } else if(st.hasError && st.recent[0]){
-    taskLine = `Lỗi: ${esc((st.recent[0].step_label || st.recent[0].step).replace(/^Đang\s+/i, ''))}`;
+    taskHtml = `<strong>${esc(r.step_label || r.step)}</strong>${esc(topicText)}`;
+  } else if(ws === 'waiting_model' || ws === 'waiting_retry' || ws === 'waiting_gate' || ws === 'error'){
+    taskHtml = esc(st.workLabel || meta.label);
+  } else {
+    taskHtml = roleHint ? esc(roleHint.charAt(0).toUpperCase() + roleHint.slice(1)) : 'Đang nghỉ';
   }
 
   const folderChips = st.folders.slice(0, 2).map(f =>
@@ -1839,65 +2156,188 @@ function wsStationHtml(st){
 
   const cls = [
     'ws-station',
-    st.isWorking ? 'is-working' : '',
+    meta.stationClass,
     st.isGate ? 'is-gate' : '',
-    (st.isGate && st.folders.length) ? 'is-gate-waiting' : '',
-    st.hasError ? 'has-error' : '',
+    (st.isGate && ws === 'waiting_gate' && st.folders.length) ? 'is-gate-waiting' : '',
+    (ws === 'working' && st.actClass) ? st.actClass : '',
     wsSelectedId === st.id ? 'is-selected' : '',
   ].filter(Boolean).join(' ');
 
-  const ariaStatus = st.isWorking
-    ? (st.isMachine ? 'đang chạy tự động' : 'đang làm việc')
-    : (st.hasError ? 'có lỗi gần nhất' : (st.isGate && st.folders.length ? 'đang chờ bác sĩ duyệt' : 'đang nghỉ'));
-  return `<button type="button" class="${cls}" data-station-id="${esc(st.id)}"
-      aria-haspopup="dialog" aria-expanded="${wsSelectedId === st.id ? 'true' : 'false'}"
-      aria-label="${esc(st.displayName)} — ${ariaStatus}${st.folders.length ? `, ${st.folders.length} hồ sơ trên bàn` : ''}">
+  const ariaStatus = (st.isGate && ws === 'waiting_gate' && st.folders.length)
+    ? `đang chờ bác sĩ duyệt (${st.folders.length} hồ sơ)`
+    : meta.aria;
+  const ariaLabel = `${st.displayName} — ${ariaStatus}${st.folders.length ? `, ${st.folders.length} hồ sơ trên bàn` : ''}`;
+
+  return {
+    cls,
+    ariaLabel,
+    expanded: wsSelectedId === st.id ? 'true' : 'false',
+    badgeClass,
+    badgeHtml,
+    durText,
+    taskHtml,
+    folderChips,
+    svgSig: wsSvgSig(st),
+    metaSig: [badgeClass, badgeText, st.displayName, taskHtml, folderChips].join('||'),
+  };
+}
+
+function wsCreateStationElement(st, pres){
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = pres.cls;
+  btn.dataset.stationId = st.id;
+  btn.dataset.svgSig = pres.svgSig;
+  btn.dataset.metaSig = pres.metaSig;
+  btn.setAttribute('aria-haspopup', 'dialog');
+  btn.setAttribute('aria-expanded', pres.expanded);
+  btn.setAttribute('aria-label', pres.ariaLabel);
+  btn.innerHTML = `
     <div class="ws-st-top">
       <span class="ws-st-num">${esc(st.num)}</span>
-      ${badge}
+      <span class="ws-st-top-r">
+        <span class="ws-st-dur" data-ws-dur ${pres.durText ? '' : 'hidden'}>${esc(pres.durText)}</span>
+        <span class="${esc(pres.badgeClass)}">${esc(pres.badgeHtml)}</span>
+      </span>
     </div>
     <div class="ws-iso-stage">${wsIsoSvg(st)}</div>
     <div class="ws-st-info">
       <div class="ws-st-name">${esc(st.displayName)}</div>
-      <div class="ws-st-task">${taskLine}</div>
-      ${folderChips ? `<div class="ws-st-files">${folderChips}</div>` : ''}
-    </div>
-  </button>`;
+      <div class="ws-st-task">${pres.taskHtml}</div>
+      <div class="ws-st-files" ${pres.folderChips ? '' : 'hidden'}>${pres.folderChips}</div>
+    </div>`;
+  btn.onclick = (ev) => openWorkshopPopover(btn.dataset.stationId, ev.currentTarget);
+  return btn;
+}
+
+function wsReconcileRow(container, stations){
+  if(!container) return;
+  const existing = new Map();
+  Array.from(container.children).forEach(el => {
+    const sid = el.getAttribute('data-station-id');
+    if(sid) existing.set(sid, el);
+  });
+  const keepIds = new Set(stations.map(s => s.id));
+  existing.forEach((el, sid) => {
+    if(!keepIds.has(sid)) el.remove();
+  });
+
+  stations.forEach((st, idx) => {
+    const pres = wsStationPresentation(st);
+    let el = existing.get(st.id);
+    if(!el){
+      el = wsCreateStationElement(st, pres);
+      const refNode = container.children[idx] || null;
+      container.insertBefore(el, refNode);
+      return;
+    }
+    if(container.children[idx] !== el){
+      container.insertBefore(el, container.children[idx] || null);
+    }
+    if(el.className !== pres.cls) el.className = pres.cls;
+    if(el.getAttribute('aria-expanded') !== pres.expanded) el.setAttribute('aria-expanded', pres.expanded);
+    if(el.getAttribute('aria-label') !== pres.ariaLabel) el.setAttribute('aria-label', pres.ariaLabel);
+
+    const durEl = el.querySelector('[data-ws-dur]');
+    if(durEl){
+      if(pres.durText){
+        if(durEl.textContent !== pres.durText) durEl.textContent = pres.durText;
+        durEl.hidden = false;
+      } else {
+        if(durEl.textContent !== '') durEl.textContent = '';
+        durEl.hidden = true;
+      }
+    }
+
+    if(el.dataset.metaSig !== pres.metaSig){
+      el.dataset.metaSig = pres.metaSig;
+      const badgeEl = el.querySelector('.ws-st-badge');
+      if(badgeEl){
+        badgeEl.className = pres.badgeClass;
+        badgeEl.textContent = pres.badgeHtml;
+      }
+      const nameEl = el.querySelector('.ws-st-name');
+      if(nameEl) nameEl.textContent = st.displayName;
+      const taskEl = el.querySelector('.ws-st-task');
+      if(taskEl) taskEl.innerHTML = pres.taskHtml;
+      const filesEl = el.querySelector('.ws-st-files');
+      if(filesEl){
+        filesEl.innerHTML = pres.folderChips;
+        filesEl.hidden = !pres.folderChips;
+      }
+    }
+
+    if(el.dataset.svgSig !== pres.svgSig){
+      el.dataset.svgSig = pres.svgSig;
+      const stageEl = el.querySelector('.ws-iso-stage');
+      if(stageEl) stageEl.innerHTML = wsIsoSvg(st);
+    }
+  });
+}
+
+function syncWorkshopMotion(){
+  const ws = $('workshop');
+  if(!ws) return;
+  const motionOn = Boolean(wsMotionEnabled);
+  const paused = wsPageHidden || !wsInView || wsOffline || !motionOn;
+  const liveFlow = !paused && wsHasActiveExecution;
+  ws.dataset.motion = motionOn ? 'on' : 'off';
+  ws.dataset.paused = paused ? 'true' : 'false';
+  ws.dataset.liveFlow = liveFlow ? 'true' : 'false';
+  ws.dataset.offline = wsOffline ? 'true' : 'false';
+  const btn = $('btn-ws-motion');
+  if(btn){
+    btn.setAttribute('aria-pressed', String(motionOn));
+    btn.dataset.state = motionOn ? 'on' : 'off';
+    const lbl = btn.querySelector('.ws-motion-label');
+    if(lbl) lbl.textContent = motionOn ? 'Hoạt cảnh: Bật' : 'Hoạt cảnh: Tắt';
+  }
 }
 
 function renderWorkshop(){
-  const roles = companyData?.roles || [];
+  const hasVerifiedCompany = !wsOffline && Boolean(companyData && Array.isArray(companyData.roles));
+  const roles = hasVerifiedCompany ? companyData.roles : [];
   const roleMap = new Map();
   roles.forEach(r => roleMap.set(r.id, r));
 
   const runningByStation = new Map();
-  roleMap.forEach((r, id) => {
-    if(Array.isArray(r.running) && r.running.length) runningByStation.set(id, r.running);
-  });
+  if(hasVerifiedCompany){
+    roleMap.forEach((r, id) => {
+      if(Array.isArray(r.running) && r.running.length) runningByStation.set(id, r.running);
+    });
+  }
 
-  const projects = (overviewData && overviewData.projects && overviewData.projects.length)
-    ? overviewData.projects
-    : (state?.projects || []);
+  const projects = wsOffline
+    ? []
+    : ((overviewData && overviewData.projects && overviewData.projects.length)
+      ? overviewData.projects
+      : (state?.projects || []));
   const folderMap = wsMapProjectsToStations(projects, roleMap, runningByStation);
 
   const buildStation = (def, fallbackNum) => {
     if(def.isMachine){
-      const activeProjs = (projects || []).filter(
-        p => (p.state === 'medically_approved' || p.state === 'production_in_progress') && !p.blocked
-      );
+      const prodObj = hasVerifiedCompany ? (companyData.production || null) : null;
+      const prodRunning = hasVerifiedCompany
+        ? (Array.isArray(companyData.production_running)
+          ? companyData.production_running
+          : (Array.isArray(prodObj?.running) ? prodObj.running : []))
+        : [];
+      const workState = wsResolveMachineState(hasVerifiedCompany ? companyData : null, wsOffline);
+      const isWorking = workState === 'working';
+      const machineProjects = isWorking ? prodRunning : [];
       const rawFolders = folderMap.get(def.id) || [];
       const seenSlugs = new Set(rawFolders.map(f => f.slug));
       const mergedFolders = [...rawFolders];
-      activeProjs.forEach(p => {
-        if(!seenSlugs.has(p.slug)){
+      machineProjects.forEach(p => {
+        if(p && p.slug && !seenSlugs.has(p.slug)){
           mergedFolders.push({
             slug: p.slug,
             title: p.title || p.slug,
             tone: 'work',
-            tag: p.state_label || 'Đang dựng tự động',
-            gate: p.gate,
-            blocked: p.blocked || '',
-            state: p.state,
+            tag: 'Đang dựng video',
+            gate: null,
+            blocked: '',
+            state: 'production_in_progress',
           });
         }
       });
@@ -1907,26 +2347,39 @@ function renderWorkshop(){
         displayName: def.title,
         isGate: false,
         isMachine: true,
+        actClass: '',
         desc: def.desc,
-        isWorking: activeProjs.length > 0,
-        hasError: mergedFolders.some(f => f.tone === 'err'),
+        workState,
+        workLabel: wsOffline ? 'Chưa xác minh' : (prodObj?.work_label || (WS_STATE_META[workState]?.machineLabel || 'Chưa xác minh')),
+        workDetail: wsOffline ? 'Mất kết nối với app xưởng' : (prodObj?.work_detail || ''),
+        retryAfter: prodObj?.retry_after || null,
+        isWorking,
+        hasError: workState === 'error',
         running: [],
         recent: [],
         modelsUsed: [],
         configuredModels: [],
-        machineProjects: activeProjs,
+        machineProjects,
         folders: mergedFolders,
       };
     }
     if(def.isGate){
       const folders = folderMap.get(def.id) || [];
+      const workState = wsOffline || !hasVerifiedCompany
+        ? 'unknown'
+        : (folders.length > 0 ? 'waiting_gate' : 'idle');
       return {
         id: def.id,
         num: def.num,
         displayName: def.title,
         isGate: true,
+        isMachine: false,
+        actClass: '',
         gateKind: def.gateKind,
         desc: def.desc,
+        workState,
+        workLabel: wsOffline ? 'Chưa xác minh' : (folders.length ? `Chờ duyệt (${folders.length})` : 'Đang nghỉ'),
+        workDetail: wsOffline ? 'Mất kết nối với app xưởng' : '',
         isWorking: false,
         hasError: false,
         running: [],
@@ -1936,26 +2389,38 @@ function renderWorkshop(){
         folders,
       };
     }
-    const r = roleMap.get(def.id) || {id: def.id, name: def.short || def.id, running: [], recent: [], models_used: [], configured_models: [], steps: [], step_labels: [], last_error: false};
+    const r = roleMap.get(def.id) || null;
+    const base = r || {
+      id: def.id, name: def.short || def.id, running: [], recent: [],
+      models_used: [], configured_models: [], steps: [], step_labels: [], last_error: false,
+    };
     const folders = folderMap.get(def.id) || [];
-    const hasBlockedHere = folders.some(f => f.tone === 'err');
-    const running = r.running || [];
+    const workState = wsResolveRoleState(r, hasVerifiedCompany, wsOffline);
+    const running = workState === 'working' && Array.isArray(base.running) ? base.running : [];
+    const fallbackLabel = WS_STATE_META[workState]?.label || 'Chưa xác minh';
     return {
-      id: r.id,
+      id: base.id,
       num: def.num || fallbackNum || 'Quầy',
-      displayName: def.short ? `${def.short}` : r.name,
-      fullName: r.name,
-      tier: r.tier || '',
-      steps: r.steps || [],
-      stepLabels: r.step_labels || [],
+      displayName: def.short ? `${def.short}` : base.name,
+      fullName: base.name,
+      tier: base.tier || '',
+      steps: base.steps || [],
+      stepLabels: base.step_labels || [],
       isGate: false,
       isMachine: false,
-      isWorking: running.length > 0,
-      hasError: Boolean(r.last_error || hasBlockedHere),
+      actClass: WS_ROLE_ACT[base.id] || '',
+      workState,
+      workLabel: wsOffline ? 'Chưa xác minh' : (base.work_label || fallbackLabel),
+      workDetail: wsOffline ? 'Mất kết nối với app xưởng' : (base.work_detail || ''),
+      retryAfter: base.retry_after || null,
+      restingUntil: base.resting_until || null,
+      lastErrorHistory: Boolean(base.last_error),
+      isWorking: workState === 'working',
+      hasError: workState === 'error',
       running,
-      recent: r.recent || [],
-      modelsUsed: r.models_used || [],
-      configuredModels: r.configured_models || [],
+      recent: base.recent || [],
+      modelsUsed: base.models_used || [],
+      configuredModels: base.configured_models || [],
       folders,
     };
   };
@@ -1973,32 +2438,33 @@ function renderWorkshop(){
   wsStationMap = new Map();
   [...counterStations, ...row1Stations, ...row2Stations].forEach(st => wsStationMap.set(st.id, st));
 
-  const activeEl = document.activeElement;
-  const focusedStationId = activeEl && activeEl.dataset ? activeEl.dataset.stationId : null;
+  wsReconcileRow($('ws-counters'), counterStations);
+  wsReconcileRow($('ws-row-1'), row1Stations);
+  wsReconcileRow($('ws-row-2'), row2Stations);
 
-  $('ws-counters').innerHTML = counterStations.map(wsStationHtml).join('');
-  $('ws-row-1').innerHTML = row1Stations.map(wsStationHtml).join('');
-  $('ws-row-2').innerHTML = row2Stations.map(wsStationHtml).join('');
+  wsHasActiveExecution = !wsOffline && [...row1Stations, ...row2Stations].some(s => s.isWorking);
+  syncWorkshopMotion();
 
-  const agentWorkingCount = [...wsStationMap.values()].filter(s => !s.isGate && !s.isMachine && s.isWorking).length;
-  const machineSt = wsStationMap.get('render_machine');
-  const gateWaitCount = [...wsStationMap.values()].filter(s => s.isGate).reduce((sum, s) => sum + (s.folders?.length || 0), 0);
-  const errCount = [...wsStationMap.values()].filter(s => s.hasError).length;
-  const parts = [`${agentWorkingCount} nhân viên đang làm`];
-  if(machineSt && machineSt.isWorking) parts.push(`Máy dựng đang chạy (${machineSt.machineProjects.length} chủ đề)`);
-  if(gateWaitCount) parts.push(`${gateWaitCount} hồ sơ chờ bác sĩ duyệt`);
-  if(errCount) parts.push(`${errCount} trạm có lỗi gần nhất`);
-  parts.push(`${projects.length} chủ đề trên sàn`);
-  $('ws-summary').textContent = parts.join(' · ');
-
-  $('workshop').querySelectorAll('[data-station-id]').forEach(btn => {
-    btn.onclick = (ev) => openWorkshopPopover(btn.dataset.stationId, ev.currentTarget);
-  });
-
-  if(focusedStationId){
-    const restore = $('workshop').querySelector(`[data-station-id="${CSS.escape(focusedStationId)}"]`);
-    if(restore) restore.focus({preventScroll: true});
+  if(wsOffline || !hasVerifiedCompany){
+    $('ws-summary').textContent = wsOffline
+      ? 'Chưa xác minh trạng thái xưởng — mất kết nối với app.'
+      : 'Chưa xác minh trạng thái xưởng — đang chờ dữ liệu xác thực.';
+  } else {
+    const allStations = [...wsStationMap.values()];
+    const agentWorkingCount = allStations.filter(s => !s.isGate && !s.isMachine && s.isWorking).length;
+    const machineSt = wsStationMap.get('render_machine');
+    const gateWaitCount = allStations.filter(s => s.isGate && s.workState === 'waiting_gate').reduce((sum, s) => sum + (s.folders?.length || 0), 0);
+    const waitCount = allStations.filter(s => s.workState === 'waiting_model' || s.workState === 'waiting_retry').length;
+    const errCount = allStations.filter(s => s.workState === 'error').length;
+    const parts = [`${agentWorkingCount} nhân viên đang làm`];
+    if(machineSt && machineSt.isWorking) parts.push(`Máy dựng đang chạy (${machineSt.machineProjects.length} chủ đề)`);
+    if(gateWaitCount) parts.push(`${gateWaitCount} hồ sơ chờ bác sĩ duyệt`);
+    if(waitCount) parts.push(`${waitCount} trạm chờ model/thử lại`);
+    if(errCount) parts.push(`${errCount} trạm dừng do lỗi`);
+    parts.push(`${projects.length} chủ đề trên sàn`);
+    $('ws-summary').textContent = parts.join(' · ');
   }
+
   if(wsSelectedId && !$('ws-popover').hidden){
     const currentSt = wsStationMap.get(wsSelectedId);
     if(currentSt) renderWorkshopPopoverContent(currentSt);
@@ -2006,20 +2472,49 @@ function renderWorkshop(){
 }
 
 function renderWorkshopPopoverContent(st){
+  const pop = $('ws-popover');
+  const nextPopSig = [
+    st.id, st.workState, st.workLabel, st.workDetail,
+    (st.machineProjects || []).map(p => p.slug).join(','),
+    (st.running || []).map(r => `${r.step}:${r.slug}:${r.cli}:${r.model}`).join(','),
+    (st.folders || []).map(f => `${f.slug}:${f.tone}:${f.tag}`).join(','),
+    (st.recent || []).length,
+  ].join('|');
+  if(pop && !pop.hidden && pop.dataset.popSig === nextPopSig){
+    const durSpan = pop.querySelector('[data-ws-pop-dur]');
+    if(durSpan){
+      const rawDur = st.isMachine ? st.machineProjects[0]?.duration_s : st.running[0]?.duration_s;
+      const nextDur = wsFmtDur(rawDur);
+      if(nextDur && durSpan.textContent !== nextDur) durSpan.textContent = nextDur;
+    }
+    return;
+  }
+  if(pop) pop.dataset.popSig = nextPopSig;
+  const prevScroll = pop ? pop.scrollTop : 0;
   $('ws-pop-title').textContent = st.fullName || st.displayName;
+  const ws = st.workState || 'unknown';
   if(st.isMachine){
     $('ws-pop-meta').textContent = `Trạm ${st.num} · Python tự chạy · TTS · FLUX · Remotion`;
-    const activeHtml = st.machineProjects.length
-      ? `<div class="ws-pop-list">${st.machineProjects.map(p => `<div class="ws-pop-item" style="border-color:hsl(168 78% 52% / .45)">
-          <div class="ws-pop-item-top"><span style="color:var(--ws-c-work)">● Đang chạy</span><span class="chip work">${esc(p.state_label || p.state)}</span></div>
+    let activeHtml = '';
+    if(ws === 'unknown'){
+      activeHtml = `<div class="ws-pop-box"><b>? Chưa xác minh:</b> ${esc(st.workDetail || 'Chưa có tín hiệu xác thực từ tiến trình máy dựng.')}</div>`;
+    } else if(st.machineProjects.length){
+      activeHtml = `<div class="ws-pop-list">${st.machineProjects.map((p, idx) => `<div class="ws-pop-item" style="border-color:hsl(168 78% 52% / .45)">
+          <div class="ws-pop-item-top"><span style="color:var(--ws-c-work)">● Đang chạy</span><span class="chip work"${idx === 0 ? ' data-ws-pop-dur' : ''}>${esc(wsFmtDur(p.duration_s) || 'Đang dựng')}</span></div>
           <div style="font-weight:700;margin-top:4px">${esc(p.title || p.slug)}</div>
           <div class="meta">${esc(p.slug)}</div>
           <div style="margin-top:8px"><button type="button" class="btn" data-ws-open-proj="${esc(p.slug)}">Xem dự án</button></div>
-        </div>`).join('')}</div>`
-      : `<div class="ws-pop-box">${st.hasError ? '<span style="color:var(--ws-c-err);font-weight:700">▲ Có dự án đang bị chặn ở bước dựng video.</span>' : 'Đang nghỉ — hiện chưa có dự án nào ở bước dựng tự động.'}</div>`;
-    const blockedFolders = st.folders.filter(f => f.tone === 'err');
-    const blockedHtml = blockedFolders.length
-      ? `<div class="ws-pop-sec"><div class="ws-pop-label">Hồ sơ đang bị chặn (${blockedFolders.length})</div><div class="ws-pop-list">${blockedFolders.map(f =>
+        </div>`).join('')}</div>`;
+    } else if(ws === 'error'){
+      activeHtml = `<div class="ws-pop-box"><span style="color:var(--ws-c-err);font-weight:700">▲ ${esc(st.workLabel || 'Dừng do lỗi dựng video')}</span>${st.workDetail ? `<div class="meta" style="margin-top:4px">${esc(st.workDetail)}</div>` : ''}</div>`;
+    } else if(ws === 'waiting_retry'){
+      activeHtml = `<div class="ws-pop-box"><span style="color:var(--ws-c-wait-retry);font-weight:700">↻ ${esc(st.workLabel || 'Chờ thử lại')}</span>${st.workDetail ? `<div class="meta" style="margin-top:4px">${esc(st.workDetail)}</div>` : ''}</div>`;
+    } else {
+      activeHtml = `<div class="ws-pop-box">Đang nghỉ — hiện chưa có tiến trình dựng thật (.production-running) đang chạy.</div>`;
+    }
+    const queuedFolders = st.folders.filter(f => !st.machineProjects.some(p => p.slug === f.slug));
+    const queuedHtml = queuedFolders.length
+      ? `<div class="ws-pop-sec"><div class="ws-pop-label">Hồ sơ trên bàn trạm 06 (${queuedFolders.length})</div><div class="ws-pop-list">${queuedFolders.map(f =>
           `<div class="ws-pop-item"><div class="ws-pop-item-top"><span>${esc(f.title)}</span><button type="button" class="btn-link" data-ws-open-proj="${esc(f.slug)}">Mở</button></div><div class="meta">${esc(f.slug)} · ${esc(f.tag)}</div></div>`
         ).join('')}</div></div>` : '';
     $('ws-pop-body').innerHTML = `
@@ -2028,23 +2523,25 @@ function renderWorkshopPopoverContent(st){
         <div class="ws-pop-box">${esc(st.desc)}</div>
       </div>
       <div class="ws-pop-sec">
-        <div class="ws-pop-label">Chủ đề đang dựng tự động (${st.machineProjects.length})</div>
+        <div class="ws-pop-label">Tiến trình dựng đã xác minh (${st.machineProjects.length})</div>
         ${activeHtml}
       </div>
-      ${blockedHtml}
+      ${queuedHtml}
       <div class="ws-pop-sec">
-        <div class="ws-pop-label">Trạng thái kích hoạt</div>
+        <div class="ws-pop-label">Trạng thái dự án đầu vào</div>
         <div class="ws-pop-models"><span class="ws-pop-model">medically_approved</span><span class="ws-pop-model">production_in_progress</span></div>
       </div>`;
   } else if(st.isGate){
     $('ws-pop-meta').textContent = `Trạm ${st.num} · Cổng duyệt của bác sĩ`;
-    const listHtml = st.folders.length
-      ? st.folders.map(f => `<div class="ws-pop-item">
-          <div class="ws-pop-item-top"><span>${esc(f.title)}</span><span class="chip gate">Chờ PIN</span></div>
-          <div class="meta">${esc(f.slug)}</div>
-          <div style="margin-top:8px"><button type="button" class="btn warn" data-ws-open-proj="${esc(f.slug)}">Mở xem &amp; quyết định</button></div>
-        </div>`).join('')
-      : `<div class="ws-pop-box">Hiện chưa có hồ sơ nào chờ tại cổng này.</div>`;
+    const listHtml = ws === 'unknown'
+      ? `<div class="ws-pop-box">? Chưa xác minh trạng thái cổng duyệt.</div>`
+      : (st.folders.length
+        ? st.folders.map(f => `<div class="ws-pop-item">
+            <div class="ws-pop-item-top"><span>${esc(f.title)}</span><span class="chip gate">Chờ PIN</span></div>
+            <div class="meta">${esc(f.slug)}</div>
+            <div style="margin-top:8px"><button type="button" class="btn warn" data-ws-open-proj="${esc(f.slug)}">Mở xem &amp; quyết định</button></div>
+          </div>`).join('')
+        : `<div class="ws-pop-box">Hiện chưa có hồ sơ nào chờ tại cổng này.</div>`);
     $('ws-pop-body').innerHTML = `
       <div class="ws-pop-sec">
         <div class="ws-pop-label">Vai trò bác sĩ</div>
@@ -2057,14 +2554,27 @@ function renderWorkshopPopoverContent(st){
   } else {
     const stepText = (st.stepLabels || []).join(' · ') || '—';
     $('ws-pop-meta').textContent = `${st.num === 'Quầy' ? 'Quầy riêng' : 'Trạm ' + st.num} · ${st.id} · bậc ${st.tier || '—'}`;
-    const currentHtml = st.isWorking
-      ? st.running.map(r => `<div class="ws-pop-box" style="border-color:hsl(168 78% 52% / .5)">
+    let currentHtml = '';
+    if(ws === 'working' && st.running.length){
+      currentHtml = st.running.map((r, idx) => `<div class="ws-pop-box" style="border-color:hsl(168 78% 52% / .5)">
           <div><b style="color:var(--ws-c-work)">● Đang làm:</b> ${esc(r.step_label || r.step)}</div>
-          ${r.slug ? `<div class="meta" style="margin-top:4px">Chủ đề: ${esc(r.slug)} · ${esc(ago(r.started_at || r.at))}</div>` : ''}
+          ${r.slug ? `<div class="meta" style="margin-top:4px">Chủ đề: ${esc(r.slug)} · <span${idx === 0 ? ' data-ws-pop-dur' : ''}>${esc(wsFmtDur(r.duration_s) || ago(r.started_at || r.at))}</span></div>` : ''}
           <div class="meta">Model: ${esc(r.cli)} / ${esc(r.model)}</div>
           ${r.slug && !['chung','chat'].includes(r.slug) ? `<div style="margin-top:8px"><button type="button" class="btn" data-ws-open-proj="${esc(r.slug)}">Xem dự án</button></div>` : ''}
-        </div>`).join('')
-      : `<div class="ws-pop-box">Đang nghỉ — hiện không có việc nào đang chạy.${st.hasError ? '<div style="margin-top:6px;color:var(--ws-c-err);font-weight:700">▲ Lần gần nhất ở bước này gặp lỗi hoặc đang bị chặn.</div>' : ''}</div>`;
+        </div>`).join('');
+    } else if(ws === 'waiting_model'){
+      currentHtml = `<div class="ws-pop-box"><b style="color:var(--ws-c-wait-model)">◷ ${esc(st.workLabel || 'Chờ model')}</b>${st.workDetail ? `<div class="meta" style="margin-top:4px">${esc(st.workDetail)}</div>` : ''}</div>`;
+    } else if(ws === 'waiting_retry'){
+      currentHtml = `<div class="ws-pop-box"><b style="color:var(--ws-c-wait-retry)">↻ ${esc(st.workLabel || 'Chờ thử lại')}</b>${st.workDetail ? `<div class="meta" style="margin-top:4px">${esc(st.workDetail)}</div>` : ''}</div>`;
+    } else if(ws === 'waiting_gate'){
+      currentHtml = `<div class="ws-pop-box"><b style="color:var(--ws-c-gate)">★ ${esc(st.workLabel || 'Chờ duyệt')}</b></div>`;
+    } else if(ws === 'error'){
+      currentHtml = `<div class="ws-pop-box"><b style="color:var(--ws-c-err)">▲ ${esc(st.workLabel || 'Dừng do lỗi')}</b>${st.workDetail ? `<div class="meta" style="margin-top:4px">${esc(st.workDetail)}</div>` : ''}</div>`;
+    } else if(ws === 'unknown'){
+      currentHtml = `<div class="ws-pop-box"><b>? ${esc(st.workLabel || 'Chưa xác minh')}</b>${st.workDetail ? `<div class="meta" style="margin-top:4px">${esc(st.workDetail)}</div>` : ''}</div>`;
+    } else {
+      currentHtml = `<div class="ws-pop-box">Đang nghỉ — hiện không có việc nào đang chạy.</div>`;
+    }
 
     const recentHtml = st.recent.length
       ? `<div class="ws-pop-list">${st.recent.slice(0, 5).map(it => {
@@ -2096,7 +2606,7 @@ function renderWorkshopPopoverContent(st){
         <div class="ws-pop-box">${esc(stepText)}</div>
       </div>
       <div class="ws-pop-sec">
-        <div class="ws-pop-label">Việc đang làm</div>
+        <div class="ws-pop-label">Trạng thái hiện tại</div>
         ${currentHtml}
       </div>
       ${deskFoldersHtml}
@@ -2117,6 +2627,7 @@ function renderWorkshopPopoverContent(st){
       openProduct(slug);
     };
   });
+  if(pop) pop.scrollTop = prevScroll;
 }
 
 function positionWorkshopPopover(anchor){
@@ -2128,7 +2639,7 @@ function positionWorkshopPopover(anchor){
   const rect = anchor.getBoundingClientRect();
   const chatRight = window.innerWidth > 980 ? 358 : 12;
   const maxRight = window.innerWidth - chatRight;
-  const popW = Math.min(390, maxRight - 12);
+  const popW = Math.min(390, Math.max(240, maxRight - 24));
   let left = Math.min(Math.max(12, rect.left), Math.max(12, maxRight - popW));
   pop.style.left = left + 'px';
   pop.style.top = '12px';
@@ -2174,6 +2685,41 @@ function closeWorkshopPopover(restoreFocus = false){
   }
 }
 
+function initWsMotionPreference(){
+  try{
+    const saved = localStorage.getItem('pyh-ws-motion');
+    if(saved === 'off') return false;
+    if(saved === 'on') return true;
+  }catch(e){}
+  return !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+}
+
+function toggleWsMotion(){
+  wsMotionEnabled = !wsMotionEnabled;
+  try{ localStorage.setItem('pyh-ws-motion', wsMotionEnabled ? 'on' : 'off'); }catch(e){}
+  syncWorkshopMotion();
+}
+
+function initWorkshopControls(){
+  wsMotionEnabled = initWsMotionPreference();
+  const btn = $('btn-ws-motion');
+  if(btn) btn.onclick = toggleWsMotion;
+  document.addEventListener('visibilitychange', () => {
+    wsPageHidden = Boolean(document.hidden);
+    syncWorkshopMotion();
+  });
+  const wsEl = $('workshop');
+  if(wsEl && typeof IntersectionObserver === 'function'){
+    const wsObs = new IntersectionObserver((entries) => {
+      if(!entries || !entries.length) return;
+      wsInView = entries.some(entry => entry.isIntersecting);
+      syncWorkshopMotion();
+    }, {threshold: 0.05});
+    wsObs.observe(wsEl);
+  }
+  syncWorkshopMotion();
+}
+
 $('ws-pop-close').onclick = () => closeWorkshopPopover(true);
 document.addEventListener('click', (e) => {
   const pop = $('ws-popover');
@@ -2188,6 +2734,10 @@ window.addEventListener('resize', () => {
     if(btn) positionWorkshopPopover(btn);
   }
 });
+
+initWorkshopControls();
+renderWorkshop();
+refresh(); loadChat(); setInterval(refresh,3000);
 </script>
 <script>
 /* Package C: app operations inside Quản trị menu */

@@ -15,7 +15,11 @@ from healthvideo.company import load_company
 from healthvideo.domain.project_v2 import WorkflowState
 from healthvideo.domain.queue import QueueEntry
 from healthvideo.domain.topic import TopicCard
-from healthvideo.process import prepare_subprocess_argv, resolve_pnpm_argv
+from healthvideo.process import (
+    prepare_subprocess_argv,
+    resolve_pnpm_argv,
+    run_with_deadline,
+)
 from healthvideo.storage.files import read_yaml
 from healthvideo.storage.project_layout import resolve_project_layout
 from healthvideo.tts.base import TTSProvider
@@ -40,6 +44,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_TTS_PYTHON = REPO_ROOT / "cache" / "tts-venv" / "Scripts" / "python.exe"
 VIENEU_WRAPPER = REPO_ROOT / "tools" / "tts" / "vieneu_synth.py"
 _EXCLUDED_TOP_DIRS = frozenset({"projects", "topics", "cache", ".claude"})
+RENDER_TIMEOUT = 2 * 60 * 60  # A full 25-minute video can render slower than real time.
 
 
 def _build_vieneu_tts(*, python: Path, voice: str, precision: str) -> NormalizedTTS:
@@ -84,8 +89,14 @@ def _run_render_argv(argv: list[str]) -> int:
     with log.open("w", encoding="utf-8", errors="replace") as stream:
         stream.write(" ".join(map(str, resolved)) + "\n\n")
         stream.flush()
-        code = subprocess.run(resolved, check=False, shell=False,
-                              stdout=stream, stderr=subprocess.STDOUT).returncode
+        try:
+            code = run_with_deadline(resolved, timeout=RENDER_TIMEOUT, runner=subprocess.run,
+                                     check=False, shell=False,
+                                     stdout=stream, stderr=subprocess.STDOUT).returncode
+        except BaseException as error:
+            stream.write(f'\n{type(error).__name__}: render interrupted or failed\n')
+            stream.flush()
+            raise
     if code == 0:
         log.unlink(missing_ok=True)
     return code

@@ -1,5 +1,6 @@
 import json
 import shutil
+import subprocess
 from pathlib import Path
 from subprocess import CompletedProcess
 
@@ -10,6 +11,22 @@ from healthvideo.domain.asset_manifest import AssetManifest
 from healthvideo.domain.storyboard import Storyboard
 from healthvideo.storage.files import read_yaml, sha256_file, write_yaml_atomic
 from tests.test_flux import illustration_record
+
+
+def test_contact_sheet_deadline_reports_partial_diagnostic(tmp_path):
+    from healthvideo.workflows.visual_review import CANDIDATES, prepare_contact_sheet
+
+    (tmp_path / 'renders').mkdir()
+    (tmp_path / 'renders/render-input.json').write_text(json.dumps({'fps': 30, 'scenes': []}))
+    (tmp_path / 'reviews/visual').mkdir(parents=True)
+    write_yaml_atomic(tmp_path / CANDIDATES, {'assets': []})
+
+    def hang(argv, **kwargs):
+        assert kwargs['timeout'] > 0
+        raise subprocess.TimeoutExpired(argv, kwargs['timeout'], stderr=b'partial FFmpeg')
+
+    with pytest.raises(RuntimeError, match='contact sheet.*timed out.*partial FFmpeg'):
+        prepare_contact_sheet(tmp_path, runner=hang)
 
 
 def _board():

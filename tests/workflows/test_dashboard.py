@@ -248,14 +248,30 @@ def test_review_console_runs_duyet_in_new_console(tmp_path):
     assert not any('pin' in key.lower() for key in captured['kw']['env'])
 
 
-def test_running_agents_reads_runner_marker(tmp_path, monkeypatch):
-    marker = tmp_path / 'topics' / 'logs' / 'gout' / dashboard.RUNNING_MARKER
-    marker.parent.mkdir(parents=True)
-    marker.write_text('codex\n2026-10-24T00:00:00\n', encoding='utf-8')
+def test_running_agents_reads_verified_marker_and_allows_live_chat_when_stopped(tmp_path, monkeypatch):
+    from healthvideo.process import process_token
+
+    gout_marker = tmp_path / 'topics' / 'logs' / 'gout' / dashboard.RUNNING_MARKER
+    gout_marker.parent.mkdir(parents=True)
+    # Legacy 2-line marker without identity must not be trusted as busy forever.
+    gout_marker.write_text('codex\n2026-10-24T00:00:00\n', encoding='utf-8')
     monkeypatch.setattr(factory, 'running_pid', lambda _: 42)
-    assert dashboard.running_agents(tmp_path) == ['codex']
-    monkeypatch.setattr(factory, 'running_pid', lambda _: None)
     assert dashboard.running_agents(tmp_path) == []
+
+    # Recycled PID (same PID, wrong creation token) must also be rejected.
+    bad_ident = json.dumps({'job_id': 'j0', 'pid': os.getpid(), 'process_token': 'win:recycled',
+                            'started_at': '2026-11-14T00:00:00+00:00'})
+    gout_marker.write_text(f'codex\n2026-11-14T00:00:00+00:00\n{bad_ident}\n', encoding='utf-8')
+    assert dashboard.running_agents(tmp_path) == []
+
+    # Verified live chat marker works even when the factory daemon is stopped.
+    monkeypatch.setattr(factory, 'running_pid', lambda _: None)
+    chat_marker = tmp_path / 'topics' / 'logs' / 'chat' / dashboard.RUNNING_MARKER
+    chat_marker.parent.mkdir(parents=True)
+    live_ident = json.dumps({'job_id': 'j1', 'pid': os.getpid(), 'process_token': process_token(os.getpid()),
+                             'started_at': '2026-11-14T00:00:00+00:00'})
+    chat_marker.write_text(f'agy\n2026-11-14T00:00:00+00:00\n{live_ident}\n', encoding='utf-8')
+    assert dashboard.running_agents(tmp_path) == ['agy']
 
 
 @pytest.fixture
@@ -523,15 +539,20 @@ def test_overview_shape(tmp_path):
     _with_server(tmp_path, check)
 
 
-def test_activity_drops_job_whose_process_died(tmp_path):
+def test_activity_drops_job_whose_process_died(tmp_path, monkeypatch):
+    from healthvideo.process import process_token
     from healthvideo.workflows.dashboard import activity
+    monkeypatch.setattr(factory, 'running_pid', lambda _: 42)
     log = tmp_path / 'topics/logs/activity.jsonl'
     log.parent.mkdir(parents=True, exist_ok=True)
+    live_tok = process_token(os.getpid())
     rows = [
         {'at': '2026-11-13T22:08:56+07:00', 'role': 'coordinator', 'cli': 'agy', 'model': 'm',
-         'slug': 'chung', 'step': 'coordinator', 'event': 'start', 'ok': None, 'pid': 2 ** 30},
+         'slug': 'chung', 'step': 'coordinator', 'event': 'start', 'ok': None,
+         'pid': 2 ** 30, 'process_token': 'win:dead', 'job_id': 'dead-job'},
         {'at': '2026-11-13T22:09:00+07:00', 'role': 'writer', 'cli': 'agy', 'model': 'm',
-         'slug': 'gout', 'step': 'draft', 'event': 'start', 'ok': None, 'pid': os.getpid()},
+         'slug': 'gout', 'step': 'draft', 'event': 'start', 'ok': None,
+         'pid': os.getpid(), 'process_token': live_tok, 'job_id': 'live-job'},
     ]
     log.write_text('\n'.join(json.dumps(r) for r in rows) + '\n', encoding='utf-8')
     data = activity(tmp_path)
@@ -539,16 +560,21 @@ def test_activity_drops_job_whose_process_died(tmp_path):
     assert data['recent'][0]['interrupted'] is True
 
 
-def test_activity_running_job_listed(tmp_path):
+def test_activity_running_job_listed(tmp_path, monkeypatch):
+    from healthvideo.process import process_token
+
+    monkeypatch.setattr(factory, 'running_pid', lambda _: 42)
     log = tmp_path / 'topics/logs/activity.jsonl'
     log.parent.mkdir(parents=True, exist_ok=True)
+    live_tok = process_token(os.getpid())
     rows = [
         {'at': '2026-11-08T10:00:00+07:00', 'role': 'medical_expert', 'cli': 'claude',
          'model': 'claude-opus-5-5', 'slug': 'gout', 'step': 'research', 'event': 'start', 'ok': None},
         {'at': '2026-11-08T10:02:00+07:00', 'role': 'medical_expert', 'cli': 'claude',
          'model': 'claude-opus-5-5', 'slug': 'gout', 'step': 'research', 'event': 'end', 'ok': True},
         {'at': '2026-11-08T10:05:00+07:00', 'role': 'writer', 'cli': 'agy',
-         'model': 'claude-opus-5-5-high', 'slug': 'gout', 'step': 'draft', 'event': 'start', 'ok': None},
+         'model': 'claude-opus-5-5-high', 'slug': 'gout', 'step': 'draft', 'event': 'start', 'ok': None,
+         'pid': os.getpid(), 'process_token': live_tok, 'job_id': 'job-draft-1'},
     ]
     log.write_text('\n'.join(json.dumps(r) for r in rows) + '\n', encoding='utf-8')
 
@@ -672,14 +698,18 @@ def test_progress_counts_tasks_and_lists_work_in_progress(tmp_path):
     assert result["phases"][0]["tasks"][2]["status"] == "todo"
 
 
-def test_company_route_returns_all_roles_recent_five_and_drops_dead_pid(tmp_path):
+def test_company_route_returns_all_roles_recent_five_and_drops_dead_pid(tmp_path, monkeypatch):
+    from healthvideo.process import process_token
+
+    monkeypatch.setattr(factory, 'running_pid', lambda _: 42)
+    live_tok = process_token(os.getpid())
     log = tmp_path / 'topics/logs/activity.jsonl'
     log.parent.mkdir(parents=True, exist_ok=True)
     rows = [
         # Dead-pid orphaned start for writer on gout at 09:00; 10:05 end is newer & ok=True.
         {'at': '2026-11-12T09:00:00+07:00', 'role': 'writer', 'cli': 'codex',
          'model': 'gpt-6.1-sol', 'slug': 'gout', 'step': 'draft', 'event': 'start',
-         'ok': None, 'pid': 2 ** 30},
+         'ok': None, 'pid': 2 ** 30, 'process_token': 'win:dead', 'job_id': 'dead-w'},
         {'at': '2026-11-12T10:00:00+07:00', 'role': 'writer', 'cli': 'agy',
          'model': 'gemini-4-carbon-high', 'slug': 'gout', 'step': 'draft', 'event': 'start', 'ok': None},
         {'at': '2026-11-12T10:05:00+07:00', 'role': 'writer', 'cli': 'agy',
@@ -696,7 +726,8 @@ def test_company_route_returns_all_roles_recent_five_and_drops_dead_pid(tmp_path
                      'event': 'end', 'ok': i != 5})
     rows.append({'at': '2026-11-12T11:00:00+07:00', 'role': 'copywriter', 'cli': 'agy',
                  'model': 'gemini-pro-orchestrator', 'slug': 'gout', 'step': 'posts',
-                 'event': 'start', 'ok': None, 'pid': os.getpid()})
+                 'event': 'start', 'ok': None, 'pid': os.getpid(),
+                 'process_token': live_tok, 'job_id': 'copy-live'})
     log.write_text('\n'.join(json.dumps(r) for r in rows) + '\n', encoding='utf-8')
 
     def check(srv):
@@ -729,16 +760,20 @@ def test_company_route_returns_all_roles_recent_five_and_drops_dead_pid(tmp_path
     _with_server(tmp_path, check)
 
 
-def test_company_route_keeps_both_roles_running_on_same_topic(tmp_path):
+def test_company_route_keeps_both_roles_running_on_same_topic(tmp_path, monkeypatch):
+    from healthvideo.process import process_token
+
+    monkeypatch.setattr(factory, 'running_pid', lambda _: 42)
+    live_tok = process_token(os.getpid())
     log = tmp_path / 'topics/logs/activity.jsonl'
     log.parent.mkdir(parents=True, exist_ok=True)
     rows = [
         {'at': '2026-11-12T10:00:00+07:00', 'role': 'writer', 'cli': 'agy',
          'model': 'gemini-4-carbon-high', 'slug': 'gout', 'step': 'draft',
-         'event': 'start', 'ok': None, 'pid': os.getpid()},
+         'event': 'start', 'ok': None, 'pid': os.getpid(), 'process_token': live_tok, 'job_id': 'w-1'},
         {'at': '2026-11-12T10:01:00+07:00', 'role': 'copywriter', 'cli': 'agy',
          'model': 'gemini-pro-orchestrator', 'slug': 'gout', 'step': 'posts',
-         'event': 'start', 'ok': None, 'pid': os.getpid()},
+         'event': 'start', 'ok': None, 'pid': os.getpid(), 'process_token': live_tok, 'job_id': 'c-1'},
     ]
     log.write_text('\n'.join(json.dumps(r) for r in rows) + '\n', encoding='utf-8')
 
@@ -756,6 +791,252 @@ def test_company_route_keeps_both_roles_running_on_same_topic(tmp_path):
     _with_server(tmp_path, check)
 
 
+def test_stopped_pipeline_stays_idle_while_live_chat_works(tmp_path, monkeypatch):
+    from healthvideo.process import process_token
+    from healthvideo.storage.files import write_yaml_atomic
+
+    monkeypatch.setattr(factory, 'running_pid', lambda _: None)
+    project = create_v2_project_fixture(tmp_path / 'projects', state='awaiting_medical_review')
+    manifest = read_yaml(project / 'project.yaml')
+    manifest['state'] = 'production_in_progress'
+    write_yaml_atomic(project / 'project.yaml', manifest)
+
+    live_tok = process_token(os.getpid())
+    log = tmp_path / 'topics/logs/activity.jsonl'
+    log.parent.mkdir(parents=True, exist_ok=True)
+    log.write_text(json.dumps({
+        'at': '2026-11-14T15:00:00+07:00', 'role': 'coordinator', 'cli': 'agy',
+        'model': 'gemini-4-hydrogen-medium', 'slug': 'chung', 'step': 'chat',
+        'event': 'start', 'ok': None, 'pid': os.getpid(),
+        'process_token': live_tok, 'job_id': 'chat-live-1',
+    }) + '\n', encoding='utf-8')
+
+    def check(srv):
+        ov = json.loads(request(srv, 'GET', '/api/overview')[1])
+        assert ov['tiles']['running'] == 0
+        comp = json.loads(request(srv, 'GET', '/api/company')[1])
+        by_id = {r['id']: r for r in comp['roles']}
+        assert by_id['coordinator']['work_state'] == 'working'
+        assert 'trả lời chat' in by_id['coordinator']['work_label'].lower()
+        assert by_id['writer']['work_state'] == 'idle'
+        assert by_id['editor']['work_state'] == 'idle'
+        assert comp['production_running'] == []
+        assert comp['production']['work_state'] == 'idle'
+
+    _with_server(tmp_path, check)
+
+
+def test_missing_dead_and_recycled_pid_are_never_busy(tmp_path):
+    log = tmp_path / 'topics/logs/activity.jsonl'
+    log.parent.mkdir(parents=True, exist_ok=True)
+    rows = [
+        # Legacy orphan start missing pid/process_token/job_id
+        {'at': '2026-11-14T10:00:00+07:00', 'role': 'scout', 'cli': 'agy',
+         'model': 'gemini-4-hydrogen-medium', 'slug': 'q', 'step': 'scout',
+         'event': 'start', 'ok': None},
+        # Dead PID with token
+        {'at': '2026-11-14T10:01:00+07:00', 'role': 'medical_expert', 'cli': 'agy',
+         'model': 'gemini-4-carbon-high', 'slug': 'gout', 'step': 'research',
+         'event': 'start', 'ok': None, 'pid': 2 ** 30,
+         'process_token': 'win:dead', 'job_id': 'dead-1'},
+        # Recycled PID: PID is alive (current process) but creation token does not match
+        {'at': '2026-11-14T10:02:00+07:00', 'role': 'writer', 'cli': 'codex',
+         'model': 'gpt-6.1-sol', 'slug': 'gout', 'step': 'draft',
+         'event': 'start', 'ok': None, 'pid': os.getpid(),
+         'process_token': 'win:recycled-token', 'job_id': 'recycled-1'},
+    ]
+    log.write_text('\n'.join(json.dumps(r) for r in rows) + '\n', encoding='utf-8')
+
+    act = dashboard.activity(tmp_path)
+    assert act['running'] == []
+    comp = dashboard.company_roster(tmp_path)
+    by_id = {r['id']: r for r in comp['roles']}
+    assert by_id['scout']['running'] == []
+    assert by_id['scout']['work_state'] in {'idle', 'unknown'}
+    assert by_id['medical_expert']['running'] == []
+    assert by_id['medical_expert']['work_state'] == 'idle'
+    assert by_id['medical_expert']['last_error'] is False
+    assert by_id['writer']['running'] == []
+    assert by_id['writer']['work_state'] == 'idle'
+    assert by_id['writer']['last_error'] is False
+
+
+def test_same_role_concurrent_jobs_match_by_job_id(tmp_path):
+    from healthvideo.process import process_token
+
+    live_tok = process_token(os.getpid())
+    log = tmp_path / 'topics/logs/activity.jsonl'
+    log.parent.mkdir(parents=True, exist_ok=True)
+    rows = [
+        {'at': '2026-11-14T12:00:00+07:00', 'role': 'coordinator', 'cli': 'agy',
+         'model': 'gemini-4-hydrogen-medium', 'slug': 'chung', 'step': 'chat',
+         'event': 'start', 'ok': None, 'pid': os.getpid(),
+         'process_token': live_tok, 'job_id': 'job-first'},
+        {'at': '2026-11-14T12:00:05+07:00', 'role': 'coordinator', 'cli': 'agy',
+         'model': 'gemini-4-hydrogen-medium', 'slug': 'chung', 'step': 'chat',
+         'event': 'start', 'ok': None, 'pid': os.getpid(),
+         'process_token': live_tok, 'job_id': 'job-second'},
+        {'at': '2026-11-14T12:00:12+07:00', 'role': 'coordinator', 'cli': 'agy',
+         'model': 'gemini-4-hydrogen-medium', 'slug': 'chung', 'step': 'chat',
+         'event': 'end', 'ok': True, 'pid': os.getpid(),
+         'process_token': live_tok, 'job_id': 'job-first'},
+    ]
+    log.write_text('\n'.join(json.dumps(r) for r in rows) + '\n', encoding='utf-8')
+
+    act = dashboard.activity(tmp_path)
+    assert [r['job_id'] for r in act['running']] == ['job-second']
+    assert act['running'][0]['started_at'] == '2026-11-14T12:00:05+07:00'
+    assert act['recent'][0]['job_id'] == 'job-first'
+    assert act['recent'][0]['duration_s'] == 12.0
+
+
+def test_production_running_requires_verified_marker_not_project_state(tmp_path, monkeypatch):
+    from healthvideo.process import process_token
+    from healthvideo.storage.files import write_yaml_atomic
+
+    project = create_v2_project_fixture(tmp_path / 'projects', state='awaiting_medical_review')
+    manifest = read_yaml(project / 'project.yaml')
+    manifest['state'] = 'medically_approved'
+    write_yaml_atomic(project / 'project.yaml', manifest)
+
+    # Merely being in medically_approved or production_in_progress is not execution.
+    comp = dashboard.company_roster(tmp_path)
+    assert comp['production_running'] == []
+    assert comp['production']['work_state'] == 'idle'
+
+    marker = tmp_path / 'topics/logs' / project.name / '.production-running'
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text('{corrupt-json', encoding='utf-8')
+    comp = dashboard.company_roster(tmp_path)
+    assert comp['production_running'] == []
+    assert comp['production']['work_state'] == 'unknown'
+
+    marker.write_text(json.dumps({
+        'pid': os.getpid(), 'process_token': 'win:recycled', 'started_at': '2026-11-14T08:00:00+00:00',
+    }), encoding='utf-8')
+    comp = dashboard.company_roster(tmp_path)
+    assert comp['production_running'] == []
+    assert comp['production']['work_state'] == 'idle'
+
+    monkeypatch.setattr(factory, 'running_pid', lambda _: 42)
+    marker.write_text(json.dumps({
+        'pid': os.getpid(), 'process_token': process_token(os.getpid()),
+        'started_at': '2026-11-14T08:00:00+00:00',
+    }), encoding='utf-8')
+    comp = dashboard.company_roster(tmp_path)
+    assert len(comp['production_running']) == 1
+    assert comp['production_running'][0]['slug'] == project.name
+    assert comp['production']['work_state'] == 'working'
+
+
+def _create_named_v2_project(
+    projects_dir,
+    slug: str,
+    state: str,
+    *,
+    resume_state: str | None = None,
+):
+    from healthvideo.storage.files import write_yaml_atomic
+
+    project = create_v2_project_fixture(projects_dir, state='awaiting_medical_review')
+    target = projects_dir / slug
+    project.rename(target)
+    manifest = read_yaml(target / 'project.yaml')
+    manifest['slug'] = slug
+    manifest['state'] = state
+    if state in {'needs_medical_revision', 'needs_production_revision', 'blocked'}:
+        manifest['side_state'] = {
+            'type': state,
+            'resume_state': resume_state or 'draft_ready',
+            'reason_code': 'test_side_state',
+            'entered_at': '2026-11-14T10:00:00+00:00',
+        }
+    elif state == 'topic_rejected':
+        manifest['side_state'] = {
+            'type': state,
+            'reason_code': 'test_rejected',
+            'entered_at': '2026-11-14T10:00:00+00:00',
+        }
+    else:
+        manifest['side_state'] = None
+    write_yaml_atomic(target / 'project.yaml', manifest)
+    return target
+
+
+def test_quota_retry_error_and_malformed_sidecar_states(tmp_path, monkeypatch):
+    from datetime import UTC, datetime, timedelta
+
+    from healthvideo.agents import QUOTA_FILE, QuotaBook
+    from healthvideo.company import load_company
+    from healthvideo.storage.files import write_yaml_atomic
+
+    monkeypatch.setattr(factory, 'running_pid', lambda _: None)
+    fixed_now = datetime(2026, 11, 14, 15, 0, 0, tzinfo=UTC)
+    company = load_company()
+    quota = QuotaBook(tmp_path / QUOTA_FILE)
+
+    # 1. Resting just one model in writer's chain does not mark writer waiting_model.
+    _create_named_v2_project(
+        tmp_path / 'projects', 'bai-viet', 'needs_medical_revision',
+        resume_state='awaiting_medical_review',
+    )
+    quota.rest(company.chain('writer')[0], fixed_now + timedelta(hours=2), '429')
+
+    # 2. Resting ALL models of bulk chain marks copywriter waiting_model when topic waits,
+    #    while scout (no topic waiting) remains idle.
+    for slot in company.chain('scout'):
+        quota.rest(slot, fixed_now + timedelta(hours=1), 'quota')
+    p_posts = _create_named_v2_project(tmp_path / 'projects', 'bai-dang', 'production_in_progress')
+    posts_log = tmp_path / 'topics/logs/bai-dang'
+    posts_log.mkdir(parents=True, exist_ok=True)
+    (posts_log / 'waiting-model.txt').write_text((fixed_now + timedelta(minutes=45)).isoformat(), encoding='utf-8')
+    # Remove posts.yaml if present so posts is the pending step on bai-dang.
+    posts_yaml = p_posts / 'revisions/001/posts/posts.yaml'
+    if posts_yaml.exists():
+        posts_yaml.unlink()
+
+    # 3. Valid transient agent-retry.yaml with future retry_after -> waiting_retry.
+    _create_named_v2_project(tmp_path / 'projects', 'nghien-cuu', 'research_in_progress')
+    write_yaml_atomic(tmp_path / 'topics/logs/nghien-cuu/agent-retry.yaml', {
+        'version': 1,
+        'steps': {
+            'research': {
+                'fingerprint': 'fp1',
+                'kind': 'transient',
+                'attempts': 1,
+                'reason': 'TimeoutExpired: network slow',
+                'retry_after': (fixed_now + timedelta(minutes=2)).isoformat(),
+            },
+        },
+    })
+
+    # 4. Malformed agent-retry.yaml -> handled safely without faking retry or busy.
+    _create_named_v2_project(tmp_path / 'projects', 'cham-bai', 'draft_ready')
+    bad_sidecar = tmp_path / 'topics/logs/cham-bai/agent-retry.yaml'
+    bad_sidecar.parent.mkdir(parents=True, exist_ok=True)
+    bad_sidecar.write_text('version: 1\nsteps: [not-a-dict\n', encoding='utf-8')
+
+    # 5. Blocked project at editor -> error.
+    _create_named_v2_project(
+        tmp_path / 'projects', 'sua-hinh', 'needs_production_revision',
+        resume_state='production_in_progress',
+    )
+    ed_log = tmp_path / 'topics/logs/sua-hinh'
+    ed_log.mkdir(parents=True, exist_ok=True)
+    (ed_log / 'blocked.txt').write_text('bước revise_production lỗi: invalid svg\n', encoding='utf-8')
+
+    comp = dashboard.company_roster(tmp_path, now=lambda: fixed_now)
+    by_id = {r['id']: r for r in comp['roles']}
+    assert by_id['writer']['work_state'] == 'idle'
+    assert by_id['scout']['work_state'] == 'idle'
+    assert by_id['copywriter']['work_state'] == 'waiting_model'
+    assert 'Chờ model' in by_id['copywriter']['work_label']
+    assert by_id['medical_expert']['work_state'] == 'waiting_retry'
+    assert 'Chờ thử lại' in by_id['medical_expert']['work_label']
+    assert by_id['script_critic']['work_state'] in {'unknown', 'error'}
+    assert by_id['editor']['work_state'] == 'error'
+
+
 def test_html_includes_workshop_3d_and_preserves_section_order():
     html = dashboard.HTML_PATH.read_text(encoding='utf-8')
     positions = [
@@ -764,8 +1045,282 @@ def test_html_includes_workshop_3d_and_preserves_section_order():
     ]
     assert positions == sorted(positions)
     assert 'prefers-reduced-motion: reduce' in html
+    assert 'id="btn-ws-motion"' in html
+    assert 'pyh-ws-motion' in html
+    assert 'visibilitychange' in html
+    assert 'IntersectionObserver' in html
+    assert 'Chưa xác minh' in html
+    assert 'Chờ model' in html
+    assert 'Chờ thử lại' in html
     assert 'Máy dựng (xưởng tự chạy)' in html
     assert 'medically_approved' in html
     assert 'production_in_progress' in html
+    # Render machine working state must come from verified production execution, not project.state.
+    assert "p => (p.state === 'medically_approved' || p.state === 'production_in_progress') && !p.blocked" not in html
+    for action_cls in (
+        'ws-act-scout', 'ws-act-medical', 'ws-act-writer', 'ws-act-critic',
+        'ws-act-art', 'ws-act-editor', 'ws-act-copywriter', 'ws-act-coordinator', 'ws-act-analyst',
+    ):
+        assert action_cls in html
     assert html.count('https://fonts.googleapis.com') <= 2
     assert 'cdn.' not in html.lower() and 'unpkg' not in html.lower() and 'jsdelivr' not in html.lower()
+
+
+def test_marker_non_string_job_id_is_rejected(tmp_path, monkeypatch):
+    from healthvideo.agents import RUNNING_MARKER
+    from healthvideo.process import process_token
+
+    monkeypatch.setattr(factory, 'running_pid', lambda _: 42)
+    live_tok = process_token(os.getpid())
+
+    _create_named_v2_project(tmp_path / 'projects', 'bool-job', 'evidence_ready')
+    _create_named_v2_project(tmp_path / 'projects', 'int-job', 'research_in_progress')
+
+    bool_marker = tmp_path / 'topics/logs/bool-job' / RUNNING_MARKER
+    bool_marker.parent.mkdir(parents=True, exist_ok=True)
+    bool_meta = json.dumps({
+        'pid': os.getpid(), 'process_token': live_tok,
+        'job_id': True, 'step': 'draft', 'started_at': '2026-11-14T10:00:00+00:00',
+    })
+    bool_marker.write_text(f'agy\n2026-11-14T10:00:00+00:00\n{bool_meta}\n', encoding='utf-8')
+
+    int_marker = tmp_path / 'topics/logs/int-job' / RUNNING_MARKER
+    int_marker.parent.mkdir(parents=True, exist_ok=True)
+    int_meta = json.dumps({
+        'pid': os.getpid(), 'process_token': live_tok,
+        'job_id': 123, 'step': 'research', 'started_at': '2026-11-14T10:00:00+00:00',
+    })
+    int_marker.write_text(f'agy\n2026-11-14T10:00:00+00:00\n{int_meta}\n', encoding='utf-8')
+
+    assert dashboard._read_agent_marker(bool_marker)['state'] == 'unverified'
+    assert dashboard._read_agent_marker(int_marker)['state'] == 'unverified'
+    assert dashboard.activity(tmp_path)['running'] == []
+
+    by_id = {r['id']: r for r in dashboard.company_roster(tmp_path)['roles']}
+    assert by_id['writer']['work_state'] == 'unknown'
+    assert by_id['medical_expert']['work_state'] == 'unknown'
+
+    valid_meta = json.dumps({
+        'pid': os.getpid(), 'process_token': live_tok,
+        'job_id': 'real-job-1', 'step': 'draft', 'started_at': '2026-11-14T10:00:00+00:00',
+    })
+    bool_marker.write_text(f'agy\n2026-11-14T10:00:00+00:00\n{valid_meta}\n', encoding='utf-8')
+    assert dashboard._read_agent_marker(bool_marker)['state'] == 'running'
+
+
+def test_waiting_model_step_precedence_staleness_terminal_and_corrupt(tmp_path, monkeypatch):
+    from datetime import UTC, date, datetime, timedelta
+
+    from healthvideo.agents import QUOTA_FILE, RUNNING_MARKER, QuotaBook
+    from healthvideo.company import load_company
+    from healthvideo.domain.queue import QueueEntry
+    from healthvideo.storage.files import write_yaml_atomic
+    from healthvideo.storage.queue import add_to_queue, queue_path
+    from healthvideo.workflows import production_retry
+
+    monkeypatch.setattr(factory, 'running_pid', lambda _: None)
+    fixed_now = datetime(2026, 11, 14, 15, 0, 0, tzinfo=UTC)
+
+    # 1. Non-dict YAML in waiting-model-step.yaml does not raise AttributeError.
+    _create_named_v2_project(tmp_path / 'projects', 'bad-list-resume', 'draft_ready')
+    bad_list_path = tmp_path / 'topics/logs/bad-list-resume/waiting-model-step.yaml'
+    bad_list_path.parent.mkdir(parents=True, exist_ok=True)
+    bad_list_path.write_text('- not-a-mapping\n', encoding='utf-8')
+
+    # 2. Terminal projects are ignored even when waiting-model-step.yaml / waiting-model.txt exist.
+    for idx, t_state in enumerate(('video_approved', 'packaged', 'published_manual', 'topic_rejected')):
+        t_slug = f'done-{idx}'
+        t_proj = _create_named_v2_project(tmp_path / 'projects', t_slug, t_state)
+        production_retry.record_model_resume(tmp_path, t_proj, 'scout', '')
+        (tmp_path / 'topics/logs' / t_slug / 'waiting-model.txt').write_text(
+            (fixed_now + timedelta(hours=1)).isoformat(), encoding='utf-8',
+        )
+
+    # 3. agent-retry.yaml overrides waiting-model-step.yaml, and unverified_scopes uses final role.
+    entry_a = QueueEntry(
+        slug='prio-case', title='Tieu de', question='Cau hoi?', doctor_note=None, added=date(2026, 11, 10),
+    )
+    add_to_queue(tmp_path, entry_a)
+    brief_a = json.dumps({'title': entry_a.title, 'question': entry_a.question, 'doctor_note': entry_a.doctor_note}, sort_keys=True)
+    p_prio = _create_named_v2_project(tmp_path / 'projects', 'prio-case', 'awaiting_medical_review')
+    production_retry.record_model_resume(tmp_path, p_prio, 'draft', brief_a)
+    write_yaml_atomic(tmp_path / 'topics/logs/prio-case/agent-retry.yaml', {
+        'version': 1,
+        'steps': {
+            'research': {
+                'fingerprint': 'fp-res',
+                'kind': 'transient',
+                'attempts': 1,
+                'reason': 'Timeout',
+                'retry_after': (fixed_now + timedelta(minutes=5)).isoformat(),
+            },
+        },
+    })
+    (tmp_path / 'topics/logs/prio-case' / RUNNING_MARKER).write_text('{bad-json', encoding='utf-8')
+
+    # 4. Stale waiting-model-step.yaml after brief change is ignored (not unknown).
+    entry_s = QueueEntry(
+        slug='stale-brief', title='Tieu de cu', question='Cau hoi?', doctor_note='Ghi chu A', added=date(2026, 11, 10),
+    )
+    add_to_queue(tmp_path, entry_s)
+    brief_s = json.dumps({'title': entry_s.title, 'question': entry_s.question, 'doctor_note': entry_s.doctor_note}, sort_keys=True)
+    p_stale = _create_named_v2_project(tmp_path / 'projects', 'stale-brief', 'awaiting_medical_review')
+    production_retry.record_model_resume(tmp_path, p_stale, 'draft', brief_s)
+    q_data = read_yaml(queue_path(tmp_path))
+    for item in q_data['entries']:
+        if item['slug'] == 'stale-brief':
+            item['doctor_note'] = 'Ghi chu B'
+    write_yaml_atomic(queue_path(tmp_path), q_data)
+
+    by_id = {r['id']: r for r in dashboard.company_roster(tmp_path, now=lambda: fixed_now)['roles']}
+    assert by_id['script_critic']['work_state'] == 'unknown'
+    assert by_id['scout']['work_state'] == 'idle'
+    assert by_id['medical_expert']['work_state'] == 'unknown'
+    assert 'Marker thiếu định danh' in by_id['medical_expert']['work_detail']
+    assert by_id['writer']['work_state'] == 'idle'
+
+    # 5. Valid forced step at gate marks role_pending_work -> waiting_model when writer chain rests.
+    entry_g = QueueEntry(
+        slug='gate-forced', title='Gate', question='Hoi?', doctor_note=None, added=date(2026, 11, 10),
+    )
+    add_to_queue(tmp_path, entry_g)
+    brief_g = json.dumps({'title': entry_g.title, 'question': entry_g.question, 'doctor_note': entry_g.doctor_note}, sort_keys=True)
+    p_gate = _create_named_v2_project(tmp_path / 'projects', 'gate-forced', 'awaiting_medical_review')
+    production_retry.record_model_resume(tmp_path, p_gate, 'draft', brief_g)
+    quota = QuotaBook(tmp_path / QUOTA_FILE)
+    for slot in load_company().chain('writer'):
+        quota.rest(slot, fixed_now + timedelta(minutes=30), '429')
+    by_id_gate = {r['id']: r for r in dashboard.company_roster(tmp_path, now=lambda: fixed_now)['roles']}
+    assert by_id_gate['writer']['work_state'] == 'waiting_model'
+
+    # 6. Corrupt waiting-model-step.yaml at gate (owner_role=None) maps saved_step to role or avoids crash.
+    _create_named_v2_project(tmp_path / 'projects', 'corrupt-raw', 'awaiting_medical_review')
+    raw_bad = tmp_path / 'topics/logs/corrupt-raw/waiting-model-step.yaml'
+    raw_bad.parent.mkdir(parents=True, exist_ok=True)
+    raw_bad.write_text('not: [valid\n', encoding='utf-8')
+    dashboard.company_roster(tmp_path, now=lambda: fixed_now)
+
+    _create_named_v2_project(tmp_path / 'projects', 'corrupt-step', 'awaiting_video_review')
+    write_yaml_atomic(
+        tmp_path / 'topics/logs/corrupt-step/waiting-model-step.yaml',
+        {'version': 2, 'step': 'posts', 'fingerprint': 'abc'},
+    )
+    by_id_corrupt = {r['id']: r for r in dashboard.company_roster(tmp_path, now=lambda: fixed_now)['roles']}
+    assert by_id_corrupt['copywriter']['work_state'] == 'unknown'
+
+
+def test_extreme_boundary_timestamps_do_not_crash_on_windows(tmp_path, monkeypatch):
+    from datetime import UTC, date, datetime
+
+    from healthvideo.domain.project_v2 import WorkflowState
+    from healthvideo.domain.queue import QueueEntry
+    from healthvideo.storage.files import write_yaml_atomic
+    from healthvideo.storage.queue import add_to_queue
+    from healthvideo.workflows import production_retry
+
+    monkeypatch.setattr(factory, 'running_pid', lambda _: None)
+    min_now = datetime(1, 1, 1, 0, 0, 0, tzinfo=UTC)
+    max_now = datetime(9999, 12, 31, 23, 59, 0, tzinfo=UTC)
+    max_iso = '9999-12-31T23:59:59+00:00'
+    min_iso = '0001-01-01T00:00:00+00:00'
+
+    add_to_queue(
+        tmp_path,
+        QueueEntry(slug='min-done', title='Min', question='Q?', doctor_note=None, added=date(1, 1, 1)),
+    )
+    p_done = _create_named_v2_project(tmp_path / 'projects', 'min-done', 'video_approved')
+    write_yaml_atomic(p_done / 'revisions/001/reviews/video-approval.yaml', {'reviewed_at': min_iso})
+
+    _create_named_v2_project(tmp_path / 'projects', 'max-retry', 'production_in_progress')
+    max_log = tmp_path / 'topics/logs/max-retry'
+    max_log.mkdir(parents=True, exist_ok=True)
+    (max_log / 'waiting-model.txt').write_text(max_iso, encoding='utf-8')
+    posts_yaml = tmp_path / 'projects/max-retry/revisions/001/posts/posts.yaml'
+    if posts_yaml.exists():
+        posts_yaml.unlink()
+
+    _create_named_v2_project(tmp_path / 'projects', 'max-agent', 'research_in_progress')
+    write_yaml_atomic(tmp_path / 'topics/logs/max-agent/agent-retry.yaml', {
+        'version': 1,
+        'steps': {
+            'research': {
+                'fingerprint': 'fp-max',
+                'kind': 'transient',
+                'attempts': 1,
+                'reason': 'Max deadline',
+                'retry_after': max_iso,
+            },
+        },
+    })
+
+    p_prod = _create_named_v2_project(tmp_path / 'projects', 'max-prod', 'medically_approved')
+    (p_prod / 'revisions/001/posts').mkdir(parents=True, exist_ok=True)
+    write_yaml_atomic(p_prod / 'revisions/001/posts/posts.yaml', {'title': 'ok'})
+    prod_fp = production_retry.production_fingerprint(tmp_path, p_prod, WorkflowState.MEDICALLY_APPROVED)
+    write_yaml_atomic(tmp_path / 'topics/logs/max-prod/production-retry.yaml', {
+        'fingerprint': prod_fp,
+        'kind': 'transient',
+        'attempts': 1,
+        'reason': 'Render backoff',
+        'retry_after': max_iso,
+    })
+
+    comp = dashboard.company_roster(tmp_path, now=lambda: min_now)
+    by_id = {r['id']: r for r in comp['roles']}
+    assert by_id['copywriter']['work_state'] == 'waiting_model'
+    assert by_id['medical_expert']['work_state'] == 'waiting_retry'
+    assert comp['production']['work_state'] == 'waiting_retry'
+
+    ov_min = dashboard.overview(tmp_path, now=lambda: min_now)
+    ov_max = dashboard.overview(tmp_path, now=lambda: max_now)
+    snap = dashboard.snapshot(tmp_path)
+    assert len(ov_min['projects']) == 4
+    assert len(ov_max['projects']) == 4
+    assert len(snap['projects']) == 4
+
+
+def test_historical_activity_error_keeps_last_error_without_error_work_state(tmp_path, monkeypatch):
+    monkeypatch.setattr(factory, 'running_pid', lambda _: None)
+    log = tmp_path / 'topics/logs/activity.jsonl'
+    log.parent.mkdir(parents=True, exist_ok=True)
+    rows = [
+        {'at': '2026-11-12T10:00:00+07:00', 'role': 'medical_expert', 'cli': 'claude',
+         'model': 'claude-sonnet-5-5', 'slug': 'deleted-topic', 'step': 'research',
+         'event': 'start', 'ok': None},
+        {'at': '2026-11-12T10:01:00+07:00', 'role': 'medical_expert', 'cli': 'claude',
+         'model': 'claude-sonnet-5-5', 'slug': 'deleted-topic', 'step': 'research',
+         'event': 'end', 'ok': False},
+    ]
+    log.write_text('\n'.join(json.dumps(r) for r in rows) + '\n', encoding='utf-8')
+
+    by_id = {r['id']: r for r in dashboard.company_roster(tmp_path)['roles']}
+    assert by_id['medical_expert']['last_error'] is True
+    assert by_id['medical_expert']['work_state'] == 'idle'
+
+
+def test_corrupt_quota_and_approval_files_keep_overview_and_status_200(tmp_path, monkeypatch):
+    from healthvideo.agents import QUOTA_FILE
+
+    monkeypatch.setattr(factory, 'running_pid', lambda _: None)
+    quota_path = tmp_path / QUOTA_FILE
+    quota_path.parent.mkdir(parents=True, exist_ok=True)
+    quota_path.write_text('models: [broken\n', encoding='utf-8')
+
+    proj = _create_named_v2_project(tmp_path / 'projects', 'bad-approval', 'video_approved')
+    approval = proj / 'revisions/001/reviews/video-approval.yaml'
+    approval.parent.mkdir(parents=True, exist_ok=True)
+    approval.write_text('- not-a-dict\n', encoding='utf-8')
+
+    def check(srv):
+        status_ov, body_ov = request(srv, 'GET', '/api/overview')
+        assert status_ov == 200
+        ov = json.loads(body_ov)
+        assert ov['resting'] == []
+        assert ov['tiles']['models_resting'] == 0
+        assert len(ov['projects']) == 1
+
+        status_st, body_st = request(srv, 'GET', '/api/status')
+        assert status_st == 200
+        assert len(json.loads(body_st)['projects']) == 1
+
+    _with_server(tmp_path, check)

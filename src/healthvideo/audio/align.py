@@ -18,12 +18,14 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from healthvideo.audio.music import REPO_ROOT, shared_repo_root
+from healthvideo.process import run_with_deadline, timeout_diagnostic
 from healthvideo.storage.files import write_text_atomic
 
 MODEL_ID = 'Systran/faster-whisper-large-v3'
 MODEL_REVISION = 'edaa852ec7e145841d8ffdb056a99866b5f0a478'
 ALIGN_VERSION = '1-fw1.2.1-ct2-4.8.3'
 MODEL_FILES = ('model.bin', 'config.json', 'tokenizer.json', 'preprocessor_config.json')
+ALIGN_TIMEOUT = 30 * 60  # One batch for a full 10–25 minute video, including model load.
 
 
 def whisper_python(repo: Path = REPO_ROOT) -> Path:
@@ -148,9 +150,10 @@ def align_lines(line_wavs: Mapping[str, Path], scripts: Mapping[str, str], *, ou
             with TemporaryDirectory(prefix='.whisper-', dir=cache) as temporary:
                 request, output = Path(temporary)/'request.json', Path(temporary)/'output.json'
                 _write_json(request, {'model': str(whisper_model()), 'lines': pending})
-                process = runner([str(whisper_python()), '-X', 'utf8',
+                process = run_with_deadline([str(whisper_python()), '-X', 'utf8',
                                   str(REPO_ROOT/'tools/whisper/transcribe.py'),
                                   '--request', str(request), '--out', str(output)],
+                                 timeout=ALIGN_TIMEOUT, runner=runner,
                                  shell=False, check=False, capture_output=True, text=True,
                                  encoding='utf-8', errors='replace')
                 if process.returncode:
@@ -168,8 +171,9 @@ def align_lines(line_wavs: Mapping[str, Path], scripts: Mapping[str, str], *, ou
             _write_json(out_dir/f'{line}.json', result[line])
             _write_json(out_dir/f'{line}.meta.json', {'cache_key': keys[line], **alignment_identity()})
         return result
-    except (OSError, ValueError, KeyError, TypeError, RuntimeError, wave.Error) as error:
-        warnings.warn(f'Whisper alignment skipped: {error}; using estimated timing', stacklevel=2)
+    except (OSError, ValueError, KeyError, TypeError, RuntimeError, wave.Error, subprocess.TimeoutExpired) as error:
+        detail = timeout_diagnostic(error) if isinstance(error, subprocess.TimeoutExpired) else str(error)
+        warnings.warn(f'Whisper alignment skipped: {detail}; using estimated timing', stacklevel=2)
         return {}
 
 

@@ -1,10 +1,15 @@
 """Select the next factory workflow step for a project state and run the queue."""
 
-from collections.abc import Callable, Mapping
+import json
+import os
+import subprocess
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
+from uuid import uuid4
 
 from healthvideo.agents import (
     AgentResult,
@@ -14,16 +19,27 @@ from healthvideo.agents import (
 from healthvideo.company import Company, load_company, role_skill_block
 from healthvideo.domain.project_v2 import WorkflowState
 from healthvideo.domain.queue import QueueEntry
+from healthvideo.process import process_token
 from healthvideo.storage.files import (
     read_yaml,
     write_text_atomic,
     write_yaml_atomic,
 )
+from healthvideo.storage.project_layout import resolve_project_layout
 from healthvideo.storage.queue import load_queue
 from healthvideo.workflows import change_request, chat, expert, product_review
 from healthvideo.workflows.production_retry import (
+    _sanitize_reason,
+    agent_fingerprint,
+    agent_retry_status,
+    clear_agent_retry,
+    clear_model_resume,
     clear_retry,
+    model_resume_step,
+    outstanding_agent_retry,
+    record_agent_failure,
     record_failure,
+    record_model_resume,
     retry_status,
 )
 from healthvideo.workflows.script_review import (
@@ -284,16 +300,31 @@ def _record_code_changes(
     )
 
 
-def run_queue(
+def _quarantine_review(project_dir: Path, step: str, log_dir: Path) -> None:
+    """A prior invocation's unconsumed score is diagnostic, never a fresh review.
+
+    Moving the file gives this invocation an empty output slot. Existing review
+    validation then requires a newly written report for the captured input hash;
+    timestamps and repeated report text cannot establish that relationship.
+    """
+    report = resolve_project_layout(project_dir).artifact_root / f"reviews/{step.replace('_', '-')}.yaml"
+    if report.is_file():
+        archive = log_dir / "review-artifacts" / f"{step}-{uuid4().hex}.yaml"
+        archive.parent.mkdir(parents=True, exist_ok=True)
+        report.rename(archive)
+
+
+def _run_topic(
     root: Path,
     deps: RunDeps,
+    topic: QueueEntry,
+    report: RunReport,
     *,
     once: bool = False,
     max_steps_per_topic: int = 20,
-) -> RunReport:
+) -> bool:
     """Advance queued topics automatically until a review gate or blocker."""
-    report = RunReport()
-    entries = load_queue(root)
+    entries = [topic]
 
     for entry in entries:
         waiting = root / "topics" / "logs" / entry.slug / WAITING_MODEL_FILE
@@ -308,11 +339,25 @@ def run_queue(
             project_dir = deps.create_project(root, entry)
 
         steps_taken = 0
+        # Dynamic rejection/answer instructions are already tracked as consumed
+        # artifacts. Keep the queue brief stable when a failed agent mutates state.
+        brief_context = json.dumps({"title": entry.title, "question": entry.question,
+                                    "doctor_note": entry.doctor_note}, sort_keys=True)
         while True:
             with chat.step_boundary(root, entry.slug):
                 state = deps.read_state(project_dir)
                 pending_change = change_request.pending_note(project_dir)
-                step = next_step(state)
+                quota_step = model_resume_step(root, project_dir, brief_context)
+                outstanding = outstanding_agent_retry(root, project_dir, brief_context)
+                forced_step = outstanding[0] if outstanding else quota_step
+                if outstanding and not outstanding[1]["allowed"]:
+                    status = outstanding[1]
+                    waiting = (f"đang chờ thử lại lúc {status['retry_after']}"
+                               if status['retry_after'] else "cần sửa đầu vào hoặc cấu hình")
+                    _mark_blocked(root, entry.slug,
+                                  f"bước {forced_step}: {waiting}; {status['reason']}", report)
+                    break
+                step = forced_step or next_step(state)
                 if step is None:
                     if state == WorkflowState.BLOCKED:
                         if entry.slug not in report.blocked:
@@ -324,6 +369,7 @@ def run_queue(
                             report.at_gate.append(entry.slug)
                     break
 
+                retrying_production = False
                 if step == "produce":
                     try:
                         status = retry_status(root, project_dir, state)
@@ -338,12 +384,13 @@ def run_queue(
                             report,
                         )
                         break
+                    retrying_production = status["attempts"] > 0
 
-                if step == "produce" and deps.visual_review_pending(project_dir):
+                if step == "produce" and not retrying_production and deps.visual_review_pending(project_dir):
                     step = "visual_review"
-                elif step == "produce" and not deps.posts_ready(project_dir):
+                elif step == "produce" and not retrying_production and not deps.posts_ready(project_dir):
                     step = "posts"
-                elif step == "produce" and deps.product_review_pending(project_dir):
+                elif step == "produce" and not retrying_production and deps.product_review_pending(project_dir):
                     try:
                         step = product_review.next_product_action(project_dir)
                     except (OSError, ValueError) as exc:
@@ -371,6 +418,8 @@ def run_queue(
                 if (step == "draft" and state == WorkflowState.EVIDENCE_READY
                         and not deps.expert_brief_ready(project_dir)):
                     step = "research"  # no expert brief yet: the research step is not finished
+                if forced_step:
+                    step = forced_step
                 rewriting = step == "draft" and state == WorkflowState.DRAFT_READY
 
                 if steps_taken >= max_steps_per_topic:
@@ -405,12 +454,22 @@ def run_queue(
                     if standards_block:
                         body, heading, rules = prompt.rpartition('## Quy tắc cứng')
                         prompt = f"{body.rstrip()}\n\n{standards_block.rstrip()}\n\n{heading}{rules}"
+                    fingerprint = agent_fingerprint(root, project_dir, step, brief_context)
+                    status = agent_retry_status(root, project_dir, step, fingerprint)
+                    if not status["allowed"]:
+                        waiting = (f"đang chờ thử lại lúc {status['retry_after']}"
+                                   if status['retry_after'] else "cần sửa đầu vào hoặc cấu hình")
+                        _mark_blocked(root, entry.slug,
+                                      f"bước {step}: {waiting}; {status['reason']}", report)
+                        break
                     before = deps.code_snapshot(root) if deps.code_snapshot is not None else None
                     reviewing = step in {"script_review", "product_review"}
                     reviewed_hash = (
                         script_hash(project_dir) if step == "script_review"
                         else product_review.render_hash(project_dir) if reviewing else ""
                     )
+                    if reviewing:
+                        _quarantine_review(project_dir, step, log_dir)
                     role = deps.company.role_for_step(step)
                     try:
                         result = deps.invoke(
@@ -424,6 +483,7 @@ def run_queue(
                         )
                     except AllAgentsExhausted as exc:
                         # Only this topic waits for a model; the rest of the queue keeps going.
+                        record_model_resume(root, project_dir, step, brief_context)
                         _record_code_changes(root, entry.slug, deps, report, before)
                         back = exc.earliest_return
                         write_text_atomic(
@@ -431,10 +491,28 @@ def run_queue(
                         )
                         report.waiting_model.append(entry.slug)
                         break
+                    except Exception as exc:  # noqa: BLE001 — a failed tool holds only this topic
+                        kind = ("transient" if isinstance(exc, (TimeoutError, ConnectionError,
+                                                              subprocess.TimeoutExpired))
+                                else "configuration" if isinstance(exc, (FileNotFoundError, PermissionError))
+                                else "agent_error")
+                        record_agent_failure(
+                            root, project_dir, step, fingerprint, kind, exc,
+                            observed_fingerprint=agent_fingerprint(root, project_dir, step, brief_context),
+                        )
+                        _record_code_changes(root, entry.slug, deps, report, before)
+                        _mark_blocked(root, entry.slug, f"bước {step} lỗi: {_sanitize_reason(exc)}", report)
+                        break
 
                     result_log_path = result.log_path
-                    _record_code_changes(root, entry.slug, deps, report, before)
                     if not result.ok:
+                        record_agent_failure(
+                            root, project_dir, step, fingerprint,
+                            getattr(result, "failure_kind", None),
+                            RuntimeError(f"agent {result.agent} thất bại ở bước {step}; log_path: {result.log_path}"),
+                            observed_fingerprint=agent_fingerprint(root, project_dir, step, brief_context),
+                        )
+                        _record_code_changes(root, entry.slug, deps, report, before)
                         _mark_blocked(
                             root,
                             entry.slug,
@@ -443,6 +521,12 @@ def run_queue(
                             log_path=result.log_path,
                         )
                         break
+                    # Hold if any artifact/state validation below fails or raises.
+                    # Remove this provisional hold only once the whole step succeeds.
+                    record_agent_failure(root, project_dir, step, fingerprint, "validation",
+                                         ValueError(f"bước {step}: đầu ra hoặc trạng thái chưa hợp lệ"),
+                                         observed_fingerprint=agent_fingerprint(root, project_dir, step, brief_context))
+                    _record_code_changes(root, entry.slug, deps, report, before)
                     if reviewing:
                         record = (record_review if step == "script_review"
                                   else product_review.record_review)
@@ -461,11 +545,15 @@ def run_queue(
                         # Python re-renders the fix at once; an unchanged render goes to the doctor.
                         try:
                             product_review.mark_fix_attempted(project_dir)
-                            deps.python_steps["produce"](project_dir)
+                            clear_agent_retry(root, entry.slug, step)
+                            clear_model_resume(root, entry.slug)
+                            with _production_running(root, entry.slug):
+                                deps.python_steps["produce"](project_dir)
                         except Exception as exc:  # noqa: BLE001
                             record_failure(root, project_dir, deps.read_state(project_dir), exc)
                             _mark_blocked(root, entry.slug, f"dựng lại sau sửa lỗi: {exc}", report)
                             break
+                        clear_retry(root, entry.slug)
                     if step == "visual_review":
                         # Python validates the report, bounds regeneration and renders the
                         # chosen candidate/fallback before it can enter the physician gate.
@@ -485,8 +573,12 @@ def run_queue(
                             )
                             break
                         try:
-                            deps.python_steps["produce"](project_dir)
+                            with _production_running(root, entry.slug):
+                                deps.python_steps["produce"](project_dir)
                         except Exception as exc:  # noqa: BLE001
+                            if not isinstance(exc, ValueError):
+                                clear_agent_retry(root, entry.slug, step)
+                                clear_model_resume(root, entry.slug)
                             record_failure(
                                 root, project_dir, deps.read_state(project_dir), exc
                             )
@@ -495,7 +587,11 @@ def run_queue(
                         clear_retry(root, entry.slug)
                 elif step in deps.python_steps:
                     try:
-                        deps.python_steps[step](project_dir)
+                        if step == "produce":
+                            with _production_running(root, entry.slug):
+                                deps.python_steps[step](project_dir)
+                        else:
+                            deps.python_steps[step](project_dir)
                     except Exception as exc:  # noqa: BLE001 — one failing topic is blocked, the queue keeps going
                         if step == "produce":
                             record_failure(
@@ -575,7 +671,43 @@ def run_queue(
                         and (new_state != state or rewriting)):
                     chat.completed(root, entry.slug, project_dir)
 
-                if once:
-                    return report
+                if step in AGENT_STEPS:
+                    clear_agent_retry(root, entry.slug, step)
+                    clear_model_resume(root, entry.slug)
 
+                if once:
+                    return True
+
+    return False
+
+
+@contextmanager
+def _production_running(root: Path, slug: str) -> Iterator[None]:
+    """Expose actual production work, including work nested after an agent step."""
+    path = root / "topics" / "logs" / slug / ".production-running"
+    write_text_atomic(path, json.dumps({"pid": os.getpid(),
+                                       "process_token": process_token(os.getpid()),
+                                       "started_at": datetime.now(UTC).isoformat()}))
+    try:
+        yield
+    finally:
+        path.unlink(missing_ok=True)
+
+
+def run_queue(root: Path, deps: RunDeps, *, once: bool = False,
+              max_steps_per_topic: int = 20) -> RunReport:
+    """Isolate project, artifact and tool errors without swallowing interrupts."""
+    report = RunReport()
+    for entry in load_queue(root):
+        completed = False
+        try:
+            completed = _run_topic(root, deps, entry, report, once=once,
+                                   max_steps_per_topic=max_steps_per_topic)
+        except Exception as exc:  # noqa: BLE001 — a corrupt topic cannot stop the next one
+            log = root / "topics" / "logs" / entry.slug / "runner-error.log"
+            reason = _sanitize_reason(exc)
+            write_text_atomic(log, f"{datetime.now(UTC).isoformat()} {reason}\n")
+            _mark_blocked(root, entry.slug, f"lỗi xử lý chủ đề: {reason}", report, log_path=log)
+        if once and completed:
+            break
     return report

@@ -6,14 +6,22 @@ from collections.abc import Callable
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from healthvideo.process import prepare_subprocess_argv, run_bounded, timeout_diagnostic
 from healthvideo.tts.audio_checks import inspect_wav
 from healthvideo.tts.base import TTSRequest, TTSResult
 
 Runner = Callable[[list[str]], int]
+LOCAL_TTS_TIMEOUT = 10 * 60  # Per narration line, allowing cold CPU model startup.
 
 
 def _run(argv: list[str]) -> int:
-    return subprocess.run(argv, shell=False, check=False).returncode
+    try:
+        result = run_bounded(prepare_subprocess_argv(argv), timeout=LOCAL_TTS_TIMEOUT,
+                             shell=False, check=False, capture_output=True,
+                             text=True, encoding='utf-8', errors='replace')
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeError(f'Command TTS {timeout_diagnostic(error)}') from error
+    return result.returncode
 
 
 class CommandTTS:

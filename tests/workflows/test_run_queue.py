@@ -1,10 +1,14 @@
 """Tests for the run_queue factory loop with injected dependencies."""
 
+import json
 import subprocess
 from dataclasses import fields
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
+
+import pytest
 
 from healthvideo.agents import (
     AgentResult,
@@ -22,6 +26,439 @@ from healthvideo.workflows.runner import (
     render_prompt,
     run_queue,
 )
+
+
+def _reliability_deps(tmp_path, *, invoke=None, read_state=None, python_steps=None):
+    for slug in ('broken', 'healthy'):
+        add_to_queue(tmp_path, _entry(slug))
+        project = tmp_path / 'projects' / slug
+        project.mkdir(parents=True)
+    states = {'broken': WorkflowState.TOPIC_SELECTED,
+              'healthy': WorkflowState.TOPIC_SELECTED}
+    calls = []
+
+    def default_invoke(*args, log_dir, **kwargs):
+        calls.append(log_dir.name)
+        if log_dir.name == 'healthy':
+            states['healthy'] = WorkflowState.AWAITING_MEDICAL_REVIEW
+            return AgentResult('fake', True, False, _log_file(log_dir))
+        return SimpleNamespace(agent='fake', ok=False, failure_kind='transient',
+                               log_path=_log_file(log_dir))
+
+    return RunDeps(
+        create_project=lambda root, entry: root / 'projects' / entry.slug,
+        read_state=read_state or (lambda project: states[project.name]),
+        reject_note=lambda _: None, python_steps=python_steps or {},
+        changed_code_paths=lambda _: [], invoke=invoke or default_invoke,
+    ), calls
+
+
+def test_agent_transient_retry_persists_backoff_and_cap_without_output_reset(tmp_path, monkeypatch):
+    from healthvideo.workflows import production_retry
+
+    now = datetime(2026, 11, 14, tzinfo=UTC)
+    clock = {'now': now}
+    monkeypatch.setattr(production_retry, '_now', lambda: clock['now'])
+    deps, calls = _reliability_deps(tmp_path)
+    assert run_queue(tmp_path, deps).at_gate == ['healthy']
+    run_queue(tmp_path, deps)
+    assert calls.count('broken') == 1
+    # A failed research agent's own evidence/project output is not fresh input.
+    project = tmp_path / 'projects/broken'
+    (project / 'project.yaml').write_text('active_revision: "001"\nstate: research_in_progress\n')
+    evidence = project / 'revisions/001/evidence'
+    evidence.mkdir(parents=True)
+    (evidence / 'ledger.yaml').write_text('attempt_output: changed\n')
+    clock['now'] += timedelta(seconds=120)
+    run_queue(tmp_path, deps)
+    run_queue(tmp_path, deps)
+    assert calls.count('broken') == 2
+    clock['now'] += timedelta(seconds=600)
+    run_queue(tmp_path, deps)
+    clock['now'] += timedelta(days=1)
+    run_queue(tmp_path, deps)
+    assert calls.count('broken') == 3
+    stored = read_yaml(tmp_path / 'topics/logs/broken/agent-retry.yaml')
+    assert stored['steps']['research']['attempts'] == 3
+
+
+def test_agent_unknown_failure_and_invalid_success_are_held(tmp_path):
+    calls = []
+
+    def invoke(*args, log_dir, **kwargs):
+        calls.append(log_dir.name)
+        return AgentResult('fake', log_dir.name == 'healthy', False, _log_file(log_dir))
+
+    deps, _ = _reliability_deps(tmp_path, invoke=invoke)
+    for _ in range(2):
+        assert set(run_queue(tmp_path, deps).blocked) == {'broken', 'healthy'}
+    assert calls == ['broken', 'healthy']
+
+
+def test_bad_state_and_tool_exception_do_not_crash_other_topics(tmp_path):
+    def state(project):
+        if project.name == 'broken':
+            raise ValueError('corrupt project state')
+        return WorkflowState.AWAITING_MEDICAL_REVIEW
+
+    deps, _ = _reliability_deps(tmp_path, read_state=state)
+    report = run_queue(tmp_path, deps)
+    assert report.blocked == ['broken']
+    assert report.at_gate == ['healthy']
+
+
+def test_produce_has_live_identity_marker_and_cleans_it_on_exception(tmp_path):
+    markers = []
+
+    def produce(project):
+        marker = tmp_path / 'topics/logs' / project.name / '.production-running'
+        markers.append(json.loads(marker.read_text()))
+        raise RuntimeError('render failed')
+
+    deps, _ = _reliability_deps(
+        tmp_path, read_state=lambda _: WorkflowState.MEDICALLY_APPROVED,
+        python_steps={'produce': produce},
+    )
+    report = run_queue(tmp_path, deps)
+    assert len(markers) == 2
+    assert all(item['pid'] > 0 and item['process_token'] and item['started_at'] for item in markers)
+    assert not list((tmp_path / 'topics/logs').glob('*/.production-running'))
+    assert report.blocked == ['broken', 'healthy']
+
+
+@pytest.mark.parametrize('quota_first', [False, True])
+def test_retry_nested_production_resumes_renderer_before_review_or_gate(tmp_path, monkeypatch, quota_first):
+    from healthvideo.workflows import product_review, production_retry
+
+    entry = _entry('retry-render')
+    add_to_queue(tmp_path, entry)
+    project = tmp_path / 'projects' / entry.slug
+    project.mkdir(parents=True)
+    state = {'value': WorkflowState.PRODUCTION_IN_PROGRESS, 'fixed': False}
+    calls = []
+    clock = {'now': datetime(2026, 11, 14, tzinfo=UTC)}
+    monkeypatch.setattr(production_retry, '_now', lambda: clock['now'])
+    monkeypatch.setattr(product_review, 'revision_notes', lambda _: 'fix layout')
+    monkeypatch.setattr(product_review, 'mark_fix_attempted', lambda _: state.update(fixed=True))
+    monkeypatch.setattr(product_review, 'next_product_action',
+                        lambda _: 'submit_video' if state['fixed'] else 'revise_product')
+
+    def invoke(*args, log_dir, **kwargs):
+        calls.append('agent')
+        if quota_first and len(calls) == 1:
+            raise AllAgentsExhausted(datetime.now(UTC) - timedelta(seconds=1))
+        return AgentResult('fake', True, False, _log_file(log_dir))
+
+    def produce(_):
+        calls.append('produce')
+        marker = tmp_path / 'topics/logs' / entry.slug / '.production-running'
+        assert marker.exists()
+        if calls.count('produce') == 1:
+            raise RuntimeError('render timeout')
+        state['value'] = WorkflowState.AWAITING_VIDEO_REVIEW
+
+    deps = RunDeps(create_project=lambda *_: project, read_state=lambda _: state['value'],
+                   reject_note=lambda _: None, changed_code_paths=lambda _: [], invoke=invoke,
+                   product_review_pending=lambda _: True,
+                   python_steps={'produce': produce, 'submit_video': lambda _: calls.append('gate')})
+    if quota_first:
+        assert run_queue(tmp_path, deps).waiting_model == [entry.slug]
+    agents = ['agent'] * (2 if quota_first else 1)
+    assert run_queue(tmp_path, deps).blocked == [entry.slug]
+    assert calls == [*agents, 'produce']
+    clock['now'] += timedelta(seconds=120)
+    assert run_queue(tmp_path, deps).at_gate == [entry.slug]
+    assert calls == [*agents, 'produce', 'produce']
+    assert not (tmp_path / 'topics/logs' / entry.slug / 'production-retry.yaml').exists()
+
+
+def test_tool_failure_holds_and_keyboard_interrupt_propagates(tmp_path):
+    def invoke(*args, **kwargs):
+        raise FileNotFoundError('missing executable')
+
+    deps, _ = _reliability_deps(tmp_path, invoke=invoke)
+    assert run_queue(tmp_path, deps).blocked == ['broken', 'healthy']
+    for slug in ['broken', 'healthy']:
+        stored = read_yaml(tmp_path / 'topics/logs' / slug / 'agent-retry.yaml')
+        assert stored['steps']['research']['kind'] == 'configuration'
+    def interrupt(*args, **kwargs):
+        raise KeyboardInterrupt
+    # A real changed brief releases the hold; KeyboardInterrupt must remain visible.
+    from dataclasses import replace
+    changed = replace(deps, invoke=interrupt)
+    (tmp_path / 'profiles').mkdir()
+    (tmp_path / 'profiles/company.yaml').write_text('changed: true')
+    import pytest
+    with pytest.raises(KeyboardInterrupt):
+        run_queue(tmp_path, changed)
+
+
+def test_post_agent_bookkeeping_failure_cannot_repeat_paid_call(tmp_path):
+    from dataclasses import replace
+
+    deps, calls = _reliability_deps(tmp_path)
+    def fail(_):
+        raise RuntimeError('git snapshot unavailable')
+    deps = replace(deps, changed_code_paths=fail)
+    run_queue(tmp_path, deps)
+    run_queue(tmp_path, deps)
+    assert calls.count('broken') == 1
+
+
+def test_configuration_hold_releases_on_real_input_change_and_success_clears(tmp_path):
+    calls, states = [], {'broken': WorkflowState.TOPIC_SELECTED, 'healthy': WorkflowState.TOPIC_SELECTED}
+    fixed = {'value': False}
+    def invoke(*args, log_dir, **kwargs):
+        calls.append(log_dir.name)
+        ok = fixed['value'] or log_dir.name == 'healthy'
+        if ok:
+            states[log_dir.name] = WorkflowState.AWAITING_MEDICAL_REVIEW
+        return AgentResult('fake', ok, False, _log_file(log_dir),
+                           failure_kind=None if ok else 'configuration')
+    deps, _ = _reliability_deps(tmp_path, invoke=invoke, read_state=lambda p: states[p.name])
+    run_queue(tmp_path, deps)
+    run_queue(tmp_path, deps)
+    assert calls.count('broken') == 1
+    fixed['value'] = True
+    source = tmp_path / 'projects/broken/revisions/001/script/questions.yaml'
+    source.parent.mkdir(parents=True)
+    source.write_text('questions: [{id: Q1, ask: Updated brief}]\n', encoding='utf-8')
+    assert run_queue(tmp_path, deps).at_gate == ['broken', 'healthy']
+    assert calls.count('broken') == 2
+    assert not (tmp_path / 'topics/logs/broken/agent-retry.yaml').exists()
+
+
+def test_once_stops_after_one_completed_step_even_if_producer_state_is_unchanged(tmp_path):
+    calls = []
+    deps, _ = _reliability_deps(
+        tmp_path, read_state=lambda _: WorkflowState.PRODUCTION_IN_PROGRESS,
+        python_steps={'produce': lambda project: calls.append(project.name)},
+    )
+    run_queue(tmp_path, deps, once=True)
+    assert calls == ['broken']
+
+
+@pytest.mark.parametrize('kind', ['script', 'product'])
+def test_failed_critic_report_cannot_be_rebound_to_changed_input(tmp_path, kind):
+    """A CLI success without fresh output cannot adopt a prior failed attempt's score."""
+    from healthvideo.workflows import product_review, script_review
+    from tests.workflows import test_product_review as product_helpers
+    from tests.workflows import test_script_review as script_helpers
+
+    helpers = script_helpers if kind == 'script' else product_helpers
+    reviewer = script_review if kind == 'script' else product_review
+    project = helpers._queue(tmp_path)
+    revision = project / 'revisions/001'
+    state = {'value': WorkflowState.DRAFT_READY if kind == 'script'
+             else WorkflowState.PRODUCTION_IN_PROGRESS, 'renders': 1}
+    attempts = []
+
+    def invoke(*args, log_dir, **kwargs):
+        attempts.append(kwargs['step'])
+        if len(attempts) == 1:
+            helpers._report(project, 8, summary='OLD INPUT REPORT')
+        elif len(attempts) == 3:
+            helpers._report(project, 8, summary='FRESH INPUT REPORT')
+        return AgentResult('fake', len(attempts) != 1, False, _log_file(log_dir),
+                           failure_kind='transient' if len(attempts) == 1 else None)
+
+    deps = helpers._deps(state, invoke) if kind == 'script' else helpers._deps(project, state, invoke)
+    assert run_queue(tmp_path, deps).blocked == [project.name]
+    assert not (revision / reviewer.LOG).exists()
+    stale_bytes = (revision / reviewer.REPORT).read_bytes()
+    if kind == 'script':
+        helpers._script(project, 'New script 2')
+    else:
+        helpers._render(project, 2)
+    second = run_queue(tmp_path, deps)
+    assert second.blocked == [project.name]
+    assert not second.at_gate
+    assert not (revision / reviewer.LOG).exists()
+    diagnostics = tmp_path / 'topics/logs' / project.name / 'review-artifacts'
+    assert any(path.read_bytes() == stale_bytes for path in diagnostics.glob('*.yaml'))
+    # A genuine new input plus a newly written report remains consumable.
+    if kind == 'script':
+        helpers._script(project, 'New script 3')
+    else:
+        helpers._render(project, 3)
+    final = run_queue(tmp_path, deps)
+    assert final.at_gate == [project.name]
+    assert read_yaml(revision / reviewer.LOG)['rounds'][-1]['summary'] == 'FRESH INPUT REPORT'
+
+
+@pytest.mark.parametrize('mutate', ['answer', 'state'])
+def test_failed_research_output_cannot_route_to_writer_before_retry_success(tmp_path, monkeypatch, mutate):
+    from healthvideo.storage.files import write_yaml_atomic
+    from healthvideo.workflows import production_retry
+    from tests.workflows.test_script_review import _deps, _queue
+
+    project = _queue(tmp_path)
+    questions = project / 'revisions/001/script/questions.yaml'
+    write_yaml_atomic(questions, {'questions': [{'id': 'Q1', 'ask': 'Question'}]})
+    state = {'value': WorkflowState.DRAFT_READY}
+    clock = {'now': datetime(2026, 11, 14, tzinfo=UTC)}
+    monkeypatch.setattr(production_retry, '_now', lambda: clock['now'])
+    calls = []
+    def invoke(*args, log_dir, **kwargs):
+        calls.append(kwargs['step'])
+        if kwargs['step'] == 'research':
+            write_yaml_atomic(questions, {'questions': [{'id': 'Q1', 'ask': 'Question',
+                                                       'answer': 'Partial', 'claim_ids': ['C1']}]})
+            if mutate == 'state':
+                state['value'] = WorkflowState.EVIDENCE_READY
+            return AgentResult('fake', False, False, _log_file(log_dir), failure_kind='transient')
+        return AgentResult('fake', True, False, _log_file(log_dir))
+    deps = _deps(state, invoke)
+    assert run_queue(tmp_path, deps).blocked == [project.name]
+    assert run_queue(tmp_path, deps).blocked == [project.name]
+    assert calls == ['research']
+    clock['now'] += timedelta(seconds=120)
+    run_queue(tmp_path, deps)
+    assert calls == ['research', 'research']
+    assert read_yaml(tmp_path / 'topics/logs' / project.name / 'agent-retry.yaml')['steps']['research']['attempts'] == 2
+
+
+def test_all_overloaded_cli_slots_remain_capped_across_restarted_queue_ticks(tmp_path, monkeypatch):
+    from healthvideo.workflows import production_retry
+
+    monkeypatch.setattr('healthvideo.process.shutil.which', lambda _: None)
+    clock = {'now': datetime(2026, 11, 14, tzinfo=UTC)}
+    monkeypatch.setattr(production_retry, '_now', lambda: clock['now'])
+    entry = _entry('overload-topic')
+    add_to_queue(tmp_path, entry)
+    project = tmp_path / 'projects' / entry.slug
+    project.mkdir(parents=True)
+    calls = []
+    slots = [ModelSlot(cli='agy', model='fake-agy'), ModelSlot(cli='codex', model='fake-codex')]
+
+    def fake_cli(argv, **kwargs):
+        calls.append(argv[0])
+        return subprocess.CompletedProcess(argv, 1, '', 'UNAVAILABLE (code 503): overloaded')
+
+    def invoke(_slots, prompt, **kwargs):
+        return invoke_with_failover(slots, prompt, **kwargs, runner=fake_cli, now=lambda: clock['now'])
+
+    for attempt in range(1, 5):
+        # Reconstruct the queue dependencies and quota book from disk each time.
+        deps = RunDeps(create_project=lambda *_: project,
+                       read_state=lambda _: WorkflowState.TOPIC_SELECTED,
+                       reject_note=lambda _: None, python_steps={},
+                       changed_code_paths=lambda _: [], invoke=invoke)
+        assert run_queue(tmp_path, deps).blocked == [entry.slug]
+        assert len(calls) == min(attempt, 3) * 2
+        stored = read_yaml(tmp_path / 'topics/logs' / entry.slug / 'agent-retry.yaml')
+        assert stored['steps']['research']['attempts'] == min(attempt, 3)
+        # Expire both the 120/600s queue backoff and every provider's 10min busy rest.
+        clock['now'] += timedelta(minutes=11)
+    assert not (tmp_path / 'topics/logs' / entry.slug / 'waiting-model.txt').exists()
+
+
+@pytest.mark.parametrize('interrupted', [False, True])
+def test_quarantined_review_remains_diagnostic_on_quota_or_interrupt(tmp_path, interrupted):
+    from tests.workflows import test_script_review as helpers
+
+    project = helpers._queue(tmp_path)
+    helpers._report(project, summary='Stale report before interrupted invocation')
+    source = project / 'revisions/001/reviews/script-review.yaml'
+    stale_bytes = source.read_bytes()
+    def invoke(*args, **kwargs):
+        raise KeyboardInterrupt if interrupted else AllAgentsExhausted(datetime.now(UTC) + timedelta(hours=1))
+    deps = helpers._deps({'value': WorkflowState.DRAFT_READY}, invoke)
+    if interrupted:
+        with pytest.raises(KeyboardInterrupt):
+            run_queue(tmp_path, deps)
+    else:
+        assert run_queue(tmp_path, deps).waiting_model == [project.name]
+    logs = tmp_path / 'topics/logs' / project.name
+    assert (logs / 'waiting-model.txt').exists() is not interrupted
+    assert not source.exists()
+    assert not (project / 'revisions/001/reviews/script-review-log.yaml').exists()
+    assert any(path.read_bytes() == stale_bytes for path in (logs / 'review-artifacts').glob('*.yaml'))
+
+
+@pytest.mark.parametrize('mutate', ['answer', 'state'])
+def test_quota_partial_output_resumes_original_step_after_model_returns(tmp_path, monkeypatch, mutate):
+    from healthvideo.storage.files import write_yaml_atomic
+    from healthvideo.workflows import runner
+    from tests.workflows.test_script_review import _deps, _queue
+
+    project = _queue(tmp_path)
+    questions = project / 'revisions/001/script/questions.yaml'
+    write_yaml_atomic(questions, {'questions': [{'id': 'Q1', 'ask': 'Question'}]})
+    state = {'value': WorkflowState.DRAFT_READY}
+    clock = {'now': datetime.now(UTC)}
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return clock['now']
+    monkeypatch.setattr(runner, 'datetime', Clock)
+    calls = []
+    def invoke(*args, log_dir, **kwargs):
+        calls.append(kwargs['step'])
+        if len(calls) == 1:
+            write_yaml_atomic(questions, {'questions': [{'id': 'Q1', 'ask': 'Question', 'answer': 'Partial'}]})
+            if mutate == 'state':
+                state['value'] = WorkflowState.EVIDENCE_READY
+            raise AllAgentsExhausted(clock['now'] + timedelta(seconds=120))
+        if kwargs['step'] == 'draft':
+            questions.unlink()
+            state['value'] = WorkflowState.AWAITING_MEDICAL_REVIEW
+        return AgentResult('fake', True, False, _log_file(log_dir))
+    deps = _deps(state, invoke)
+    assert run_queue(tmp_path, deps).waiting_model == [project.name]
+    assert run_queue(tmp_path, deps).waiting_model == [project.name]
+    assert calls == ['research']
+    clock['now'] += timedelta(seconds=120)
+    assert run_queue(tmp_path, deps, once=True).advanced == [project.name]
+    assert calls == ['research', 'research']
+    assert run_queue(tmp_path, deps).at_gate == [project.name]
+    assert calls == ['research', 'research', 'draft']
+    logs = tmp_path / 'topics/logs' / project.name
+    assert not (logs / 'waiting-model-step.yaml').exists()
+    assert not (logs / 'agent-retry.yaml').exists()
+
+
+def test_malformed_quota_resume_metadata_blocks_only_its_topic(tmp_path):
+    deps, calls = _reliability_deps(tmp_path)
+    metadata = tmp_path / 'topics/logs/broken/waiting-model-step.yaml'
+    metadata.parent.mkdir(parents=True)
+    metadata.write_text('version: 1\nstep: non-agent\nfingerprint: invalid\n')
+    report = run_queue(tmp_path, deps)
+    assert report.blocked == ['broken']
+    assert report.at_gate == ['healthy']
+    assert calls == ['healthy']
+
+
+def test_quota_observes_own_partial_changes_without_resetting_transient_cap(tmp_path, monkeypatch):
+    from healthvideo.storage.files import write_yaml_atomic
+    from healthvideo.workflows import production_retry
+    from tests.workflows.test_script_review import _deps, _queue
+
+    project = _queue(tmp_path)
+    questions = project / 'revisions/001/script/questions.yaml'
+    write_yaml_atomic(questions, {'questions': [
+        {'id': f'Q{i}', 'ask': f'Question {i}', 'answer': f'Answer {i}'} for i in range(5)
+    ]})
+    clock = {'now': datetime.now(UTC)}
+    monkeypatch.setattr(production_retry, '_now', lambda: clock['now'])
+    calls = []
+    def invoke(*args, log_dir, **kwargs):
+        calls.append(kwargs['step'])
+        # Writers are explicitly allowed to remove answers already incorporated.
+        remaining = read_yaml(questions)
+        remaining['questions'].pop()
+        write_yaml_atomic(questions, remaining)
+        if len(calls) % 2 == 0:
+            raise AllAgentsExhausted(datetime.now(UTC) - timedelta(seconds=1))
+        return AgentResult('fake', False, False, _log_file(log_dir), failure_kind='transient')
+    deps = _deps({'value': WorkflowState.EVIDENCE_READY}, invoke)
+    sidecar = tmp_path / 'topics/logs' / project.name / 'agent-retry.yaml'
+    for attempts in [1, 1, 2, 2, 3]:
+        run_queue(tmp_path, deps)
+        assert read_yaml(sidecar)['steps']['draft']['attempts'] == attempts
+        clock['now'] += timedelta(seconds=600)
+    run_queue(tmp_path, deps)
+    assert calls == ['draft'] * 5
 
 
 def _entry(
@@ -139,7 +576,11 @@ def test_run_stops_at_medical_gate(tmp_path: Path) -> None:
     assert not stale_block.exists()
 
 
-def test_run_rerun_resumes_same_step(tmp_path: Path) -> None:
+def test_run_rerun_resumes_same_step(tmp_path: Path, monkeypatch) -> None:
+    from healthvideo.workflows import production_retry
+
+    clock = {'now': datetime(2026, 11, 14, tzinfo=UTC)}
+    monkeypatch.setattr(production_retry, '_now', lambda: clock['now'])
     entry = _entry("suy-tim-man")
     add_to_queue(tmp_path, entry)
 
@@ -169,6 +610,7 @@ def test_run_rerun_resumes_same_step(tmp_path: Path) -> None:
             ok=False,
             quota_exhausted=False,
             log_path=_log_file(log_dir, "interrupted.log"),
+            failure_kind="transient",
         )
 
     deps1 = RunDeps(
@@ -219,6 +661,7 @@ def test_run_rerun_resumes_same_step(tmp_path: Path) -> None:
         invoke=normal_invoke,
     )
 
+    clock['now'] += timedelta(seconds=120)
     report2 = run_queue(tmp_path, deps2)
 
     assert created_calls == ["suy-tim-man"]

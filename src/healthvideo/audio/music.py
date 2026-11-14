@@ -10,6 +10,8 @@ import wave
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from healthvideo.process import run_with_deadline, timeout_diagnostic
+
 MUSIC_PYTHON_ENV = "HEALTHVIDEO_MUSIC_PYTHON"
 MODEL_ID = "ace-step-1.5/acestep-v15-turbo+acestep-5Hz-lm-1.7B:pt-offload-v1"
 DEFAULT_MOOD = "calm curious documentary"
@@ -19,6 +21,8 @@ MUSIC_DB = -20.0
 DUCK_DB = -12.0
 MIX_VERSION = "sidechain-v1"
 REPO_ROOT = Path(__file__).resolve().parents[3]
+MUSIC_TIMEOUT = 30 * 60  # Includes cold model loading/offloading on the local GPU.
+MIX_TIMEOUT = 15 * 60
 
 
 def shared_repo_root(repo: Path = REPO_ROOT) -> Path:
@@ -65,10 +69,13 @@ def _sha256(path: Path) -> str:
         return hashlib.file_digest(source, "sha256").hexdigest()
 
 
-def _command(argv: list[str], runner, label: str) -> None:
+def _command(argv: list[str], runner, label: str, *, timeout: float = MIX_TIMEOUT) -> None:
     try:
-        result = runner(argv, shell=False, check=False, capture_output=True, text=True,
+        result = run_with_deadline(argv, timeout=timeout, runner=runner,
+                        shell=False, check=False, capture_output=True, text=True,
                         encoding="utf-8", errors="replace")
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeError(f'{label} {timeout_diagnostic(error)}') from error
     except OSError as error:
         raise RuntimeError(f"{label} could not start: {error}") from error
     if result.returncode:
@@ -104,7 +111,7 @@ def generate_music(
                 str(music_python()), "-X", "utf8", str(REPO_ROOT / "tools/music/generate.py"),
                 "--mood", mood, "--seconds", str(float(seconds)), "--seed", str(seed),
                 "--out", str(generated),
-            ], runner, "ACE-Step music generation")
+            ], runner, "ACE-Step music generation", timeout=MUSIC_TIMEOUT)
             if not generated.is_file():
                 raise RuntimeError("ACE-Step music generation did not create a WAV")
             frames, rate, channels = _wav_info(generated)

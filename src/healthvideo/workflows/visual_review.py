@@ -9,6 +9,7 @@ from pathlib import Path
 from healthvideo.domain.asset_manifest import AssetKind, AssetManifest
 from healthvideo.domain.format_profile import FORMAT_SPECS
 from healthvideo.domain.storyboard import SceneAnatomy, SceneBeat, Storyboard
+from healthvideo.process import run_with_deadline, timeout_diagnostic
 from healthvideo.storage.files import (
     canonical_json_hash,
     read_yaml,
@@ -21,6 +22,7 @@ from healthvideo.visuals.flux import generate_candidates, illustration_recipe_ha
 CANDIDATES = 'reviews/visual/candidates.yaml'
 REPORT = 'reviews/visual-review.yaml'
 MAX_REGENERATIONS = 2
+CONTACT_SHEET_TIMEOUT = 15 * 60  # Decode the full video and sample every scene/beat.
 
 
 def review_pending(project: Path) -> bool:
@@ -226,11 +228,16 @@ def prepare_contact_sheet(root: Path, *, runner=None, final: bool = False) -> No
     pattern = root / 'reviews/visual' / f'{prefix}-%03d.jpg'
     for old in pattern.parent.glob(f'{prefix}-*.jpg'):
         old.unlink()
-    result = runner([
-        'ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-i', str(root / 'renders/video.mp4'),
-        '-vf', f'select={expression},scale=384:-1,tile=5x5', '-vsync', 'vfr',
-        '-frames:v', str(math.ceil(len(frames) / 25)), str(pattern),
-    ], capture_output=True, text=True, check=False)
+    try:
+        result = run_with_deadline([
+            'ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-i', str(root / 'renders/video.mp4'),
+            '-vf', f'select={expression},scale=384:-1,tile=5x5', '-vsync', 'vfr',
+            '-frames:v', str(math.ceil(len(frames) / 25)), str(pattern),
+        ], timeout=CONTACT_SHEET_TIMEOUT, runner=runner, capture_output=True, text=True, check=False)
+    except subprocess.TimeoutExpired as error:
+        for partial in pattern.parent.glob(f'{prefix}-*.jpg'):
+            partial.unlink(missing_ok=True)
+        raise RuntimeError(f'Visual review contact sheet {timeout_diagnostic(error)}') from error
     paths = sorted(pattern.parent.glob(f'{prefix}-*.jpg'))
     if result.returncode or len(paths) != math.ceil(len(frames) / 25):
         raise RuntimeError(f'Visual review contact sheet failed: {result.stderr}')

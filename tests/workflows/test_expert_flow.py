@@ -178,21 +178,29 @@ def test_evidence_ready_requires_expert_brief(tmp_path):
     assert 'expert-brief.md' in blocked
     assert not expert_brief_ready(project)
 
-    # Next run: an evidence_ready project without a brief goes back to the expert, not the writer.
+    # A new tick with identical inputs keeps the validation hold and makes no paid call.
     def expert_then_writer(slots, prompt, *, cwd, log_dir, **kwargs):
         del prompt, cwd
         steps.append(kwargs['step'])
-        if kwargs['step'] == 'research':
-            (project / REV / EXPERT_BRIEF).write_text(
-                '# Brief\n- Cơ chế: C01\n', encoding='utf-8')
-        else:
-            state['value'] = WorkflowState.AWAITING_MEDICAL_REVIEW
+        assert kwargs['step'] == 'draft'  # recovered research must not be billed again
+        state['value'] = WorkflowState.AWAITING_MEDICAL_REVIEW
         return _result(slots, log_dir)
 
     deps = _deps(state, expert_then_writer, expert_brief_ready=expert_brief_ready)
     report = run_queue(tmp_path, deps)
+    assert report.blocked == [SLUG]
+    assert steps == ['research']
 
-    assert steps == ['research', 'research', 'draft']
+    # Synthetic external recovery supplies the missing brief and explicitly changes
+    # the doctor's input. Routing can now hand verified evidence straight to the writer.
+    (project / REV / EXPERT_BRIEF).write_text(
+        '# Synthetic corrected brief\n- Cơ chế: C01\n', encoding='utf-8')
+    queue = read_yaml(tmp_path / 'topics/queue.yaml')
+    queue['entries'][0]['doctor_note'] = 'Synthetic recovery: corrected expert brief supplied.'
+    write_yaml_atomic(tmp_path / 'topics/queue.yaml', queue)
+    report = run_queue(tmp_path, deps)
+
+    assert steps == ['research', 'draft']
     assert expert_brief_ready(project)
     assert report.blocked == []
     assert report.at_gate == [SLUG]

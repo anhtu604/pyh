@@ -25,13 +25,16 @@ from urllib.error import URLError
 from urllib.parse import parse_qs, unquote, urlsplit
 from urllib.request import urlopen
 
+import yaml
+
 from healthvideo.agents import ACTIVITY_FILE, QUOTA_FILE, RUNNING_MARKER, QuotaBook
 from healthvideo.approver_pin import pin_path, verify_pin
 from healthvideo.company import COMPANY_PATH, REPO_ROOT, load_company
 from healthvideo.domain.gate_review import GateKind
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
+from healthvideo.domain.queue import QueueEntry
 from healthvideo.env import child_env
-from healthvideo.process import resolve_pnpm_argv
+from healthvideo.process import is_same_process, resolve_pnpm_argv
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.storage.queue import load_queue
 from healthvideo.workflows import (
@@ -41,6 +44,7 @@ from healthvideo.workflows import (
     factory,
     feedback_inbox,
     product_review,
+    production_retry,
     standards,
 )
 from healthvideo.workflows.gate_review import approve_gate, reject_gate
@@ -123,15 +127,119 @@ def _tail(path: Path, lines: int) -> list[str]:
     return [line for line in text.splitlines() if line.strip()][-lines:]
 
 
+PRODUCTION_RUNNING_MARKER = '.production-running'
+_APP_LIVE_ROLES: frozenset[str] = frozenset({'coordinator', 'coordinator_senior', 'feedback_analyst'})
+_APP_LIVE_STEPS: frozenset[str] = frozenset({'chat', 'chat_deep', 'coordinator', 'feedback_inbox'})
+_APP_LIVE_SCOPES: frozenset[str] = frozenset({'chat', 'feedback'})
+_BLOCKED_STEP_RE = re.compile(r'(?:ở bước|bước)\s+([a-z_]+)|^([a-z_]+)\s+lỗi:', re.IGNORECASE)
+
+
+def _valid_pid(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
+def _read_agent_marker(marker: Path) -> dict:
+    """Verify per-topic/chat/feedback .agent-running line-3 process identity."""
+    if not marker.is_file():
+        return {'state': 'missing', 'scope': marker.parent.name}
+    try:
+        lines = marker.read_text(encoding='utf-8', errors='replace').splitlines()
+    except OSError:
+        return {'state': 'unverified', 'scope': marker.parent.name}
+    agent_name = lines[0].strip() if lines and lines[0].strip() else 'agent'
+    started_at = lines[1].strip() if len(lines) > 1 else ''
+    if len(lines) < 3 or not lines[2].strip():
+        return {'state': 'unverified', 'agent': agent_name, 'scope': marker.parent.name}
+    try:
+        meta = json.loads(lines[2])
+    except ValueError:
+        return {'state': 'unverified', 'agent': agent_name, 'scope': marker.parent.name}
+    if not isinstance(meta, dict):
+        return {'state': 'unverified', 'agent': agent_name, 'scope': marker.parent.name}
+    pid = meta.get('pid')
+    token = meta.get('process_token')
+    raw_job_id = meta.get('job_id')
+    job_id = raw_job_id.strip() if isinstance(raw_job_id, str) else ''
+    if not _valid_pid(pid) or not isinstance(token, str) or not token.strip() or not job_id:
+        return {'state': 'unverified', 'agent': agent_name, 'scope': marker.parent.name}
+    if is_same_process(pid, token):
+        return {
+            'state': 'running',
+            'agent': agent_name,
+            'pid': pid,
+            'process_token': token,
+            'job_id': job_id,
+            'started_at': str(meta.get('started_at') or started_at),
+            'scope': marker.parent.name,
+        }
+    return {'state': 'stale', 'agent': agent_name, 'scope': marker.parent.name}
+
+
 def running_agents(root: Path) -> list[str]:
-    """Agents the factory itself is running now, from the runner's per-topic marker."""
-    if factory.running_pid(root) is None:
-        return []
-    names = []
+    """Verified live agent CLIs; live chat/feedback still report when the factory daemon is off."""
+    factory_on = factory.running_pid(root) is not None
+    names: list[str] = []
     for marker in sorted((root / 'topics' / 'logs').glob(f'*/{RUNNING_MARKER}')):
-        first = marker.read_text(encoding='utf-8', errors='replace').splitlines()[:1]
-        names.append(first[0].strip() if first else 'agent')
+        info = _read_agent_marker(marker)
+        if info.get('state') != 'running':
+            continue
+        if not factory_on and info.get('scope') not in _APP_LIVE_SCOPES:
+            continue
+        names.append(str(info.get('agent') or 'agent'))
     return names
+
+
+def _inspect_production_markers(
+    root: Path,
+    *,
+    now_dt: datetime,
+) -> tuple[list[dict], list[dict]]:
+    """Read topics/logs/<slug>/.production-running and verify PID + creation token."""
+    factory_on = factory.running_pid(root) is not None
+    titles = {path.name: factory.project_title(path, proj) for path, proj in factory.projects(root)}
+    running: list[dict] = []
+    unverified: list[dict] = []
+    for marker in sorted((root / 'topics' / 'logs').glob(f'*/{PRODUCTION_RUNNING_MARKER}')):
+        slug = marker.parent.name
+        if slug not in titles:
+            continue
+        try:
+            data = json.loads(marker.read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            unverified.append({'slug': slug, 'reason': 'Marker máy dựng không đọc được'})
+            continue
+        if not isinstance(data, dict):
+            unverified.append({'slug': slug, 'reason': 'Marker máy dựng sai định dạng'})
+            continue
+        pid = data.get('pid')
+        token = data.get('process_token')
+        started_raw = str(data.get('started_at') or '')
+        if not _valid_pid(pid) or not isinstance(token, str) or not token.strip():
+            unverified.append({'slug': slug, 'reason': 'Marker máy dựng thiếu định danh'})
+            continue
+        if factory_on and is_same_process(pid, token):
+            started_dt = _parse_iso(started_raw)
+            duration_s = (
+                round(max(0.0, (now_dt - started_dt).total_seconds()), 1)
+                if started_dt is not None else 0.0
+            )
+            running.append({
+                'slug': slug,
+                'title': titles.get(slug, slug),
+                'pid': pid,
+                'started_at': started_raw,
+                'duration_s': duration_s,
+            })
+    return running, unverified
+
+
+def production_running(
+    root: Path,
+    *,
+    now: Callable[[], datetime] = lambda: datetime.now().astimezone(),
+) -> list[dict]:
+    """Active production runs verified by OS process creation token."""
+    return _inspect_production_markers(root, now_dt=now())[0]
 
 
 STEP_LABELS: dict[str, str] = {
@@ -154,15 +262,62 @@ STEP_LABELS: dict[str, str] = {
 }
 
 
+_TERMINAL_STATES: frozenset[WorkflowState] = frozenset({
+    WorkflowState.VIDEO_APPROVED,
+    WorkflowState.PACKAGED,
+    WorkflowState.PUBLISHED_MANUAL,
+    WorkflowState.TOPIC_REJECTED,
+})
+
+
+def _safe_astimezone(dt: datetime) -> datetime:
+    """Convert to local timezone without failing on Windows boundary dates."""
+    try:
+        return dt.astimezone()
+    except (OSError, OverflowError, ValueError):
+        return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
+
+
+def _format_hhmm(dt: datetime) -> str:
+    """Format local HH:MM safely even when Windows rejects tz conversion."""
+    local_dt = _safe_astimezone(dt)
+    try:
+        return local_dt.strftime('%H:%M')
+    except (OSError, OverflowError, ValueError):
+        try:
+            return dt.strftime('%H:%M')
+        except (OSError, OverflowError, ValueError):
+            return dt.isoformat()
+
+
+def _safe_mtime_optional(path: Path) -> datetime | None:
+    try:
+        return _safe_astimezone(datetime.fromtimestamp(path.stat().st_mtime, tz=UTC))
+    except (OSError, OverflowError, ValueError):
+        return None
+
+
+def _safe_mtime(path: Path, fallback: datetime) -> datetime:
+    return _safe_mtime_optional(path) or fallback
+
+
+def _safe_quota_snapshot(root: Path, now_dt: datetime) -> tuple[list[dict], bool]:
+    try:
+        entries = QuotaBook(root / QUOTA_FILE).snapshot(now_dt)
+        if not isinstance(entries, list):
+            return [], True
+        return [entry for entry in entries if isinstance(entry, dict)], False
+    except (OSError, ValueError, TypeError, KeyError, AttributeError, OverflowError, yaml.YAMLError):
+        return [], True
+
+
 def _parse_iso(value: object) -> datetime | None:
-    if isinstance(value, datetime):
-        return value if value.tzinfo else value.astimezone()
     if not value:
         return None
     try:
-        parsed = datetime.fromisoformat(str(value))
-        return parsed if parsed.tzinfo else parsed.astimezone()
-    except ValueError:
+        parsed = value if isinstance(value, datetime) else datetime.fromisoformat(str(value))
+        return parsed if parsed.tzinfo else _safe_astimezone(parsed)
+    except (ValueError, OSError, OverflowError):
         return None
 
 
@@ -218,11 +373,12 @@ def activity(
     slug: str | None = None,
     now: Callable[[], datetime] = lambda: datetime.now().astimezone(),
 ) -> dict:
-    """Recent completed agent events plus any currently running (start without end) jobs."""
+    """Recent completed agent events plus verified currently running jobs."""
     path = root / ACTIVITY_FILE
     roles = _role_names()
-    current_now = now()
-    open_starts: dict[tuple[str, str, str, str, str], tuple[dict, datetime | None]] = {}
+    current_now = _safe_astimezone(now())
+    factory_on = factory.running_pid(root) is not None
+    open_starts: dict[tuple[str, ...], tuple[dict, datetime | None]] = {}
     history: list[dict] = []
     if path.is_file():
         for raw in path.read_text(encoding='utf-8', errors='replace').splitlines():
@@ -236,12 +392,19 @@ def activity(
                 continue
             if slug and str(row.get('slug') or '') != slug:
                 continue
-            key = (
-                str(row.get('slug') or ''),
-                str(row.get('step') or ''),
-                str(row.get('role') or ''),
-                str(row.get('cli') or ''),
-                str(row.get('model') or ''),
+            raw_job_id = row.get('job_id')
+            job_id = raw_job_id.strip() if isinstance(raw_job_id, str) else ''
+            key: tuple[str, ...] = (
+                ('job', job_id)
+                if job_id
+                else (
+                    'legacy',
+                    str(row.get('slug') or ''),
+                    str(row.get('step') or ''),
+                    str(row.get('role') or ''),
+                    str(row.get('cli') or ''),
+                    str(row.get('model') or ''),
+                )
             )
             role_id = str(row.get('role') or '')
             enriched = {
@@ -274,15 +437,43 @@ def activity(
                     'duration_s': 0.0,
                     'running': False,
                 })
-    from healthvideo.workflows.factory import _process_token
 
     running: list[dict] = []
     for start_row, start_dt in open_starts.values():
         pid = start_row.get('pid')
-        if isinstance(pid, int) and _process_token(pid) is None:
-            # The process that started this job died (app or factory restarted): not running.
-            history.append({**start_row, 'started_at': start_row.get('at'), 'duration_s': 0.0,
-                            'running': False, 'ok': False, 'interrupted': True})
+        token = start_row.get('process_token')
+        raw_job_id = start_row.get('job_id')
+        job_id = raw_job_id.strip() if isinstance(raw_job_id, str) else ''
+        has_identity = (
+            bool(job_id)
+            and _valid_pid(pid)
+            and isinstance(token, str)
+            and bool(token.strip())
+        )
+        role_id = str(start_row.get('role') or '')
+        step_id = str(start_row.get('step') or '')
+        app_live = role_id in _APP_LIVE_ROLES or step_id in _APP_LIVE_STEPS
+        if not has_identity:
+            history.append({
+                **start_row,
+                'started_at': start_row.get('at'),
+                'duration_s': 0.0,
+                'running': False,
+                'ok': None,
+                'interrupted': True,
+                'unverified': True,
+            })
+            continue
+        if not is_same_process(pid, token) or (not factory_on and not app_live):
+            history.append({
+                **start_row,
+                'started_at': start_row.get('at'),
+                'duration_s': 0.0,
+                'running': False,
+                'ok': None,
+                'interrupted': True,
+                'unverified': False,
+            })
             continue
         duration_s = 0.0
         if start_dt is not None:
@@ -301,16 +492,129 @@ def activity(
     }
 
 
+def _blocked_note(root: Path, path: Path, project: ProjectManifestV2) -> str:
+    blocked = root / 'topics' / 'logs' / path.name / 'blocked.txt'
+    reason = path / 'blocked-reason.md'
+    if project.state is WorkflowState.BLOCKED or blocked.exists():
+        source = reason if reason.exists() else blocked
+        return source.read_text(encoding='utf-8', errors='replace').strip() if source.exists() else ''
+    return ''
+
+
+def _blocked_step(note: str) -> str | None:
+    match = _BLOCKED_STEP_RE.search(note or '')
+    if not match:
+        return None
+    return (match.group(1) or match.group(2) or '').lower() or None
+
+
+def _project_pending_step(root: Path, path: Path, project: ProjectManifestV2, blocked_note: str) -> str | None:
+    """Infer which step a project currently sits at without making external calls."""
+    if blocked_note:
+        step = _blocked_step(blocked_note)
+        if step:
+            return step
+    state = project.state
+    if state is WorkflowState.BLOCKED and project.side_state and project.side_state.resume_state:
+        state = project.side_state.resume_state
+    if state in {WorkflowState.TOPIC_SELECTED, WorkflowState.RESEARCH_IN_PROGRESS}:
+        return 'research'
+    if state is WorkflowState.EVIDENCE_READY:
+        return 'draft'
+    if state is WorkflowState.DRAFT_READY:
+        return 'script_review'
+    if state is WorkflowState.NEEDS_MEDICAL_REVISION:
+        return 'revise_medical'
+    if state is WorkflowState.NEEDS_PRODUCTION_REVISION:
+        return 'revise_production'
+    if state in {WorkflowState.MEDICALLY_APPROVED, WorkflowState.PRODUCTION_IN_PROGRESS}:
+        rev = path / 'revisions' / project.active_revision
+        if (rev / 'reviews/visual/candidates.yaml').is_file() and not (rev / 'reviews/visual-review.yaml').is_file():
+            return 'visual_review'
+        if not (rev / 'posts/posts.yaml').is_file():
+            waiting_model = (root / 'topics/logs' / path.name / 'waiting-model.txt').is_file()
+            if waiting_model or (rev / 'renders/video.mp4').is_file():
+                return 'posts'
+        if (rev / 'renders/video.mp4').is_file() and product_review.pending(path):
+            try:
+                return product_review.next_product_action(path)
+            except (OSError, ValueError):
+                return 'product_review'
+        return 'produce'
+    return None
+
+
+def _read_agent_retry_sidecar(path: Path) -> tuple[dict[str, dict], bool]:
+    """Read topics/logs/<slug>/agent-retry.yaml defensively; never trust malformed files."""
+    if not path.exists():
+        return {}, False
+    valid_kinds = {'transient', 'validation', 'configuration', 'agent_error'}
+    try:
+        data = read_yaml(path)
+        if not isinstance(data, dict) or data.get('version') != 1:
+            return {}, True
+        steps = data.get('steps')
+        if not isinstance(steps, dict):
+            return {}, True
+        parsed: dict[str, dict] = {}
+        for step, record in steps.items():
+            if not isinstance(step, str) or not isinstance(record, dict):
+                return {}, True
+            fp = record.get('fingerprint')
+            kind = record.get('kind')
+            attempts = record.get('attempts')
+            reason = record.get('reason')
+            deadline = record.get('retry_after')
+            if (
+                not isinstance(fp, str) or not fp.strip()
+                or kind not in valid_kinds
+                or type(attempts) is not int or attempts < 1
+                or not isinstance(reason, str) or not reason.strip()
+            ):
+                return {}, True
+            deadline_dt = None
+            if deadline is not None:
+                if not isinstance(deadline, str):
+                    return {}, True
+                deadline_dt = _parse_iso(deadline)
+                if deadline_dt is None or datetime.fromisoformat(deadline).tzinfo is None:
+                    return {}, True
+            parsed[step] = {
+                'fingerprint': fp,
+                'kind': kind,
+                'attempts': attempts,
+                'reason': reason,
+                'retry_after': deadline,
+                'retry_after_dt': deadline_dt,
+            }
+        return parsed, False
+    except (OSError, ValueError, TypeError, OverflowError, yaml.YAMLError):
+        return {}, True
+
+
 def company_roster(
     root: Path,
     *,
     per_role_limit: int = 5,
     now: Callable[[], datetime] = lambda: datetime.now().astimezone(),
 ) -> dict:
-    """Read-only company roster from profiles/company.yaml enriched with per-role activity."""
+    """Read-only company roster from profiles/company.yaml enriched with verified work state."""
+    current_now = _safe_astimezone(now())
     cfg_path = root / 'profiles/company.yaml'
     company = load_company(cfg_path if cfg_path.is_file() else COMPANY_PATH)
-    act = activity(root, limit=10_000, now=now)
+    act = activity(root, limit=10_000, now=lambda: current_now)
+    quota_book = QuotaBook(root / QUOTA_FILE)
+    factory_on = factory.running_pid(root) is not None
+    quota_bad = False
+    try:
+        quota_book.snapshot(current_now)
+        # Snapshot validates dates; validate each slot through the same public reader.
+        for role_id in company.roles:
+            for slot in company.chain(role_id):
+                quota_book.resting(slot, current_now)
+    except (OSError, ValueError, TypeError, KeyError, AttributeError, OverflowError, yaml.YAMLError):
+        quota_bad = True
+
     running_by_role: dict[str, list[dict]] = {}
     recent_by_role: dict[str, list[dict]] = {}
     for item in act['running']:
@@ -318,11 +622,214 @@ def company_roster(
     for item in act['recent']:
         recent_by_role.setdefault(str(item.get('role') or ''), []).append(item)
 
+    # Map per-project state, retry sidecars, waiting-model, and markers without network/CLI calls.
+    logs_dir = root / 'topics' / 'logs'
+    unverified_scopes: set[str] = set()
+    marker_running_by_scope: dict[str, dict] = {}
+    for marker in sorted(logs_dir.glob(f'*/{RUNNING_MARKER}')):
+        m_info = _read_agent_marker(marker)
+        scope = str(m_info.get('scope') or '')
+        if m_info.get('state') == 'unverified':
+            unverified_scopes.add(scope)
+        elif m_info.get('state') == 'running' and (factory_on or scope in _APP_LIVE_SCOPES):
+            marker_running_by_scope[scope] = m_info
+
+    role_waiting_model: dict[str, tuple[str, datetime | None]] = {}
+    role_waiting_retry: dict[str, tuple[str, datetime, str]] = {}
+    role_errors: dict[str, tuple[str, str]] = {}
+    role_unknowns: dict[str, str] = {}
+    role_pending_work: dict[str, str] = {}
+
+    if 'chat' in unverified_scopes:
+        role_unknowns['coordinator'] = 'Marker chat thiếu định danh tiến trình'
+    if 'feedback' in unverified_scopes:
+        role_unknowns['feedback_analyst'] = 'Marker phân tích ý kiến thiếu định danh tiến trình'
+
+    prod_retry_wait: tuple[str, datetime, str] | None = None
+    prod_error: tuple[str, str] | None = None
+    prod_malformed = False
+
+    step_to_role: dict[str, str] = {}
+    for r_id, r_cfg in company.roles.items():
+        for s_name in r_cfg.steps:
+            step_to_role[s_name] = r_id
+
+    queue_entries: dict[str, QueueEntry] = {}
+    try:
+        queue_entries = {entry.slug: entry for entry in load_queue(root)}
+    except (OSError, ValueError, TypeError, yaml.YAMLError):
+        pass
+
+    for path, project in factory.projects(root):
+        if project.state in _TERMINAL_STATES:
+            continue
+        slug = path.name
+        note = _blocked_note(root, path, project)
+        p_step = _project_pending_step(root, path, project, note)
+        owner_role = step_to_role.get(p_step or '')
+
+        a_records, a_bad = _read_agent_retry_sidecar(logs_dir / slug / 'agent-retry.yaml')
+        quota_step: str | None = None
+        resume_error = False
+        resume_unknown_role: str | None = None
+        resume_path = logs_dir / slug / 'waiting-model-step.yaml'
+        if resume_path.is_file():
+            saved_step: object = None
+            try:
+                resume = read_yaml(resume_path)
+                if not isinstance(resume, dict):
+                    raise TypeError('Invalid model resume')
+                saved_step = resume.get('step')
+                saved_fp = resume.get('fingerprint')
+                if (
+                    resume.get('version') != 1
+                    or not isinstance(saved_step, str)
+                    or saved_step not in step_to_role
+                    or saved_step not in production_retry._AGENT_INPUTS
+                    or not isinstance(saved_fp, str)
+                    or not saved_fp
+                ):
+                    raise ValueError('Invalid model resume')
+                entry = queue_entries.get(slug)
+                brief_context = (
+                    json.dumps(
+                        {
+                            'title': entry.title,
+                            'question': entry.question,
+                            'doctor_note': entry.doctor_note,
+                        },
+                        sort_keys=True,
+                    )
+                    if entry is not None
+                    else ''
+                )
+                expected_fp = production_retry.agent_fingerprint(root, path, saved_step, brief_context)
+                if expected_fp == saved_fp:
+                    quota_step = saved_step
+            except (OSError, ValueError, TypeError, KeyError, AttributeError, yaml.YAMLError):
+                resume_error = True
+                if isinstance(saved_step, str):
+                    resume_unknown_role = step_to_role.get(saved_step)
+
+        # Match runner._run_topic: outstanding agent retry takes precedence over model resume step.
+        forced_step = next(iter(a_records)) if a_records else quota_step
+        if forced_step is not None:
+            p_step = forced_step
+            owner_role = step_to_role.get(p_step)
+
+        if slug in unverified_scopes and owner_role:
+            role_unknowns.setdefault(owner_role, f'Marker thiếu định danh · {slug}')
+        if resume_error:
+            unknown_role = resume_unknown_role or owner_role
+            if unknown_role:
+                role_unknowns.setdefault(unknown_role, f'Hồ sơ chờ model không hợp lệ · {slug}')
+        if a_bad and owner_role:
+            role_unknowns.setdefault(owner_role, f'Chưa xác minh (agent-retry lỗi · {slug})')
+
+        p_bad = False
+        try:
+            p_record = production_retry.retry_status(root, path, project.state)
+            if p_record['kind'] is None:
+                p_record = None
+            elif p_record['retry_after']:
+                p_record['retry_after_dt'] = _parse_iso(p_record['retry_after'])
+        except (OSError, ValueError, TypeError, KeyError, AttributeError, OverflowError, yaml.YAMLError):
+            p_record, p_bad = None, True
+        if p_bad:
+            prod_malformed = True
+        elif p_record is not None and p_step == 'produce':
+            r_dt = p_record.get('retry_after_dt')
+            if p_record['kind'] == 'transient' and r_dt is not None and r_dt > current_now:
+                if prod_retry_wait is None or r_dt < prod_retry_wait[1]:
+                    prod_retry_wait = (slug, r_dt, p_record['reason'])
+            elif p_record['kind'] == 'validation' or p_record['attempts'] >= 3:
+                prod_error = prod_error or (slug, p_record['reason'])
+
+        waiting_file = logs_dir / slug / 'waiting-model.txt'
+        if waiting_file.is_file() and owner_role:
+            until_raw = waiting_file.read_text(encoding='utf-8', errors='replace').strip()
+            until_dt = _parse_iso(until_raw)
+            chain = company.chain(owner_role)
+            chain_exhausted = not quota_bad and bool(chain) and all(quota_book.resting(s, current_now) for s in chain)
+            if (until_dt is not None and until_dt > current_now) or (not until_raw and chain_exhausted):
+                effective_dt = until_dt or quota_book.earliest_return(chain, current_now)
+                role_waiting_model.setdefault(owner_role, (slug, effective_dt))
+
+        if p_step and owner_role:
+            step_rec = a_records.get(p_step)
+            if step_rec is not None:
+                r_dt = step_rec.get('retry_after_dt')
+                if step_rec['kind'] == 'transient' and r_dt is not None and r_dt > current_now:
+                    existing = role_waiting_retry.get(owner_role)
+                    if existing is None or r_dt < existing[1]:
+                        role_waiting_retry[owner_role] = (slug, r_dt, step_rec['reason'])
+                elif step_rec['kind'] != 'transient' or step_rec['attempts'] >= production_retry.MAX_TRANSIENT_ATTEMPTS:
+                    role_errors.setdefault(owner_role, (slug, step_rec['reason']))
+
+        if note:
+            if p_step == 'produce':
+                prod_error = prod_error or (slug, note)
+            elif owner_role and owner_role not in role_waiting_retry:
+                role_errors.setdefault(owner_role, (slug, note))
+        elif owner_role and (forced_step is not None or project.state not in factory.GATES):
+            role_pending_work.setdefault(owner_role, slug)
+
+    prod_running, prod_unverified = _inspect_production_markers(root, now_dt=current_now)
+    if prod_running:
+        p0 = prod_running[0]
+        prod_state = 'working'
+        prod_label = f"Đang dựng video · {p0['slug']}"
+        prod_detail = p0.get('title') or p0['slug']
+        prod_retry_iso = None
+    elif prod_unverified or prod_malformed:
+        prod_state = 'unknown'
+        prod_label = 'Chưa xác minh trạng thái máy dựng'
+        prod_detail = (
+            prod_unverified[0]['reason']
+            if prod_unverified else 'Hồ sơ production-retry.yaml không hợp lệ'
+        )
+        prod_retry_iso = None
+    elif prod_retry_wait is not None:
+        slug_w, dt_w, reason_w = prod_retry_wait
+        prod_state = 'waiting_retry'
+        prod_label = f'Chờ thử lại dựng lúc {_format_hhmm(dt_w)} · {slug_w}'
+        prod_detail = reason_w
+        prod_retry_iso = dt_w.isoformat()
+    elif prod_error is not None:
+        slug_e, reason_e = prod_error
+        prod_state = 'error'
+        prod_label = f'Dừng do lỗi dựng video · {slug_e}'
+        prod_detail = reason_e
+        prod_retry_iso = None
+    else:
+        prod_state = 'idle'
+        prod_label = 'Đang nghỉ'
+        prod_detail = ''
+        prod_retry_iso = None
+
     cap = max(1, int(per_role_limit))
     epoch = datetime.min.replace(tzinfo=UTC)
     roles_payload: list[dict] = []
     for role_id, role in company.roles.items():
-        role_running = running_by_role.get(role_id, [])
+        role_running = list(running_by_role.get(role_id, []))
+        if not role_running:
+            if role_id == 'coordinator' and 'chat' in marker_running_by_scope:
+                m_chat = marker_running_by_scope['chat']
+                role_running.append({
+                    'role': role_id, 'role_name': role.name, 'cli': m_chat['agent'], 'model': '',
+                    'slug': 'chung', 'step': 'chat', 'step_label': STEP_LABELS['chat'],
+                    'started_at': m_chat['started_at'], 'at': m_chat['started_at'],
+                    'duration_s': 0.0, 'running': True,
+                })
+            elif role_id == 'feedback_analyst' and 'feedback' in marker_running_by_scope:
+                m_fb = marker_running_by_scope['feedback']
+                role_running.append({
+                    'role': role_id, 'role_name': role.name, 'cli': m_fb['agent'], 'model': '',
+                    'slug': 'chung', 'step': 'feedback_inbox', 'step_label': STEP_LABELS['feedback_inbox'],
+                    'started_at': m_fb['started_at'], 'at': m_fb['started_at'],
+                    'duration_s': 0.0, 'running': True,
+                })
+
         all_recent = sorted(
             recent_by_role.get(role_id, []),
             key=lambda it: _parse_iso(it.get('at')) or epoch,
@@ -333,6 +840,59 @@ def company_roster(
             for it in [*role_running, *all_recent]
             if it.get('cli') or it.get('model')
         )
+        completed_recent = [
+            it for it in all_recent
+            if not it.get('interrupted') and it.get('event') != 'quota'
+        ]
+        last_error = bool(completed_recent and completed_recent[0].get('ok') is False)
+
+        chain = company.chain(role_id)
+        chain_all_resting = not quota_bad and bool(chain) and all(quota_book.resting(s, current_now) for s in chain)
+
+        work_detail = ''
+        retry_after_iso: str | None = None
+        resting_until_iso: str | None = None
+
+        if role_running:
+            r0 = role_running[0]
+            step_lbl = str(r0.get('step_label') or STEP_LABELS.get(str(r0.get('step') or ''), 'Đang làm'))
+            slug_lbl = str(r0.get('slug') or '')
+            work_state = 'working'
+            work_label = (
+                f'{step_lbl} · {slug_lbl}'
+                if slug_lbl and slug_lbl not in {'chung', 'chat'}
+                else step_lbl
+            )
+            work_detail = f"{r0.get('cli') or ''}/{r0.get('model') or ''}".strip('/')
+        elif role_id in role_unknowns or quota_bad:
+            work_state = 'unknown'
+            work_label = 'Chưa xác minh trạng thái'
+            work_detail = role_unknowns.get(role_id, 'Không đọc được trạng thái quota model')
+        elif role_id in role_waiting_model or (chain_all_resting and role_id in role_pending_work):
+            if role_id in role_waiting_model:
+                w_slug, w_dt = role_waiting_model[role_id]
+            else:
+                w_slug = role_pending_work[role_id]
+                w_dt = quota_book.earliest_return(chain, current_now)
+            work_state = 'waiting_model'
+            when_txt = f' đến {_format_hhmm(w_dt)}' if w_dt else ''
+            work_label = f'Chờ model{when_txt} · {w_slug}'
+            resting_until_iso = w_dt.isoformat() if w_dt else None
+        elif role_id in role_waiting_retry:
+            r_slug, r_dt, r_reason = role_waiting_retry[role_id]
+            work_state = 'waiting_retry'
+            work_label = f'Chờ thử lại lúc {_format_hhmm(r_dt)} · {r_slug}'
+            work_detail = r_reason
+            retry_after_iso = r_dt.isoformat()
+        elif role_id in role_errors:
+            work_state = 'error'
+            e_slug, e_reason = role_errors[role_id]
+            work_label = f'Dừng do lỗi · {e_slug}'
+            work_detail = e_reason
+        else:
+            work_state = 'idle'
+            work_label = 'Đang nghỉ'
+
         roles_payload.append({
             'id': role.id,
             'name': role.name,
@@ -340,13 +900,28 @@ def company_roster(
             'steps': list(role.steps),
             'step_labels': [STEP_LABELS.get(s, s) for s in role.steps],
             'skills': list(role.skills),
-            'configured_models': [{'cli': m.cli, 'model': m.model} for m in company.chain(role.id)],
+            'configured_models': [{'cli': m.cli, 'model': m.model} for m in chain],
             'running': role_running,
             'recent': all_recent[:cap],
             'models_used': [{'cli': c, 'model': m, 'count': n} for (c, m), n in counts.items()],
-            'last_error': bool(all_recent and all_recent[0].get('ok') is False),
+            'last_error': last_error,
+            'work_state': work_state,
+            'work_label': work_label,
+            'work_detail': work_detail,
+            'retry_after': retry_after_iso,
+            'resting_until': resting_until_iso,
         })
-    return {'roles': roles_payload}
+    return {
+        'roles': roles_payload,
+        'production_running': prod_running,
+        'production': {
+            'work_state': prod_state,
+            'work_label': prod_label,
+            'work_detail': prod_detail,
+            'retry_after': prod_retry_iso,
+            'running': prod_running,
+        },
+    }
 
 
 def _project_preview_url(path: Path, project: ProjectManifestV2) -> str | None:
@@ -382,7 +957,7 @@ def _project_status_line(
     if waiting_file.is_file():
         until_raw = waiting_file.read_text(encoding='utf-8', errors='replace').strip()
         until_dt = _parse_iso(until_raw)
-        when = until_dt.strftime('%H:%M') if until_dt else until_raw
+        when = _format_hhmm(until_dt) if until_dt else until_raw
         return f'Chờ model trở lại ({when})'
     if blocked_note:
         return f'Bị chặn · {STAGES[stage_index(project)].lower()}'
@@ -401,7 +976,7 @@ def overview(
     now: Callable[[], datetime] = lambda: datetime.now().astimezone(),
 ) -> dict:
     """Company overview payload for the home page: KPI tiles, decision strip, projects, resting models."""
-    current_now = now()
+    current_now = _safe_astimezone(now())
     act = activity(root, limit=30, now=lambda: current_now)
     running_by_slug = {str(item.get('slug')): item for item in act['running'] if item.get('slug')}
     recent_by_slug: dict[str, dict] = {}
@@ -409,31 +984,31 @@ def overview(
         slug_key = str(item.get('slug') or '')
         if slug_key and slug_key not in recent_by_slug:
             recent_by_slug[slug_key] = item
-    resting = QuotaBook(root / QUOTA_FILE).snapshot(current_now)
+    resting, _ = _safe_quota_snapshot(root, current_now)
     queue_dates: dict[str, datetime] = {}
     try:
         for entry in load_queue(root):
-            queue_dates[entry.slug] = datetime.combine(entry.added, datetime.min.time()).astimezone()
-    except (OSError, ValueError):
+            queue_dates[entry.slug] = _safe_astimezone(datetime.combine(entry.added, datetime.min.time()))
+    except (OSError, ValueError, TypeError, OverflowError, yaml.YAMLError):
         pass
 
     logs = root / 'topics' / 'logs'
+    factory_on = factory.running_pid(root) is not None
+    prod_by_slug = {
+        str(item.get('slug')): item
+        for item in production_running(root, now=lambda: current_now)
+        if item.get('slug')
+    }
     decisions: list[dict] = []
     project_cards: list[dict] = []
     done_states = {WorkflowState.VIDEO_APPROVED, WorkflowState.PACKAGED, WorkflowState.PUBLISHED_MANUAL}
-    inactive_states = done_states | {WorkflowState.IDEA, WorkflowState.TOPIC_REJECTED, WorkflowState.BLOCKED} | set(factory.GATES)
     running_count = 0
     done_7d = 0
     done_30d = 0
     lead_days: list[float] = []
 
     for path, project in factory.projects(root):
-        blocked = logs / path.name / 'blocked.txt'
-        reason = path / 'blocked-reason.md'
-        note = ''
-        if project.state is WorkflowState.BLOCKED or blocked.exists():
-            source = reason if reason.exists() else blocked
-            note = source.read_text(encoding='utf-8', errors='replace').strip() if source.exists() else ''
+        note = _blocked_note(root, path, project)
         current_card = decision_card.card(path)
         title = factory.project_title(path, project)
         if current_card is not None:
@@ -444,22 +1019,28 @@ def overview(
                 'count': len(current_card['decisions']),
                 'revision': project.active_revision,
             })
-        marker = logs / path.name / RUNNING_MARKER
+        marker_info = _read_agent_marker(logs / path.name / RUNNING_MARKER)
+        marker_live = factory_on and marker_info.get('state') == 'running'
         is_running = (
             path.name in running_by_slug
-            or marker.is_file()
-            or (project.state not in inactive_states and not note)
+            or path.name in prod_by_slug
+            or marker_live
         )
         if is_running:
             running_count += 1
         manifest_file = path / 'project.yaml'
-        mtime_dt = datetime.fromtimestamp(manifest_file.stat().st_mtime).astimezone()
+        mtime_dt = _safe_mtime(manifest_file, current_now)
         if project.state in done_states:
             rev = path / 'revisions' / project.active_revision
             approval_file = rev / 'reviews/video-approval.yaml'
             done_dt = mtime_dt
             if approval_file.is_file():
-                done_dt = _parse_iso(read_yaml(approval_file).get('reviewed_at')) or mtime_dt
+                try:
+                    approval = read_yaml(approval_file)
+                    reviewed_at = approval.get('reviewed_at') if isinstance(approval, dict) else None
+                    done_dt = _parse_iso(reviewed_at) or mtime_dt
+                except (OSError, ValueError, TypeError, yaml.YAMLError):
+                    done_dt = mtime_dt
             age_days = max(0.0, (current_now - done_dt).total_seconds() / 86400.0)
             if age_days <= 7.0:
                 done_7d += 1
@@ -469,7 +1050,7 @@ def overview(
             if start_dt is None:
                 first_card = path / 'revisions/001/topic/card.yaml'
                 if first_card.is_file():
-                    start_dt = datetime.fromtimestamp(first_card.stat().st_mtime).astimezone()
+                    start_dt = _safe_mtime_optional(first_card)
             if start_dt is not None and done_dt >= start_dt:
                 lead_days.append((done_dt - start_dt).total_seconds() / 86400.0)
 
@@ -570,6 +1151,7 @@ def timeline(project_dir: Path) -> list[dict]:
 
 def snapshot(root: Path, *, agents: Callable[[], list[str]] | None = None) -> dict:
     """Plain-JSON view of the factory for the dashboard; reads files only."""
+    now_dt = _safe_astimezone(datetime.now(UTC))
     logs = root / 'topics' / 'logs'
     items = []
     for path, project in factory.projects(root):
@@ -591,7 +1173,7 @@ def snapshot(root: Path, *, agents: Callable[[], list[str]] | None = None) -> di
             'blocked': note,
             'revision': project.active_revision,
             'comments': len(load_draft(root, path.name)),
-            'updated_at': datetime.fromtimestamp(manifest.stat().st_mtime).astimezone().isoformat(timespec='seconds'),
+            'updated_at': _safe_mtime(manifest, now_dt).isoformat(timespec='seconds'),
         })
     pid = factory.running_pid(root)
     return {
@@ -607,7 +1189,7 @@ def snapshot(root: Path, *, agents: Callable[[], list[str]] | None = None) -> di
         'resume_options': {kind.value: [label for _, label in options]
                            for kind, options in RESUME_TARGETS.items()},
         'log': _tail(logs / 'xuong.log', LOG_TAIL),
-        'now': datetime.now().astimezone().isoformat(timespec='seconds'),
+        'now': now_dt.isoformat(timespec='seconds'),
     }
 
 

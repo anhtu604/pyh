@@ -197,3 +197,89 @@ def test_reason_sanitizes_secrets_and_fingerprint_tracks_inputs(
     code.write_text("# code update\n", encoding="utf-8")
     fp4 = production_fingerprint(tmp_path, project, state)
     assert fp4 != fp3
+
+
+def test_agent_fingerprint_tracks_consumed_input_not_partial_outputs(tmp_path):
+    project = _setup_project(tmp_path)
+    revision = project / 'revisions/001'
+    (revision / 'script').mkdir()
+    questions = revision / 'script/questions.yaml'
+    questions.write_text('questions: [{id: Q1, ask: Why}]\n', encoding='utf-8')
+    fingerprint = production_retry.agent_fingerprint(tmp_path, project, 'research', 'brief')
+    questions.write_text('questions: [{id: Q1, ask: Why, answer: Partial, claim_ids: [C1]}]\n', encoding='utf-8')
+    assert production_retry.agent_fingerprint(tmp_path, project, 'research', 'brief') == fingerprint
+    questions.write_text('questions: [{id: Q1, ask: Changed}]\n', encoding='utf-8')
+    assert production_retry.agent_fingerprint(tmp_path, project, 'research', 'brief') != fingerprint
+    (revision / 'evidence').mkdir()
+    source = revision / 'evidence/expert-brief.md'
+    source.write_text('verified input', encoding='utf-8')
+    fingerprint = production_retry.agent_fingerprint(tmp_path, project, 'draft', 'brief')
+    (revision / 'script/script.yaml').write_text('partial output', encoding='utf-8')
+    assert production_retry.agent_fingerprint(tmp_path, project, 'draft', 'brief') == fingerprint
+    source.write_text('corrected input', encoding='utf-8')
+    assert production_retry.agent_fingerprint(tmp_path, project, 'draft', 'brief') != fingerprint
+
+
+@pytest.mark.parametrize('content', ['[bad', 'version: 1\nsteps: []',
+    'version: 1\nsteps: {research: {fingerprint: abc, kind: transient, attempts: 1, reason: timeout}}'])
+def test_corrupt_agent_retry_fails_closed_even_if_inputs_changed(tmp_path, content):
+    project = _setup_project(tmp_path)
+    sidecar = tmp_path / 'topics/logs/gout-test/agent-retry.yaml'
+    sidecar.parent.mkdir(parents=True)
+    sidecar.write_text(content, encoding='utf-8')
+    with pytest.raises(ValueError, match='agent-retry.yaml'):
+        production_retry.agent_retry_status(tmp_path, project, 'research', 'new fingerprint')
+
+
+def test_agent_retry_reset_clear_and_step_budgets_are_independent(tmp_path, monkeypatch):
+    project = _setup_project(tmp_path)
+    for step, kind in [('research', 'configuration'), ('draft', 'validation')]:
+        production_retry.record_agent_failure(tmp_path, project, step, 'fp', kind, ValueError('bad'))
+    assert not production_retry.agent_retry_status(tmp_path, project, 'research', 'fp')['allowed']
+    assert production_retry.agent_retry_status(tmp_path, project, 'research', 'fixed')['allowed']
+    assert not production_retry.agent_retry_status(tmp_path, project, 'draft', 'fp')['allowed']
+    production_retry.clear_agent_retry(tmp_path, project.name, 'draft')
+    assert not (tmp_path / 'topics/logs/gout-test/agent-retry.yaml').exists()
+
+
+def test_writer_questions_and_critic_diagnostics_cannot_reset_their_retry_budget(tmp_path):
+    project = _setup_project(tmp_path)
+    revision = project / 'revisions/001'
+    (revision / 'script').mkdir()
+    questions = revision / 'script/questions.yaml'
+    questions.write_text('questions: []\n', encoding='utf-8')
+    writer = production_retry.agent_fingerprint(tmp_path, project, 'draft', 'brief')
+    questions.write_text('questions: [{id: Q1, ask: New question}]\n', encoding='utf-8')
+    assert production_retry.agent_fingerprint(tmp_path, project, 'draft', 'brief') == writer
+    questions.write_text('questions: [{id: Q1, ask: New question, answer: Verified answer}]\n', encoding='utf-8')
+    assert production_retry.agent_fingerprint(tmp_path, project, 'draft', 'brief') != writer
+    (revision / 'renders').mkdir()
+    critic = production_retry.agent_fingerprint(tmp_path, project, 'product_review', 'brief')
+    (revision / 'renders/review-frames').mkdir()
+    (revision / 'renders/review-frames/index.json').write_text('{}', encoding='utf-8')
+    assert production_retry.agent_fingerprint(tmp_path, project, 'product_review', 'brief') == critic
+    (revision / 'renders/render-manifest.json').write_text('{"sha256": "new"}', encoding='utf-8')
+    assert production_retry.agent_fingerprint(tmp_path, project, 'product_review', 'brief') != critic
+    log = revision / 'reviews/product-review-log.yaml'
+    log.write_text('rounds: [{summary: Original}]\n', encoding='utf-8')
+    editor = production_retry.agent_fingerprint(tmp_path, project, 'revise_product', 'brief')
+    log.write_text('rounds: [{summary: Original, fix_attempted: true}]\n', encoding='utf-8')
+    assert production_retry.agent_fingerprint(tmp_path, project, 'revise_product', 'brief') == editor
+    log.write_text('rounds: [{summary: Corrected}]\n', encoding='utf-8')
+    assert production_retry.agent_fingerprint(tmp_path, project, 'revise_product', 'brief') != editor
+
+
+def test_agent_recovery_tracks_reopened_rejection_and_semantic_workflow_reason(tmp_path):
+    project = _setup_project(tmp_path)
+    revision = project / 'revisions/001'
+    fingerprint = production_retry.agent_fingerprint(tmp_path, project, 'draft', 'brief')
+    workflow = revision / 'workflow.yaml'
+    workflow.write_text('state: draft_ready\nentered_at: fake\n', encoding='utf-8')
+    assert production_retry.agent_fingerprint(tmp_path, project, 'draft', 'brief') == fingerprint
+    workflow.write_text('reason: "semantic_issue: corrected brief"\n', encoding='utf-8')
+    semantic = production_retry.agent_fingerprint(tmp_path, project, 'draft', 'brief')
+    assert semantic != fingerprint
+    reopened = revision / 'reviews/medical/2026-reopened-note.yaml'
+    reopened.parent.mkdir()
+    reopened.write_text('reason: Updated doctor note\n', encoding='utf-8')
+    assert production_retry.agent_fingerprint(tmp_path, project, 'draft', 'brief') != semantic
