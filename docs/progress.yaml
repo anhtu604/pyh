@@ -2,7 +2,7 @@
 # Kế hoạch chi tiết từng việc: CLAUDE.md mục 5. status: todo | doing | done | blocked.
 # Claude sửa file này ở checkout chính khi bắt đầu và khi xong mỗi việc (CLAUDE.md mục 3).
 version: 1
-updated: '2026-11-13'
+updated: '2026-11-14'
 phases:
 - id: P0
   title: Giữ an toàn dữ liệu và môi trường
@@ -22,7 +22,7 @@ phases:
   title: Video gout chuẩn
   tasks:
   - {id: '2.1', title: 'Một vòng sửa gộp: biểu đồ, beat S02, clip CL02, hình kim S07', status: done, owner: xưởng, note: qua kiểm bố cục trước cổng; hình kim S07 nằm ở code hình, xem lại ở cổng video}
-  - {id: '2.2', title: Bác sĩ duyệt cổng y khoa, status: doing, owner: bác sĩ, note: 'duyệt 11:10; dựng hỏng (CL01) nên mở lại 13:35, writer đang sửa; chờ duyệt lại'}
+  - {id: '2.2', title: Bác sĩ duyệt cổng y khoa, status: doing, owner: bác sĩ, note: 'duyệt 11:10; dựng hỏng (CL01) nên mở lại 13:35, writer sửa xong 13:37, đang kiểm duyệt kịch bản; codex tiếp quản dev lead và sẽ nạp log dựng mới khi tới cổng'}
   - {id: '2.3', title: Dựng video và agent duyệt sản phẩm, status: todo, owner: xưởng}
   - {id: '2.4', title: Bác sĩ xem và duyệt cổng video, status: todo, owner: bác sĩ}
   - {id: '2.5', title: Ghi điều bác sĩ chấp nhận thành kiểm tự động, status: todo, owner: claude}
