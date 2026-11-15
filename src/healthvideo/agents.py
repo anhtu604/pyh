@@ -15,9 +15,11 @@ from healthvideo.company import REPO_ROOT, ModelSlot
 from healthvideo.env import child_env
 from healthvideo.process import (
     UnsafeBatchLauncherError,
+    is_same_process,
     prepare_subprocess_argv,
     process_token,
     run_with_deadline,
+    terminate_process_tree,
     timeout_diagnostic,
 )
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
@@ -32,6 +34,8 @@ MAX_ARGV_PROMPT = 8000
 AGENT_TIMEOUT = 15 * 60
 STEP_TIMEOUTS = {
     'chat': 120, 'chat_deep': 300, 'posts': 600, 'feedback_inbox': 300,
+    'topic_research': 600, 'channel_analytics': 600,
+    'storyboard_design': 900, 'voice_prep': 300, 'shorts_plan': 600,
     'script_review': 900, 'visual_review': 900, 'product_review': 900,
     'research': 1800, 'draft': 1800, 'revise_medical': 1800,
     'revise_production': 1800, 'revise_product': 1800,
@@ -255,9 +259,11 @@ def invoke(
     runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
     timeout: float = AGENT_TIMEOUT,
     job_id: str | None = None,
+    meta: dict | None = None,
 ) -> AgentResult:
     """Invoke a single agent CLI and capture its output to a UTF-8 log file."""
     log_dir.mkdir(parents=True, exist_ok=True)
+    actual_job_id = job_id or uuid.uuid4().hex
     timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%f")
     log_path = log_dir / f"{timestamp}-{agent.name}.log"
     if agent.prompt_via_stdin:
@@ -274,16 +280,29 @@ def invoke(
 
     env = child_env()
     marker = log_dir / RUNNING_MARKER
+    job_file = log_dir / f".job-{actual_job_id}.json"
+    cancel_file = log_dir / f".cancelled-{actual_job_id}"
     started_at = datetime.now(UTC).isoformat()
-    identity = {'job_id': job_id or uuid.uuid4().hex, 'pid': os.getpid(),
+    identity = {'job_id': actual_job_id, 'pid': os.getpid(),
                 'process_token': process_token(os.getpid()), 'started_at': started_at}
     marker.write_text(f"{agent.name}\n{started_at}\n{json.dumps(identity)}\n", encoding="utf-8")
+
+    def on_spawn(child_pid: int, child_token: str | None) -> None:
+        payload = {
+            **identity,
+            'agent': agent.name,
+            'child_pid': child_pid,
+            'child_process_token': child_token,
+            **(meta or {}),
+        }
+        job_file.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
     try:
         completed = run_with_deadline(
             prepare_subprocess_argv(argv),
             timeout=timeout,
             runner=runner,
+            on_spawn=on_spawn,
             cwd=cwd,
             input=stdin_input,
             capture_output=True,
@@ -295,7 +314,10 @@ def invoke(
     except Exception as exc:  # noqa: BLE001 -- persist unexpected tool failures; never catch Ctrl+C.
         detail = timeout_diagnostic(exc) if isinstance(exc, subprocess.TimeoutExpired) else str(exc)
         log_path.write_text(f"{type(exc).__name__}: {detail}\n", encoding="utf-8")
-        kind = ('transient' if isinstance(exc, (subprocess.TimeoutExpired, ConnectionError, TimeoutError))
+        was_cancelled = cancel_file.is_file()
+        cancel_file.unlink(missing_ok=True)
+        kind = ('cancelled' if was_cancelled
+                else 'transient' if isinstance(exc, (subprocess.TimeoutExpired, ConnectionError, TimeoutError))
                 else 'configuration' if isinstance(exc, (FileNotFoundError, PermissionError, UnsafeBatchLauncherError))
                 else 'agent_error')
         return AgentResult(
@@ -307,9 +329,20 @@ def invoke(
         )
     finally:
         marker.unlink(missing_ok=True)
+        job_file.unlink(missing_ok=True)
 
+    was_cancelled = cancel_file.is_file()
+    cancel_file.unlink(missing_ok=True)
     output = f"{completed.stdout or ''}{completed.stderr or ''}"
     log_path.write_text(output, encoding="utf-8")
+    if was_cancelled:
+        return AgentResult(
+            agent=agent.name,
+            ok=False,
+            quota_exhausted=False,
+            log_path=log_path,
+            failure_kind='cancelled',
+        )
     lower_output = output.lower()
     ok = completed.returncode == 0 and not any(
         pattern in lower_output for pattern in PERMISSION_DENIED_PATTERNS
@@ -347,6 +380,7 @@ def invoke_with_failover(
     quota: QuotaBook | None = None,
     activity: Path | None = None,
     timeout: float | None = None,
+    exclude_slots: Sequence[ModelSlot] = (),
 ) -> AgentResult:
     """Try each non-resting slot once on quota, overload or transient tool failures.
 
@@ -356,6 +390,10 @@ def invoke_with_failover(
     activity = activity or cwd / ACTIVITY_FILE
     deadline = timeout if timeout is not None else STEP_TIMEOUTS.get(step, AGENT_TIMEOUT)
     last_transient = None
+    excluded = set(exclude_slots)
+    candidate_slots = [slot for slot in slots if slot not in excluded]
+    if slots and excluded and not candidate_slots:
+        raise ValueError("Không còn model độc lập nào cho critic sau khi loại trừ model của maker.")
 
     job_id = ''
     caller_token = process_token(os.getpid())
@@ -368,7 +406,7 @@ def invoke_with_failover(
         with activity.open("a", encoding="utf-8") as stream:
             stream.write(json.dumps(row, ensure_ascii=False) + "\n")
 
-    for slot in slots:
+    for slot in candidate_slots:
         if quota.resting(slot, now()):
             continue
         cli, argv = argv_for(slot)
@@ -376,11 +414,21 @@ def invoke_with_failover(
         log(slot, "start", None)
         result = None
         try:
-            result = invoke(replace(cli, argv=tuple(argv)), prompt, cwd=cwd, log_dir=log_dir,
-                            runner=runner, timeout=deadline, job_id=job_id)
+            result = invoke(
+                replace(cli, argv=tuple(argv)),
+                prompt,
+                cwd=cwd,
+                log_dir=log_dir,
+                runner=runner,
+                timeout=deadline,
+                job_id=job_id,
+                meta={"role": role, "slug": slug, "step": step},
+            )
             result = replace(result, model=slot.model)
         finally:
             log(slot, "end", result.ok if result is not None else False)
+        if result.failure_kind == 'cancelled':
+            return result
         if not result.ok and not result.quota_exhausted:
             output = result.log_path.read_text(encoding="utf-8", errors="replace").lower()
             if any(pattern in output for pattern in BUSY_PATTERNS):
@@ -406,4 +454,69 @@ def invoke_with_failover(
 
     if last_transient is not None:
         return last_transient
-    raise AllAgentsExhausted(quota.earliest_return(slots, now()))
+    raise AllAgentsExhausted(quota.earliest_return(candidate_slots, now()))
+
+
+def cancel_running_job(
+    root: Path,
+    *,
+    job_id: str | None = None,
+    slug: str | None = None,
+    role: str | None = None,
+    clear_retry_holds: bool = True,
+) -> list[dict]:
+    """Terminate verified running agent child process trees matching filters; never kill self."""
+    if not any(v and str(v).strip() for v in (job_id, slug, role)):
+        raise ValueError("Cần chỉ định job_id, slug hoặc role để hủy tác vụ.")
+    logs_root = root / "topics" / "logs"
+    if not logs_root.is_dir():
+        return []
+    cancelled: list[dict] = []
+    for job_file in sorted(logs_root.rglob(".job-*.json")):
+        try:
+            data = json.loads(job_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        if job_id and data.get("job_id") != job_id:
+            continue
+        if slug and data.get("slug") != slug:
+            continue
+        if role and data.get("role") != role:
+            continue
+        child_pid = data.get("child_pid")
+        child_token = data.get("child_process_token")
+        j_id = str(data.get("job_id") or "")
+        killed = False
+        if isinstance(child_pid, int) and child_pid != os.getpid() and is_same_process(child_pid, child_token):
+            if j_id:
+                try:
+                    (job_file.parent / f".cancelled-{j_id}").write_text("cancelled\n", encoding="utf-8")
+                except OSError:
+                    pass
+            killed = terminate_process_tree(child_pid)
+        job_file.unlink(missing_ok=True)
+        (job_file.parent / RUNNING_MARKER).unlink(missing_ok=True)
+        t_slug = str(data.get("slug") or "")
+        t_step = str(data.get("step") or "")
+        if clear_retry_holds and t_slug and t_slug not in {"chung", "chat"}:
+            slug_dir = logs_root / t_slug
+            (slug_dir / "waiting-model.txt").unlink(missing_ok=True)
+            (slug_dir / "waiting-model-step.yaml").unlink(missing_ok=True)
+            if t_step:
+                from healthvideo.workflows.production_retry import clear_agent_retry
+
+                try:
+                    clear_agent_retry(root, t_slug, t_step)
+                except ValueError:
+                    pass
+        cancelled.append({
+            "job_id": j_id,
+            "slug": t_slug,
+            "role": data.get("role"),
+            "step": t_step,
+            "child_pid": child_pid,
+            "terminated": killed,
+        })
+    return cancelled

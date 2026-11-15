@@ -8,23 +8,40 @@ import sys
 from pathlib import Path
 
 
+def background_python() -> str:
+    """Return pythonw.exe on Windows when available so background services never allocate a console."""
+    exe = Path(sys.executable)
+    if sys.platform == 'win32':
+        pythonw = exe.with_name('pythonw.exe')
+        if pythonw.is_file():
+            return str(pythonw)
+    return str(exe)
+
+
+def background_popen_kwargs() -> dict[str, object]:
+    """Return Popen keyword arguments for silent background daemons without console allocation."""
+    if sys.platform == 'win32':
+        return {
+            'creationflags': subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP,
+            'close_fds': True,
+        }
+    return {'start_new_session': True}
+
+
 def hide_child_consoles(*, has_console: bool | None = None) -> None:
-    """Under pythonw every console child (git, ffmpeg, node, agents) flashes a window; hide them.
+    """Ensure child console processes (git, ffmpeg, node, agents) do not flash or open terminal windows.
 
     A child opened with CREATE_NEW_CONSOLE (the doctor's PIN window) stays visible.
     """
     if sys.platform != 'win32' or getattr(subprocess.Popen, '_hides_console', False):
         return
-    if has_console is None:
-        import ctypes
-        has_console = bool(ctypes.windll.kernel32.GetConsoleWindow())
     if has_console:
         return
     original = subprocess.Popen.__init__
 
     def init(self, *args, creationflags=0, **kwargs):
         if not creationflags & subprocess.CREATE_NEW_CONSOLE:
-            creationflags |= subprocess.CREATE_NO_WINDOW
+            creationflags = (creationflags & ~subprocess.DETACHED_PROCESS) | subprocess.CREATE_NO_WINDOW
         original(self, *args, creationflags=creationflags, **kwargs)
 
     subprocess.Popen.__init__ = init

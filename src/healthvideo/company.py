@@ -14,8 +14,11 @@ SKILL_RULE = (
     'Khi skill mâu thuẫn với prompt bước hoặc quy tắc cứng, prompt bước và quy tắc cứng thắng.'
 )
 
-# A critic must not start on the same (cli, model) as the role whose work it grades.
-CRITIC_OF = {'script_critic': 'writer', 'product_critic': 'editor'}
+# A critic must not start on the same (cli, model) as the role(s) whose work it grades.
+CRITIC_OF: dict[str, tuple[str, ...]] = {
+    'script_critic': ('writer', 'storyboard_director'),
+    'product_critic': ('editor',),
+}
 
 # A skill is a folder name under .agents/skills/, never a path.
 SkillName = Annotated[str, StringConstraints(pattern=r'^[a-z0-9][a-z0-9-]*$')]
@@ -83,10 +86,13 @@ def load_company(path: Path = COMPANY_PATH) -> Company:
     missing = AGENT_STEPS - owner.keys()
     if missing:
         raise ValueError(f'{path.name}: các bước chưa có vai: {", ".join(sorted(missing))}')
-    for critic, maker in CRITIC_OF.items():
-        if (critic in company.roles and maker in company.roles
-                and company.chain(critic)[0] == company.chain(maker)[0]):
-            raise ValueError(f'{path.name}: {critic!r} không được bắt đầu cùng model với {maker!r}')
+    for critic, makers in CRITIC_OF.items():
+        if critic not in company.roles:
+            continue
+        maker_ids = (makers,) if isinstance(makers, str) else tuple(makers)
+        for maker in maker_ids:
+            if maker in company.roles and company.chain(critic)[0] == company.chain(maker)[0]:
+                raise ValueError(f'{path.name}: {critic!r} không được bắt đầu cùng model với {maker!r}')
     return company
 
 

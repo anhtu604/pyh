@@ -14,7 +14,6 @@ from healthvideo.approver_pin import set_pin
 from healthvideo.domain.queue import QueueEntry
 from healthvideo.storage.files import write_yaml_atomic
 from healthvideo.storage.queue import add_to_queue
-from healthvideo.tts.elevenlabs import ElevenLabsTTS
 from healthvideo.tts.vibi import VibiTTS
 from healthvideo.workflows import (
     dashboard,
@@ -59,7 +58,6 @@ def test_legacy_project_reads_accepted_standards_without_mutation(
 
     monkeypatch.setattr(factory, "start_background", _forbidden)
     monkeypatch.setattr(VibiTTS, "synthesize", _forbidden)
-    monkeypatch.setattr(ElevenLabsTTS, "synthesize", _forbidden)
     monkeypatch.setattr(factory, "running_pid", lambda _: None)
 
     pin_file = tmp_path / "config" / "approver-pin.json"

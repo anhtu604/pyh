@@ -581,7 +581,7 @@ def test_cli_evidence_ingest(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize(
     'options,expected',
-    [([], []), (['--tts', 'auto'], ['auto']), (['--tts', 'elevenlabs'], ['elevenlabs'])],
+    [([], []), (['--tts', 'auto'], ['auto']), (['--tts', 'vibi'], ['vibi'])],
 )
 def test_cli_produce_defaults_to_silent_provider(tmp_path, monkeypatch, options, expected):
     from healthvideo import cli
@@ -679,9 +679,11 @@ def test_public_command_surface():
 
     root = get_command(app)
     expected = {
-        (): {"topic", "run", "status", "review", "preview", "produce", "package", "doctor", "duyet", "xuong",
-             "notify-test", "notify-setup", "app", "evidence"},
-        ("topic",): {"discover", "add", "list"},
+        (): {"topic", "channel", "telegram", "run", "status", "review", "preview", "produce", "package", "doctor",
+             "duyet", "xuong", "notify-test", "notify-setup", "app", "evidence"},
+        ("topic",): {"discover", "add", "list", "sync-sheet", "discover-ai"},
+        ("channel",): {"sync-sheet", "import-csv", "analyze", "create-sheet"},
+        ("telegram",): {"status", "start", "stop", "run"},
         ("review",): {"open", "approve", "reject", "reopen", "set-pin"},
         ("evidence",): {"elsevier-search", "elsevier-abstract"},
     }

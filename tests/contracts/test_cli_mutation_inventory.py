@@ -21,6 +21,10 @@ EXPECTED = {
     "src/healthvideo/commands/operator.py": {
         "select",
         "draft",
+        "draft_script",
+        "storyboard",
+        "voice_prep",
+        "shorts_plan",
         "submit_medical",
     },
 }

@@ -127,3 +127,12 @@ def test_split_script_roles_in_prompts() -> None:
     assert "evidence-search" not in revise
     assert "questions.yaml" in revise
     assert "expert-brief.md" in review
+
+
+def test_company_20_new_prompts_reference_step_commands() -> None:
+    sb = (PROMPTS_DIR / "storyboard_design.md").read_text(encoding="utf-8")
+    vp = (PROMPTS_DIR / "voice_prep.md").read_text(encoding="utf-8")
+    sp = (PROMPTS_DIR / "shorts_plan.md").read_text(encoding="utf-8")
+    assert "healthvideo step storyboard" in sb
+    assert "healthvideo step voice-prep" in vp
+    assert "healthvideo step shorts-plan" in sp

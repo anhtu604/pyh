@@ -99,3 +99,25 @@ Hướng dẫn biên tập tham khảo
 mở bài khớp title/thumbnail và đánh giá chỗ người xem bỏ qua. Kênh chưa có số liệu
 để bảo đảm retention, CTR hay “viral”; các ngưỡng thời gian trong skill chỉ là
 hướng thiết kế hoặc giới hạn runtime.
+
+## Đợt kiểm thực tế 2026-11-15 (Company 2.0 · R1.5)
+
+Đã khóa bất biến độc lập maker/critic khi failover trong `src/healthvideo/agents.py`
+(bỏ fallback `or list(slots)` khi `exclude_slots` loại hết chuỗi ứng viên của critic,
+thay bằng `ValueError`; khóa bằng 2 unit test mới trong `tests/test_agents.py`).
+
+Thử nghiệm thật qua `invoke_with_failover` lưu log gốc tại
+`E:/Protect Your Health/cache/dev-lead/model-benchmark/2026-11-15/` (không commit):
+
+| Vai / bước | Model chạy | Thời gian | Kết quả quan sát |
+| --- | --- | --- | --- |
+| `writer` (TOFU/MOFU/BOFU 3 dữ kiện men gan) | `codex/gpt-6.1-sol` | 19,62s | Exit 0; bám đúng 3 dữ kiện, hơi lặp câu chốt để đủ 45–65 từ |
+| `writer` (cùng prompt trên) | `agy/gemini-4-carbon-medium` | 60,82s | Exit 0; dẫn nhập tự nhiên, bám đúng 3 dữ kiện |
+| `script_critic` (chấm mù A/B + bẫy C) | `agy/gemini-4-carbon-medium` (`exclude_slots=[codex/gpt-6.1-sol]`) | 15,75s | Exit 0; xếp bản Carbon trên bản Sol do lặp câu chốt & banner stderr, bắt đủ 5 lỗi bẫy ở Ứng viên C |
+| `medical_expert` (truy Europe PMC) | `agy/gemini-4-carbon-medium` | 46,05s | Exit 0; tra Europe PMC trả đúng `PMC13671609` (`PMID: 42475234`, *Hepatol Commun* 2026), đã kiểm chéo API |
+| `art_director` (kiểm pixel ảnh) | `agy/gemini-4-carbon-medium` | 25,32s | Exit 0; đọc trực tiếp `flux-recheck.png` (`can_see_pixels: true`), mô tả khớp ảnh thật |
+| `editor` (`video/src/anatomy/ArterySection.tsx`) | `agy/gemini-4-carbon-medium` | 82,44s | Exit 0; đọc đúng `viewBox="0 0 560 560"` và 3 rủi ro biên (thiếu `clipPath` ở `severity=1`, `%` âm khi `frame < 0`, thiếu guard hữu hạn) |
+| `coordinator` (phân loại 2 tin chat) | `agy/gemini-4-carbon-medium` → `codex/gpt-6.1-sol` | 136,80s | Lần đầu `agy` quá hạn 120s (`TimeoutExpired`), tự động failover sang `codex/gpt-6.1-sol` (16,8s), trả chuẩn `edit_production` + `factory_feedback` |
+
+Giới hạn cỡ mẫu: đây là phép thử kiểm từng vai trên một bộ đề 3 tầng và một tình huống
+chuyên biệt mỗi vai, chưa thay thế theo dõi chất lượng trên nhiều chủ đề sản xuất dài.

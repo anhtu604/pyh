@@ -24,21 +24,23 @@ from healthvideo.storage.files import read_yaml
 from healthvideo.storage.project_layout import resolve_project_layout
 from healthvideo.tts.base import TTSProvider
 from healthvideo.tts.command import CommandTTS
-from healthvideo.tts.elevenlabs import (
-    VOICE_PROFILE_PATH,
-    ElevenLabsTTS,
-    load_voice_profile,
-)
 from healthvideo.tts.normalize import NormalizedTTS
 from healthvideo.tts.silent import SilentTTS
-from healthvideo.tts.vibi import VibiTTS
+from healthvideo.tts.vibi import (
+    VOICE_PROFILE_PATH,
+    VibiTTS,
+    load_voice_profile,
+)
 from healthvideo.workflows.create_project_v2 import create_project_v2
 from healthvideo.workflows.draft import submit_medical_review
 from healthvideo.workflows.expert import expert_brief_ready
 from healthvideo.workflows.gate_review import check_revision_posts
 from healthvideo.workflows.produce import produce_project, submit_video
 from healthvideo.workflows.runner import RunDeps
+from healthvideo.workflows.shorts_plan import shorts_plan_ready
+from healthvideo.workflows.storyboard_design import storyboard_ready
 from healthvideo.workflows.topic import select_topic
+from healthvideo.workflows.voice_prep import voice_prep_ready
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_TTS_PYTHON = REPO_ROOT / "cache" / "tts-venv" / "Scripts" / "python.exe"
@@ -120,18 +122,10 @@ def build_tts_provider(
             raise ValueError("--tts vibi cần VIBI_API_KEY trong .env")
         warnings.warn("vibi unavailable: configure VIBI_API_KEY; using VieNeu.", RuntimeWarning, stacklevel=2)
         return _build_vieneu_tts(python=tts_python, voice=voice or FACTORY_VOICE, precision=precision)
-    if tts in {"auto", "elevenlabs"}:
-        if (os.environ.get("ELEVENLABS_API_KEY", "").strip() and profile is not None
-                and profile.provider == "elevenlabs"):
-            provider: TTSProvider = NormalizedTTS(ElevenLabsTTS(profile))
-        else:
-            warnings.warn(
-                "ElevenLabs unavailable: configure ELEVENLABS_API_KEY and profiles/voice.yaml; using VieNeu.",
-                RuntimeWarning, stacklevel=2,
-            )
-            provider = _build_vieneu_tts(
-                python=tts_python, voice=voice or FACTORY_VOICE, precision=precision,
-            )
+    if tts == "auto":
+        provider: TTSProvider = _build_vieneu_tts(
+            python=tts_python, voice=voice or FACTORY_VOICE, precision=precision,
+        )
     elif tts == "silent":
         provider = SilentTTS()
     elif tts == "vieneu":
@@ -190,6 +184,11 @@ def create_project(root: Path, entry: QueueEntry, *, projects_dir: Path | None =
         question=entry.question,
     )
     select_topic(project_dir, card, now=now)
+    dossier_src = root / "topics" / "inbox" / f"{entry.slug}.dossier.yaml"
+    if dossier_src.is_file():
+        dossier_dst = project_dir / "revisions" / "001" / "topic" / "dossier.yaml"
+        dossier_dst.parent.mkdir(parents=True, exist_ok=True)
+        dossier_dst.write_bytes(dossier_src.read_bytes())
     return project_dir
 
 
@@ -320,6 +319,10 @@ def default_run_deps(
             repo_root, runner=git_runner
         ),
         posts_ready=posts_ready,
+        storyboard_ready=storyboard_ready,
+        voice_prep_ready=voice_prep_ready,
+        shorts_plan_ready=shorts_plan_ready,
+        parallel_branches=True,
         code_snapshot=lambda repo_root: code_snapshot(repo_root, runner=git_runner),
         expert_brief_ready=expert_brief_ready,
         company=load_company(),

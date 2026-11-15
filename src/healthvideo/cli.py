@@ -103,15 +103,23 @@ for _stream in (sys.stdout, sys.stderr):
 app = typer.Typer(no_args_is_help=True)
 review_app = typer.Typer(no_args_is_help=True)
 topic_app = typer.Typer(no_args_is_help=True)
+channel_app = typer.Typer(no_args_is_help=True, help="Chỉ số hiệu quả kênh & báo cáo phân tích.")
+telegram_app = typer.Typer(no_args_is_help=True, help="Bot Telegram điều khiển Trưởng nhóm Điều phối.")
 step_app = typer.Typer(no_args_is_help=True)
 evidence_app = typer.Typer(no_args_is_help=True, help="Tra cứu Elsevier qua API chính thức.")
 app.add_typer(review_app, name="review")
 app.add_typer(topic_app, name="topic")
+app.add_typer(channel_app, name="channel")
+app.add_typer(telegram_app, name="telegram")
 app.add_typer(step_app, name="step", hidden=True)
 app.add_typer(evidence_app, name="evidence")
 step_app.command("new")(operator.new)
 step_app.command("select")(operator.select)
 step_app.command("draft")(operator.draft)
+step_app.command("draft-script")(operator.draft_script)
+step_app.command("storyboard")(operator.storyboard)
+step_app.command("voice-prep")(operator.voice_prep)
+step_app.command("shorts-plan")(operator.shorts_plan)
 step_app.command("submit-medical")(operator.submit_medical)
 
 
@@ -320,7 +328,7 @@ def produce(
     project_dir: Annotated[
         Path, typer.Argument(help="Thư mục dự án đã duyệt kịch bản")
     ],
-    tts: Annotated[str, typer.Option("--tts", help="Nhà cung cấp TTS: silent | auto | vibi | elevenlabs | vieneu")] = "silent",
+    tts: Annotated[str, typer.Option("--tts", help="Nhà cung cấp TTS: silent | auto | vibi | vieneu")] = "silent",
     voice: Annotated[
         str | None, typer.Option("--voice", help="Preset voice VieNeu do bác sĩ chọn")
     ] = None,
@@ -337,7 +345,7 @@ def produce(
     no_music: Annotated[bool, typer.Option("--no-music", help="Disable background music")] = False,
 ) -> None:
     """Tạo video từ script/storyboard đã duyệt y khoa."""
-    if tts in {'auto', 'elevenlabs'}:
+    if tts in {'auto', 'vibi'}:
         try:
             provider: TTSProvider = factory_deps.build_tts_provider(
                 tts=tts, voice=voice, tts_python=tts_python, precision=precision,
@@ -630,17 +638,79 @@ def xuong(
     """Chạy xưởng liên tục, tự đóng gói sau cổng video; Ctrl+C để dừng."""
     if sum([once, background, stop]) > 1:
         raise typer.BadParameter('Chỉ chọn một trong --once, --background, --stop')
+    from healthvideo.workflows import telegram_bot
+
     try:
         if stop:
             pid = factory.stop_background(root)
             typer.echo(f'Đã dừng xưởng PID {pid}.' if pid else 'Xưởng không chạy.')
         elif background:
             typer.echo(f'Xưởng đang chạy (PID {factory.start_background(root, interval)}).')
+            telegram_bot.ensure_background(root)
         else:
+            if not once:
+                telegram_bot.ensure_background(root)
             factory.run_factory(root, default_run_deps(root), interval=interval, once=once, echo=typer.echo)
     except factory.FactoryAlreadyRunning as error:
         typer.echo(str(error))
     except (OSError, TypeError, ValueError, RuntimeError) as error:
+        _echo_error(error)
+        raise typer.Exit(code=1) from error
+
+
+@telegram_app.command('status')
+def telegram_status(root: Root = Path('.')) -> None:
+    """Xem trạng thái bot Telegram kết nối Trưởng nhóm Điều phối."""
+    from healthvideo.workflows import telegram_bot
+
+    info = telegram_bot.bot_status(root)
+    state_txt = f"đang chạy (PID {info['pid']})" if info['running'] else 'đang tắt'
+    cfg_txt = 'đã cấu hình' if info['configured'] else 'chưa cấu hình'
+    scope_txt = info['active_slug'] or 'Toàn xưởng'
+    typer.echo(f"Telegram bot ({cfg_txt}): {state_txt} · Ngữ cảnh: {scope_txt}")
+    if info.get('last_poll_at'):
+        typer.echo(f"Lần poll gần nhất: {info['last_poll_at']}")
+    if info.get('last_error'):
+        typer.echo(f"Lỗi gần nhất: {info['last_error']}")
+
+
+@telegram_app.command('start')
+def telegram_start(
+    root: Root = Path('.'),
+    poll_timeout: Annotated[int, typer.Option('--poll-timeout', min=1, max=50)] = 25,
+) -> None:
+    """Chạy nền bot Telegram nối với Trưởng nhóm Điều phối."""
+    from healthvideo.workflows import telegram_bot
+
+    try:
+        pid = telegram_bot.start_background(root, poll_timeout=poll_timeout)
+        typer.echo(f'Telegram bot đang chạy (PID {pid}).')
+    except (OSError, TypeError, ValueError, RuntimeError, telegram_bot.TelegramBotAlreadyRunning) as error:
+        _echo_error(error)
+        raise typer.Exit(code=1) from error
+
+
+@telegram_app.command('stop')
+def telegram_stop(root: Root = Path('.')) -> None:
+    """Dừng bot Telegram đang chạy nền."""
+    from healthvideo.workflows import telegram_bot
+
+    pid = telegram_bot.stop_background(root)
+    typer.echo(f'Đã dừng Telegram bot PID {pid}.' if pid else 'Telegram bot không chạy.')
+
+
+@telegram_app.command('run')
+def telegram_run(
+    root: Root = Path('.'),
+    poll_timeout: Annotated[int, typer.Option('--poll-timeout', min=1, max=50)] = 25,
+    max_polls: Annotated[int | None, typer.Option('--max-polls', min=1)] = None,
+) -> None:
+    """Chạy trực tiếp vòng lặp long-polling của bot Telegram (dùng Ctrl+C để dừng)."""
+    from healthvideo.workflows import telegram_bot
+
+    try:
+        telegram_bot.run_bot(root, poll_timeout=poll_timeout, max_polls=max_polls, echo=typer.echo)
+    except (OSError, TypeError, ValueError, RuntimeError, telegram_bot.TelegramBotAlreadyRunning) as error:
         _echo_error(error)
         raise typer.Exit(code=1) from error
 
@@ -873,6 +943,49 @@ def topic_discover(
         typer.echo(f"{failure.source}: {failure.reason}")
 
 
+@topic_app.command("sync-sheet")
+def topic_sync_sheet(
+    sheet: Annotated[str | None, typer.Option("--sheet", help="ID hoặc URL Google Sheet tham khảo")] = None,
+    tab: Annotated[str | None, typer.Option("--tab", help="Các tab cần đồng bộ, cách nhau dấu phẩy")] = None,
+    max_rows: Annotated[int, typer.Option("--max-rows", min=1, max=500)] = 60,
+    root: Root = Path("."),
+) -> None:
+    """Đồng bộ & chấm điểm 100 từ Google Sheet tham khảo vào Topic Inbox."""
+    from healthvideo.workflows import researcher
+
+    tabs = tuple(t.strip() for t in tab.split(",") if t.strip()) if tab else None
+    try:
+        summary = researcher.sync_reference_sheet(
+            root,
+            sheet_id_or_url=sheet,
+            tabs=tabs,
+            max_rows=max_rows,
+        )
+    except (OSError, RuntimeError, ValueError) as error:
+        _echo_error(error)
+        raise typer.Exit(code=1) from error
+    typer.echo(json.dumps(summary, ensure_ascii=False, indent=2))
+
+
+@topic_app.command("discover-ai")
+def topic_discover_ai(
+    query: Annotated[str, typer.Option("--query", help="Hướng chủ đề cần tìm")] = "",
+    max_topics: Annotated[int, typer.Option("--max-topics", min=1, max=10)] = 4,
+    root: Root = Path("."),
+) -> None:
+    """Cho Researcher chủ động đề xuất & chấm điểm chủ đề mới vào Topic Inbox."""
+    from healthvideo.workflows import researcher
+
+    try:
+        summary = researcher.discover_topics_with_agent(
+            root, query=query or "phòng bệnh thường gặp tại Việt Nam", max_topics=max_topics
+        )
+    except (OSError, RuntimeError, ValueError) as error:
+        _echo_error(error)
+        raise typer.Exit(code=1) from error
+    typer.echo(json.dumps(summary, ensure_ascii=False, indent=2))
+
+
 @step_app.command("evidence-search")
 def evidence_search(
     project_dir: ProjectDir,
@@ -1091,3 +1204,70 @@ def elsevier_abstract(
 ) -> None:
     """Lấy tóm tắt theo DOI qua Abstract Retrieval API; in JSON."""
     _elsevier_json(lambda client: client.abstract(doi))
+
+
+@channel_app.command("sync-sheet")
+def channel_sync_sheet(
+    sheet: Annotated[str | None, typer.Option("--sheet", help="ID hoặc URL Google Sheet chỉ số kênh")] = None,
+    tab: Annotated[str, typer.Option("--tab", help="Tên tab chỉ số kênh")] = "KET_QUA_KENH",
+    root: Root = Path("."),
+) -> None:
+    """Đồng bộ chỉ số hiệu quả video từ Google Sheet (mặc định tab KET_QUA_KENH)."""
+    from healthvideo.workflows import channel_analytics
+
+    try:
+        result = channel_analytics.sync_channel_sheet(root, sheet_id_or_url=sheet, tab=tab)
+    except (OSError, RuntimeError, ValueError) as error:
+        _echo_error(error)
+        raise typer.Exit(code=1) from error
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@channel_app.command("import-csv")
+def channel_import_csv(
+    csv_file: Annotated[Path, typer.Argument(help="File CSV xuất từ YouTube Studio hoặc TikTok")],
+    platform: Annotated[str, typer.Option("--platform", help="Nền tảng mặc định (youtube/tiktok/facebook)")] = "youtube",
+    root: Root = Path("."),
+) -> None:
+    """Nạp file CSV hiệu quả video vào bộ nhớ phân tích kênh."""
+    from healthvideo.workflows import channel_analytics
+
+    try:
+        text = csv_file.read_text(encoding="utf-8-sig")
+        result = channel_analytics.import_channel_csv(root, text, platform=platform)
+    except (OSError, ValueError) as error:
+        _echo_error(error)
+        raise typer.Exit(code=1) from error
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@channel_app.command("analyze")
+def channel_analyze(
+    question: Annotated[str | None, typer.Option("--question", help="Câu hỏi trọng tâm bác sĩ muốn phân tích")] = None,
+    root: Root = Path("."),
+) -> None:
+    """Cho Researcher phân tích hiệu quả các video đã đăng và đề xuất cải thiện."""
+    from healthvideo.workflows import channel_analytics
+
+    try:
+        result = channel_analytics.analyze_channel_performance(root, question=question)
+    except (OSError, RuntimeError, ValueError) as error:
+        _echo_error(error)
+        raise typer.Exit(code=1) from error
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@channel_app.command("create-sheet")
+def channel_create_sheet(
+    title: Annotated[str, typer.Option("--title", help="Tiêu đề Google Sheet mới")] = "PYH - Theo dõi Hiệu quả Kênh",
+    root: Root = Path("."),
+) -> None:
+    """Tạo Google Sheet riêng có quyền ghi qua gsheets CLI để lưu tab KET_QUA_KENH."""
+    from healthvideo.workflows import channel_analytics
+
+    try:
+        result = channel_analytics.create_channel_sheet(root, title=title)
+    except (OSError, RuntimeError, ValueError) as error:
+        _echo_error(error)
+        raise typer.Exit(code=1) from error
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))

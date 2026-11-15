@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -11,15 +12,42 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any
+from typing import Any, Literal
 
+from pydantic import BaseModel, ConfigDict, Field
+
+from healthvideo.storage.files import read_yaml
 from healthvideo.tts.audio_checks import inspect_wav
 from healthvideo.tts.base import TTSRequest, TTSResult
-from healthvideo.tts.elevenlabs import ElevenLabsTTS, VoiceProfile
 
 API_ROOT = "https://api.vibi.pro"
 # Cloudflare rejects requests without a User-Agent (error 1010).
 USER_AGENT = "healthvideo/1.0"
+
+
+VOICE_PROFILE_PATH = Path(__file__).resolve().parents[3] / "profiles" / "voice.yaml"
+
+
+class MiniMaxSettings(BaseModel, frozen=True):
+    model_config = ConfigDict(extra="forbid")
+    speed: float = Field(default=1.0, ge=0.5, le=2.0)
+    pitch: int = Field(default=0, ge=-12, le=12)
+    vol: float = Field(default=1.0, ge=0.01, le=10)
+
+
+class VoiceProfile(BaseModel, frozen=True):
+    model_config = ConfigDict(extra="forbid")
+    provider: Literal["vibi_minimax"] = "vibi_minimax"
+    model_id: str | None = None
+    voice_id: str = Field(min_length=1, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+    settings: MiniMaxSettings = Field(default_factory=MiniMaxSettings)
+    allowed_tags: tuple[str, ...] = (
+        "sarcastic", "curious", "excited", "chuckles", "sighs", "whispers", "pause",
+    )
+
+
+def load_voice_profile(path: Path = VOICE_PROFILE_PATH) -> VoiceProfile:
+    return VoiceProfile.model_validate(read_yaml(path))
 
 
 class VibiError(RuntimeError):
@@ -61,10 +89,11 @@ def account(*, api_key: str, opener=None) -> dict[str, Any]:
         raise VibiError("vibi returned invalid account information.") from None
 
 
-class VibiTTS(ElevenLabsTTS):
+class VibiTTS:
     """Async task: submit, poll history until completed, download the mp3."""
 
     provider_name = "vibi_minimax"
+    require_signal = True
 
     def __init__(
         self, profile: VoiceProfile, *, api_key: str | None = None, opener=None,
@@ -81,6 +110,32 @@ class VibiTTS(ElevenLabsTTS):
         self.timeout, self.retries, self.sleep = timeout, retries, sleep
         self.usage_path = usage_path
         self.poll_seconds, self.max_wait_seconds = poll_seconds, max_wait_seconds
+
+    def cache_identity(self) -> dict[str, str]:
+        settings = json.dumps(self.profile.settings.model_dump(), sort_keys=True)
+        return {"provider": self.provider_name, "model_id": self.model_id,
+                "voice_id": self.profile.voice_id,
+                "runtime_id": "rest-" + hashlib.sha256(settings.encode()).hexdigest()[:24]}
+
+    def set_usage_path(self, path: Path) -> None:
+        self.usage_path = path
+
+    def _record_usage(self, text: str, output: Path) -> None:
+        parent = output.parent
+        if parent.name.startswith(".loudnorm-"):
+            parent = parent.parent
+        path = self.usage_path or parent / "tts-usage.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {
+            "provider": self.provider_name, "characters": 0, "requests": [],
+            "count_basis": "submitted Unicode characters; consult subscription for billed credits",
+        }
+        data["characters"] += len(text)
+        data["requests"].append({"characters": len(text), **self.cache_identity(),
+                                 "text_sha256": hashlib.sha256(text.encode()).hexdigest()})
+        temporary = path.with_suffix(".json.tmp")
+        temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(temporary, path)
 
     def _call(self, url: str, payload: dict[str, Any] | None = None) -> bytes:
         return vibi_request(url, api_key=self._api_key, payload=payload, opener=self.opener,
@@ -100,7 +155,7 @@ class VibiTTS(ElevenLabsTTS):
         tags = re.findall(r"\[([^\[\]]+)\]", request.text)
         if any(tag not in self.profile.allowed_tags for tag in tags):
             raise ValueError("Delivery contains an unsupported audio tag")
-        # MiniMax would read ElevenLabs-style tags aloud, so delivery tags are dropped.
+        # MiniMax would read delivery tags aloud, so delivery tags are dropped.
         text = re.sub(r"\s+", " ", re.sub(r"\[[^\[\]]+\]", " ", request.text)).strip()
         task = self._json(f"/v1/text-to-speech/{self.profile.voice_id}", {
             "text": text, "model_id": self.model_id, "provider": "minimax",

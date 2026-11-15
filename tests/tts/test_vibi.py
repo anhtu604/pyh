@@ -7,8 +7,7 @@ import wave
 import pytest
 
 from healthvideo.tts.base import TTSRequest, provider_identity
-from healthvideo.tts.elevenlabs import VoiceProfile, load_voice_profile
-from healthvideo.tts.vibi import VibiError, VibiTTS
+from healthvideo.tts.vibi import VibiError, VibiTTS, VoiceProfile, load_voice_profile
 from healthvideo.workflows import factory_deps
 from healthvideo.workflows.doctor import _vibi_check
 
@@ -130,3 +129,47 @@ def test_doctor_reports_credit(monkeypatch):
     monkeypatch.setenv("VIBI_API_KEY", "key")
     monkeypatch.setattr("healthvideo.tts.vibi.account", lambda **kwargs: {"credit_balance": 127368})
     assert _vibi_check().detected == "127368 credits remaining"
+
+
+def test_identity_preserves_settings_hash_and_never_contains_credentials(tmp_path):
+    import hashlib
+
+    first = VibiTTS(PROFILE, api_key="secret-key")
+    settings = json.dumps(PROFILE.settings.model_dump(), sort_keys=True)
+    assert first.cache_identity() == {
+        "provider": "vibi_minimax", "voice_id": "clone-1", "model_id": "speech-2.8-hd",
+        "runtime_id": "rest-" + hashlib.sha256(settings.encode()).hexdigest()[:24],
+    }
+    second = VibiTTS(PROFILE.model_copy(update={
+        "settings": PROFILE.settings.model_copy(update={"pitch": 1})}), api_key="another-key")
+    assert first.cache_identity() != second.cache_identity()
+    assert "secret-key" not in json.dumps(first.cache_identity())
+
+
+def test_usage_meter_records_submitted_text_in_explicit_path(tmp_path):
+    opener, _ = _opener(["completed", "completed"])
+    usage = tmp_path / "meter/tts-usage.json"
+    tts = VibiTTS(PROFILE, api_key="secret-key", opener=opener, runner=_decode,
+                  sleep=lambda _: None, usage_path=usage)
+    tts.synthesize(TTSRequest(text="[sarcastic] Gút", language="vi"), tmp_path / "one.wav")
+    tts.synthesize(TTSRequest(text="Đau", language="vi"), tmp_path / "two.wav")
+    data = json.loads(usage.read_text(encoding="utf-8"))
+    assert data["characters"] == len("GútĐau")
+    assert [request["characters"] for request in data["requests"]] == [3, 3]
+    assert all(request["provider"] == "vibi_minimax" for request in data["requests"])
+    assert "secret-key" not in usage.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("status", [401, 403, 429, 500])
+def test_http_errors_redact_provider_response_and_key(status):
+    from healthvideo.tts.vibi import vibi_request
+
+    def opener(request, **kwargs):
+        raise urllib.error.HTTPError(request.full_url, status, "secret-key", {},
+                                     io.BytesIO(b"secret-key"))
+
+    with pytest.raises(VibiError) as caught:
+        vibi_request("/v1/auth/me", api_key="secret-key", opener=opener,
+                     retries=0)
+    assert str(status) in str(caught.value)
+    assert "secret-key" not in str(caught.value)

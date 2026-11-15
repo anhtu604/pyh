@@ -14,7 +14,15 @@ def test_repository_lexicon_has_medical_terms_and_review_flags() -> None:
     assert apply_pronunciation("Gout và monosodium urat, acid uric.", lexicon) == (
         "gút và mô-nô-sô-đi-um u-rát, a-xít u-ríc."
     )
-    assert any(entry.needs_doctor_review for entry in lexicon.entries)
+    assert all(not entry.needs_doctor_review for entry in lexicon.entries)
+
+    pending = PronunciationLexicon(
+        schema_version="1.0",
+        language="vi",
+        version="test-pending",
+        entries=[{"written": "uric", "spoken": "u-ríc", "needs_doctor_review": True}],
+    )
+    assert any(entry.needs_doctor_review for entry in pending.entries)
 
 
 def test_literal_longest_complete_occurrence() -> None:

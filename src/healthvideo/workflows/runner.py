@@ -1,9 +1,13 @@
 """Select the next factory workflow step for a project state and run the queue."""
 
+import inspect
 import json
 import os
 import subprocess
+import threading
+import time
 from collections.abc import Callable, Iterator, Mapping
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -12,11 +16,18 @@ from typing import Literal
 from uuid import uuid4
 
 from healthvideo.agents import (
+    ACTIVITY_FILE,
     AgentResult,
     AllAgentsExhausted,
     invoke_with_failover,
 )
-from healthvideo.company import Company, load_company, role_skill_block
+from healthvideo.company import (
+    CRITIC_OF,
+    Company,
+    ModelSlot,
+    load_company,
+    role_skill_block,
+)
 from healthvideo.domain.project_v2 import WorkflowState
 from healthvideo.domain.queue import QueueEntry
 from healthvideo.process import process_token
@@ -55,9 +66,12 @@ StepKind = Literal[
     "create",
     "research",
     "draft",
+    "storyboard_design",
+    "voice_prep",
     "script_review",
     "submit_medical",
     "posts",
+    "shorts_plan",
     "produce",
     "visual_review",
     "product_review",
@@ -70,8 +84,11 @@ AGENT_STEPS: frozenset[str] = frozenset(
     {
         "research",
         "draft",
+        "storyboard_design",
+        "voice_prep",
         "script_review",
         "posts",
+        "shorts_plan",
         "visual_review",
         "product_review",
         "revise_product",
@@ -160,6 +177,10 @@ class RunDeps:
     changed_code_paths: Callable[[Path], list[Path]]
     invoke: Callable[..., AgentResult] = invoke_with_failover
     posts_ready: Callable[[Path], bool] = lambda _: True
+    storyboard_ready: Callable[[Path], bool] = lambda _: True
+    voice_prep_ready: Callable[[Path], bool] = lambda _: True
+    shorts_plan_ready: Callable[[Path], bool] = lambda _: True
+    parallel_branches: bool = False
     code_snapshot: Callable[[Path], dict[str, str]] | None = None
     visual_review_pending: Callable[[Path], bool] = review_pending
     product_review_pending: Callable[[Path], bool] = product_review.pending
@@ -168,6 +189,95 @@ class RunDeps:
     expert_brief_ready: Callable[[Path], bool] = lambda _: True
     # Role table: which (cli, model) chain runs each agent step.
     company: Company = field(default_factory=load_company)
+
+
+_REPORT_LOCK = threading.RLock()
+_GPU_THREAD_LOCK = threading.Lock()
+_TOPIC_LOCKS_GUARD = threading.Lock()
+_TOPIC_LOCKS: dict[str, threading.RLock] = {}
+
+
+def _topic_lock(slug: str) -> threading.RLock:
+    with _TOPIC_LOCKS_GUARD:
+        lock = _TOPIC_LOCKS.get(slug)
+        if lock is None:
+            lock = threading.RLock()
+            _TOPIC_LOCKS[slug] = lock
+        return lock
+
+
+@contextmanager
+def gpu_mutex(root: Path) -> Iterator[None]:
+    """Serialize heavy RTX 3060 GPU/TTS/Remotion production across threads and processes."""
+    lock_file = root / "cache" / "gpu-mutex.lock"
+    lock_file.parent.mkdir(parents=True, exist_ok=True)
+    with _GPU_THREAD_LOCK, lock_file.open("a+b") as stream:
+        if stream.tell() == 0:
+            stream.write(b"\0")
+            stream.flush()
+        if os.name == "nt":
+            import msvcrt
+
+            while True:
+                stream.seek(0)
+                try:
+                    msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+                    break
+                except OSError:
+                    time.sleep(0.1)
+            try:
+                yield
+            finally:
+                stream.seek(0)
+                msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+
+
+def _maker_slots_for_critic(root: Path, slug: str, critic_role: str) -> tuple[ModelSlot, ...]:
+    maker_roles = set(CRITIC_OF.get(critic_role, ()))
+    if not maker_roles:
+        return ()
+    act_path = root / ACTIVITY_FILE
+    if not act_path.is_file():
+        return ()
+    slots: list[ModelSlot] = []
+    seen: set[ModelSlot] = set()
+    try:
+        for line in act_path.read_text(encoding="utf-8", errors="replace").splitlines():
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            if (
+                row.get("slug") == slug
+                and row.get("role") in maker_roles
+                and row.get("ok") is True
+                and row.get("cli")
+                and row.get("model")
+            ):
+                slot = ModelSlot(cli=str(row["cli"]), model=str(row["model"]))
+                if slot not in seen:
+                    seen.add(slot)
+                    slots.append(slot)
+    except (OSError, ValueError):
+        return ()
+    return tuple(slots)
+
+
+def _invoke_supports_exclude(invoke_fn: object) -> bool:
+    try:
+        sig = inspect.signature(invoke_fn)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return False
+    return "exclude_slots" in sig.parameters or any(
+        param.kind == inspect.Parameter.VAR_KEYWORD for param in sig.parameters.values()
+    )
 
 
 @dataclass
@@ -197,9 +307,10 @@ def waiting_until(root: Path, slug: str) -> datetime | None:
 
 def _mark_advanced(root: Path, slug: str, report: RunReport) -> None:
     """Record progress and drop a stale block note from an earlier run."""
-    if slug not in report.advanced:
-        report.advanced.append(slug)
-    (root / "topics" / "logs" / slug / "blocked.txt").unlink(missing_ok=True)
+    with _REPORT_LOCK:
+        if slug not in report.advanced:
+            report.advanced.append(slug)
+        (root / "topics" / "logs" / slug / "blocked.txt").unlink(missing_ok=True)
 
 
 def _mark_blocked(
@@ -210,15 +321,16 @@ def _mark_blocked(
     *,
     log_path: Path | None = None,
 ) -> None:
-    if slug not in report.blocked:
-        report.blocked.append(slug)
-    blocked_file = root / "topics" / "logs" / slug / "blocked.txt"
-    detail = (
-        f"{reason}\nlog_path: {log_path}\n"
-        if log_path is not None
-        else f"{reason}\n"
-    )
-    write_text_atomic(blocked_file, detail)
+    with _REPORT_LOCK:
+        if slug not in report.blocked:
+            report.blocked.append(slug)
+        blocked_file = root / "topics" / "logs" / slug / "blocked.txt"
+        detail = (
+            f"{reason}\nlog_path: {log_path}\n"
+            if log_path is not None
+            else f"{reason}\n"
+        )
+        write_text_atomic(blocked_file, detail)
 
 
 def _unused_answers(project_dir: Path) -> str | None:
@@ -264,40 +376,41 @@ def _record_code_changes(
     else:
         paths = deps.changed_code_paths(root)
     new_paths: list[Path] = []
-    for raw_path in paths:
-        path = Path(raw_path)
-        is_new = path not in report.code_changes
-        if is_new:
-            report.code_changes.append(path)
-        if path not in new_paths and (before is not None or is_new):
-            new_paths.append(path)
-    if not new_paths:
-        return
+    with _REPORT_LOCK:
+        for raw_path in paths:
+            path = Path(raw_path)
+            is_new = path not in report.code_changes
+            if is_new:
+                report.code_changes.append(path)
+            if path not in new_paths and (before is not None or is_new):
+                new_paths.append(path)
+        if not new_paths:
+            return
 
-    review_file = root / "topics" / "code-review.yaml"
-    existing_entries: list[dict[str, str]] = []
-    if review_file.exists():
-        data = read_yaml(review_file)
-        raw_entries = data.get("entries", [])
-        if isinstance(raw_entries, list):
-            existing_entries = list(raw_entries)
+        review_file = root / "topics" / "code-review.yaml"
+        existing_entries: list[dict[str, str]] = []
+        if review_file.exists():
+            data = read_yaml(review_file)
+            raw_entries = data.get("entries", [])
+            if isinstance(raw_entries, list):
+                existing_entries = list(raw_entries)
 
-    timestamp = datetime.now(UTC).isoformat()
-    for path in new_paths:
-        existing_entries.append(
+        timestamp = datetime.now(UTC).isoformat()
+        for path in new_paths:
+            existing_entries.append(
+                {
+                    "path": path.as_posix(),
+                    "slug": slug,
+                    "at": timestamp,
+                }
+            )
+        write_yaml_atomic(
+            review_file,
             {
-                "path": path.as_posix(),
-                "slug": slug,
-                "at": timestamp,
-            }
+                "version": 1,
+                "entries": existing_entries,
+            },
         )
-    write_yaml_atomic(
-        review_file,
-        {
-            "version": 1,
-            "entries": existing_entries,
-        },
-    )
 
 
 def _quarantine_review(project_dir: Path, step: str, log_dir: Path) -> None:
@@ -312,6 +425,249 @@ def _quarantine_review(project_dir: Path, step: str, log_dir: Path) -> None:
         archive = log_dir / "review-artifacts" / f"{step}-{uuid4().hex}.yaml"
         archive.parent.mkdir(parents=True, exist_ok=True)
         report.rename(archive)
+
+
+def _build_step_prompt(
+    root: Path,
+    deps: RunDeps,
+    entry: QueueEntry,
+    project_dir: Path,
+    step: str,
+    *,
+    rewriting: bool = False,
+    answering: bool = False,
+) -> str:
+    prompt_fields: dict[str, str] = {
+        "project": str(project_dir),
+        "slug": entry.slug,
+        "title": entry.title,
+        "question": entry.question,
+        "doctor_note": entry.doctor_note or "",
+    }
+    if step.startswith("revise_") or step in {"draft", "script_review", "storyboard_design"}:
+        prompt_fields["reject_note"] = deps.reject_note(project_dir) or ""
+    if step == "revise_product":
+        prompt_fields["reject_note"] = product_review.revision_notes(project_dir)
+    if rewriting:
+        notes = expert.answer_notes(project_dir) if answering else revision_notes(project_dir)
+        prompt_fields["reject_note"] = f"{notes}\n{prompt_fields.get('reject_note', '')}".strip()
+    prompt = render_prompt(step, company=deps.company, **prompt_fields)
+    standards_block = prompt_block(root, slug=entry.slug)
+    if standards_block:
+        body, heading, rules = prompt.rpartition("## Quy tắc cứng")
+        prompt = f"{body.rstrip()}\n\n{standards_block.rstrip()}\n\n{heading}{rules}"
+    return prompt
+
+
+def _run_agent_invocation(
+    root: Path,
+    deps: RunDeps,
+    entry: QueueEntry,
+    project_dir: Path,
+    report: RunReport,
+    *,
+    step: str,
+    brief_context: str,
+    log_dir: Path,
+    rewriting: bool = False,
+    answering: bool = False,
+) -> tuple[str, Path | None, str | None, dict[str, str] | None]:
+    """Run one agent step with fingerprint retry gating, failover & quarantine."""
+    prompt = _build_step_prompt(
+        root, deps, entry, project_dir, step, rewriting=rewriting, answering=answering
+    )
+    with _topic_lock(entry.slug):
+        fingerprint = agent_fingerprint(root, project_dir, step, brief_context)
+        status = agent_retry_status(root, project_dir, step, fingerprint)
+        if not status["allowed"]:
+            waiting = (
+                f"đang chờ thử lại lúc {status['retry_after']}"
+                if status["retry_after"]
+                else "cần sửa đầu vào hoặc cấu hình"
+            )
+            _mark_blocked(
+                root, entry.slug, f"bước {step}: {waiting}; {status['reason']}", report
+            )
+            return "blocked", None, None, None
+    before = deps.code_snapshot(root) if deps.code_snapshot is not None else None
+    reviewing = step in {"script_review", "product_review"}
+    reviewed_hash = (
+        script_hash(project_dir)
+        if step == "script_review"
+        else product_review.render_hash(project_dir)
+        if reviewing
+        else ""
+    )
+    if reviewing:
+        _quarantine_review(project_dir, step, log_dir)
+    role = deps.company.role_for_step(step)
+    invoke_kwargs: dict[str, object] = {}
+    if reviewing and _invoke_supports_exclude(deps.invoke):
+        excluded = _maker_slots_for_critic(root, entry.slug, role.id)
+        if excluded:
+            invoke_kwargs["exclude_slots"] = excluded
+    try:
+        result = deps.invoke(
+            deps.company.chain(role.id),
+            prompt,
+            cwd=root,
+            log_dir=log_dir,
+            role=role.id,
+            slug=entry.slug,
+            step=step,
+            **invoke_kwargs,
+        )
+    except AllAgentsExhausted as exc:
+        with _topic_lock(entry.slug):
+            record_model_resume(root, project_dir, step, brief_context)
+        _record_code_changes(root, entry.slug, deps, report, before)
+        back = exc.earliest_return
+        write_text_atomic(
+            root / "topics" / "logs" / entry.slug / WAITING_MODEL_FILE,
+            back.isoformat() if back else "",
+        )
+        with _REPORT_LOCK:
+            if entry.slug not in report.waiting_model:
+                report.waiting_model.append(entry.slug)
+        return "waiting_model", None, None, None
+    except Exception as exc:  # noqa: BLE001 — a failed tool holds only this topic
+        kind = (
+            "transient"
+            if isinstance(exc, (TimeoutError, ConnectionError, subprocess.TimeoutExpired))
+            else "configuration"
+            if isinstance(exc, (FileNotFoundError, PermissionError))
+            else "agent_error"
+        )
+        with _topic_lock(entry.slug):
+            record_agent_failure(
+                root,
+                project_dir,
+                step,
+                fingerprint,
+                kind,
+                exc,
+                observed_fingerprint=agent_fingerprint(root, project_dir, step, brief_context),
+            )
+        _record_code_changes(root, entry.slug, deps, report, before)
+        _mark_blocked(
+            root, entry.slug, f"bước {step} lỗi: {_sanitize_reason(exc)}", report
+        )
+        return "blocked", None, None, None
+
+    if not result.ok:
+        with _topic_lock(entry.slug):
+            record_agent_failure(
+                root,
+                project_dir,
+                step,
+                fingerprint,
+                getattr(result, "failure_kind", None),
+                RuntimeError(
+                    f"agent {result.agent} thất bại ở bước {step}; log_path: {result.log_path}"
+                ),
+                observed_fingerprint=agent_fingerprint(root, project_dir, step, brief_context),
+            )
+        _record_code_changes(root, entry.slug, deps, report, before)
+        _mark_blocked(
+            root,
+            entry.slug,
+            f"agent {result.agent} thất bại ở bước {step}",
+            report,
+            log_path=result.log_path,
+        )
+        return "blocked", result.log_path, None, None
+
+    with _topic_lock(entry.slug):
+        record_agent_failure(
+            root,
+            project_dir,
+            step,
+            fingerprint,
+            "validation",
+            ValueError(f"bước {step}: đầu ra hoặc trạng thái chưa hợp lệ"),
+            observed_fingerprint=agent_fingerprint(root, project_dir, step, brief_context),
+        )
+    _record_code_changes(root, entry.slug, deps, report, before)
+    return "ok", result.log_path, reviewed_hash, {"fingerprint": fingerprint}
+
+
+def _validate_nonstate_agent_step(
+    deps: RunDeps, project_dir: Path, step: str
+) -> str | None:
+    if step == "posts" and not deps.posts_ready(project_dir):
+        return "agent không làm đổi trạng thái: posts.yaml chưa hợp lệ"
+    if step == "storyboard_design" and not deps.storyboard_ready(project_dir):
+        return "agent không làm đổi trạng thái: storyboard.yaml chưa hợp lệ"
+    if step == "voice_prep" and not deps.voice_prep_ready(project_dir):
+        return "agent không làm đổi trạng thái: script/voice-prep.yaml chưa hợp lệ"
+    if step == "shorts_plan" and not deps.shorts_plan_ready(project_dir):
+        return "agent không làm đổi trạng thái: posts/shorts-plan.yaml chưa hợp lệ"
+    return None
+
+
+def _run_parallel_branches(
+    root: Path,
+    deps: RunDeps,
+    entry: QueueEntry,
+    project_dir: Path,
+    report: RunReport,
+    *,
+    branches: tuple[str, ...],
+    brief_context: str,
+) -> tuple[str, int]:
+    """Execute independent steps concurrently for the same topic with isolated log dirs."""
+    outcomes: dict[str, tuple[str, Path | None, str | None]] = {}
+
+    def run_branch(b_step: str) -> tuple[str, Path | None, str | None]:
+        if b_step == "produce":
+            try:
+                with gpu_mutex(root), _production_running(root, entry.slug):
+                    deps.python_steps["produce"](project_dir)
+                clear_retry(root, entry.slug)
+                return "ok", None, None
+            except Exception as exc:  # noqa: BLE001
+                record_failure(root, project_dir, deps.read_state(project_dir), exc)
+                return "blocked", None, f"bước produce lỗi: {type(exc).__name__}: {exc}"
+        b_log_dir = root / "topics" / "logs" / entry.slug / f"parallel-{b_step}"
+        status, log_p, _, _ = _run_agent_invocation(
+            root,
+            deps,
+            entry,
+            project_dir,
+            report,
+            step=b_step,
+            brief_context=brief_context,
+            log_dir=b_log_dir,
+        )
+        if status != "ok":
+            return status, log_p, None
+        problem = _validate_nonstate_agent_step(deps, project_dir, b_step)
+        if problem:
+            return "blocked", log_p, problem
+        with _topic_lock(entry.slug):
+            clear_agent_retry(root, entry.slug, b_step)
+            clear_model_resume(root, entry.slug)
+        return "ok", log_p, None
+
+    with ThreadPoolExecutor(max_workers=len(branches)) as pool:
+        futures = {pool.submit(run_branch, b_step): b_step for b_step in branches}
+        for future in as_completed(futures):
+            b_step = futures[future]
+            try:
+                outcomes[b_step] = future.result()
+            except Exception as exc:  # noqa: BLE001
+                outcomes[b_step] = ("blocked", None, f"bước {b_step} lỗi: {_sanitize_reason(exc)}")
+
+    if any(res[0] == "waiting_model" for res in outcomes.values()):
+        return "waiting_model", len(branches)
+    for b_step in branches:
+        st, log_p, err = outcomes[b_step]
+        if st != "ok":
+            if err:
+                _mark_blocked(root, entry.slug, err, report, log_path=log_p)
+            return "blocked", len(branches)
+    _mark_advanced(root, entry.slug, report)
+    return "ok", len(branches)
 
 
 def _run_topic(
@@ -331,7 +687,8 @@ def _run_topic(
         if waiting.exists():
             back = waiting_until(root, entry.slug)
             if back is not None and back > datetime.now(UTC):
-                report.waiting_model.append(entry.slug)
+                with _REPORT_LOCK:
+                    report.waiting_model.append(entry.slug)
                 continue
             waiting.unlink()
         project_dir = root / "projects" / entry.slug
@@ -347,8 +704,9 @@ def _run_topic(
             with chat.step_boundary(root, entry.slug):
                 state = deps.read_state(project_dir)
                 pending_change = change_request.pending_note(project_dir)
-                quota_step = model_resume_step(root, project_dir, brief_context)
-                outstanding = outstanding_agent_retry(root, project_dir, brief_context)
+                with _topic_lock(entry.slug):
+                    quota_step = model_resume_step(root, project_dir, brief_context)
+                    outstanding = outstanding_agent_retry(root, project_dir, brief_context)
                 forced_step = outstanding[0] if outstanding else quota_step
                 if outstanding and not outstanding[1]["allowed"]:
                     status = outstanding[1]
@@ -359,14 +717,15 @@ def _run_topic(
                     break
                 step = forced_step or next_step(state)
                 if step is None:
-                    if state == WorkflowState.BLOCKED:
-                        if entry.slug not in report.blocked:
-                            report.blocked.append(entry.slug)
-                    elif state in (WorkflowState.PACKAGED, WorkflowState.PUBLISHED_MANUAL):
-                        pass  # finished topics are not waiting at any gate
-                    else:
-                        if entry.slug not in report.at_gate:
-                            report.at_gate.append(entry.slug)
+                    with _REPORT_LOCK:
+                        if state == WorkflowState.BLOCKED:
+                            if entry.slug not in report.blocked:
+                                report.blocked.append(entry.slug)
+                        elif state in (WorkflowState.PACKAGED, WorkflowState.PUBLISHED_MANUAL):
+                            pass  # finished topics are not waiting at any gate
+                        else:
+                            if entry.slug not in report.at_gate:
+                                report.at_gate.append(entry.slug)
                     break
 
                 retrying_production = False
@@ -388,14 +747,48 @@ def _run_topic(
 
                 if step == "produce" and not retrying_production and deps.visual_review_pending(project_dir):
                     step = "visual_review"
-                elif step == "produce" and not retrying_production and not deps.posts_ready(project_dir):
-                    step = "posts"
-                elif step == "produce" and not retrying_production and deps.product_review_pending(project_dir):
-                    try:
-                        step = product_review.next_product_action(project_dir)
-                    except (OSError, ValueError) as exc:
-                        _mark_blocked(root, entry.slug, f"duyệt sản phẩm lỗi: {exc}", report)
-                        break
+                elif step == "produce" and not retrying_production and not forced_step:
+                    need_posts = not deps.posts_ready(project_dir)
+                    need_shorts = not deps.shorts_plan_ready(project_dir)
+                    need_produce = not deps.product_review_pending(project_dir)
+                    if deps.parallel_branches and (need_posts or need_shorts):
+                        branches_to_run: list[str] = []
+                        if need_posts:
+                            branches_to_run.append("posts")
+                        if need_shorts:
+                            branches_to_run.append("shorts_plan")
+                        if need_produce:
+                            branches_to_run.append("produce")
+                        if len(branches_to_run) > 1:
+                            if steps_taken + len(branches_to_run) > max_steps_per_topic:
+                                _mark_blocked(root, entry.slug, "vượt số bước", report)
+                                break
+                            outcome, delta = _run_parallel_branches(
+                                root,
+                                deps,
+                                entry,
+                                project_dir,
+                                report,
+                                branches=tuple(branches_to_run),
+                                brief_context=brief_context,
+                            )
+                            steps_taken += delta
+                            if outcome != "ok":
+                                break
+                            if once:
+                                return True
+                            continue
+                        step = branches_to_run[0]
+                    elif need_posts:
+                        step = "posts"
+                    elif need_shorts:
+                        step = "shorts_plan"
+                    elif deps.product_review_pending(project_dir):
+                        try:
+                            step = product_review.next_product_action(project_dir)
+                        except (OSError, ValueError) as exc:
+                            _mark_blocked(root, entry.slug, f"duyệt sản phẩm lỗi: {exc}", report)
+                            break
 
                 answering = False
                 if step == "script_review":
@@ -415,6 +808,34 @@ def _run_topic(
                     except (OSError, ValueError) as exc:
                         _mark_blocked(root, entry.slug, f"chấm kịch bản lỗi: {exc}", report)
                         break
+                if (step in {"script_review", "submit_medical"}
+                        and state == WorkflowState.DRAFT_READY
+                        and not pending_change and not forced_step):
+                    need_sb = not deps.storyboard_ready(project_dir)
+                    need_vp = not deps.voice_prep_ready(project_dir)
+                    if deps.parallel_branches and need_sb and need_vp:
+                        if steps_taken + 2 > max_steps_per_topic:
+                            _mark_blocked(root, entry.slug, "vượt số bước", report)
+                            break
+                        outcome, delta = _run_parallel_branches(
+                            root,
+                            deps,
+                            entry,
+                            project_dir,
+                            report,
+                            branches=("storyboard_design", "voice_prep"),
+                            brief_context=brief_context,
+                        )
+                        steps_taken += delta
+                        if outcome != "ok":
+                            break
+                        if once:
+                            return True
+                        continue
+                    if need_sb:
+                        step = "storyboard_design"
+                    elif need_vp:
+                        step = "voice_prep"
                 if (step == "draft" and state == WorkflowState.EVIDENCE_READY
                         and not deps.expert_brief_ready(project_dir)):
                     step = "research"  # no expert brief yet: the research step is not finished
@@ -430,103 +851,28 @@ def _run_topic(
                 result_log_path: Path | None = None
 
                 if step in AGENT_STEPS:
-                    prompt_fields: dict[str, str] = {
-                        "project": str(project_dir),
-                        "slug": entry.slug,
-                        "title": entry.title,
-                        "question": entry.question,
-                        "doctor_note": entry.doctor_note or "",
-                    }
-                    if step.startswith("revise_") or step in {"draft", "script_review"}:
-                        prompt_fields["reject_note"] = (
-                            deps.reject_note(project_dir) or ""
-                        )
-                    if step == "revise_product":
-                        prompt_fields["reject_note"] = product_review.revision_notes(project_dir)
-                    if rewriting:
-                        notes = (expert.answer_notes(project_dir) if answering
-                                 else revision_notes(project_dir))
-                        prompt_fields["reject_note"] = (
-                            f"{notes}\n{prompt_fields['reject_note']}"
-                        ).strip()
-                    prompt = render_prompt(step, company=deps.company, **prompt_fields)
-                    standards_block = prompt_block(root, slug=entry.slug)
-                    if standards_block:
-                        body, heading, rules = prompt.rpartition('## Quy tắc cứng')
-                        prompt = f"{body.rstrip()}\n\n{standards_block.rstrip()}\n\n{heading}{rules}"
-                    fingerprint = agent_fingerprint(root, project_dir, step, brief_context)
-                    status = agent_retry_status(root, project_dir, step, fingerprint)
-                    if not status["allowed"]:
-                        waiting = (f"đang chờ thử lại lúc {status['retry_after']}"
-                                   if status['retry_after'] else "cần sửa đầu vào hoặc cấu hình")
-                        _mark_blocked(root, entry.slug,
-                                      f"bước {step}: {waiting}; {status['reason']}", report)
-                        break
-                    before = deps.code_snapshot(root) if deps.code_snapshot is not None else None
                     reviewing = step in {"script_review", "product_review"}
                     reviewed_hash = (
-                        script_hash(project_dir) if step == "script_review"
-                        else product_review.render_hash(project_dir) if reviewing else ""
+                        script_hash(project_dir)
+                        if step == "script_review"
+                        else product_review.render_hash(project_dir)
+                        if reviewing
+                        else ""
                     )
-                    if reviewing:
-                        _quarantine_review(project_dir, step, log_dir)
-                    role = deps.company.role_for_step(step)
-                    try:
-                        result = deps.invoke(
-                            deps.company.chain(role.id),
-                            prompt,
-                            cwd=root,
-                            log_dir=log_dir,
-                            role=role.id,
-                            slug=entry.slug,
-                            step=step,
-                        )
-                    except AllAgentsExhausted as exc:
-                        # Only this topic waits for a model; the rest of the queue keeps going.
-                        record_model_resume(root, project_dir, step, brief_context)
-                        _record_code_changes(root, entry.slug, deps, report, before)
-                        back = exc.earliest_return
-                        write_text_atomic(
-                            log_dir / WAITING_MODEL_FILE, back.isoformat() if back else ""
-                        )
-                        report.waiting_model.append(entry.slug)
+                    outcome, result_log_path, _, _ = _run_agent_invocation(
+                        root,
+                        deps,
+                        entry,
+                        project_dir,
+                        report,
+                        step=step,
+                        brief_context=brief_context,
+                        log_dir=log_dir,
+                        rewriting=rewriting,
+                        answering=answering,
+                    )
+                    if outcome != "ok":
                         break
-                    except Exception as exc:  # noqa: BLE001 — a failed tool holds only this topic
-                        kind = ("transient" if isinstance(exc, (TimeoutError, ConnectionError,
-                                                              subprocess.TimeoutExpired))
-                                else "configuration" if isinstance(exc, (FileNotFoundError, PermissionError))
-                                else "agent_error")
-                        record_agent_failure(
-                            root, project_dir, step, fingerprint, kind, exc,
-                            observed_fingerprint=agent_fingerprint(root, project_dir, step, brief_context),
-                        )
-                        _record_code_changes(root, entry.slug, deps, report, before)
-                        _mark_blocked(root, entry.slug, f"bước {step} lỗi: {_sanitize_reason(exc)}", report)
-                        break
-
-                    result_log_path = result.log_path
-                    if not result.ok:
-                        record_agent_failure(
-                            root, project_dir, step, fingerprint,
-                            getattr(result, "failure_kind", None),
-                            RuntimeError(f"agent {result.agent} thất bại ở bước {step}; log_path: {result.log_path}"),
-                            observed_fingerprint=agent_fingerprint(root, project_dir, step, brief_context),
-                        )
-                        _record_code_changes(root, entry.slug, deps, report, before)
-                        _mark_blocked(
-                            root,
-                            entry.slug,
-                            f"agent {result.agent} thất bại ở bước {step}",
-                            report,
-                            log_path=result.log_path,
-                        )
-                        break
-                    # Hold if any artifact/state validation below fails or raises.
-                    # Remove this provisional hold only once the whole step succeeds.
-                    record_agent_failure(root, project_dir, step, fingerprint, "validation",
-                                         ValueError(f"bước {step}: đầu ra hoặc trạng thái chưa hợp lệ"),
-                                         observed_fingerprint=agent_fingerprint(root, project_dir, step, brief_context))
-                    _record_code_changes(root, entry.slug, deps, report, before)
                     if reviewing:
                         record = (record_review if step == "script_review"
                                   else product_review.record_review)
@@ -538,16 +884,17 @@ def _run_topic(
                                 entry.slug,
                                 f"{'chấm kịch bản' if step == 'script_review' else 'duyệt sản phẩm'} lỗi: {exc}",
                                 report,
-                                log_path=result.log_path,
+                                log_path=result_log_path,
                             )
                             break
                     if step == "revise_product":
                         # Python re-renders the fix at once; an unchanged render goes to the doctor.
                         try:
                             product_review.mark_fix_attempted(project_dir)
-                            clear_agent_retry(root, entry.slug, step)
-                            clear_model_resume(root, entry.slug)
-                            with _production_running(root, entry.slug):
+                            with _topic_lock(entry.slug):
+                                clear_agent_retry(root, entry.slug, step)
+                                clear_model_resume(root, entry.slug)
+                            with gpu_mutex(root), _production_running(root, entry.slug):
                                 deps.python_steps["produce"](project_dir)
                         except Exception as exc:  # noqa: BLE001
                             record_failure(root, project_dir, deps.read_state(project_dir), exc)
@@ -573,12 +920,13 @@ def _run_topic(
                             )
                             break
                         try:
-                            with _production_running(root, entry.slug):
+                            with gpu_mutex(root), _production_running(root, entry.slug):
                                 deps.python_steps["produce"](project_dir)
                         except Exception as exc:  # noqa: BLE001
                             if not isinstance(exc, ValueError):
-                                clear_agent_retry(root, entry.slug, step)
-                                clear_model_resume(root, entry.slug)
+                                with _topic_lock(entry.slug):
+                                    clear_agent_retry(root, entry.slug, step)
+                                    clear_model_resume(root, entry.slug)
                             record_failure(
                                 root, project_dir, deps.read_state(project_dir), exc
                             )
@@ -588,7 +936,7 @@ def _run_topic(
                 elif step in deps.python_steps:
                     try:
                         if step == "produce":
-                            with _production_running(root, entry.slug):
+                            with gpu_mutex(root), _production_running(root, entry.slug):
                                 deps.python_steps[step](project_dir)
                         else:
                             deps.python_steps[step](project_dir)
@@ -617,6 +965,7 @@ def _run_topic(
 
                 steps_taken += 1
                 new_state = deps.read_state(project_dir)
+                nonstate_problem = _validate_nonstate_agent_step(deps, project_dir, step)
                 if step in {"visual_review", "script_review", "product_review", "revise_product"}:
                     _mark_advanced(root, entry.slug, report)
                 elif rewriting:
@@ -634,12 +983,12 @@ def _run_topic(
                         )
                         break
                     _mark_advanced(root, entry.slug, report)
-                elif step == "posts":
-                    if not deps.posts_ready(project_dir):
+                elif step in {"posts", "storyboard_design", "voice_prep", "shorts_plan"}:
+                    if nonstate_problem:
                         _mark_blocked(
                             root,
                             entry.slug,
-                            "agent không làm đổi trạng thái: posts.yaml chưa hợp lệ",
+                            nonstate_problem,
                             report,
                             log_path=result_log_path,
                         )
@@ -672,8 +1021,9 @@ def _run_topic(
                     chat.completed(root, entry.slug, project_dir)
 
                 if step in AGENT_STEPS:
-                    clear_agent_retry(root, entry.slug, step)
-                    clear_model_resume(root, entry.slug)
+                    with _topic_lock(entry.slug):
+                        clear_agent_retry(root, entry.slug, step)
+                        clear_model_resume(root, entry.slug)
 
                 if once:
                     return True
@@ -694,20 +1044,36 @@ def _production_running(root: Path, slug: str) -> Iterator[None]:
         path.unlink(missing_ok=True)
 
 
-def run_queue(root: Path, deps: RunDeps, *, once: bool = False,
-              max_steps_per_topic: int = 20) -> RunReport:
+def run_queue(
+    root: Path,
+    deps: RunDeps,
+    *,
+    once: bool = False,
+    max_steps_per_topic: int = 20,
+    max_parallel_topics: int = 1,
+) -> RunReport:
     """Isolate project, artifact and tool errors without swallowing interrupts."""
     report = RunReport()
-    for entry in load_queue(root):
-        completed = False
+    entries = load_queue(root)
+
+    def _run_entry(entry: QueueEntry) -> bool:
         try:
-            completed = _run_topic(root, deps, entry, report, once=once,
-                                   max_steps_per_topic=max_steps_per_topic)
+            return _run_topic(
+                root, deps, entry, report, once=once, max_steps_per_topic=max_steps_per_topic
+            )
         except Exception as exc:  # noqa: BLE001 — a corrupt topic cannot stop the next one
             log = root / "topics" / "logs" / entry.slug / "runner-error.log"
             reason = _sanitize_reason(exc)
             write_text_atomic(log, f"{datetime.now(UTC).isoformat()} {reason}\n")
             _mark_blocked(root, entry.slug, f"lỗi xử lý chủ đề: {reason}", report, log_path=log)
-        if once and completed:
+            return False
+
+    if max_parallel_topics > 1 and not once and len(entries) > 1:
+        with ThreadPoolExecutor(max_workers=min(max_parallel_topics, len(entries))) as pool:
+            list(pool.map(_run_entry, entries))
+        return report
+
+    for entry in entries:
+        if _run_entry(entry) and once:
             break
     return report

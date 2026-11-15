@@ -2,6 +2,7 @@
 
 import json
 import subprocess
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -15,11 +16,13 @@ from healthvideo.agents import (
     AllAgentsExhausted,
     QuotaBook,
     argv_for,
+    cancel_running_job,
     invoke,
     invoke_with_failover,
     parse_reset,
 )
-from healthvideo.company import ModelSlot
+from healthvideo.company import CRITIC_OF, ModelSlot
+from healthvideo.process import process_token
 
 NOW = datetime(2026, 11, 8, 18, 0, tzinfo=timezone(timedelta(hours=7)))
 CODEX_SLOT = ModelSlot(cli="codex", model="gpt-6-astra")
@@ -352,19 +355,18 @@ def test_claude_runs_with_a_tool_allowlist_not_a_permission_bypass():
 def test_factory_uses_moderate_models_and_critics_away_from_the_author():
     from healthvideo.workflows.factory_deps import default_run_deps
     company = default_run_deps(Path('.')).company
-    # 2026-11-14 editorial standards use Carbon high for evidence, medium for reviews.
-    assert company.chain('medical_expert')[0].model == 'gemini-4-carbon-high'
-    for role in ('script_critic', 'art_director', 'editor'):
-        assert company.chain(role)[0].model == 'gemini-4-carbon-medium'
-    for step in ('draft', 'revise_medical'):
-        assert company.chain(company.role_for_step(step).id)[0].model == 'gpt-6.1-sol'
-    for role in ('coordinator', 'scout', 'copywriter', 'feedback_analyst'):
-        assert company.chain(role)[0].model == 'gemini-4-hydrogen-medium'
+    for role in ('coordinator', 'researcher', 'medical_expert', 'script_critic', 'art_director', 'editor', 'shorts_producer'):
+        assert company.chain(role)[0].model == 'gemini-4-carbon-medium', role
+    for step in ('draft', 'revise_medical', 'storyboard_design', 'chat_deep'):
+        assert company.chain(company.role_for_step(step).id)[0].model == 'gpt-6.1-sol', step
+    for role in ('scout', 'voice_director', 'copywriter', 'feedback_analyst'):
+        assert company.chain(role)[0].model == 'gemini-4-hydrogen-medium', role
     for role in company.roles:
         for slot in company.chain(role):
             assert 'opus' not in slot.model and 'astra' not in slot.model, (role, slot)
-    assert company.chain('script_critic')[0].cli != company.chain('writer')[0].cli
-    assert company.chain('product_critic')[0].cli != company.chain('editor')[0].cli
+    for critic_id, makers in CRITIC_OF.items():
+        for maker_id in makers:
+            assert company.chain(critic_id)[0].cli != company.chain(maker_id)[0].cli, (critic_id, maker_id)
 
 
 def test_resting_slot_is_skipped(tmp_path):
@@ -517,3 +519,70 @@ def test_long_argv_prompt_goes_through_file(tmp_path, monkeypatch):
     assert str(prompt_file) in passed
     assert prompt_file.read_text(encoding='utf-8') == long_prompt
     assert calls[1][calls[1].index('-p') + 1] == 'ngắn'
+
+
+def test_exclude_slots_avoids_excluded_slots(tmp_path):
+    calls = []
+
+    def runner(argv, **kwargs):
+        calls.append(argv)
+        return _completed()
+
+    result = _failover(tmp_path, [CODEX_SLOT, AGY_SLOT], runner, exclude_slots=[CODEX_SLOT])
+    assert result.ok and result.model == AGY_SLOT.model
+    assert len(calls) == 1 and calls[0][0] == 'agy'
+
+
+def test_exclude_slots_never_falls_back_to_maker_slot_when_all_excluded(tmp_path):
+    calls = []
+
+    def runner(argv, **kwargs):
+        calls.append(argv)
+        return _completed()
+
+    with pytest.raises(ValueError, match='model độc lập'):
+        _failover(tmp_path, [CODEX_SLOT], runner, exclude_slots=[CODEX_SLOT])
+    assert calls == []
+
+
+def test_exclude_slots_exhausts_without_touching_maker_slot(tmp_path):
+    calls = []
+
+    def runner(argv, **kwargs):
+        calls.append(argv[0])
+        return _completed(1, stderr='429 rate limit exceeded')
+
+    with pytest.raises(AllAgentsExhausted):
+        _failover(tmp_path, [CODEX_SLOT, AGY_SLOT], runner, exclude_slots=[CODEX_SLOT])
+    assert calls == ['agy']
+
+
+def test_cancel_running_job_terminates_child_and_removes_job_file(tmp_path):
+    proc = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])
+    try:
+        job_dir = tmp_path / 'topics/logs/gout-test'
+        job_dir.mkdir(parents=True, exist_ok=True)
+        job_file = job_dir / '.job-test-cancel-1.json'
+        job_file.write_text(
+            json.dumps({
+                'job_id': 'test-cancel-1',
+                'role': 'writer',
+                'slug': 'gout-test',
+                'step': 'draft',
+                'cli': 'codex',
+                'model': 'gpt-6.1-sol',
+                'child_pid': proc.pid,
+                'child_process_token': process_token(proc.pid),
+                'started_at': NOW.isoformat(),
+            }),
+            encoding='utf-8',
+        )
+        cancelled = cancel_running_job(tmp_path, job_id='test-cancel-1')
+        assert len(cancelled) == 1
+        assert cancelled[0]['job_id'] == 'test-cancel-1'
+        assert proc.wait(timeout=5) is not None
+        assert not job_file.exists()
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait(timeout=5)

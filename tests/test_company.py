@@ -7,6 +7,7 @@ import yaml
 
 from healthvideo.company import (
     COMPANY_PATH,
+    CRITIC_OF,
     REPO_ROOT,
     SKILL_RULE,
     ModelSlot,
@@ -44,7 +45,8 @@ def test_chain_uses_override_then_tier():
     company = load_company()
     assert company.chain('script_critic')[0] == ModelSlot(cli='agy', model='gemini-4-carbon-medium')
     assert company.chain('writer')[0] == ModelSlot(cli='codex', model='gpt-6.1-sol')
-    assert company.chain('medical_expert') == company.tiers['hard']
+    assert company.chain('medical_expert') == [ModelSlot(cli='agy', model='gemini-4-carbon-medium')]
+    assert company.chain('scout') == company.tiers['bulk']
 
 
 def test_duplicate_step_rejected(tmp_path):
@@ -100,18 +102,22 @@ def test_every_role_skill_exists():
 
 
 def test_role_skills_follow_spec_table():
-    # Standardized skills per role (task 3.7): each role has 1-3 skills tailored to its step.
+    # Company 2.0 standardized 15-role skills (1-3 skills per role).
     expected = {
         'coordinator': ['pyh-coordinator'],
         'coordinator_senior': ['pyh-coordinator', 'pyh-coordinator-senior'],
+        'researcher': ['content-strategy', 'systematic-literature-review', 'pyh-researcher'],
         'scout': ['content-strategy', 'pyh-scout'],
         'medical_expert': ['pyh-medical-expert'],
         'writer': ['youtube-scriptwriting', 'short-form-video', 'pyh-writer'],
+        'storyboard_director': ['scripting-and-storyboarding', 'visual-style', 'pyh-storyboard-director'],
+        'voice_director': ['pyh-voice-director'],
         'script_critic': ['copy-editing', 'pyh-script-critic'],
         'art_director': ['pyh-art-director'],
         'editor': ['remotion-best-practices', 'motion-design', 'pyh-editor'],
         'product_critic': ['character-animation-qa', 'pyh-product-critic'],
-        'copywriter': ['social', 'pyh-copywriter'],
+        'copywriter': ['social', 'copy-editing', 'pyh-copywriter'],
+        'shorts_producer': ['short-form-video', 'social', 'pyh-shorts-producer'],
         'feedback_analyst': ['pyh-feedback-analyst'],
     }
     company = load_company()
@@ -121,10 +127,27 @@ def test_role_skills_follow_spec_table():
 
 def test_split_script_roles_have_new_names():
     company = load_company()
-    assert 'researcher' not in company.roles
+    assert len(company.roles) == 15
+    assert 'researcher' in company.roles
+    assert company.role_for_step('topic_research').id == 'researcher'
+    assert company.role_for_step('channel_analytics').id == 'researcher'
     assert company.role_for_step('research').id == 'medical_expert'
     assert company.roles['medical_expert'].name == 'Chuyên gia y học'
     assert company.roles['writer'].name == 'Biên kịch viral'
+    assert company.roles['coordinator'].name == 'Trưởng nhóm Điều phối'
+
+
+def test_critic_of_invariant_for_all_makers_and_no_banned_models():
+    company = load_company()
+    for critic_id, maker_ids in CRITIC_OF.items():
+        critic_first = company.chain(critic_id)[0]
+        for maker_id in maker_ids:
+            maker_first = company.chain(maker_id)[0]
+            assert critic_first.cli != maker_first.cli, (critic_id, maker_id)
+    for role_id in company.roles:
+        for slot in company.chain(role_id):
+            assert 'opus' not in slot.model.lower()
+            assert 'astra' not in slot.model.lower()
 
 
 def test_role_without_skills_has_no_block():

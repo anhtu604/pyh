@@ -1,57 +1,213 @@
-# Tiến độ hoàn thiện xưởng. App `healthvideo app` đọc file này (mục "Tiến độ hoàn thiện xưởng").
-# Kế hoạch chi tiết từng việc: CLAUDE.md mục 5. status: todo | doing | done | blocked.
-# Claude sửa file này ở checkout chính khi bắt đầu và khi xong mỗi việc (CLAUDE.md mục 3).
 version: 1
-updated: '2026-11-14'
+updated: '2026-11-15'
 phases:
 - id: R1
   title: Hoàn thiện xưởng trước khi làm video mới
   tasks:
-  - {id: 'R1.1', title: Dừng và lưu trữ toàn bộ pilot cũ, status: done, owner: codex, note: '2026-11-14 theo yêu cầu bác sĩ: xưởng dừng, queue rỗng; hai project và log riêng giữ ở cache/pilot-archive/2026-11-14; không xóa dữ liệu'}
-  - {id: 'R1.2', title: Chuẩn hóa skill và hợp đồng công việc từng agent, status: done, owner: codex, note: '11 skill và 6 prompt đồng bộ; kiểm độc lập 5 nhóm tình huống, review đạt; 117 test liên quan đạt và Ruff sạch; chưa nghiệm thu runtime/video'}
-  - {id: 'R1.3', title: Phân model ban đầu và kiểm mẫu biên kịch/kiểm duyệt, status: done, owner: codex, note: 'Sol viết, Carbon high y khoa, Carbon medium kiểm duyệt/hình/dựng, Hydrogen việc nhẹ, Sonnet chấm sản phẩm; 2 mẫu viết và 1 mẫu critic thật; vai khác chưa benchmark, không Opus/astra'}
-  - {id: 'R1.4', title: Sửa khả năng phục hồi lỗi và giới hạn nội dung cứng của xưởng, status: doing, owner: codex, note: 'đang sửa timeout/process tree, retry agent bền vững và cô lập lỗi theo chủ đề; khung nội dung xử lý riêng sau đợt này'}
-  - {id: 'R1.5', title: Kiểm model trên bộ tình huống riêng từng vai trước sản xuất, status: todo, owner: codex, note: 'mở rộng nhiều đề và chấm ẩn danh; kiểm nguồn, ảnh, sửa component, phân loại log và failover độc lập; chưa bật xưởng/pilot'}
-  - {id: 'R1.6', title: Hoạt cảnh nhân viên theo trạng thái làm việc và nghỉ thật, status: doing, owner: agy, note: 'giữ xưởng isometric; sửa false-busy, dáng làm/nghỉ theo vai, chờ model/lỗi/offline, hỗ trợ giảm chuyển động'}
+  - id: R1.1
+    title: Dừng và lưu trữ toàn bộ pilot cũ
+    status: done
+    owner: codex
+    note: '2026-11-14 theo yêu cầu bác sĩ: xưởng dừng, queue rỗng; hai project và log riêng giữ ở cache/pilot-archive/2026-11-14; không xóa dữ liệu'
+  - id: R1.2
+    title: Chuẩn hóa skill và hợp đồng công việc từng agent
+    status: done
+    owner: codex
+    note: 11 skill và 6 prompt đồng bộ; kiểm độc lập 5 nhóm tình huống, review đạt; 117 test liên quan đạt và Ruff sạch; chưa nghiệm thu runtime/video
+  - id: R1.3
+    title: Phân model ban đầu và kiểm mẫu biên kịch/kiểm duyệt
+    status: done
+    owner: codex
+    note: Sol viết, Carbon high y khoa, Carbon medium kiểm duyệt/hình/dựng, Hydrogen việc nhẹ, Sonnet chấm sản phẩm; 2 mẫu viết và 1 mẫu critic thật; vai khác chưa
+      benchmark, không Opus/astra
+  - id: R1.4
+    title: Sửa khả năng phục hồi lỗi runtime và cô lập chủ đề của xưởng
+    status: done
+    owner: codex
+    note: '8c9fa8f: timeout + dọn process tree theo token, retry/hold agent bền vững theo fingerprint, cô lập lỗi từng chủ đề, tách lỗi công cụ khỏi cổng duyệt'
+  - id: R1.5
+    title: Kiểm model trên bộ tình huống riêng từng vai trước sản xuất
+    status: done
+    owner: codex
+    note: 'Vá exclude_slots trong src/healthvideo/agents.py không rơi về list(slots) khi hết ứng viên critic (+2 unit test). Đã đo CLI 7 lượt thật tại cache/dev-lead/model-benchmark/2026-11-15/: writer Sol/Carbon TOFU/MOFU/BOFU, script_critic chấm mù + bắt đủ 5 bẫy C, medical_expert tra Europe PMC PMC13671609, art_director đọc pixel PNG, editor kiểm ArterySection.tsx, coordinator timeout agy tự failover codex. Xem docs/reference/agent-model-evaluation.md.'
+  - id: R1.6
+    title: Hoạt cảnh nhân viên theo trạng thái làm việc và nghỉ thật
+    status: done
+    owner: agy
+    note: '8c9fa8f + vá UI: xưởng isometric theo thực thi đã xác minh (.production-running/PID token), 9 hoạt cảnh vai + dáng nghỉ/chờ/lỗi/offline, giảm chuyển động,
+      sửa tràn chữ'
+  - id: R1.7
+    title: Gỡ giới hạn nội dung cứng và tách biên kịch khỏi kỹ thuật dựng
+    status: done
+    owner: agy
+    note: outline flexible_v1 gỡ khóa cứng 10–25 phút; tách draft-script, storyboard_design và voice_prep chạy song song trước script_review
+  - id: R1.8
+    title: Kiểm khói bước dựng (VRAM/render) và chốt giọng phát âm trước pilot
+    status: done
+    owner: codex
+    note: 'profiles/voice.yaml giữ speech-2.8-hd; profiles/pronunciation.vi.yaml v3 đã bỏ needs_doctor_review cả 9 mục theo bác sĩ 2026-11-15. Vibi TTS 110 ký tự (6.84s WAV) + Whisper align 19 từ (match_ratio 0.632, flagged 7 từ ghép âm để bác sĩ nghe ở Video Gate). PYH_REAL_RENDER_SMOKE=1 pytest tests/e2e/test_real_production_smoke.py đạt 1 passed (83.41s).'
+- id: C2
+  title: Công ty Tự hành PYH 2.0 — 15 nhân sự, Song song & Phân tích kênh
+  tasks:
+  - id: C2.1
+    title: Nâng cấp Trưởng nhóm Điều phối (Leader Coordinator)
+    status: done
+    owner: agy
+    note: phân tích chỉ thị theo trạng thái công ty, lập danh sách phân việc assignments, tự thực thi lệnh an toàn và chỉ giữ pending khi cần xác nhận cổng đã duyệt
+  - id: C2.2
+    title: Bổ sung Researcher đồng bộ Google Sheet 100 điểm, tìm đề AI & phân tích kênh
+    status: done
+    owner: agy
+    note: đồng bộ read-only Sheet 1e-WrbZP062LSlNTF8rmpYuHYECgXI10n6HUtiOBfOXg (Tier A/B/C), topics/inbox/, kênh KET_QUA_KENH/CSV/insights và chép dossier vào project
+  - id: C2.3
+    title: Mở rộng 15 vai nhân sự & tách pipeline trước cổng y khoa
+    status: done
+    owner: agy
+    note: thêm researcher, storyboard_director, voice_director, shorts_producer; giữ bất biến tách maker/critic (CRITIC_OF) và không dùng opus/astra
+  - id: C2.4
+    title: Động cơ chạy song song đa chủ đề/đa nhánh & gpu_mutex
+    status: done
+    owner: agy
+    note: max_parallel_topics=3, fan-out storyboard_design||voice_prep và posts||shorts_plan||produce, khóa gpu_mutex Windows-safe, cancel_running_job theo child
+      PID token
+  - id: C2.5
+    title: Nâng cấp Dashboard 2.0 cho 15 trạm, Kho đề tài, Kênh & Hủy tác vụ treo
+    status: done
+    owner: agy
+    note: 15 trạm xưởng 3D, /api/research/*, /api/channel/*, /api/jobs/cancel và thẻ giao việc assignments trong khung chat
+- id: CH
+  title: Kết nối YouTube và TikTok, đăng gói đã duyệt
+  tasks:
+  - id: CH.1
+    title: Kiểm tiến độ Company 2.0 và chặn phân tích khi chưa có dữ liệu
+    status: done
+    owner: codex
+    note: 1986 pytest đạt, 1 bỏ qua; Ruff/diff sạch; Company 2.0 kiểm offline, chặn không dữ liệu và dữ liệu kênh cũ, chưa nghiệm thu video thật
+  - id: CH.2
+    title: OAuth desktop và đồng bộ số liệu thật YouTube/TikTok
+    status: done
+    owner: codex
+    note: 'YouTube Protect Your Health đã OAuth (can_sync=True, can_publish=True) và sync_connected_channel sạch (0 video). TikTok Autotok DPAPI browser session đã connected (can_publish=True, không analytics theo spec bổ sung 2026-11-15).'
+  - id: CH.3
+    title: Đăng gói sau hai cổng với chống trùng và đối soát
+    status: doing
+    owner: codex
+    note: Đã tích hợp gửi thumbnail YouTube và adapter Autotok. Test kiểm hai cổng, hash gói, chống đăng trùng và trạng thái chờ xác minh. Đang chờ chủ đề thật qua 2 cổng PIN bác sĩ để đăng thật.
+  - id: CH.4
+    title: Giao diện thiết lập kênh và đăng bài
+    status: done
+    owner: codex (agy fallback)
+    note: Sol dự phòng hoàn tất. Chrome desktop/mobile trên app chính kiểm nút TikTok sẵn sàng, thông báo chưa có video và Researcher chờ dữ liệu.
+  - id: CH.5
+    title: Đánh giá Autotok bác sĩ gửi cho phương án TikTok không OAuth
+    status: done
+    owner: codex
+    note: review source autotok 2.1.0 tại 0bcbbdc; API web qua session, chưa cài/chạy; cần store mã hóa, xác minh account/post thật; không có analytics. docs/reference/tiktok-autouploader-review.md
 - id: P0
   title: Giữ an toàn dữ liệu và môi trường
   tasks:
-  - {id: '0.1', title: Commit hồ sơ góp ý và chuẩn của bác sĩ, status: done, owner: claude}
-  - {id: '0.2', title: Merge nhánh kế hoạch vào master và push lên GitHub, status: done, owner: claude}
-  - {id: '0.3', title: Cài pnpm 11 để dựng video chạy lại được, status: done, owner: claude, note: pnpm 11.28.11, doctor báo OK pnpm}
-  - {id: '0.4', title: Dọn file lạc ở gốc repo và ignore .remotion, status: done, owner: claude, note: m4a và api-docs.zip đã chuyển vào cache/}
-  - {id: '0.5', title: Khởi động lại app bằng code mới, status: done, owner: claude, note: app mở lại 2026-11-13 22:09 với code mới}
+  - id: '0.1'
+    title: Commit hồ sơ góp ý và chuẩn của bác sĩ
+    status: done
+    owner: claude
+  - id: '0.2'
+    title: Merge nhánh kế hoạch vào master và push lên GitHub
+    status: done
+    owner: claude
+  - id: '0.3'
+    title: Cài pnpm 11 để dựng video chạy lại được
+    status: done
+    owner: claude
+    note: pnpm 11.28.11, doctor báo OK pnpm
+  - id: '0.4'
+    title: Dọn file lạc ở gốc repo và ignore .remotion
+    status: done
+    owner: claude
+    note: m4a và api-docs.zip đã chuyển vào cache/
+  - id: '0.5'
+    title: Khởi động lại app bằng code mới
+    status: done
+    owner: claude
+    note: app mở lại 2026-11-13 22:09 với code mới
 - id: P1
   title: Bắt lỗi bố cục trước cổng y khoa
   tasks:
-  - {id: '1.1', title: Ước lượng thời lượng lời đọc từ cache giọng đã có, status: done, owner: codex, note: 16,39 ký tự/giây, 30/30 cảnh gout sai số ≤10%}
-  - {id: '1.2', title: Chạy các bộ kiểm của bước dựng ngay khi nộp cổng y khoa, status: done, owner: codex, note: gout hiện tại bị chặn vì clip CL02 quá ngắn}
-  - {id: '1.3', title: Lệch nhỏ sau khi có giọng thật thì tự kẹp thay vì chặn, status: done, owner: codex}
-- id: P2
-  title: Pilot gout cũ — đã dừng theo yêu cầu bác sĩ 2026-11-14
-  tasks:
-  - {id: '2.1', title: 'Một vòng sửa gộp: biểu đồ, beat S02, clip CL02, hình kim S07', status: done, owner: xưởng, note: qua kiểm bố cục trước cổng; hình kim S07 nằm ở code hình, xem lại ở cổng video}
-  - {id: '2.2', title: Bác sĩ duyệt cổng y khoa, status: blocked, owner: codex, note: 'đã dừng pilot theo yêu cầu bác sĩ; không tiếp tục yêu cầu duyệt gout, dữ liệu giữ trong cache/pilot-archive/2026-11-14'}
-  - {id: '2.3', title: Dựng video và agent duyệt sản phẩm, status: blocked, owner: codex, note: 'pilot đã dừng theo yêu cầu bác sĩ 2026-11-14'}
-  - {id: '2.4', title: Bác sĩ xem và duyệt cổng video, status: blocked, owner: codex, note: 'pilot đã dừng, không yêu cầu bác sĩ duyệt tiếp'}
-  - {id: '2.5', title: Ghi điều bác sĩ chấp nhận thành kiểm tự động, status: blocked, owner: codex, note: 'pilot đã dừng; chuẩn kênh mới xử lý trong R1'}
-  - {id: '2.6', title: Đóng gói và bác sĩ đăng tay, status: blocked, owner: codex, note: 'pilot đã dừng, không đóng gói hay đăng'}
-  - {id: '2.7', title: Thử một phong cách Lemo-Opuscar cho hình (ví dụ cảnh S07), status: blocked, owner: codex, note: 'dừng cùng pilot, không thử hình trên gout; giữ ghi chú lịch sử về giấy phép CC BY-NC'}
+  - id: '1.1'
+    title: Ước lượng thời lượng lời đọc từ cache giọng đã có
+    status: done
+    owner: codex
+    note: 16, 39 ký tự/giây, 30/30 cảnh gout sai số ≤10%
+  - id: '1.2'
+    title: Chạy các bộ kiểm của bước dựng ngay khi nộp cổng y khoa
+    status: done
+    owner: codex
+    note: chặn sớm sai ngân sách hình 16–24%, beat lệch cảnh, chữ dồn đầu cảnh và clip ngoài 45–180s
+  - id: '1.3'
+    title: Lệch nhỏ sau khi có giọng thật thì tự kẹp thay vì chặn
+    status: done
+    owner: codex
 - id: P3
   title: Tinh gọn kết cấu
   tasks:
-  - {id: '3.1', title: Xóa khu nghiệm thu 4 giai đoạn đã bỏ, status: done, owner: agy, note: bớt 1.882 dòng, pytest 1767 đạt}
-  - {id: '3.2', title: Xóa giọng ElevenLabs và module ASR không dùng, status: todo, owner: agy, note: 'codex kiểm tra 2026-11-14: worktree p3-elevenlabs sạch, chưa có bản sửa để review; tiếp tục sau gout theo bàn giao'}
-  - {id: '3.3', title: Bỏ các skill agent không vai nào dùng, status: done, owner: agy, note: còn 13 skill, bớt 0,9 MB}
-  - {id: '3.4', title: Gọn tài liệu, một nguồn tiến độ duy nhất, status: done, owner: agy, note: README còn 93 dòng, HANDOFF đã xóa}
-  - {id: '3.5', title: Xóa worktree và nhánh cũ, status: todo, owner: claude, note: cần bác sĩ xác nhận danh sách}
-  - {id: '3.6', title: Gộp tab Ý kiến vào khung chat, status: todo, owner: agy, note: làm sau khi gout xong}
-  - {id: '3.7', title: Nghiên cứu các agent và chuẩn hoá skill từng vai, status: done, owner: agy, note: '11 skill pyh-<vai>, mỗi vai 1–3 skill; bỏ 4 skill lệch việc; pytest 1788 đạt'}
-  - {id: '3.8', title: Xưởng 3D, agent thành nhân viên đang làm việc, status: done, owner: agy, note: 'xưởng isometric 11 trạm + Máy dựng, dữ liệu thật từ nhật ký; pytest 1791 đạt'}
+  - id: '3.1'
+    title: Xóa khu nghiệm thu 4 giai đoạn đã bỏ
+    status: done
+    owner: agy
+    note: bớt 1.882 dòng, pytest 1767 đạt
+  - id: '3.2'
+    title: Xóa giọng ElevenLabs và module ASR không dùng
+    status: done
+    owner: codex
+    note: Đã bỏ ElevenLabs và module ASR cũ. Giữ Vibi, cache giọng và bước căn lời Whisper.
+  - id: '3.3'
+    title: Bỏ các skill agent không vai nào dùng
+    status: done
+    owner: agy
+    note: còn 13 skill, bớt 0,9 MB
+  - id: '3.4'
+    title: Gọn tài liệu, một nguồn tiến độ duy nhất
+    status: done
+    owner: agy
+    note: README còn 93 dòng, HANDOFF đã xóa
+  - id: '3.5'
+    title: Xóa worktree và nhánh cũ
+    status: done
+    owner: claude
+    note: 'Đã sao lưu report-* và cache-shots vào cache/dev-lead/worktree-backups/, gắn tag archive/* cho 14 nhánh chưa gộp, gỡ toàn bộ 20 worktree phụ + 41 nhánh cũ. git worktree list còn 1 dòng (master), git branch còn * master.'
+  - id: '3.6'
+    title: Gộp tab Ý kiến vào khung chat
+    status: done
+    owner: agy
+    note: 'Tab ops-feedback đã gỡ; #pv-general thành nút "Nhắn điều phối viên" mở #chat-panel và focus #chat-input duy nhất (chat.py phân loại sửa sản phẩm vs factory_feedback).'
+  - id: '3.7'
+    title: Nghiên cứu các agent và chuẩn hoá skill từng vai
+    status: done
+    owner: agy
+    note: 11 skill pyh-<vai>, mỗi vai 1–3 skill; bỏ 4 skill lệch việc; pytest 1788 đạt
+  - id: '3.8'
+    title: Xưởng 3D, agent thành nhân viên đang làm việc
+    status: done
+    owner: agy
+    note: xưởng isometric 11 trạm + Máy dựng, dữ liệu thật từ nhật ký; pytest 1791 đạt
 - id: P4
-  title: Chủ đề thứ hai và bàn giao
+  title: Pilot chủ đề mới và bàn giao
   tasks:
-  - {id: '4.1', title: Bác sĩ chọn một chủ đề thật, status: todo, owner: bác sĩ}
-  - {id: '4.2', title: Xưởng chạy A–Z, Claude chỉ quan sát và ghi chỗ phải can thiệp, status: todo, owner: xưởng}
-  - {id: '4.3', title: Sửa các chỗ đã ghi, status: todo, owner: codex}
-  - {id: '4.4', title: Cài thử trên checkout sạch và kiểm lệnh /pyh, status: todo, owner: claude}
+  - id: '4.1'
+    title: Bác sĩ chọn một chủ đề thật
+    status: done
+    owner: bác sĩ
+    note: 'Đã thêm men-gan-tang-va-thuoc-bo-gan cùng các chủ đề thật của bác sĩ vào topics/queue.yaml.'
+  - id: '4.2'
+    title: Xưởng chạy A–Z, chỉ quan sát và ghi chỗ phải can thiệp
+    status: doing
+    owner: xưởng
+    note: 'Xưởng nền đang tự động chạy các chủ đề thật tới cổng duyệt y khoa (an-gao-lut gặp 1 lỗi agent agy ở research; hoc-xuong-ca và men-gan-tang-va-thuoc-bo-gan đang xếp/chạy).'
+  - id: '4.3'
+    title: Sửa các chỗ đã ghi
+    status: doing
+    owner: codex
+    note: 'Đang theo dõi lượt chạy thật trong Bước 4.2 để xử lý kịp thời nếu phát sinh lỗi workflow/runtime mới.'
+  - id: '4.4'
+    title: Cài thử trên checkout sạch và kiểm lệnh /pyh
+    status: todo
+    owner: claude

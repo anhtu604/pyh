@@ -128,7 +128,7 @@ def _synthesize_cached_line(
     tts: TTSProvider, request: TTSRequest, output: Path, *, cache_dir: Path,
 ) -> None:
     """Retain paid line requests even when a later render fails."""
-    if provider_identity(tts)["provider"] not in {"elevenlabs", "vibi_minimax"}:
+    if provider_identity(tts)["provider"] not in {"vibi_minimax"}:
         tts.synthesize(request, output)
         return
     key = canonical_json_hash({"request": request.model_dump(mode="json"),
@@ -286,6 +286,10 @@ def _produce_v2(
     pronunciation = load_pronunciation_lexicon(
         pronunciation_module.PRONUNCIATION_PROFILE_PATH
     )
+    if (layout.artifact_root / "script" / "voice-prep.yaml").is_file():
+        from healthvideo.workflows.voice_prep import load_voice_prep_lexicon
+
+        pronunciation = load_voice_prep_lexicon(layout.artifact_root, pronunciation)
     pronunciation_sha256 = pronunciation_hash(pronunciation)
     provider_name = _provider_name(tts)
     provider_identity_data = provider_identity(tts)
@@ -456,7 +460,7 @@ def _produce_v2(
             line_audio = staging_dir / "audio" / "lines" / f"{line.id}.wav"
             line_audio.parent.mkdir(parents=True, exist_ok=True)
             sent_text = apply_pronunciation(
-                line.tts_text(expressive=provider_name == "elevenlabs"), pronunciation,
+                line.tts_text(expressive=False), pronunciation,
             )
             # Lexicon hyphens mark syllables, whereas Whisper returns separate
             # words (u-rát -> u / rát). They are not omitted or extra speech.
@@ -473,7 +477,7 @@ def _produce_v2(
                 line_audio, require_signal=getattr(tts, "require_signal", False)
             ).duration_ms
         usage_path = layout.artifact_root / "audio/tts-usage.json"
-        if provider_name in {"elevenlabs", "vibi_minimax"} and usage_path.is_file():
+        if provider_name in {"vibi_minimax"} and usage_path.is_file():
             shutil.copyfile(usage_path, staging_dir / "audio/tts-usage.json")
         alignment = align_lines(
             line_wavs, {line.id: line.text for line in script.lines},
@@ -536,15 +540,6 @@ def _produce_v2(
                 path.relative_to(staging_dir).as_posix(): sha256_file(path)
                 for path in (voice_audio, staged_audio)
             }
-        if provider_name == "elevenlabs":
-            generated_rights.append(LicenseEntry(
-                path="audio/narration.wav", source="generated:elevenlabs",
-                creator=f"ElevenLabs voice {provider_identity_data.get('voice_id', 'unknown')}",
-                license="ElevenLabs subscription commercial rights (operator responsibility)",
-                rights_basis=(f"Model {provider_identity_data.get('model_id', 'eleven_v3')}; "
-                              "the operator must ensure their subscription and voice rights permit commercial use."),
-                revision=project.active_revision, sha256=sha256_file(staged_audio),
-            ))
         if sfx_events:
             for entry in sfx_rights(sfx_events, project.active_revision):
                 target = staging_dir / entry.path
@@ -560,9 +555,6 @@ def _produce_v2(
             write_yaml_atomic(ledger_path, rights.model_dump(mode="json"))
             ledger_hash = sha256_file(ledger_path)
             if music_settings is not None or sfx_events:
-                generated_audio_hashes["license-ledger.yaml"] = ledger_hash
-            if provider_name == "elevenlabs":
-                generated_audio_hashes["audio/narration.wav"] = sha256_file(staged_audio)
                 generated_audio_hashes["license-ledger.yaml"] = ledger_hash
             if illustration_rights:
                 generated_visual_hashes = {entry.path: entry.sha256 for entry in illustration_rights}
@@ -800,14 +792,6 @@ def _v2_run_is_valid(
     } != dict(music_settings):
         return False
     generated_hashes = manifest.get("generated_audio_sha256", {})
-    if provider_name == "elevenlabs" and (
-        not isinstance(generated_hashes, dict)
-        or not {"audio/narration.wav", "license-ledger.yaml"}.issubset(generated_hashes)
-        or not all((run_dir / relative).is_file()
-                   and sha256_file(run_dir / relative) == digest
-                   for relative, digest in generated_hashes.items())
-    ):
-        return False
     generated_visual_hashes = manifest.get("generated_visual_sha256", {})
     if not isinstance(generated_visual_hashes, dict) or not all(
         (run_dir / relative).is_file() and sha256_file(run_dir / relative) == digest

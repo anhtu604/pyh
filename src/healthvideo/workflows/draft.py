@@ -15,6 +15,7 @@ from healthvideo.domain.asset_manifest import (
 from healthvideo.domain.clip_plan import ClipPlan, validate_clip_plan
 from healthvideo.domain.evidence import EvidenceClaim
 from healthvideo.domain.hook_outro import validate_hook_outro
+from healthvideo.domain.outline import Outline
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.script import Script
 from healthvideo.domain.script_style import StyleIssue, lint_script_style
@@ -151,6 +152,98 @@ def _validate(
     validate_asset_manifest(revision, assets)
     referenced_storyboard_assets(revision, storyboard, assets)
     return style_issues
+
+
+def submit_script_draft(
+    project_dir: Path,
+    script_file: Path,
+    *,
+    outline_file: Path | None = None,
+) -> ProjectManifestV2:
+    """Validate and submit only script.yaml (+ optional outline.yaml) so visual/voice prep can fan out."""
+    project = _project(project_dir)
+    if project.state not in {
+        WorkflowState.EVIDENCE_READY,
+        WorkflowState.DRAFT_READY,
+        WorkflowState.NEEDS_MEDICAL_REVISION,
+    }:
+        raise ValueError(
+            "script draft submission requires evidence_ready, draft_ready, or needs_medical_revision"
+        )
+    script = Script.model_validate(read_yaml(script_file))
+    if not script.lines:
+        raise ValueError("draft requires nonempty script lines")
+    if script.format_profile != "explain_first_v1":
+        raise ValueError(
+            "explain_first_v1 project requires script format_profile explain_first_v1"
+        )
+    revision = project_dir / "revisions" / project.active_revision
+    if not (revision / "explainer/explainer.yaml").is_file():
+        raise ValueError("explain_first_v1 requires explainer/explainer.yaml")
+    outline = Outline.model_validate(read_yaml(outline_file)) if outline_file else None
+    staging = Path(mkdtemp(prefix=f".{revision.name}.script-", dir=revision.parent))
+    promoted = False
+    try:
+        shutil.copytree(revision, staging, dirs_exist_ok=True)
+        write_yaml_atomic(staging / "script/script.yaml", script.model_dump(mode="json"))
+        if outline is not None:
+            write_yaml_atomic(
+                staging / "script/outline.yaml", outline.model_dump(mode="json")
+            )
+        ledger = read_yaml(staging / "evidence/ledger.yaml")
+        claims = [EvidenceClaim.model_validate(item) for item in ledger.get("claims", [])]
+        claim_ids = {claim.id for claim in claims}
+        if outline is not None:
+            for chapter in outline.chapters:
+                unknown = [cid for cid in chapter.claim_ids if cid not in claim_ids]
+                if unknown:
+                    raise ValueError(
+                        f"outline chapter {chapter.id} references unknown claim: {unknown[0]}"
+                    )
+        explainer = read_explainer(staging)
+        issues = review_script(script, claims, [], explainer=explainer)
+        blocking = [issue for issue in issues if issue.code == "unknown_claim"]
+        if blocking:
+            raise ValueError("script references unknown claim: " + blocking[0].message)
+        errors = [issue for issue in issues if issue.severity == "error"]
+        if errors:
+            raise ValueError(f"script review error ({errors[0].code}): {errors[0].message}")
+        style_issues = lint_script_style(script)
+        style_blocks = [issue for issue in style_issues if issue.severity == "block"]
+        if style_blocks:
+            details = "; ".join(
+                f"{issue.line_id} ({issue.rule}): {issue.excerpt}"
+                for issue in style_blocks
+            )
+            raise ValueError(f"script style block: {details}")
+        write_text_atomic(
+            staging / "reviews/style-lint.json",
+            json.dumps(
+                {"issues": [issue.to_dict() for issue in style_issues]},
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+        )
+        script_data = read_yaml(staging / "script/script.yaml")
+        context = TransitionContext(
+            active_revision=project.active_revision,
+            current_input_hash=canonical_json_hash(script_data),
+            validated_artifacts=frozenset({"script/script.yaml"}),
+        )
+        changed = (
+            transition_v2(project, WorkflowState.DRAFT_READY, context)
+            if project.state is WorkflowState.EVIDENCE_READY
+            else project
+        )
+        replace_directory_atomic(staging, revision)
+        promoted = True
+        if changed != project:
+            write_yaml_atomic(project_dir / "project.yaml", changed.model_dump(mode="json"))
+        return changed
+    finally:
+        if not promoted and staging.exists():
+            shutil.rmtree(staging)
 
 
 def submit_draft(

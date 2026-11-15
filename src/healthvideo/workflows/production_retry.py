@@ -239,9 +239,12 @@ _AGENT_FAILURE_KINDS = {"transient", "validation", "configuration", "agent_error
 _AGENT_INPUTS = {
     "research": ("script/questions.yaml", "script/script.yaml"),
     "draft": ("evidence/**", "explainer/**", "script/questions.yaml", "reviews/script-review-log.yaml"),
+    "storyboard_design": ("script/script.yaml", "script/outline.yaml", "explainer/**", "evidence/**"),
+    "voice_prep": ("script/script.yaml",),
     "revise_medical": ("evidence/**", "explainer/**", "script/questions.yaml"),
     "script_review": ("script/**", "storyboard/**", "evidence/**", "explainer/**", "assets/*.yaml"),
     "posts": ("script/**", "storyboard/**", "evidence/**"),
+    "shorts_plan": ("script/**", "storyboard/**", "evidence/**"),
     "visual_review": ("storyboard/**", "assets/*.yaml", "reviews/visual/candidates.yaml"),
     "product_review": ("script/**", "storyboard/**", "posts/**", "renders/render-manifest.json",
                        "renders/scene-timing.json", "renders/render-input.json", "reviews/video-qa.json"),

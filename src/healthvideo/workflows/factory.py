@@ -1,5 +1,6 @@
 """Local factory service and desktop integration; never approves or publishes."""
 
+import inspect
 import json
 import logging
 import os
@@ -15,7 +16,12 @@ from pathlib import Path
 
 from healthvideo.domain.gate_review import GateKind, GateRejectionRecord
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
-from healthvideo.env import child_env
+from healthvideo.env import (
+    background_popen_kwargs,
+    background_python,
+    child_env,
+    hide_child_consoles,
+)
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.storage.queue import load_queue
 from healthvideo.storage.revisions import create_revision
@@ -216,6 +222,7 @@ class FactoryLock:
 
 
 def start_background(root: Path, interval: float = 120) -> int:
+    hide_child_consoles()
     existing = running_pid(root)
     if existing:
         return existing
@@ -225,12 +232,11 @@ def start_background(root: Path, interval: float = 120) -> int:
     import_paths.extend(str(Path(p).resolve()) for p in env.get('PYTHONPATH', '').split(os.pathsep) if p)
     env['PYTHONPATH'] = os.pathsep.join(dict.fromkeys(import_paths))
     process = subprocess.Popen(
-        [sys.executable, '-c', 'from healthvideo.cli import app; app()',
+        [background_python(), '-c', 'from healthvideo.cli import app; app()',
          'xuong', '--root', str(root.resolve()), '--interval', str(interval)],
         cwd=root.resolve(), env=env, stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=False,
-        **({'creationflags': subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS}
-           if sys.platform == 'win32' else {'start_new_session': True}),
+        **background_popen_kwargs(),
     )
     for _ in range(100):
         pid = running_pid(root)
@@ -297,6 +303,7 @@ def run_factory(root: Path, deps: RunDeps, *, interval: float = 120, once: bool 
                 sleep: Callable = time.sleep, notify: Callable | None = None,
                 echo: Callable = print) -> None:
     """Advance, package approved work, and announce changes until interrupted."""
+    hide_child_consoles()
     notify = notify or globals()['notify']
     with FactoryLock(root):
         logs = root / 'topics/logs'
@@ -326,7 +333,10 @@ def run_factory(root: Path, deps: RunDeps, *, interval: float = 120, once: bool 
                 current = {}
                 try:
                     prepare_semantic_revisions(root)
-                    report = run_queue(root, deps)
+                    if 'max_parallel_topics' in inspect.signature(run_queue).parameters:
+                        report = run_queue(root, deps, max_parallel_topics=1 if once else 3)
+                    else:
+                        report = run_queue(root, deps)
                     backs = [back for slug in report.waiting_model
                              if (back := waiting_until(root, slug)) is not None]
                     backs.extend(back for entry in load_queue(root)

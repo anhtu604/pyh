@@ -117,7 +117,36 @@ class _WindowsJob:
             self.handle = None
 
 
-def run_bounded(argv, *, timeout, **subprocess_run_kwargs):
+def terminate_process_tree(pid: int) -> bool:
+    """Force-terminate an external child process tree cleanly; never target self."""
+    if not isinstance(pid, int) or pid <= 0 or pid == os.getpid():
+        return False
+    if os.name == 'nt':
+        completed = subprocess.run(
+            ['taskkill', '/PID', str(pid), '/T', '/F'],
+            capture_output=True,
+            text=True,
+            check=False,
+            shell=False,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+            timeout=15,
+        )
+        return completed.returncode == 0
+    try:
+        pgid = os.getpgid(pid)
+        os.killpg(pgid, signal.SIGKILL)
+        return True
+    except ProcessLookupError:
+        return False
+    except OSError:
+        try:
+            os.kill(pid, signal.SIGKILL)
+            return True
+        except OSError:
+            return False
+
+
+def run_bounded(argv, *, timeout, on_spawn=None, **subprocess_run_kwargs):
     """Like subprocess.run, with a finite deadline and owned process-tree cleanup."""
     if not isinstance(timeout, (int, float)) or not math.isfinite(timeout) or timeout <= 0:
         raise ValueError('timeout must be positive and finite')
@@ -154,6 +183,8 @@ def run_bounded(argv, *, timeout, **subprocess_run_kwargs):
         child = subprocess.Popen(argv, **options)
         if job:
             job.attach(child)
+        if on_spawn is not None and child.pid:
+            on_spawn(child.pid, process_token(child.pid))
         try:
             stdout, stderr = child.communicate(input_value, timeout=timeout)
         except subprocess.TimeoutExpired as error:
@@ -182,10 +213,10 @@ def run_bounded(argv, *, timeout, **subprocess_run_kwargs):
                     pipe.close()
 
 
-def run_with_deadline(argv, *, timeout, runner, **kwargs):
+def run_with_deadline(argv, *, timeout, runner, on_spawn=None, **kwargs):
     """Preserve injected run-style adapters while containing real subprocesses."""
     if runner is _SUBPROCESS_RUN:
-        return run_bounded(argv, timeout=timeout, **kwargs)
+        return run_bounded(argv, timeout=timeout, on_spawn=on_spawn, **kwargs)
     return runner(argv, timeout=timeout, **kwargs)
 
 

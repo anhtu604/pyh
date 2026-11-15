@@ -1,72 +1,89 @@
-# Bậc model và bảng vai của xưởng (spec 2026-11-08 mục 5.1).
+# Bậc model và bảng vai của công ty (PYH Company 2.0 · spec 2026-11-15).
 # Mỗi chuỗi được thử theo thứ tự; mục hết lượt thì "nghỉ" và chuyển sang mục kế tiếp.
-# skills: tên thư mục trong .agents/skills/ (spec 5.3), tối đa 3.
-# 2026-11-14 chuẩn hóa agent: gọi model trực tiếp cho nhiệm vụ hữu hạn.
-# Mẫu thử và giới hạn đánh giá: docs/reference/agent-model-evaluation.md.
-# Biên kịch Sol; y khoa Carbon high; kiểm duyệt/hình/dựng Carbon medium;
-# việc nhẹ Hydrogen medium. Không dùng Opus, astra; không tự bật lại pilot.
+# skills: tên thư mục trong .agents/skills/ (tối đa 3 mỗi vai).
+# Không dùng model chứa 'opus' hoặc 'astra'; critic phải khác model khởi đầu của maker.
 tiers:
   hard:  # 2026-11-12 bác sĩ: dùng model vừa phải, không dùng Opus hay astra
     - {cli: agy, model: gemini-4-carbon-high}
     - {cli: codex, model: gpt-6.1-sol}
     - {cli: claude, model: claude-sonnet-5-5}
     - {cli: codex, model: gpt-6.1-terra}
-  medium:  # nhiệm vụ có ranh rõ, không mặc định giao orchestrator
+  medium:  # nhiệm vụ cần tư duy phân tích, lập kế hoạch, phân cảnh
     - {cli: agy, model: gemini-4-carbon-medium}
     - {cli: codex, model: gpt-6.1-sol}
     - {cli: claude, model: claude-sonnet-5-5}
     - {cli: codex, model: gpt-6.1-terra}
-  bulk:  # 2026-11-14 đo cùng việc nhẹ: Hydrogen medium 16s, Flash 18s, Orchestrator Argon 30s, Carbon 45s
+  bulk:  # việc nhẹ/chuẩn hóa nhanh: ưu tiên Hydrogen medium
     - {cli: agy, model: gemini-4-hydrogen-medium}
     - {cli: codex, model: gpt-6-luna}
     - {cli: claude, model: claude-haiku-5-5}
     - {cli: codex, model: gpt-6.1-terra}
 
 roles:
-  coordinator:  # 2026-11-12 bác sĩ: model nhẹ để trả lời nhanh; câu khó escalate lên vai dưới
-    name: Điều phối viên
+  coordinator:  # Trưởng nhóm Điều phối: phân tích chỉ thị và giao việc cho nhân viên
+    name: Trưởng nhóm Điều phối
     skills: [pyh-coordinator]
     steps: [chat]
-    tier: bulk
-    models:  # 2026-11-14 bác sĩ: chat cần nhanh; Hydrogen nhanh nhất, Flash hay quá tải (503)
-      - {cli: agy, model: gemini-4-hydrogen-medium}
-      - {cli: agy, model: gemini-3.8-flash-medium}
-      - {cli: codex, model: gpt-6-luna}
-      - {cli: claude, model: claude-haiku-5-5}
+    tier: medium
+    models:
+      - {cli: agy, model: gemini-4-carbon-medium}
+      - {cli: codex, model: gpt-6.1-sol}
+      - {cli: claude, model: claude-sonnet-5-5}
   coordinator_senior:
-    name: Điều phối viên chuyên sâu
+    name: Điều phối viên trưởng · Chuyên sâu
     skills: [pyh-coordinator, pyh-coordinator-senior]
     steps: [chat_deep]
     tier: medium
-    models:  # khác nhà cung cấp với Điều phối viên để vòng chuyên sâu thật sự khác
+    models:  # khác nhà cung cấp đầu tiên với Trưởng nhóm Điều phối
       - {cli: codex, model: gpt-6.1-sol}
       - {cli: claude, model: claude-sonnet-5-5}
       - {cli: agy, model: gemini-4-carbon-medium}
+  researcher:  # Săn đề tài, đồng bộ Google Sheet 100 điểm và phân tích hiệu quả kênh
+    name: Chuyên viên Nghiên cứu & Phân tích Kênh
+    skills: [content-strategy, systematic-literature-review, pyh-researcher]
+    steps: [topic_research, channel_analytics]
+    tier: medium
   scout:
     name: Trinh sát chủ đề
     skills: [content-strategy, pyh-scout]
     steps: [scout]
     tier: bulk
-  medical_expert:  # spec 5.8: thay vai researcher
+  medical_expert:  # Chuyên gia y học kiểm chứng PubMed/PMC và viết expert-brief
     name: Chuyên gia y học
     skills: [pyh-medical-expert]
     steps: [research]
-    tier: hard
+    tier: medium
+    models:
+      - {cli: agy, model: gemini-4-carbon-medium}
   writer:
     name: Biên kịch viral
     skills: [youtube-scriptwriting, short-form-video, pyh-writer]
     steps: [draft, revise_medical]
     tier: hard
-    models:  # mẫu ngắn 2026-11-14: Sol 45s, Carbon medium 125s; chưa đo video dài
+    models:
       - {cli: codex, model: gpt-6.1-sol}
       - {cli: agy, model: gemini-4-carbon-medium}
       - {cli: claude, model: claude-sonnet-5-5}
+  storyboard_director:  # Thiết kế phân cảnh, visual budget và component SVG độc lập
+    name: Đạo diễn Phân cảnh & Đồ họa
+    skills: [scripting-and-storyboarding, visual-style, pyh-storyboard-director]
+    steps: [storyboard_design]
+    tier: medium
+    models:  # cùng nhà cung cấp maker với writer (khác script_critic khởi đầu bằng agy)
+      - {cli: codex, model: gpt-6.1-sol}
+      - {cli: claude, model: claude-sonnet-5-5}
+      - {cli: agy, model: gemini-4-carbon-medium}
+  voice_director:  # Chuẩn hóa phiên âm thuật ngữ y khoa và nhịp đọc trước khi chạy TTS
+    name: Đạo diễn Giọng đọc & Phiên âm
+    skills: [pyh-voice-director]
+    steps: [voice_prep]
+    tier: bulk
   script_critic:
     name: Kiểm duyệt kịch bản
     skills: [copy-editing, pyh-script-critic]
     steps: [script_review]
     tier: hard
-    models:  # bắt đầu từ nhà cung cấp khác với biên kịch (biên kịch dùng codex)
+    models:  # bắt đầu từ nhà cung cấp khác với biên kịch và đạo diễn phân cảnh (codex)
       - {cli: agy, model: gemini-4-carbon-medium}
       - {cli: claude, model: claude-sonnet-5-5}
       - {cli: codex, model: gpt-6.1-sol}
@@ -75,7 +92,7 @@ roles:
     skills: [pyh-art-director]
     steps: [visual_review]
     tier: medium
-    models:  # phân công tạm thời; cần đánh giá bằng bộ ảnh trước sản xuất
+    models:
       - {cli: agy, model: gemini-4-carbon-medium}
       - {cli: claude, model: claude-sonnet-5-5}
       - {cli: codex, model: gpt-6.1-sol}
@@ -85,7 +102,7 @@ roles:
     skills: [remotion-best-practices, motion-design, pyh-editor]
     steps: [revise_production, revise_product]
     tier: medium
-    models:  # phân công tạm thời; cần kiểm sửa component trước sản xuất
+    models:
       - {cli: agy, model: gemini-4-carbon-medium}
       - {cli: claude, model: claude-sonnet-5-5}
       - {cli: codex, model: gpt-6.1-sol}
@@ -100,12 +117,17 @@ roles:
       - {cli: codex, model: gpt-6.1-sol}
       - {cli: agy, model: gemini-4-carbon-medium}
   copywriter:
-    name: Viết bài đăng
-    skills: [social, pyh-copywriter]
+    name: Chiến lược Đóng gói & Bài đăng
+    skills: [social, copy-editing, pyh-copywriter]
     steps: [posts]
     tier: bulk
+  shorts_producer:
+    name: Nhà sản xuất Shorts & Reels
+    skills: [short-form-video, social, pyh-shorts-producer]
+    steps: [shorts_plan]
+    tier: medium
   feedback_analyst:
     name: Phân tích ý kiến
     skills: [pyh-feedback-analyst]
     steps: [feedback_inbox]
-    tier: bulk  # việc nhẹ, ưu tiên nhanh
+    tier: bulk

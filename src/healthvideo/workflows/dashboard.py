@@ -33,18 +33,20 @@ from healthvideo.company import COMPANY_PATH, REPO_ROOT, load_company
 from healthvideo.domain.gate_review import GateKind
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.queue import QueueEntry
-from healthvideo.env import child_env
+from healthvideo.env import child_env, hide_child_consoles
 from healthvideo.process import is_same_process, resolve_pnpm_argv
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.storage.queue import load_queue
 from healthvideo.workflows import (
     asset_library,
+    channel_analytics,
     dashboard_operations,
     decision_card,
     factory,
     feedback_inbox,
     product_review,
     production_retry,
+    researcher,
     standards,
 )
 from healthvideo.workflows.gate_review import approve_gate, reject_gate
@@ -128,9 +130,21 @@ def _tail(path: Path, lines: int) -> list[str]:
 
 
 PRODUCTION_RUNNING_MARKER = '.production-running'
-_APP_LIVE_ROLES: frozenset[str] = frozenset({'coordinator', 'coordinator_senior', 'feedback_analyst'})
-_APP_LIVE_STEPS: frozenset[str] = frozenset({'chat', 'chat_deep', 'coordinator', 'feedback_inbox'})
-_APP_LIVE_SCOPES: frozenset[str] = frozenset({'chat', 'feedback'})
+_APP_LIVE_ROLES: frozenset[str] = frozenset({
+    'coordinator',
+    'coordinator_senior',
+    'feedback_analyst',
+    'researcher',
+})
+_APP_LIVE_STEPS: frozenset[str] = frozenset({
+    'chat',
+    'chat_deep',
+    'coordinator',
+    'feedback_inbox',
+    'topic_research',
+    'channel_analytics',
+})
+_APP_LIVE_SCOPES: frozenset[str] = frozenset({'chat', 'feedback', 'researcher', 'channel'})
 _BLOCKED_STEP_RE = re.compile(r'(?:ở bước|bước)\s+([a-z_]+)|^([a-z_]+)\s+lỗi:', re.IGNORECASE)
 
 
@@ -138,30 +152,35 @@ def _valid_pid(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value > 0
 
 
+def _marker_scope(marker: Path) -> str:
+    return marker.parent.parent.name if marker.parent.name.startswith('parallel-') else marker.parent.name
+
+
 def _read_agent_marker(marker: Path) -> dict:
     """Verify per-topic/chat/feedback .agent-running line-3 process identity."""
+    scope = _marker_scope(marker)
     if not marker.is_file():
-        return {'state': 'missing', 'scope': marker.parent.name}
+        return {'state': 'missing', 'scope': scope}
     try:
         lines = marker.read_text(encoding='utf-8', errors='replace').splitlines()
     except OSError:
-        return {'state': 'unverified', 'scope': marker.parent.name}
+        return {'state': 'unverified', 'scope': scope}
     agent_name = lines[0].strip() if lines and lines[0].strip() else 'agent'
     started_at = lines[1].strip() if len(lines) > 1 else ''
     if len(lines) < 3 or not lines[2].strip():
-        return {'state': 'unverified', 'agent': agent_name, 'scope': marker.parent.name}
+        return {'state': 'unverified', 'agent': agent_name, 'scope': scope}
     try:
         meta = json.loads(lines[2])
     except ValueError:
-        return {'state': 'unverified', 'agent': agent_name, 'scope': marker.parent.name}
+        return {'state': 'unverified', 'agent': agent_name, 'scope': scope}
     if not isinstance(meta, dict):
-        return {'state': 'unverified', 'agent': agent_name, 'scope': marker.parent.name}
+        return {'state': 'unverified', 'agent': agent_name, 'scope': scope}
     pid = meta.get('pid')
     token = meta.get('process_token')
     raw_job_id = meta.get('job_id')
     job_id = raw_job_id.strip() if isinstance(raw_job_id, str) else ''
     if not _valid_pid(pid) or not isinstance(token, str) or not token.strip() or not job_id:
-        return {'state': 'unverified', 'agent': agent_name, 'scope': marker.parent.name}
+        return {'state': 'unverified', 'agent': agent_name, 'scope': scope}
     if is_same_process(pid, token):
         return {
             'state': 'running',
@@ -170,16 +189,18 @@ def _read_agent_marker(marker: Path) -> dict:
             'process_token': token,
             'job_id': job_id,
             'started_at': str(meta.get('started_at') or started_at),
-            'scope': marker.parent.name,
+            'scope': scope,
         }
-    return {'state': 'stale', 'agent': agent_name, 'scope': marker.parent.name}
+    return {'state': 'stale', 'agent': agent_name, 'scope': scope}
 
 
 def running_agents(root: Path) -> list[str]:
     """Verified live agent CLIs; live chat/feedback still report when the factory daemon is off."""
     factory_on = factory.running_pid(root) is not None
     names: list[str] = []
-    for marker in sorted((root / 'topics' / 'logs').glob(f'*/{RUNNING_MARKER}')):
+    logs_dir = root / 'topics' / 'logs'
+    markers = sorted([*logs_dir.glob(f'*/{RUNNING_MARKER}'), *logs_dir.glob(f'*/parallel-*/{RUNNING_MARKER}')])
+    for marker in markers:
         info = _read_agent_marker(marker)
         if info.get('state') != 'running':
             continue
@@ -187,6 +208,38 @@ def running_agents(root: Path) -> list[str]:
             continue
         names.append(str(info.get('agent') or 'agent'))
     return names
+
+
+def _active_running_jobs(root: Path) -> list[dict]:
+    """Read live .job-*.json sidecars verified by child OS PID + creation token."""
+    logs_dir = root / 'topics' / 'logs'
+    if not logs_dir.is_dir():
+        return []
+    jobs: list[dict] = []
+    for path in sorted(logs_dir.rglob('.job-*.json')):
+        try:
+            data = json.loads(path.read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        pid = data.get('child_pid')
+        token = data.get('child_process_token')
+        if not _valid_pid(pid) or not isinstance(token, str) or not is_same_process(pid, token):
+            continue
+        step = str(data.get('step') or '')
+        jobs.append({
+            'job_id': str(data.get('job_id') or ''),
+            'role': str(data.get('role') or ''),
+            'slug': str(data.get('slug') or ''),
+            'step': step,
+            'step_label': STEP_LABELS.get(step, step),
+            'cli': str(data.get('cli') or ''),
+            'model': str(data.get('model') or ''),
+            'started_at': str(data.get('started_at') or ''),
+            'child_pid': pid,
+        })
+    return jobs
 
 
 def _inspect_production_markers(
@@ -247,14 +300,19 @@ STEP_LABELS: dict[str, str] = {
     'scout': 'Đang trinh sát chủ đề',
     'research': 'Đang nghiên cứu y văn',
     'draft': 'Đang viết kịch bản',
+    'storyboard_design': 'Đang thiết kế storyboard',
+    'voice_prep': 'Đang chuẩn hóa phiên âm',
     'script_review': 'Đang chấm kịch bản',
     'posts': 'Đang soạn bài đăng',
+    'shorts_plan': 'Đang lên kế hoạch Shorts',
     'produce': 'Đang dựng video',
     'visual_review': 'Đang chọn hình minh họa',
     'product_review': 'Đang kiểm định video',
     'revise_medical': 'Đang sửa theo góp ý y khoa',
     'revise_production': 'Đang sửa hình/nhịp video',
     'revise_product': 'Đang sửa lỗi sản phẩm',
+    'topic_research': 'Đang tìm & chấm chủ đề',
+    'channel_analytics': 'Đang phân tích kênh',
     'chat': 'Đang trả lời chat',
     'chat_deep': 'Đang phân tích chuyên sâu',
     'coordinator': 'Đang điều phối chat',
@@ -522,6 +580,9 @@ def _project_pending_step(root: Path, path: Path, project: ProjectManifestV2, bl
     if state is WorkflowState.EVIDENCE_READY:
         return 'draft'
     if state is WorkflowState.DRAFT_READY:
+        rev = path / 'revisions' / project.active_revision
+        if (rev / 'script/script.yaml').is_file() and not (rev / 'storyboard/storyboard.yaml').is_file():
+            return 'storyboard_design'
         return 'script_review'
     if state is WorkflowState.NEEDS_MEDICAL_REVISION:
         return 'revise_medical'
@@ -626,7 +687,8 @@ def company_roster(
     logs_dir = root / 'topics' / 'logs'
     unverified_scopes: set[str] = set()
     marker_running_by_scope: dict[str, dict] = {}
-    for marker in sorted(logs_dir.glob(f'*/{RUNNING_MARKER}')):
+    markers = sorted([*logs_dir.glob(f'*/{RUNNING_MARKER}'), *logs_dir.glob(f'*/parallel-*/{RUNNING_MARKER}')])
+    for marker in markers:
         m_info = _read_agent_marker(marker)
         scope = str(m_info.get('scope') or '')
         if m_info.get('state') == 'unverified':
@@ -644,6 +706,8 @@ def company_roster(
         role_unknowns['coordinator'] = 'Marker chat thiếu định danh tiến trình'
     if 'feedback' in unverified_scopes:
         role_unknowns['feedback_analyst'] = 'Marker phân tích ý kiến thiếu định danh tiến trình'
+    if 'researcher' in unverified_scopes or 'channel' in unverified_scopes:
+        role_unknowns['researcher'] = 'Marker tìm đề tài/kênh thiếu định danh tiến trình'
 
     prod_retry_wait: tuple[str, datetime, str] | None = None
     prod_error: tuple[str, str] | None = None
@@ -827,7 +891,23 @@ def company_roster(
                     'role': role_id, 'role_name': role.name, 'cli': m_fb['agent'], 'model': '',
                     'slug': 'chung', 'step': 'feedback_inbox', 'step_label': STEP_LABELS['feedback_inbox'],
                     'started_at': m_fb['started_at'], 'at': m_fb['started_at'],
-                    'duration_s': 0.0, 'running': True,
+                    'duration_s': 0.0, 'running': True, 'job_id': m_fb.get('job_id', ''),
+                })
+            elif role_id == 'researcher' and 'researcher' in marker_running_by_scope:
+                m_res = marker_running_by_scope['researcher']
+                role_running.append({
+                    'role': role_id, 'role_name': role.name, 'cli': m_res['agent'], 'model': '',
+                    'slug': 'chung', 'step': 'topic_research', 'step_label': STEP_LABELS['topic_research'],
+                    'started_at': m_res['started_at'], 'at': m_res['started_at'],
+                    'duration_s': 0.0, 'running': True, 'job_id': m_res.get('job_id', ''),
+                })
+            elif role_id == 'researcher' and 'channel' in marker_running_by_scope:
+                m_ch = marker_running_by_scope['channel']
+                role_running.append({
+                    'role': role_id, 'role_name': role.name, 'cli': m_ch['agent'], 'model': '',
+                    'slug': 'chung', 'step': 'channel_analytics', 'step_label': STEP_LABELS['channel_analytics'],
+                    'started_at': m_ch['started_at'], 'at': m_ch['started_at'],
+                    'duration_s': 0.0, 'running': True, 'job_id': m_ch.get('job_id', ''),
                 })
 
         all_recent = sorted(
@@ -1088,7 +1168,9 @@ def overview(
         'decisions': decisions,
         'projects': project_cards,
         'resting': resting,
-        'channel': {'connected': False},
+        'channel': channel_analytics.channel_overview_payload(root),
+        'inbox': researcher.inbox_summary(root),
+        'running_jobs': _active_running_jobs(root),
     }
 
 
@@ -1175,10 +1257,13 @@ def snapshot(root: Path, *, agents: Callable[[], list[str]] | None = None) -> di
             'comments': len(load_draft(root, path.name)),
             'updated_at': _safe_mtime(manifest, now_dt).isoformat(timespec='seconds'),
         })
+    from healthvideo.workflows import telegram_bot
+
     pid = factory.running_pid(root)
     return {
         'app': APP_ID,
         'factory': {'running': pid is not None, 'pid': pid},
+        'telegram': telegram_bot.bot_status(root),
         'agents': agents() if agents is not None else running_agents(root),
         'stages': list(STAGES),
         'projects': items,
@@ -1575,7 +1660,8 @@ class _Handler(BaseHTTPRequestHandler):
         parts = [p for p in self.path.split('/') if p]
         try:
             length = int(self.headers.get('Content-Length') or 0)
-            if length < 0 or length > MAX_BODY:
+            max_body = 512_000 if parts == ['api', 'channel', 'import-csv'] else MAX_BODY
+            if length < 0 or length > max_body:
                 raise ValueError('Yêu cầu quá lớn.')
             raw = self.rfile.read(length) if length else b''
             body = json.loads(raw.decode('utf-8')) if raw else {}
@@ -1603,6 +1689,7 @@ class DashboardServer(ThreadingHTTPServer):
     def __init__(self, root: Path, port: int, *, token: str | None = None,
                  agents: Callable[[], list[str]] | None = None,
                  actions: dict[str, Callable[..., str]] | None = None) -> None:
+        hide_child_consoles()
         super().__init__(('127.0.0.1', port), _Handler)
         self.root = root.resolve()
         self.token = token or secrets.token_urlsafe(24)
@@ -1763,12 +1850,16 @@ def existing_dashboard(port: int) -> bool:
 def serve(root: Path, *, port: int = DEFAULT_PORT, open_browser: bool = True,
           echo: Callable[[str], object] = print) -> None:
     """Run the dashboard until quit; reuse an already-open one on the same port."""
+    hide_child_consoles()
     url = f'http://127.0.0.1:{port}/'
     if existing_dashboard(port):
         if open_browser:
             webbrowser.open(url)
         echo(f'App đã mở sẵn: {url}')
         return
+    from healthvideo.workflows import telegram_bot
+
+    telegram_bot.ensure_background(root)
     server = DashboardServer(root, port)
     echo(f'App xưởng: {server.url} (đóng bằng nút "Tắt app")')
     if open_browser:

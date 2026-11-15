@@ -13,9 +13,16 @@ import typer
 from healthvideo.domain.topic import TopicCard
 from healthvideo.storage.files import read_yaml
 from healthvideo.workflows.create_project_v2 import create_project_v2
-from healthvideo.workflows.draft import submit_draft, submit_medical_review
+from healthvideo.workflows.draft import (
+    submit_draft,
+    submit_medical_review,
+    submit_script_draft,
+)
 from healthvideo.workflows.operator import get_next_action, render_status
+from healthvideo.workflows.shorts_plan import save_shorts_plan
+from healthvideo.workflows.storyboard_design import submit_storyboard_design
 from healthvideo.workflows.topic import select_topic
+from healthvideo.workflows.voice_prep import save_voice_prep
 
 app = typer.Typer(no_args_is_help=True)
 
@@ -107,3 +114,69 @@ def submit_medical(
         typer.echo(str(error))
         raise typer.Exit(code=1) from error
     typer.echo(changed.state.value)
+
+
+@app.command("draft-script")
+def draft_script(
+    project_dir: Annotated[Path, typer.Argument(help="Thư mục project")],
+    script: Annotated[Path, typer.Option("--script", help="Script YAML đã soạn")],
+    outline: Annotated[Path | None, typer.Option("--outline", help="Outline YAML (nếu youtube_long)")] = None,
+) -> None:
+    """Validate and submit only script.yaml (+ optional outline.yaml) before visual/voice fan-out."""
+    try:
+        changed = submit_script_draft(project_dir, script, outline_file=outline)
+    except (OSError, TypeError, ValueError) as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
+    typer.echo(changed.state.value)
+
+
+@app.command("storyboard")
+def storyboard(
+    project_dir: Annotated[Path, typer.Argument(help="Thư mục project")],
+    storyboard_file: Annotated[Path, typer.Option("--storyboard", help="Storyboard YAML")],
+    assets: Annotated[Path, typer.Option("--assets", help="Asset manifest YAML")],
+    clip_plan: Annotated[Path | None, typer.Option("--clip-plan", help="Clip plan YAML")] = None,
+    outline: Annotated[Path | None, typer.Option("--outline", help="Outline YAML")] = None,
+) -> None:
+    """Validate and save storyboard/asset-manifest/(clip-plan) for active revision."""
+    try:
+        changed = submit_storyboard_design(
+            project_dir,
+            storyboard_file,
+            assets,
+            clip_plan_file=clip_plan,
+            outline_file=outline,
+        )
+    except (OSError, TypeError, ValueError) as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
+    typer.echo(changed.state.value)
+
+
+@app.command("voice-prep")
+def voice_prep(
+    project_dir: Annotated[Path, typer.Argument(help="Thư mục project")],
+    file: Annotated[Path, typer.Option("--file", help="VoicePrepSheet YAML")],
+) -> None:
+    """Validate and save pre-TTS pronunciation sheet (script/voice-prep.yaml)."""
+    try:
+        saved = save_voice_prep(project_dir, file)
+    except (OSError, TypeError, ValueError) as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
+    typer.echo(str(saved))
+
+
+@app.command("shorts-plan")
+def shorts_plan(
+    project_dir: Annotated[Path, typer.Argument(help="Thư mục project")],
+    file: Annotated[Path, typer.Option("--file", help="ShortsPlan YAML")],
+) -> None:
+    """Validate and save vertical 9:16 Shorts plan (posts/shorts-plan.yaml)."""
+    try:
+        saved = save_shorts_plan(project_dir, file)
+    except (OSError, TypeError, ValueError) as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
+    typer.echo(str(saved))

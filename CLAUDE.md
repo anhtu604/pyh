@@ -6,7 +6,9 @@ dưới đây và làm đúng bước được giao, bỏ qua các mục còn l�
 ## 1. Quy tắc cứng
 
 1. Không bịa nguồn, DOI, PMID, số liệu, kết quả nghiên cứu, hoặc trải nghiệm của bác sĩ.
-2. Không vượt cổng duyệt y khoa hoặc cổng duyệt video; không tự động xuất bản. PIN chỉ bác
+2. Không vượt cổng duyệt y khoa hoặc cổng duyệt video. Bác sĩ 2026-11-15 cho phép
+   kết nối YouTube/TikTok và đăng đúng gói đã duyệt còn hiệu lực theo
+   `docs/superpowers/specs/2026-11-15-channel-connection-publishing-design.md`. PIN chỉ bác
    sĩ gõ trong app hoặc TTY của mình; agent không nhận PIN qua chat, tham số, biến môi
    trường hay file.
 3. Không lưu API key, audio tạm, render, cache hay toàn văn có bản quyền vào Git. Không in
@@ -21,7 +23,8 @@ dưới đây và làm đúng bước được giao, bỏ qua các mục còn l�
 
 Xưởng làm video y khoa tiếng Việt: mỗi chủ đề ra 1 video YouTube 16:9 dài 10–25 phút, 1–6
 clip dọc 9:16 và bộ bài đăng. Xưởng chạy tự động bằng agent CLI, dừng ở hai cổng duyệt của
-bác sĩ, bác sĩ tự đăng. Cách dùng: `README.md`. Thiết kế hiện hành:
+bác sĩ; đăng qua kết nối được cấp quyền sau khi kiểm lại gói đã duyệt. Thiết lập:
+`docs/channel-setup.md`. Cách dùng: `README.md`. Thiết kế hiện hành:
 `docs/superpowers/specs/2026-11-08-factory-company-design.md` (đọc trước khi đổi workflow
 hoặc schema). Bản đánh giá đầy đủ: `docs/superpowers/plans/2026-11-11-completion-plan.md`.
 

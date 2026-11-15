@@ -9,7 +9,8 @@ description: Use when writing or revising a PYH script at draft or revise_medica
 - Đọc prompt bước, doctor_note/reject_note và `active_revision` trong
   `{project}/project.yaml`; mọi đường dẫn sản phẩm dưới đây ở `revisions/<rev>/`.
 - Đọc `evidence/expert-brief.md`, `evidence/ledger.yaml`,
-  `explainer/explainer.yaml`, câu trả lời trong `script/questions.yaml` nếu có.
+  `explainer/explainer.yaml`, câu trả lời trong `script/questions.yaml` nếu có,
+  và `topic/dossier.yaml` (nếu dự án xuất phát từ Google Sheet / Researcher), cùng `topics/channel-insights.yaml` nếu có để tận dụng mẫu hook giữ chân tốt.
   Lấy khán giả, intent và câu hỏi từ expert brief; đọc outline hiện có khi sửa.
 - Đọc mục `slug: chung` trong `profiles/doctor-feedback.yaml`.
   Chuẩn `docs/superpowers/specs/2026-11-14-agent-editorial-standards-design.md`

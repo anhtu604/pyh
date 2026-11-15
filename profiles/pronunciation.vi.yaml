@@ -1,6 +1,6 @@
 schema_version: '1.0'
 language: vi
-version: '2'
+version: '3'
 entries:
   - written: gout
     spoken: gút
@@ -10,28 +10,37 @@ entries:
     note: Cách đọc đã được bác sĩ chỉ định.
   - written: acid uric
     spoken: a-xít u-ríc
-    needs_doctor_review: true
+    needs_doctor_review: false
+    note: Bác sĩ đã duyệt 2026-11-15.
   - written: axit uric
     spoken: a-xít u-ríc
-    needs_doctor_review: true
+    needs_doctor_review: false
+    note: Bác sĩ đã duyệt 2026-11-15.
   - written: monosodium urat
     spoken: mô-nô-sô-đi-um u-rát
-    needs_doctor_review: true
+    needs_doctor_review: false
+    note: Bác sĩ đã duyệt 2026-11-15.
   - written: NLRP3
     spoken: en-en-rờ-pê ba
-    needs_doctor_review: true
+    needs_doctor_review: false
+    note: Bác sĩ đã duyệt 2026-11-15.
   - written: IL-1β
     spoken: in-tơ-lơ-kin một bê-ta
-    needs_doctor_review: true
+    needs_doctor_review: false
+    note: Bác sĩ đã duyệt 2026-11-15.
   - written: MSU
     spoken: em-ét-xi-u
-    needs_doctor_review: true
+    needs_doctor_review: false
+    note: Bác sĩ đã duyệt 2026-11-15.
   - written: colchicine
     spoken: côn-xi-xin
-    needs_doctor_review: true
+    needs_doctor_review: false
+    note: Bác sĩ đã duyệt 2026-11-15.
   - written: allopurinol
     spoken: a-lô-pu-ri-nôn
-    needs_doctor_review: true
+    needs_doctor_review: false
+    note: Bác sĩ đã duyệt 2026-11-15.
   - written: NSAID
     spoken: en-xết
-    needs_doctor_review: true
+    needs_doctor_review: false
+    note: Bác sĩ đã duyệt 2026-11-15.

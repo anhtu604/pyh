@@ -119,20 +119,35 @@ def test_hide_child_consoles_hides_children_but_keeps_pin_window(monkeypatch):
 
     import pytest
 
-    from healthvideo.env import hide_child_consoles
+    from healthvideo.env import (
+        background_popen_kwargs,
+        background_python,
+        hide_child_consoles,
+    )
     if sys.platform != 'win32':
         pytest.skip('Windows only')
     seen = []
     monkeypatch.setattr(subprocess.Popen, '__init__',
                         lambda self, *a, creationflags=0, **k: seen.append(creationflags))
     monkeypatch.setattr(subprocess.Popen, '_hides_console', False, raising=False)
-    hide_child_consoles(has_console=False)
+    hide_child_consoles()  # patches even when default has_console=None
     subprocess.Popen(['git'])
+    subprocess.Popen(['python'], creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
     subprocess.Popen(['python'], creationflags=subprocess.CREATE_NEW_CONSOLE)
-    assert seen == [subprocess.CREATE_NO_WINDOW, subprocess.CREATE_NEW_CONSOLE]
+    assert seen == [
+        subprocess.CREATE_NO_WINDOW,
+        subprocess.CREATE_NO_WINDOW,
+        subprocess.CREATE_NEW_CONSOLE,
+    ]
     hide_child_consoles(has_console=False)  # idempotent
     subprocess.Popen(['git'])
     assert seen[-1] == subprocess.CREATE_NO_WINDOW
+
+    bg_kwargs = background_popen_kwargs()
+    assert bg_kwargs['creationflags'] & subprocess.CREATE_NO_WINDOW
+    assert bg_kwargs['creationflags'] & subprocess.CREATE_NEW_PROCESS_GROUP
+    assert not (bg_kwargs['creationflags'] & subprocess.DETACHED_PROCESS)
+    assert Path(background_python()).name.lower() in {'pythonw.exe', 'python.exe'}
 
 
 def test_child_env_drops_parent_claude_session(monkeypatch):

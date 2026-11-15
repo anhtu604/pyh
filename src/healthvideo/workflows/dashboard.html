@@ -54,6 +54,7 @@ button{font:inherit;cursor:pointer;border:0;color:inherit}
   background:rgba(148,173,255,.08);border:1px solid var(--line-strong);transition:transform .2s var(--ease),background .2s,border-color .2s}
 .btn:hover:not(:disabled){transform:translateY(-1px);background:rgba(148,173,255,.15)}
 .btn:disabled,.btn.primary:disabled{opacity:.6;cursor:not-allowed;transform:none}
+.btn[hidden]{display:none}
 .btn.primary{background:linear-gradient(135deg,var(--teal),var(--teal-d));border-color:transparent;color:#03140f}
 html[data-theme="light"] .btn.primary{color:#fff}
 .btn.warn{background:linear-gradient(135deg,var(--amber),hsl(24 95% 55%));color:#1d1102;border-color:transparent}
@@ -87,11 +88,13 @@ html[data-theme="light"] .btn.primary{color:#fff}
 .card:hover{border-color:var(--line-strong)}
 .card.gate{border-color:hsl(38 96% 60% / .45)}
 .card.blocked{border-color:hsl(350 88% 64% / .45)}
-.proj-layout{display:grid;grid-template-columns:148px 1fr;gap:16px;align-items:start}
+.proj-layout{display:grid;grid-template-columns:148px minmax(0,1fr);gap:16px;align-items:start}
+.proj-layout > div{min-width:0}
 .proj-thumb{width:148px;height:90px;border-radius:10px;background:var(--bg2);border:1px solid var(--line);overflow:hidden;display:grid;place-items:center;color:var(--faint);font-size:12px;text-align:center;padding:6px}
 .proj-thumb img{width:100%;height:100%;object-fit:cover}
-@media (max-width:720px){.proj-layout{grid-template-columns:1fr}.proj-thumb{width:100%;height:140px}}
+@media (max-width:720px){.proj-layout{grid-template-columns:minmax(0,1fr)}.proj-thumb{width:100%;height:140px}}
 .card-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.card-top > div{min-width:0;overflow-wrap:anywhere}
 .card h3{font-size:17px;font-weight:700;line-height:1.35}
 .meta{color:var(--faint);font-size:12.5px;margin-top:3px;font-family:'JetBrains Mono',monospace}
 .status-line{margin-top:6px;font-size:14px;font-weight:600;color:var(--text)}
@@ -104,13 +107,15 @@ html[data-theme="light"] .btn.primary{color:#fff}
 .prog-bar{height:6px;border-radius:999px;background:var(--line-strong);overflow:hidden;margin:6px 0 2px}
 .prog-bar i{display:block;height:100%;background:var(--teal)}
 #prog-phases details{padding:8px 0;border-top:1px solid var(--line-strong)}
-#prog-phases summary{cursor:pointer;font-weight:600}
-.prog-task{display:flex;gap:10px;align-items:baseline;padding:5px 0 5px 14px;font-size:14px}
-.prog-task .meta{margin-left:auto;white-space:nowrap}
+#prog-phases summary{cursor:pointer;font-weight:600;overflow-wrap:anywhere}
+.prog-task{display:flex;gap:10px;align-items:baseline;padding:5px 0 5px 14px;font-size:14px;min-width:0}
+.prog-task > div,.prog-body{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
+.prog-task .prog-note,.prog-task > div .meta{white-space:normal;overflow-wrap:anywhere;line-height:1.45}
+.prog-task > .meta,.prog-task .prog-owner{margin-left:auto;white-space:nowrap;flex-shrink:0}
 .chip.pending{background:rgba(148,173,255,.09);color:var(--muted);border-color:var(--line-strong)}
 
-.steps{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin:12px 0 6px}
-.step{position:relative}
+.steps{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px;margin:12px 0 6px}
+.step{position:relative;min-width:0}
 .bar{height:6px;border-radius:99px;background:rgba(148,173,255,.15);overflow:hidden}
 .step.done .bar{background:linear-gradient(90deg,var(--teal-d),var(--teal))}
 .step.cur .bar{background:rgba(148,173,255,.2)}
@@ -122,22 +127,47 @@ html[data-theme="light"] .btn.primary{color:#fff}
 .step.cur span{color:var(--text);font-weight:700}
 
 .note{margin-top:10px;padding:11px 14px;border-radius:10px;font-size:14px;background:hsl(350 88% 64% / .11);border:1px solid hsl(350 88% 64% / .35)}
-.note-msg{font-weight:600}
+.note-msg{font-weight:600;overflow-wrap:anywhere}
 .note-raw{margin-top:6px;font-size:12.5px;color:var(--muted)}
 .note-raw code{display:block;margin-top:5px;padding:8px 10px;border-radius:8px;background:rgba(0,0,0,.28);font-family:'JetBrains Mono',monospace;font-size:12px;white-space:pre-wrap;max-height:130px;overflow:auto}
 .actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center}
 
 /* 4. Activity feed */
 .act-list{display:grid;gap:8px}
-.act-row{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;padding:10px 14px;border-radius:12px;background:rgba(148,173,255,.04);border:1px solid var(--line);font-size:13.5px}
+.act-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 14px;border-radius:12px;background:rgba(148,173,255,.04);border:1px solid var(--line);font-size:13.5px}
+.act-row > div{min-width:0;overflow-wrap:anywhere}
 .act-row.running{border-color:hsl(258 90% 70% / .45);background:hsl(258 90% 70% / .08)}
 .agent{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.agent > div:last-child{min-width:0;overflow-wrap:anywhere}
 .orb{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;background:rgba(148,173,255,.08);border:1px solid var(--line)}
 .spin{width:16px;height:16px;border-radius:50%;border:2px solid rgba(148,173,255,.25);border-top-color:var(--violet);animation:rot .9s linear infinite}
 @keyframes rot{to{transform:rotate(360deg)}}
 
 /* 5. Channel box */
-.channel-box{padding:14px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--muted);font-size:14px;margin-bottom:18px}
+.channel-box{padding:16px 18px;display:flex;flex-direction:column;align-items:stretch;gap:12px;color:var(--muted);font-size:14px;margin-bottom:18px}
+#channel-connections{grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))}
+#channel-connections .ch-kpi{min-width:0;padding:16px}
+#channel-connections h3{color:var(--text);margin:0 0 10px}
+#channel-connections p{line-height:1.6;overflow-wrap:anywhere}
+#channel-connections code{white-space:normal;overflow-wrap:anywhere}
+#channel-connections summary,#channel-publish summary{cursor:pointer;color:var(--text);padding:10px 0}
+#ch-preview-body{display:grid;gap:12px;margin:16px 0;color:var(--text)}
+#ch-preview-body label{display:block;line-height:1.6}
+#ch-preview-body input[type=checkbox]{width:auto;accent-color:var(--violet)}
+.ch-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch-actions,.res-head,.res-filters{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ch-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.ch-kpi{padding:10px 12px;border-radius:10px;background:rgba(148,173,255,.06);border:1px solid var(--line)}
+.ch-kpi .k{font-size:11.5px;color:var(--muted)}
+.ch-kpi .v{font-size:19px;font-weight:800;color:var(--text);font-variant-numeric:tabular-nums;margin-top:2px}
+.ch-list,.res-list{display:grid;gap:8px;margin-top:8px}
+.ch-row,.res-row{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:10px 12px;border-radius:10px;background:rgba(148,173,255,.04);border:1px solid var(--line);font-size:13.5px}
+.ch-row > div,.res-row > div{min-width:0;flex:1 1 220px;overflow-wrap:anywhere}
+.ch-insights{padding:11px 13px;border-radius:10px;background:hsl(168 78% 52% / .08);border:1px solid hsl(168 78% 52% / .28);color:var(--text);font-size:13.5px;line-height:1.5}
+.res-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.c-assigns{display:grid;gap:6px;margin-top:8px}
+.c-assign{padding:7px 9px;border-radius:9px;background:rgba(148,173,255,.08);border:1px solid var(--line);font-size:12.5px}
+.c-assign-top{display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;font-weight:700}
 
 /* Admin drawer ("Quản trị") */
 .admin-panel{margin-top:14px;padding:18px;display:none}
@@ -216,10 +246,11 @@ textarea.inp{min-height:90px;resize:vertical;line-height:1.55}
 .scene-chip{padding:7px 11px;border-radius:10px;font-size:13px;font-weight:600;background:rgba(148,173,255,.08);border:1px solid var(--line-strong)}
 .scene-chip.open-change{border-color:var(--amber);background:hsl(38 96% 60% / .18);color:var(--amber)}
 
-.row{display:grid;grid-template-columns:64px 1fr auto;gap:12px;padding:12px 14px;border-radius:12px;margin-bottom:8px;background:rgba(148,173,255,.04);border:1px solid var(--line)}
+.row{display:grid;grid-template-columns:64px minmax(0,1fr) auto;gap:12px;padding:12px 14px;border-radius:12px;margin-bottom:8px;background:rgba(148,173,255,.04);border:1px solid var(--line)}
+.row > div{min-width:0}
 .row.has-c{border-color:hsl(38 96% 60% / .45)}
 .rid{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--violet);font-weight:600}
-.rtext{font-size:15px;line-height:1.6}
+.rtext{font-size:15px;line-height:1.6;overflow-wrap:anywhere}
 .rmeta{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 .tag{font-size:12px;padding:2px 8px;border-radius:99px;background:rgba(148,173,255,.12);color:var(--muted);font-family:'JetBrains Mono',monospace}
 .tag.claim{background:hsl(204 95% 62% / .14);color:var(--sky);cursor:pointer}
@@ -321,8 +352,8 @@ html[data-theme="light"]{
   margin-bottom:8px;perspective:1400px;max-width:100%}
 .ws-floor-grid{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;opacity:.85}
 .ws-floor-inner{position:relative;z-index:1;min-width:0}
-.ws-row{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;position:relative;transform-style:preserve-3d}
-.ws-row-prod{grid-template-columns:repeat(3,minmax(0,1fr))}
+.ws-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;position:relative;transform-style:preserve-3d}
+.ws-row-prod{grid-template-columns:repeat(4,minmax(0,1fr))}
 .ws-turn-bridge{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 8px;margin:4px 0;font-size:12.5px;font-weight:600;color:var(--muted)}
 .ws-turn-track{flex:1;height:4px;border-radius:99px;background:var(--ws-track);position:relative;overflow:hidden}
 .ws-turn-track::after{content:"";position:absolute;top:0;left:0;width:32%;height:100%;border-radius:99px;
@@ -376,6 +407,14 @@ html[data-theme="light"]{
 /* Hoạt họa Isometric SVG — chỉ chạy khi working, bật hoạt cảnh, tab hiện & trong khung nhìn; chỉ animate transform/opacity */
 #workshop[data-motion="on"][data-paused="false"] .ws-station.is-working .ws-dossier-active{animation:ws-dossier-bob 1.8s ease-in-out infinite}
 #workshop[data-motion="on"][data-paused="false"] .ws-station.is-working .ws-scr-bar{transform-origin:left center;animation:ws-screen-pulse 1.3s ease-in-out infinite alternate}
+#workshop[data-motion="on"][data-paused="false"] .ws-station.is-working.ws-act-researcher .ws-res-pulse{transform-origin:122px 52px;animation:ws-pulse-scale 1.6s ease-in-out infinite alternate}
+#workshop[data-motion="on"][data-paused="false"] .ws-station.is-working.ws-act-storyboard .ws-sb-frame{animation:ws-sb-flip 1.9s ease-in-out infinite alternate}
+#workshop[data-motion="on"][data-paused="false"] .ws-station.is-working.ws-act-voice .ws-voice-wave{animation:ws-wave-bar 1.2s ease-in-out infinite alternate}
+#workshop[data-motion="on"][data-paused="false"] .ws-station.is-working.ws-act-shorts .ws-shorts-reel{transform-origin:122px 50px;animation:ws-reel-spin 2.4s linear infinite}
+@keyframes ws-pulse-scale{from{transform:scale(.9);opacity:.72}to{transform:scale(1.1);opacity:1}}
+@keyframes ws-sb-flip{from{transform:translateY(0)}to{transform:translateY(-2.5px)}}
+@keyframes ws-wave-bar{from{transform:scaleY(.65)}to{transform:scaleY(1.25)}}
+@keyframes ws-reel-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 #workshop[data-motion="on"][data-paused="false"] .ws-station.is-working .ws-mach-led{animation:ws-led-blink 1.1s ease-in-out infinite alternate}
 #workshop[data-motion="on"][data-paused="false"] .ws-station.is-working .ws-mach-wave{transform-origin:center bottom;animation:ws-wave-eq .65s ease-in-out infinite alternate}
 #workshop[data-motion="on"][data-paused="false"] .ws-station.is-working .ws-mach-wave-b{transform-origin:center bottom;animation:ws-wave-eq .65s ease-in-out .22s infinite alternate}
@@ -491,6 +530,7 @@ html[data-theme="light"]{
       </div>
     </div>
     <div class="controls">
+      <a class="btn ghost" href="#channel">Kết nối kênh</a>
       <span class="pill" id="factory-pill"><span class="dot"></span><span id="factory-text">Đang kiểm tra…</span></span>
       <span class="start-group">
         <button class="btn primary" id="btn-start" type="button" title="Bật xưởng sản xuất">
@@ -553,7 +593,7 @@ html[data-theme="light"]{
       <div class="ws-counter-grid" id="ws-counters"></div>
     </div>
 
-    <div class="ws-floor-wrap" aria-label="Dây chuyền sản xuất 11 trạm">
+    <div class="ws-floor-wrap" aria-label="Dây chuyền sản xuất 15 trạm">
       <svg class="ws-floor-grid" aria-hidden="true">
         <defs>
           <pattern id="ws-iso-pat" width="52" height="30" patternUnits="userSpaceOnUse">
@@ -566,15 +606,15 @@ html[data-theme="light"]{
         <div class="ws-zone-bar">
           <span class="ws-zone-title">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 17h18M5 12h14l2 5H3l2-5zM8 12V7h8v5"/></svg>
-            Dây chuyền sản xuất (Trạm 01 → 11)
+            Dây chuyền sản xuất (Trạm 01 → 15)
           </span>
           <span class="ws-zone-hint">Bấm vào từng trạm, máy dựng hoặc cổng bác sĩ để xem chi tiết</span>
         </div>
         <div class="ws-row" id="ws-row-1"></div>
         <div class="ws-turn-bridge" aria-hidden="true">
-          <span class="ws-turn-pill">05 Cổng y khoa đã duyệt</span>
+          <span class="ws-turn-pill">08 Cổng y khoa đã duyệt</span>
           <div class="ws-turn-track"></div>
-          <span class="ws-turn-pill">Chuyển sang 06 Máy dựng (xưởng tự chạy) →</span>
+          <span class="ws-turn-pill">Chuyển sang 09 Máy dựng (xưởng tự chạy) →</span>
         </div>
         <div class="ws-row ws-row-prod" id="ws-row-2"></div>
       </div>
@@ -584,6 +624,31 @@ html[data-theme="light"]{
   <!-- 3. Project cards -->
   <div class="section-title">Dự án video (7 bước)</div>
   <section id="projects"><div class="glass empty">Đang tải…</div></section>
+
+  <!-- 3b. Kho đề tài & Researcher (Google Sheet 100đ + AI) -->
+  <section class="glass card" id="research-panel">
+    <div class="res-bar">
+      <div>
+        <h3 style="margin:0;font-size:15.5px">Kho đề tài &amp; Researcher (Google Sheet 100đ)</h3>
+        <div class="meta" id="res-summary">Chưa đồng bộ kho đề tài.</div>
+      </div>
+      <div class="res-head">
+        <button type="button" class="btn" id="btn-sync-sheet">Đồng bộ Google Sheet</button>
+        <input type="text" id="res-discover-q" placeholder="Từ khóa để AI tìm đề tài…" style="min-width:190px;max-width:260px" />
+        <button type="button" class="btn primary" id="btn-discover-ai">AI Tìm đề</button>
+      </div>
+    </div>
+    <details id="res-details" style="margin-top:10px">
+      <summary id="res-details-summary" style="cursor:pointer;font-weight:600;font-size:13.5px">Mở kho đề tài đã chấm điểm (Tier A/B/C)</summary>
+      <div class="res-filters" style="margin-top:10px">
+        <button type="button" class="btn primary" data-res-tier="all">Tất cả</button>
+        <button type="button" class="btn ghost" data-res-tier="A">Tier A (80–100)</button>
+        <button type="button" class="btn ghost" data-res-tier="B">Tier B (65–79)</button>
+        <button type="button" class="btn ghost" data-res-tier="C">Tier C (&lt;65)</button>
+      </div>
+      <div class="res-list" id="res-list"><div class="sub">Đang tải kho đề tài…</div></div>
+    </details>
+  </section>
 
   <!-- 4. "Công ty đang làm gì" -->
   <div class="section-title">Công ty đang làm gì</div>
@@ -604,8 +669,35 @@ html[data-theme="light"]{
 
   <!-- 5. "Kết quả kênh" -->
   <section class="glass channel-box" id="channel">
-    <span><b>Kết quả kênh:</b> chưa kết nối</span>
-    <span class="tag">YouTube / TikTok / Facebook</span>
+    <div class="ch-head">
+      <div id="channel-status"><span><b>Kết quả kênh:</b> chưa kết nối</span> <span class="tag">YouTube / TikTok / Facebook</span></div>
+      <div class="ch-actions">
+        <button type="button" class="btn" id="btn-ch-sync">Đồng bộ KET_QUA_KENH</button>
+        <button type="button" class="btn ghost" id="btn-ch-csv-toggle">Nhập CSV</button>
+        <button type="button" class="btn ghost" id="btn-ch-add-toggle">Thêm video</button>
+        <button type="button" class="btn ghost" id="btn-ch-create-sheet">Tạo Sheet riêng</button>
+        <button type="button" class="btn primary" id="btn-ch-analyze" disabled>Researcher phân tích kênh</button>
+      </div>
+    </div>
+    <div id="channel-connections" class="ch-kpis"></div>
+    <div id="channel-publish"></div>
+    <div id="channel-forms">
+      <form class="ops-form" id="form-ch-csv" hidden>
+        <label>Nền tảng<select name="platform"><option value="youtube">YouTube</option><option value="tiktok">TikTok</option><option value="facebook">Facebook</option></select></label>
+        <label>Dữ liệu CSV (title, views, retention, ctr)<textarea name="csv_text" rows="4" placeholder="Dán CSV xuất từ YouTube Studio / TikTok…" required></textarea></label>
+        <button type="submit" class="btn primary">Nhập CSV vào hệ thống</button>
+      </form>
+      <form class="ops-form" id="form-ch-upsert" hidden>
+        <label>Tiêu đề video<input type="text" name="title" required /></label>
+        <label>Nền tảng<select name="platform"><option value="youtube">YouTube</option><option value="tiktok">TikTok</option><option value="facebook">Facebook</option></select></label>
+        <label>Lượt xem (views)<input type="number" name="views" min="0" /></label>
+        <label>Giữ chân 30s (%)<input type="number" name="retention_30s_pct" step="0.1" min="0" max="100" /></label>
+        <label>CTR (%)<input type="number" name="ctr_pct" step="0.1" min="0" max="100" /></label>
+        <label>Ghi chú / câu hỏi bình luận<input type="text" name="top_comments" placeholder="Ví dụ: khán giả hỏi thêm về thực phẩm kiêng" /></label>
+        <button type="submit" class="btn primary">Lưu chỉ số video</button>
+      </form>
+    </div>
+    <div id="channel-body"></div>
   </section>
 
   <!-- Legacy stats hook kept hidden for compatibility -->
@@ -740,7 +832,7 @@ html[data-theme="light"]{
   <div class="vfoot" id="pv-foot">
     <p id="pv-foot-text"></p>
     <div style="display:flex;gap:8px">
-      <button class="btn" id="pv-general" type="button">Góp ý chung</button>
+      <button class="btn" id="pv-general" type="button">Nhắn điều phối viên</button>
       <button class="btn warn" id="pv-decide" type="button">Quyết định · PIN</button>
     </div>
   </div>
@@ -840,10 +932,13 @@ $('btn-admin-toggle').onclick = () => {
 };
 
 const STEP_VI = {
-  create:'tạo dự án', research:'nghiên cứu', draft:'viết kịch bản', script_review:'chấm kịch bản',
-  posts:'soạn bài đăng', produce:'sản xuất video', visual_review:'chọn hình minh họa',
+  create:'tạo dự án', research:'nghiên cứu', draft:'viết kịch bản', storyboard_design:'thiết kế phân cảnh',
+  voice_prep:'chuẩn hóa giọng đọc', script_review:'chấm kịch bản', posts:'soạn bài đăng',
+  shorts_plan:'lên kế hoạch Shorts/Reels', produce:'sản xuất video', visual_review:'chọn hình minh họa',
   product_review:'kiểm định video', revise_medical:'sửa theo góp ý y khoa',
-  revise_production:'sửa sản xuất video', revise_product:'sửa lỗi sản phẩm', package:'đóng gói'
+  revise_production:'sửa sản xuất video', revise_product:'sửa lỗi sản phẩm', package:'đóng gói',
+  scout:'trinh sát đề tài', topic_research:'nghiên cứu & săn đề tài', channel_analytics:'phân tích kênh',
+  chat:'điều phối chat', chat_deep:'phân tích chuyên sâu', feedback_inbox:'phân tích góp ý'
 };
 
 function esc(s){return String(s ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
@@ -930,16 +1025,443 @@ function renderOverview(ov){
     decBox.querySelectorAll('[data-decide-slug]').forEach(b => b.onclick = () => openProduct(b.dataset.decideSlug));
   }
 
-  const ch = ov.channel || {connected: false};
-  $('channel').innerHTML = `<span><b>Kết quả kênh:</b> ${ch.connected ? 'đã kết nối' : 'chưa kết nối'}</span><span class="tag">YouTube / TikTok / Facebook</span>`;
+  renderResearchSummary(ov.inbox || null);
+  renderChannelSection(ov.channel || {connected: false});
+}
+
+let resTierFilter = 'all';
+let resInboxItems = null;
+
+function renderResearchSummary(inbox){
+  const el = $('res-summary');
+  if(!el || !inbox) return;
+  el.textContent = `${inbox.total || 0} đề tài · Tier A (chờ): ${inbox.tier_a || 0} · Tier B (chờ): ${inbox.tier_b || 0} · Tier C (chờ): ${inbox.tier_c || 0}`;
+}
+
+function renderResearchList(){
+  const listEl = $('res-list');
+  if(!listEl) return;
+  if(!Array.isArray(resInboxItems)){
+    listEl.innerHTML = '<div class="sub">Đang tải kho đề tài…</div>';
+    return;
+  }
+  const filtered = resInboxItems.filter(it => resTierFilter === 'all' || String(it.tier || '').toUpperCase() === resTierFilter);
+  if(!filtered.length){
+    listEl.innerHTML = '<div class="sub">Chưa có đề tài nào khớp bộ lọc.</div>';
+    return;
+  }
+  listEl.innerHTML = filtered.map(it => {
+    const tier = String(it.tier || 'C').toUpperCase();
+    const score = it.rubric_total ?? it.score ?? 0;
+    const chipCls = tier === 'A' ? 'done' : (tier === 'B' ? 'work' : 'pending');
+    const queued = Boolean(it.queued) || it.status === 'selected';
+    const rejected = it.status === 'rejected';
+    const actions = queued
+      ? '<span class="chip done">Trong queue</span>'
+      : (rejected
+        ? '<span class="chip bad">Đã bỏ qua</span>'
+        : `<button type="button" class="btn primary" data-res-promote="${esc(it.slug)}">Đưa vào queue</button><button type="button" class="btn ghost" data-res-reject="${esc(it.slug)}">Bỏ qua</button>`);
+    return `<div class="res-row">
+      <div>
+        <div><span class="chip ${chipCls}">Tier ${esc(tier)} · ${esc(score)}đ</span> <b>${esc(it.title || it.slug)}</b></div>
+        <div class="meta">${esc(it.slug)}${it.source_tab ? ' · ' + esc(it.source_tab) : ''}${it.question ? ' · ' + esc(it.question) : ''}</div>
+      </div>
+      <div class="ch-actions">${actions}</div>
+    </div>`;
+  }).join('');
+  listEl.querySelectorAll('[data-res-promote]').forEach(b => {
+    b.onclick = async () => {
+      b.disabled = true;
+      try{
+        await postJson('/api/research/promote', {slug: b.dataset.resPromote});
+        toast('Đã đưa chủ đề vào hàng đợi.');
+        await loadResearchInbox();
+        await refresh();
+      }catch(e){ toast(e.message, true); b.disabled = false; }
+    };
+  });
+  listEl.querySelectorAll('[data-res-reject]').forEach(b => {
+    b.onclick = async () => {
+      b.disabled = true;
+      try{
+        await postJson('/api/research/reject', {slug: b.dataset.resReject});
+        toast('Đã đánh dấu bỏ qua.');
+        await loadResearchInbox();
+        await refresh();
+      }catch(e){ toast(e.message, true); b.disabled = false; }
+    };
+  });
+}
+
+async function loadResearchInbox(){
+  if(!$('res-list')) return;
+  try{
+    const r = await fetch('/api/research/inbox', {cache:'no-store'});
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error || ('Lỗi ' + r.status));
+    resInboxItems = d.items || [];
+    if(d.summary) renderResearchSummary(d.summary);
+    renderResearchList();
+  }catch(e){
+    $('res-list').innerHTML = `<div class="sub">${esc(e.message)}</div>`;
+  }
+}
+
+let channelAnalysisReady = false, channelAnalysisReason = '', channelConnectionsLoading = false;
+let channelPreview = null, channelReceipt = null, channelPublishBusy = false;
+let channelBrowserBusy = false, channelBrowserMethod = false;
+function channelMetricValues(val){
+  const result = {};
+  for(const key of ['views','retention_30s_pct','ctr_pct']) if(val(key).trim() !== '') result[key] = Number(val(key));
+  return result;
+}
+function syncChannelAnalysis(){
+  const b = $('btn-ch-analyze');
+  if(b){ b.disabled = !channelAnalysisReady; b.title = channelAnalysisReady ? '' : channelAnalysisReason; }
+}
+function setupChannelCards(){
+  const el = $('channel-connections');
+  if(!el || el.dataset.ready) return;
+  el.dataset.ready = 'true';
+  el.innerHTML = ['youtube','tiktok'].map(platform => {
+    const yt = platform === 'youtube', name = yt ? 'YouTube' : 'TikTok';
+    return `<div class="ch-kpi"><h3>${name}</h3><p id="ch-account-${platform}" role="status">Đang kiểm tra kết nối…</p>
+      ${!yt ? '<p><b>Đăng nhập bằng trình duyệt — không cần app Developer</b></p><p>Khuyên dùng khi chưa có app Developer. Phiên trình duyệt chỉ hỗ trợ gửi video; chưa hỗ trợ đồng bộ số liệu.</p><div class="ch-actions"><button class="btn" id="ch-browser-install" type="button" hidden>Cài công cụ đăng nhập</button><button class="btn primary" id="ch-browser-login" type="button" disabled>Đăng nhập TikTok bằng trình duyệt</button><button class="btn ghost" id="ch-browser-disconnect" type="button" disabled>Ngắt phiên trình duyệt</button></div><p id="ch-browser-status" role="status">Đang kiểm tra công cụ trình duyệt…</p><details><summary>Kết nối OAuth bằng app Developer (tùy chọn)</summary>' : ''}
+      <div class="ch-actions"><button class="btn" id="ch-connect-${platform}" type="button">Kết nối ${name}</button><button class="btn ghost" id="ch-sync-${platform}" type="button" disabled>Đồng bộ số liệu</button><button class="btn ghost" id="ch-disconnect-${platform}" type="button" disabled>Ngắt kết nối</button></div>
+      <a id="ch-auth-${platform}" class="btn primary" target="_blank" rel="noopener noreferrer" hidden>Mở trang cấp quyền ${yt ? 'Google' : 'TikTok'}</a>
+      <p id="ch-auth-help-${platform}" role="status"></p>
+      <details><summary>Thiết lập ứng dụng lần đầu</summary><p>${yt ? 'Trong Google Cloud, bật YouTube Data API và YouTube Analytics API; thiết lập màn hình đồng ý OAuth, thêm tài khoản thử nghiệm, tạo OAuth client loại Desktop và tải JSON.' : 'Trong TikTok Developer, tạo ứng dụng Desktop, thêm Login Kit và Content Posting API (Direct Post); yêu cầu scopes user.info.basic, video.list, video.publish.'}</p>
+      <p><a href="${yt ? 'https://console.cloud.google.com/apis/library/youtube.googleapis.com' : 'https://developers.tiktok.com/apps/'}" target="_blank" rel="noopener noreferrer">${yt ? 'Google Cloud' : 'TikTok Developer'}</a> · <a href="${yt ? 'https://developers.google.com/youtube/analytics' : 'https://developers.tiktok.com/doc/content-posting-api-get-started/'}" target="_blank" rel="noopener noreferrer">Hướng dẫn chính thức</a></p>
+      ${yt ? '<p><a href="https://console.cloud.google.com/apis/library/youtubeanalytics.googleapis.com" target="_blank" rel="noopener noreferrer">Bật YouTube Analytics API</a></p>' : ''}<p>Callback: <code>http://127.0.0.1:8765/api/channel/oauth/${platform}/callback</code></p>
+      <form id="ch-config-${platform}" class="ops-form">${yt ? '<label>JSON OAuth Desktop<textarea name="credentials_json" rows="3" required autocomplete="off"></textarea></label>' : '<label>Client key<input name="client_id" autocomplete="off" required></label><label>Client secret<input name="client_secret" type="password" autocomplete="off" required></label>'}<button class="btn" type="submit">Lưu cấu hình ${name}</button></form></details>
+      <p class="meta">Sau khi cấp quyền, quay lại xưởng. ${yt ? '' : 'Với OAuth, ứng dụng chưa được duyệt chỉ đăng riêng tư. Đăng công khai cần ứng dụng phù hợp được TikTok phê duyệt; công cụ chỉ dùng nội bộ không đủ điều kiện Direct Post audit.'}</p>${!yt ? '</details>' : ''}</div>`;
+  }).join('');
+  for(const action of ['install','login','disconnect']) $('ch-browser-'+action).onclick = async () => {
+    if(channelBrowserBusy) return;
+    channelBrowserBusy = true;
+    for(const a of ['install','login','disconnect']) $('ch-browser-'+a).disabled = true;
+    $('ch-browser-status').textContent = action === 'login' ? 'Đang mở trình duyệt. Đăng nhập TikTok trong cửa sổ vừa mở rồi quay lại xưởng.' : action === 'install' ? 'Đang cài công cụ trình duyệt…' : 'Đang ngắt phiên…';
+    let failure = '';
+    try{ await postJson('/api/channel/browser-'+action,{platform:'tiktok'}); }
+    catch(e){failure = 'Chưa thực hiện được. '+e.message;}
+    finally{channelBrowserBusy = false; await loadChannelConnections(); if(failure) $('ch-browser-status').textContent = failure;}
+  };
+  for(const platform of ['youtube','tiktok']){
+    const form = $('ch-config-'+platform);
+    form.onsubmit = async e => {
+      e.preventDefault();
+      const payload = {platform};
+      for(const key of platform === 'youtube' ? ['credentials_json'] : ['client_id','client_secret']) payload[key] = form.querySelector('[name='+key+']').value;
+      try{ await postJson('/api/channel/configure', payload); form.querySelectorAll('input,textarea').forEach(i => i.value = ''); toast('Đã lưu. Bấm Kết nối ở trên, rồi Mở trang cấp quyền để đăng nhập.'); await loadChannelConnections(); }catch(ex){toast(ex.message,true);}
+    };
+    for(const action of ['connect','disconnect','sync']) $('ch-'+action+'-'+platform).onclick = async () => {
+      try{
+        if(action === 'connect'){ $('ch-auth-'+platform).hidden = true; $('ch-auth-help-'+platform).textContent = 'Đang chuẩn bị trang đăng nhập…'; }
+        const r = await postJson('/api/channel/'+(action === 'sync' ? 'sync-api' : action), {platform});
+        if(action === 'connect'){
+          const url = new URL(r.authorization_url);
+          if(url.protocol !== 'https:' || url.hostname !== (platform === 'youtube' ? 'accounts.google.com' : 'www.tiktok.com')) throw Error('Địa chỉ cấp quyền không hợp lệ.');
+          const link = $('ch-auth-'+platform); link.href = url.href; link.hidden = false;
+          $('ch-auth-help-'+platform).textContent = 'Bấm Mở trang cấp quyền, đăng nhập tài khoản quản lý kênh và cho phép truy cập. Xong thì quay lại xưởng.';
+          toast('Trang cấp quyền đã sẵn sàng. Bấm liên kết vừa hiện dưới nút Kết nối.');
+        } else {
+          toast(action === 'sync' ? (r.imported_count === 0 ? 'Đã đồng bộ. Kênh chưa có video để phân tích.' : 'Đã đồng bộ số liệu.') : 'Đã ngắt kết nối.');
+          await refresh();
+        }
+        await loadChannelConnections();
+      }catch(e){if(action === 'connect') $('ch-auth-help-'+platform).textContent = e.message; toast(e.message,true);}
+    };
+  }
+}
+async function loadChannelConnections(){
+  setupChannelCards();
+  if(channelConnectionsLoading) return;
+  channelConnectionsLoading = true;
+  try{
+    const r = await fetch('/api/channel/connections',{cache:'no-store'});
+    if(!r.ok) throw Error('Chưa đọc được kết nối. Thử lại sau.');
+    const data = await r.json();
+    for(const p of ['youtube','tiktok']){
+      const c = data[p] || {};
+      if(p === 'tiktok') channelBrowserMethod = c.connection_method === 'browser_session';
+      if(c.connected && !c.needs_reauth){ $('ch-auth-'+p).hidden = true; $('ch-auth-help-'+p).textContent = p === 'tiktok' && channelBrowserMethod ? 'Đã kết nối phiên trình duyệt. Chưa hỗ trợ đồng bộ số liệu.' : 'Đã cấp quyền. Bấm Đồng bộ số liệu để lấy kết quả kênh.'; }
+      $('ch-account-'+p).textContent = c.needs_reauth ? 'Cần cấp quyền lại: '+(c.account_title || c.account_id || p) : c.connected ? 'Đã kết nối: '+(c.account_title || c.account_id) : c.configured ? 'Đã cấu hình · chưa kết nối tài khoản' : 'Chưa cấu hình · mở hướng dẫn bên dưới';
+      $('ch-sync-'+p).disabled = !c.can_sync;
+      $('ch-sync-'+p).title = p === 'tiktok' && channelBrowserMethod ? 'Phiên trình duyệt chưa hỗ trợ số liệu. Có thể nhập CSV quan sát thực tế.' : '';
+      $('ch-disconnect-'+p).disabled = !c.connected || (p === 'tiktok' && channelBrowserMethod);
+    }
+    try{
+      const br = await fetch('/api/channel/browser-status',{cache:'no-store'});
+      if(!br.ok) throw Error('Chưa đọc được trạng thái trình duyệt. Xưởng sẽ kiểm tra lại ở lần làm mới tiếp theo.');
+      const b = await br.json(), active = ['installing','logging_in'].includes(b.status);
+      channelBrowserBusy = active;
+      $('ch-browser-install').hidden = Boolean(b.installed);
+      $('ch-browser-install').disabled = active;
+      $('ch-browser-login').disabled = active || !b.installed;
+      $('ch-browser-login').textContent = channelBrowserMethod ? 'Đăng nhập lại TikTok bằng trình duyệt' : 'Đăng nhập TikTok bằng trình duyệt';
+      $('ch-browser-disconnect').disabled = active || !channelBrowserMethod;
+      const labels = {installing:'Đang cài công cụ trình duyệt…',logging_in:'Đang chờ đăng nhập. Kiểm tra đúng tài khoản trong cửa sổ TikTok rồi quay lại xưởng.',connected:'Đã kết nối phiên trình duyệt. Xưởng hiển thị mã phiên. Tên tài khoản xem trong TikTok.',failed:'Chưa hoàn tất. Thử đăng nhập lại hoặc kiểm tra cài đặt trình duyệt.'};
+      $('ch-browser-status').textContent = (labels[b.status] || (b.installed ? 'Sẵn sàng. Bấm Đăng nhập TikTok bằng trình duyệt để mở cửa sổ đăng nhập.' : 'Cài công cụ một lần, sau đó đăng nhập TikTok bằng trình duyệt.'))+(b.message ? ' '+b.message : '');
+    }catch(e){$('ch-browser-status').textContent = e.message;}
+  }catch(e){for(const p of ['youtube','tiktok']) $('ch-account-'+p).textContent = e.message;}
+  finally{channelConnectionsLoading = false;}
+}
+function channelSelection(){return {platform:$('ch-p-platform').value,slug:$('ch-p-slug').value,clip_id:$('ch-p-clip').value.trim() || null,title_index:Number($('ch-p-title').value)};}
+function invalidateChannelPreview(){channelPreview = null; $('ch-preview-body').innerHTML = ''; $('ch-send').disabled = true;}
+function channelPublishAllowed(){return Boolean(channelPreview && !channelPublishBusy && $('ch-confirm').checked && $('ch-privacy').value && (channelPreview.platform !== 'tiktok' || ($('ch-music').checked && $('ch-noncommercial').checked)));}
+function renderChannelPublish(){
+  const el = $('channel-publish'); if(!el) return;
+  if(!el.dataset.ready){
+    el.dataset.ready = 'true';
+    el.innerHTML = `<details><summary>Đăng gói đã duyệt</summary><p>Chỉ đăng gói còn hiệu lực qua cả hai cổng bác sĩ. Tiêu đề và mô tả giữ đúng bản đã duyệt.</p><div id="ch-p-empty" class="empty"></div><div class="ops-form"><label>Gói đã duyệt<select id="ch-p-slug"></select></label><label>Nền tảng<select id="ch-p-platform"><option value="youtube">YouTube</option><option value="tiktok">TikTok</option></select></label><label>Mã clip (bắt buộc với TikTok)<input id="ch-p-clip"></label><label>Biến thể tiêu đề đã duyệt<select id="ch-p-title"><option value="0">1</option><option value="1">2</option><option value="2">3</option></select></label><button type="button" class="btn" id="ch-preview">Xem chính xác gói sẽ đăng</button></div><div id="ch-preview-body"></div><button type="button" class="btn primary" id="ch-send" disabled>Đăng gói đã xác nhận</button><p id="ch-receipt" role="status"></p><button type="button" class="btn ghost" id="ch-check" hidden>Kiểm tra trạng thái đăng</button></details>`;
+    for(const id of ['ch-p-slug','ch-p-platform','ch-p-clip','ch-p-title']) $(id).onchange = invalidateChannelPreview;
+    $('ch-p-clip').oninput = invalidateChannelPreview;
+    $('ch-preview').onclick = async () => {
+      invalidateChannelPreview(); const selection = channelSelection();
+      if(!selection.slug || (selection.platform === 'tiktok' && !selection.clip_id)){toast('Chọn gói đã duyệt và nhập mã clip TikTok.',true);return;}
+      try{
+        const p = await postJson('/api/channel/publish-preview',selection);
+        if(JSON.stringify(selection) !== JSON.stringify(channelSelection())) return;
+        if(!p.gates_current || !p.account?.id) throw Error('Gói hoặc tài khoản chưa đủ điều kiện đăng.');
+        channelPreview = p;
+        $('ch-preview-body').innerHTML = `<p><b>Tài khoản nhận: ${esc(p.account.name || p.account.id)}</b></p><p>${esc(p.title)}</p><pre style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(p.caption)}</pre>${p.connection_method === 'browser_session' ? '<p>Gửi bằng phiên trình duyệt (thử nghiệm). Sau khi gửi, cần kiểm tra trực tiếp trên TikTok để xác minh video.</p>' : ''}<p class="meta">Bản ${esc(p.revision)} · ${esc(p.sha256)}</p><label>Quyền hiển thị<select id="ch-privacy"><option value="">Chọn quyền hiển thị…</option>${(p.privacy_options || []).map(v=>`<option value="${esc(v)}">${esc(({public:'Công khai',private:'Riêng tư'})[v] || v)}</option>`).join('')}</select></label>${p.platform === 'tiktok' ? '<p>TikTok: chỉ hỗ trợ nội dung sức khỏe phi thương mại. Mọi tương tác mặc định tắt.</p><label><input type="checkbox" id="ch-music"> Bằng việc đăng, tôi đồng ý <a href="https://www.tiktok.com/legal/page/global/music-usage-confirmation/en" target="_blank" rel="noopener noreferrer">Xác nhận sử dụng nhạc của TikTok</a></label><label><input type="checkbox" id="ch-noncommercial"> Tôi xác nhận đây là nội dung phi thương mại.</label>' : ''}<label><input type="checkbox" id="ch-confirm"> Tôi xác nhận đăng đúng gói trên vào tài khoản này.</label>`;
+        for(const id of ['ch-privacy','ch-confirm','ch-music','ch-noncommercial']) if($(id)) $(id).onchange = () => $('ch-send').disabled = !channelPublishAllowed();
+      }catch(e){toast(e.message,true);}
+    };
+    $('ch-send').onclick = async () => {
+      if(!channelPublishAllowed()) return;
+      const p = channelPreview, selection = channelSelection(); channelPublishBusy = true; $('ch-send').disabled = true;
+      try{
+        const r = await postJson('/api/channel/publish',{...selection,privacy:$('ch-privacy').value,expected_account_id:p.account.id,expected_revision:p.revision,expected_sha256:p.sha256,confirmed:true,...(p.platform === 'tiktok' ? {music_usage_confirmed:true,noncommercial_confirmed:true} : {})});
+        channelReceipt = r; invalidateChannelPreview(); renderChannelReceipt(r);
+      }catch(e){invalidateChannelPreview();toast(e.message+' Kiểm tra trạng thái trước khi đăng lại.',true);}
+      finally{channelPublishBusy = false;}
+    };
+    $('ch-check').onclick = async () => {if(!channelReceipt?.receipt_id)return;try{renderChannelReceipt(await postJson('/api/channel/publish-status',{receipt_id:channelReceipt.receipt_id}));}catch(e){toast(e.message,true);}};
+  }
+  const projects = (state?.projects || overviewData?.projects || []).filter(p => p.state === 'packaged');
+  const signature = JSON.stringify(projects.map(p => [p.slug,p.title]));
+  if(el.dataset.projects !== signature){
+    el.dataset.projects = signature; invalidateChannelPreview();
+    const old = $('ch-p-slug').value;
+    $('ch-p-slug').innerHTML = '<option value="">Chọn gói…</option>'+projects.map(p=>`<option value="${esc(p.slug)}">${esc(p.title || p.slug)}</option>`).join('');
+    if(projects.some(p=>p.slug === old)) $('ch-p-slug').value = old;
+  }
+  $('ch-p-empty').textContent = projects.length ? '' : 'Chưa có gói đã qua hai cổng duyệt. Hoàn tất duyệt và đóng gói trước khi đăng.';
+  $('ch-preview').disabled = !projects.length || channelPublishBusy;
+  $('ch-send').disabled = !channelPublishAllowed();
+}
+function renderChannelReceipt(r){
+  channelReceipt = {...channelReceipt,...r};
+  const labels = {posted:'Đã đăng và được nền tảng xác nhận',pending:'Đang chờ nền tảng xử lý',pending_verification:'Đã gửi, chờ xác minh trên TikTok',needs_reconciliation:'Chưa xác định kết quả · kiểm tra trạng thái trước khi đăng lại',failed:'Đăng thất bại'};
+  $('ch-receipt').textContent = (labels[r.status] || 'Chưa xác định kết quả')+' · '+(channelReceipt.receipt_id || '');
+  if(r.status === 'pending_verification') $('ch-receipt').textContent += ' · Mở TikTok kiểm tra video; không gửi lại khi chưa rõ kết quả.';
+  if(r.thumbnail_status) $('ch-receipt').textContent += ' · Ảnh thu nhỏ: '+({posted:'đã tải lên',uploaded:'đã tải lên',failed:'chưa tải được; video đã đăng, không đăng lại video',not_applicable:'không áp dụng',pending:'đang chờ'}[r.thumbnail_status] || r.thumbnail_status);
+  $('ch-check').hidden = !['pending','pending_verification','needs_reconciliation'].includes(r.status);
+}
+
+function renderChannelSection(ch){
+  const statusEl = $('channel-status');
+  const bodyEl = $('channel-body');
+  if(!statusEl || !bodyEl) return;
+  const connected = Boolean(ch && ch.connected);
+  channelAnalysisReady = Boolean(ch.analysis_ready);
+  channelAnalysisReason = ch.analysis_reason || 'Chưa đủ số liệu để phân tích.';
+  syncChannelAnalysis();
+  loadChannelConnections();
+  renderChannelPublish();
+  statusEl.innerHTML = `<span><b>Kết quả kênh:</b> ${connected ? 'đã kết nối tài khoản' : 'chưa kết nối tài khoản'}${ch.data_available ? ' · có dữ liệu đã nhập / đồng bộ' : ' · chưa có số liệu'}</span> <span class="tag">YouTube / TikTok / Facebook</span>`;
+  const sourceNames = {csv:'CSV đã nhập',manual:'Nhập tay',google_sheet:'Google Sheet',youtube_api:'YouTube API',tiktok_api:'TikTok API'};
+  const sourcesHtml = (ch.sources || []).length ? '<p class="meta">Nguồn số liệu: '+ch.sources.map(x=>esc(sourceNames[x] || x)).join(', ')+'. Dữ liệu nhập không xác nhận kết nối tài khoản.</p>' : '';
+  const ins = (ch.insights_stale || ch.insights_status === 'historical_unverified') ? null : (ch.insights || null);
+  const staleHtml = ch.insights_stale ? '<p class="meta">Phân tích cũ đã hết hiệu lực · cần phân tích lại sau khi cập nhật số liệu.</p>' : ch.insights_status === 'historical_unverified' ? '<p class="meta">Có phân tích lịch sử chưa được xác minh với dữ liệu hiện tại.</p>' : '';
+  const videos = Array.isArray(ch.videos) ? ch.videos : [];
+  const sig = JSON.stringify([
+    ch, connected, ch.videos_count || 0, ch.total_views || 0,
+    ch.avg_retention_30s_pct ?? null, ch.avg_ctr_pct ?? null,
+    videos.length, ins ? (ins.generated_at || ins.summary || '') : ''
+  ]);
+  if(bodyEl.dataset.chSig === sig) return;
+  bodyEl.dataset.chSig = sig;
+  if(!ch.data_available && !videos.length && !ins){
+    bodyEl.innerHTML = staleHtml + (connected
+      ? '<div class="empty">Chưa có video để phân tích. Sau khi đăng video đầu tiên, đồng bộ lại kênh để lấy số liệu.</div>'
+      : '<div class="empty">Chưa có số liệu. Kết nối tài khoản để đồng bộ, hoặc nhập CSV / Sheet.</div>');
+    return;
+  }
+  const kpiHtml = (ch.data_available || videos.length) ? `<div class="ch-kpis">
+    <div class="ch-kpi"><div class="k">Số video</div><div class="v">${esc(ch.videos_count ?? 0)}</div></div>
+    <div class="ch-kpi"><div class="k">Tổng lượt xem</div><div class="v">${ch.total_views == null ? 'chưa có số liệu' : esc(Number(ch.total_views).toLocaleString('vi-VN'))}</div></div>
+    <div class="ch-kpi"><div class="k">Giữ chân 30s TB</div><div class="v">${ch.avg_retention_30s_pct != null ? esc(ch.avg_retention_30s_pct) + '%' : '—'}</div></div>
+    <div class="ch-kpi"><div class="k">CTR TB</div><div class="v">${ch.avg_ctr_pct != null ? esc(ch.avg_ctr_pct) + '%' : '—'}</div></div>
+  </div>` : '';
+  const topHtml = videos.length ? `<div class="ch-list">${videos.slice(0, 5).map(v => `
+    <div class="ch-row">
+      <div><b>${esc(v.title_used || v.slug)}</b><div class="meta">${esc(v.platform || 'youtube')} · ${v.views == null ? 'chưa có số liệu' : esc(Number(v.views).toLocaleString('vi-VN')) + ' lượt xem'}${v.retention_30s_pct != null ? ' · Giữ chân 30s ' + esc(v.retention_30s_pct) + '%' : ''}${v.ctr_pct != null ? ' · CTR ' + esc(v.ctr_pct) + '%' : ''}</div></div>
+    </div>`).join('')}</div>` : '';
+  let insHtml = '';
+  if(ins && (ins.summary || (ins.winning_patterns || []).length || (ins.recommended_topics || []).length)){
+    const pats = (ins.winning_patterns || []).slice(0, 4).map(p => `<li>${esc(p)}</li>`).join('');
+    const recs = (ins.recommended_topics || []).slice(0, 4).map(p => `<li>${esc(typeof p === 'string' ? p : (p.title || ''))}</li>`).join('');
+    insHtml = `<div class="ch-insights">
+      <div><b>Phân tích từ Researcher:</b> ${esc(ins.summary || 'Đã tổng hợp dữ liệu kênh.')}</div>
+      ${pats ? `<ul style="margin:6px 0 0 18px">${pats}</ul>` : ''}
+      ${recs ? `<div style="margin-top:6px"><b>Đề xuất chủ đề tiếp theo:</b><ul style="margin:4px 0 0 18px">${recs}</ul></div>` : ''}
+    </div>`;
+  }
+  bodyEl.innerHTML = `${sourcesHtml}${staleHtml}${kpiHtml}${topHtml}${insHtml}`;
+}
+
+async function cancelRunningJob(jobId, slug, role){
+  if(!confirm('Hủy tác vụ agent đang chạy này?')) return;
+  try{
+    const res = await postJson('/api/jobs/cancel', {job_id: jobId || '', slug: slug || '', role: role || ''});
+    const n = Array.isArray(res.cancelled) ? res.cancelled.length : 0;
+    toast(n ? `Đã hủy ${n} tác vụ đang chạy.` : 'Không tìm thấy tác vụ còn sống để hủy.');
+    await refresh();
+  }catch(e){ toast(e.message, true); }
+}
+
+function initCompanyControls(){
+  if($('btn-sync-sheet')){
+    $('btn-sync-sheet').onclick = async () => {
+      const b = $('btn-sync-sheet'); b.disabled = true;
+      try{
+        const r = await postJson('/api/research/sync-sheet', {});
+        toast(`Đã đồng bộ ${r.synced_count || 0} đề tài (Tổng ${r.total || 0} · Tier A: ${r.tier_a || 0}).`);
+        const det = $('res-details');
+        if(det) det.open = true;
+        await loadResearchInbox();
+        await refresh();
+      }catch(e){ toast(e.message, true); }
+      finally{ b.disabled = false; }
+    };
+  }
+  if($('btn-discover-ai')){
+    $('btn-discover-ai').onclick = async () => {
+      const q = $('res-discover-q') ? $('res-discover-q').value.trim() : '';
+      if(!q){ toast('Nhập từ khóa để AI tìm đề tài.', true); return; }
+      const b = $('btn-discover-ai'); b.disabled = true;
+      try{
+        const r = await postJson('/api/research/discover', {query: q});
+        if(r.error) throw new Error(r.error);
+        toast(`AI đã tìm thêm ${r.added_count || 0} đề tài mới.`);
+        const det = $('res-details');
+        if(det) det.open = true;
+        await loadResearchInbox();
+        await refresh();
+      }catch(e){ toast(e.message, true); }
+      finally{ b.disabled = false; }
+    };
+  }
+  if($('res-details-summary')){
+    $('res-details-summary').onclick = () => {
+      setTimeout(() => {
+        const det = $('res-details');
+        if(det && det.open) loadResearchInbox();
+      }, 0);
+    };
+  }
+  document.querySelectorAll('[data-res-tier]').forEach(btn => {
+    btn.onclick = () => {
+      resTierFilter = btn.dataset.resTier || 'all';
+      document.querySelectorAll('[data-res-tier]').forEach(b => {
+        b.className = b === btn ? 'btn primary' : 'btn ghost';
+      });
+      if(resInboxItems === null) loadResearchInbox();
+      else renderResearchList();
+    };
+  });
+  if($('btn-ch-sync')){
+    $('btn-ch-sync').onclick = async () => {
+      const b = $('btn-ch-sync'); b.disabled = true;
+      try{
+        const r = await postJson('/api/channel/sync-sheet', {});
+        if(r.ok === false){
+          toast(r.message || 'Bảng tính chưa có tab KET_QUA_KENH.', true);
+        } else {
+          toast(`Đã đồng bộ KET_QUA_KENH (${r.imported_count || 0} dòng mới, tổng ${r.total_videos || 0} video).`);
+        }
+        await refresh();
+      }catch(e){ toast(e.message, true); }
+      finally{ b.disabled = false; }
+    };
+  }
+  if($('btn-ch-csv-toggle') && $('form-ch-csv')){
+    $('btn-ch-csv-toggle').onclick = () => {
+      $('form-ch-csv').hidden = !$('form-ch-csv').hidden;
+      if($('form-ch-upsert')) $('form-ch-upsert').hidden = true;
+    };
+  }
+  if($('btn-ch-add-toggle') && $('form-ch-upsert')){
+    $('btn-ch-add-toggle').onclick = () => {
+      $('form-ch-upsert').hidden = !$('form-ch-upsert').hidden;
+      if($('form-ch-csv')) $('form-ch-csv').hidden = true;
+    };
+  }
+  if($('btn-ch-create-sheet')){
+    $('btn-ch-create-sheet').onclick = async () => {
+      const b = $('btn-ch-create-sheet'); b.disabled = true;
+      try{
+        const r = await postJson('/api/channel/create-sheet', {});
+        toast(`Đã tạo Google Sheet riêng: ${r.spreadsheet_id || r.url || ''}`);
+        await refresh();
+      }catch(e){ toast(e.message, true); }
+      finally{ b.disabled = false; }
+    };
+  }
+  if($('btn-ch-analyze')){
+    $('btn-ch-analyze').onclick = async () => {
+      if(!channelAnalysisReady){toast(channelAnalysisReason,true);return;}
+      const b = $('btn-ch-analyze'); b.disabled = true;
+      try{
+        await postJson('/api/channel/analyze', {});
+        toast('Researcher đã hoàn tất phân tích kênh.');
+        await refresh();
+      }catch(e){ toast(e.message, true); }
+      finally{ syncChannelAnalysis(); }
+    };
+  }
+  if($('form-ch-csv')){
+    $('form-ch-csv').onsubmit = async (e) => {
+      e.preventDefault();
+      const f = $('form-ch-csv');
+      const platform = f.querySelector('[name=platform]')?.value || 'youtube';
+      const csvText = f.querySelector('[name=csv_text]')?.value || '';
+      try{
+        const r = await postJson('/api/channel/import-csv', {platform, csv_text: csvText});
+        toast(`Đã nhập ${r.imported_count || 0} video từ CSV (tổng ${r.total_videos || 0}).`);
+        f.hidden = true;
+        await refresh();
+      }catch(ex){ toast(ex.message, true); }
+    };
+  }
+  if($('form-ch-upsert')){
+    $('form-ch-upsert').onsubmit = async (e) => {
+      e.preventDefault();
+      const f = $('form-ch-upsert');
+      const val = (name) => f.querySelector(`[name=${name}]`)?.value || '';
+      try{
+        await postJson('/api/channel/upsert', {
+          title: val('title'),
+          platform: val('platform') || 'youtube',
+          ...channelMetricValues(val),
+          top_comments: val('top_comments'),
+        });
+        toast('Đã lưu chỉ số video.');
+        f.hidden = true;
+        await refresh();
+      }catch(ex){ toast(ex.message, true); }
+    };
+  }
 }
 
 const PROG_CHIP = {todo:['pending','Chưa làm'], doing:['work','Đang làm'], done:['done','Xong'], blocked:['bad','Bị chặn']};
 function progTask(t){
   const [cls,label] = PROG_CHIP[t.status] || PROG_CHIP.todo;
   return `<div class="prog-task"><span class="chip ${cls}">${label}</span>
-    <div><b>${esc(t.id)}</b> ${esc(t.title)}${t.note ? `<div class="meta">${esc(t.note)}</div>` : ''}</div>
-    <span class="meta">${esc(t.owner)}</span></div>`;
+    <div class="prog-body"><b>${esc(t.id)}</b> ${esc(t.title)}${t.note ? `<div class="meta prog-note">${esc(t.note)}</div>` : ''}</div>
+    <span class="meta prog-owner">${esc(t.owner)}</span></div>`;
 }
 function renderProgress(p){
   if(!p) return;
@@ -972,14 +1494,20 @@ function renderActivityFeed(actData){
       : (it.event === 'quota' ? '<span class="chip gate">Đổi model (hết quota)</span>'
       : (it.ok === false ? '<span class="chip bad">Lỗi</span>' : '<span class="chip done">Xong</span>'));
     const dur = it.duration_s != null ? `${it.duration_s}s` : '';
+    const cancelBtn = isRun && (it.job_id || it.role)
+      ? `<button type="button" class="btn danger" style="padding:3px 9px;font-size:12px" data-act-cancel-job="${esc(it.job_id || '')}" data-act-cancel-slug="${esc(it.slug || '')}" data-act-cancel-role="${esc(it.role || '')}">Hủy</button>`
+      : '';
     return `<div class="act-row ${isRun?'running':''}">
       ${badge}
       <div><b>${esc(it.role_name || it.role)}</b> · ${esc(it.step_label || it.step)} ${it.slug ? `· <span class="tag">${esc(it.slug)}</span>` : ''}
         <div class="meta">${esc(it.cli)} / ${esc(it.model)}${it.reason ? ' · '+esc(it.reason) : ''}</div>
       </div>
-      <div class="meta">${esc(dur)}</div>
+      <div class="ch-actions"><span class="meta">${esc(dur)}</span>${cancelBtn}</div>
     </div>`;
   }).join('');
+  box.querySelectorAll('[data-act-cancel-job]').forEach(btn => {
+    btn.onclick = () => cancelRunningJob(btn.dataset.actCancelJob, btn.dataset.actCancelSlug, btn.dataset.actCancelRole);
+  });
 }
 
 function renderProjects(d){
@@ -1004,6 +1532,7 @@ function renderProjects(d){
       acts.push(`<button class="btn" data-product="${esc(p.slug)}">Xem sản phẩm</button>`);
     }
     if(p.comments) acts.push(`<span class="tag" style="align-self:center;color:var(--amber)">${p.comments} góp ý nháp</span>`);
+    if(p.blocked && !p.gate && !done) acts.push(`<button type="button" class="btn warn" data-retry-project="${esc(p.slug)}" data-revision="${esc(p.revision)}">Làm lại bước lỗi</button>`);
     if(p.blocked && REOPENABLE.includes(p.state)) acts.push(`<button class="btn warn" data-reopen="${esc(p.slug)}">Mở lại cổng y khoa để sửa</button>`);
     acts.push(`<button class="btn ghost" data-act="/api/project/${q}/folder">Mở thư mục</button>`);
     const noteHtml=p.blocked?`<div class="note"><div class="note-msg">${esc(friendlyError(p.blocked))}</div><details class="note-raw"><summary>Chi tiết lỗi</summary><code>${esc(p.blocked)}</code></details></div>`:'';
@@ -1026,7 +1555,25 @@ function renderProjects(d){
       </div></article>`}).join('');
   box.querySelectorAll('[data-act]').forEach(b=>b.onclick=()=>act(b.dataset.act));
   box.querySelectorAll('[data-product]').forEach(b=>b.onclick=()=>openProduct(b.dataset.product));
+  box.querySelectorAll('[data-retry-project]').forEach(b=>b.onclick=()=>retryBlockedProject(b));
   box.querySelectorAll('[data-reopen]').forEach(b=>b.onclick=()=>openReopen(d.projects.find(p=>p.slug===b.dataset.reopen)).catch(e=>toast(e.message,true)));
+}
+
+async function retryBlockedProject(button){
+  if(busy) return;
+  busy=true;
+  button.disabled=true;
+  try{
+    const {retryProject, revision}=button.dataset;
+    await postJson(`/api/project/${encodeURIComponent(retryProject)}/retry`,{expected_revision:revision});
+    toast(state?.factory?.running?'Đã cho phép xưởng làm lại bước lỗi.':'Đã cho phép làm lại bước lỗi. Bật xưởng để tiếp tục.');
+  }catch(e){
+    toast(e.message,true);
+  }finally{
+    busy=false;
+    button.disabled=false;
+    await refresh();
+  }
 }
 
 function isTracebackLine(l){
@@ -1089,6 +1636,8 @@ function render(d){
   $('agent-sub').textContent=ag.length?'Đang nghiên cứu, viết hoặc sửa theo góp ý.':(d.waiting?'Đang đợi bác sĩ duyệt.':(on?'Vòng kiểm tra kế tiếp trong ≤ 2 phút.':'Bấm “Bật xưởng” để chạy tiếp.'));
   renderProjects(d); renderLog(d.log);
   $('std-count').textContent=d.standards??0;
+  const tgOn = Boolean(d.telegram && d.telegram.running);
+  if($('chat-badge')) $('chat-badge').textContent = tgOn ? 'Trực tuyến · Telegram' : 'Trực tuyến';
   document.title=(d.waiting?`(${d.waiting}) `:'')+'Xưởng video · Protect Your Health';
   syncStartGate();
 }
@@ -1117,8 +1666,10 @@ async function refresh(){
     if(progData) renderProgress(progData);
     state=d; render(d);
     renderWorkshop();
-    if(!busy) document.querySelectorAll('main button, header button').forEach(b=>b.disabled=false);
+    if(!busy) document.querySelectorAll('main button, header button').forEach(b=>{if(!b.closest('#channel')) b.disabled=false;});
     syncStartGate();
+    syncChannelAnalysis();
+    renderChannelPublish();
   }catch(e){
     wsOffline = true;
     $('offline').classList.add('show');
@@ -1438,7 +1989,7 @@ function gotoClaim(id){
 }
 $('pv-back').onclick=closeProduct;
 $('pv-packet').onclick=async()=>{if(!pv) return; try{toast(await post(`/api/project/${encodeURIComponent(pv.slug)}/packet`))}catch(e){toast(e.message,true)}};
-$('pv-general').onclick=()=>{const r=$('gen-row'); if(!r) return; r.style.display=''; r.querySelector('.cbox').classList.add('open'); r.querySelector('textarea').focus(); $('pv-scroll').scrollTop=0};
+$('pv-general').onclick=()=>{const p=$('chat-panel'); if(p) p.classList.add('open'); if(pv) updateChatContext({slug: pv.slug, revision: pv.revision, view: pvTab}); const inp=$('chat-input'); if(inp){inp.placeholder='Góp ý sửa sản phẩm này hoặc góp ý chung cho xưởng…'; inp.focus();}};
 $('pv-decide').onclick=()=>{if(pv) openReview(pv.slug)};
 
 /* ---------- Chat Panel (Task 5 Backend Integration) ---------- */
@@ -1456,32 +2007,62 @@ async function loadChat(){
 function renderChatMessages(msgs){
   const box = $('chat-msgs');
   if(!msgs.length){
-    box.innerHTML = '<div class="empty">Gõ câu hỏi hoặc yêu cầu sửa. Không bao giờ nhập PIN vào khung chat.</div>';
+    box.innerHTML = '<div class="empty">Gõ câu hỏi hoặc chỉ thị cho Trưởng nhóm Điều phối. Không bao giờ nhập PIN vào khung chat.</div>';
     return;
   }
   let hasPending = false;
   box.innerHTML = msgs.map(m => {
     const who = m.who === 'doctor' ? 'doctor' : 'coordinator';
     const when = String(m.at || '').slice(11, 16);
-    const act = m.action || {};
-    if(m.status === 'pending' || m.status === 'analyzing') hasPending = true;
+    const rawAct = m.action;
+    const actType = typeof rawAct === 'string' ? rawAct : (rawAct && rawAct.type ? rawAct.type : '');
+    const actBrief = (rawAct && typeof rawAct === 'object' ? rawAct.brief : '') || m.brief || '';
+    const actOpts = (rawAct && typeof rawAct === 'object' && Array.isArray(rawAct.options))
+      ? rawAct.options
+      : (Array.isArray(m.options) ? m.options : []);
+    const assigns = Array.isArray(m.assignments) ? m.assignments : [];
+    const execResults = Array.isArray(m.execution_results) ? m.execution_results : [];
+    const confirmableTypes = new Set(['edit_production', 'edit_script', 'dispatch', 'queue_topic', 'factory_feedback']);
+
+    if((who === 'doctor' && (m.status === 'pending' || m.status === 'analyzing')) || m.status === 'analyzing'){
+      hasPending = true;
+    }
     let extra = '';
-    if(m.status === 'pending' || m.status === 'analyzing'){
-      extra += `<div class="c-meta" style="margin-top:6px;color:var(--violet)">⟳ Điều phối viên đang phân tích…</div>`;
+    if((who === 'doctor' && (m.status === 'pending' || m.status === 'analyzing')) || m.status === 'analyzing'){
+      extra += `<div class="c-meta" style="margin-top:6px;color:var(--violet)">⟳ Trưởng nhóm Điều phối đang phân tích…</div>`;
     }
     if(m.error){
       extra += `<div class="c-meta" style="margin-top:6px;color:var(--rose)">Lỗi: ${esc(m.error)}</div>`;
     }
-    if(act.type === 'ask' && Array.isArray(act.options) && act.options.length){
-      extra += `<div class="c-opts">${act.options.map(opt => `<button type="button" data-chat-opt="${esc(opt)}">${esc(opt)}</button>`).join('')}</div>`;
+    if(actType === 'ask' && actOpts.length){
+      extra += `<div class="c-opts">${actOpts.map(opt => {
+        const lbl = typeof opt === 'string' ? opt : (opt && opt.label ? opt.label : '');
+        return lbl ? `<button type="button" data-chat-opt="${esc(lbl)}">${esc(lbl)}</button>` : '';
+      }).join('')}</div>`;
     }
-    if((act.type === 'edit_production' || act.type === 'edit_script') && m.status === 'proposed'){
-      extra += `<div class="c-confirm"><span>Đề xuất sửa: <b>${esc(act.brief || act.type)}</b></span><button class="btn warn" type="button" data-chat-confirm="${esc(m.id)}">Mở lại để sửa?</button></div>`;
+    if(assigns.length){
+      extra += `<div class="c-assigns">${assigns.map(a => `
+        <div class="c-assign">
+          <div class="c-assign-top">
+            <span>${esc(a.role)} · ${esc(STEP_VI[a.step] || a.step)}${a.slug ? ' · ' + esc(a.slug) : ''}</span>
+            <span class="chip ${a.status === 'done' ? 'done' : 'pending'}">${a.status === 'done' ? 'Đã giao' : 'Chờ xác nhận'}</span>
+          </div>
+          <div style="margin-top:2px;color:var(--muted)">${esc(a.task || a.brief || '')}</div>
+        </div>`).join('')}</div>`;
+    }
+    if(who === 'coordinator' && (m.status === 'proposed' || (m.status === 'pending' && confirmableTypes.has(actType)))){
+      const btnLbl = (actType === 'edit_production' || actType === 'edit_script') ? 'Mở lại để sửa?' : 'Xác nhận thực hiện';
+      extra += `<div class="c-confirm"><span>Đề xuất: <b>${esc(actBrief || actType)}</b></span><button class="btn warn" type="button" data-chat-confirm="${esc(m.id)}">${btnLbl}</button></div>`;
     } else if(m.status === 'confirmed'){
-      extra += `<div class="c-meta" style="margin-top:6px;color:var(--teal)">✓ Đã mở lại để sửa</div>`;
+      extra += `<div class="c-meta" style="margin-top:6px;color:var(--teal)">✓ Đã xác nhận thực hiện</div>`;
+    } else if(m.status === 'queued'){
+      extra += `<div class="c-meta" style="margin-top:6px;color:var(--amber)">◷ Đã xếp hàng chờ bước hiện tại xong</div>`;
+    } else if(m.status === 'done' && execResults.length){
+      extra += `<div class="c-meta" style="margin-top:6px;color:var(--teal)">✓ Đã tự thực thi ${execResults.length} lệnh</div>`;
     }
+    const senderLabel = who==='doctor' ? (m.source==='telegram' ? 'Bác sĩ (Telegram)' : 'Bác sĩ') : 'Trưởng nhóm Điều phối';
     return `<div class="c-msg ${who}">
-      <div class="c-meta">${who==='doctor'?'Bác sĩ':'Điều phối viên'} · ${esc(when)}</div>
+      <div class="c-meta">${senderLabel} · ${esc(when)}</div>
       <div>${esc(m.text)}</div>
       ${extra}
     </div>`;
@@ -1622,40 +2203,50 @@ $('btn-quit').onclick=()=>act('/api/app/quit','Tắt app? Xưởng nền vẫn c
 
 /* ---------- 3D Isometric Workshop Renderer ---------- */
 const WS_LINE_1 = [
-  {id:'scout', num:'01', short:'Trinh sát'},
-  {id:'medical_expert', num:'02', short:'Chuyên gia y học'},
-  {id:'writer', num:'03', short:'Biên kịch'},
-  {id:'script_critic', num:'04', short:'Kiểm duyệt kịch bản'},
-  {id:'gate_medical', num:'05', short:'Cổng y khoa', isGate:true, gateKind:'medical',
+  {id:'researcher', num:'01', short:'Nghiên cứu & Kênh'},
+  {id:'scout', num:'02', short:'Trinh sát'},
+  {id:'medical_expert', num:'03', short:'Chuyên gia y học'},
+  {id:'writer', num:'04', short:'Biên kịch'},
+  {id:'storyboard_director', num:'05', short:'Đạo diễn phân cảnh'},
+  {id:'voice_director', num:'06', short:'Đạo diễn giọng'},
+  {id:'script_critic', num:'07', short:'Kiểm duyệt kịch bản'},
+  {id:'gate_medical', num:'08', short:'Cổng y khoa', isGate:true, gateKind:'medical',
     title:'Cổng y khoa (bác sĩ)', desc:'Bác sĩ kiểm chứng bằng chứng y văn, kịch bản và storyboard trước khi dựng video.'},
 ];
 const WS_LINE_2 = [
-  {id:'render_machine', num:'06', short:'Máy dựng (xưởng tự chạy)', isMachine:true,
+  {id:'render_machine', num:'09', short:'Máy dựng (xưởng tự chạy)', isMachine:true,
     title:'Máy dựng (xưởng tự chạy)',
     desc:'Tự động tổng hợp giọng đọc (TTS), vẽ ảnh ứng viên (FLUX) và kết xuất video (Remotion) bằng Python khi có tiến trình dựng thật (.production-running) cho dự án đã qua medically_approved hoặc production_in_progress.'},
-  {id:'art_director', num:'07', short:'Đạo diễn hình'},
-  {id:'editor', num:'08', short:'Thợ dựng'},
-  {id:'product_critic', num:'09', short:'Kiểm định sản phẩm'},
-  {id:'gate_video', num:'10', short:'Cổng video', isGate:true, gateKind:'video',
+  {id:'art_director', num:'10', short:'Đạo diễn hình'},
+  {id:'editor', num:'11', short:'Thợ dựng'},
+  {id:'product_critic', num:'12', short:'Kiểm định sản phẩm'},
+  {id:'gate_video', num:'13', short:'Cổng video', isGate:true, gateKind:'video',
     title:'Cổng video (bác sĩ)', desc:'Bác sĩ xem video, nghe phát âm và duyệt đóng gói xuất bản.'},
-  {id:'copywriter', num:'11', short:'Viết bài đăng'},
+  {id:'copywriter', num:'14', short:'Đóng gói & Bài đăng'},
+  {id:'shorts_producer', num:'15', short:'Shorts & Reels'},
 ];
 const WS_COUNTER_BASE = ['coordinator', 'coordinator_senior', 'feedback_analyst'];
 const WS_SHIRTS = {
-  scout:'#38bdf8', medical_expert:'#f8fafc', writer:'#2dd4bf', script_critic:'#a78bfa',
-  art_director:'#c084fc', editor:'#60a5fa', product_critic:'#fb7185', copywriter:'#34d399',
+  researcher:'#38bdf8', scout:'#38bdf8', medical_expert:'#f8fafc', writer:'#2dd4bf',
+  storyboard_director:'#a78bfa', voice_director:'#f472b6', script_critic:'#a78bfa',
+  art_director:'#c084fc', editor:'#60a5fa', product_critic:'#fb7185',
+  copywriter:'#34d399', shorts_producer:'#fb923c',
   coordinator:'#2dd4bf', coordinator_senior:'#818cf8', feedback_analyst:'#fbbf24',
   gate_medical:'#fef3c7', gate_video:'#fef3c7',
 };
 const WS_ROLE_ACT = {
+  researcher:'ws-act-researcher',
   scout:'ws-act-scout',
   medical_expert:'ws-act-medical',
   writer:'ws-act-writer',
+  storyboard_director:'ws-act-storyboard',
+  voice_director:'ws-act-voice',
   script_critic:'ws-act-critic',
   product_critic:'ws-act-critic',
   art_director:'ws-act-art',
   editor:'ws-act-editor',
   copywriter:'ws-act-copywriter',
+  shorts_producer:'ws-act-shorts',
   coordinator:'ws-act-coordinator',
   coordinator_senior:'ws-act-coordinator',
   feedback_analyst:'ws-act-analyst',
@@ -1805,6 +2396,40 @@ function wsPropSvg(id, workState){
       <polygon points="52,27 83,13 83,35 52,49" fill="#0f172a" stroke="#f59e0b" stroke-width="1.4"/>
       <polygon points="64,28 74,29 64,37" fill="#fbbf24"/>
       <polygon points="108,52 121,46 130,50 117,56" fill="#fde68a" stroke="#b45309" stroke-width="1"/>
+    </g>`;
+  }
+  if(id === 'researcher'){
+    return `<g opacity="${dim}">
+      <polygon points="108,55 129,44.5 137,49 116,59.5" fill="#0f172a" stroke="#38bdf8" stroke-width="1"/>
+      <rect x="113" y="51" width="4" height="6" rx=".8" fill="#2dd4bf"/>
+      <rect x="119" y="47.5" width="4" height="8" rx=".8" fill="#38bdf8"/>
+      <circle class="ws-res-pulse" cx="122" cy="52" r="5.5" fill="none" stroke="#38bdf8" stroke-width="1.3"/>
+    </g>`;
+  }
+  if(id === 'storyboard_director'){
+    return `<g opacity="${dim}">
+      <polygon points="108,55 127,45.5 136,50 117,59.5" fill="#1e1b4b" stroke="#a78bfa" stroke-width="1"/>
+      <g class="ws-sb-frame">
+        <polygon points="112,51 124,45 131,48.5 119,54.5" fill="#312e81" stroke="#c4b5fd" stroke-width="1"/>
+        <circle cx="120" cy="49.5" r="1.8" fill="#fde047"/>
+      </g>
+    </g>`;
+  }
+  if(id === 'voice_director'){
+    return `<g opacity="${dim}">
+      <ellipse cx="120" cy="55" rx="6" ry="3.2" fill="#3b0764" stroke="#f472b6" stroke-width="1"/>
+      <rect class="ws-voice-wave" x="114" y="49" width="2.4" height="6" rx="1" fill="#f472b6"/>
+      <rect class="ws-voice-wave" x="118.5" y="46" width="2.4" height="9" rx="1" fill="#fbcfe8"/>
+      <rect class="ws-voice-wave" x="123" y="48.5" width="2.4" height="6.5" rx="1" fill="#f472b6"/>
+    </g>`;
+  }
+  if(id === 'shorts_producer'){
+    return `<g opacity="${dim}">
+      <polygon points="112,55 125,48.5 133,52.5 120,59" fill="#431407" stroke="#fb923c" stroke-width="1"/>
+      <g class="ws-shorts-reel">
+        <circle cx="122" cy="50" r="4.8" fill="none" stroke="#fb923c" stroke-width="1.5"/>
+        <circle cx="122" cy="50" r="1.5" fill="#fdba74"/>
+      </g>
     </g>`;
   }
   if(id === 'scout'){
@@ -2476,7 +3101,7 @@ function renderWorkshopPopoverContent(st){
   const nextPopSig = [
     st.id, st.workState, st.workLabel, st.workDetail,
     (st.machineProjects || []).map(p => p.slug).join(','),
-    (st.running || []).map(r => `${r.step}:${r.slug}:${r.cli}:${r.model}`).join(','),
+    (st.running || []).map(r => `${r.step}:${r.slug}:${r.cli}:${r.model}:${r.job_id||''}`).join(','),
     (st.folders || []).map(f => `${f.slug}:${f.tone}:${f.tag}`).join(','),
     (st.recent || []).length,
   ].join('|');
@@ -2560,7 +3185,7 @@ function renderWorkshopPopoverContent(st){
           <div><b style="color:var(--ws-c-work)">● Đang làm:</b> ${esc(r.step_label || r.step)}</div>
           ${r.slug ? `<div class="meta" style="margin-top:4px">Chủ đề: ${esc(r.slug)} · <span${idx === 0 ? ' data-ws-pop-dur' : ''}>${esc(wsFmtDur(r.duration_s) || ago(r.started_at || r.at))}</span></div>` : ''}
           <div class="meta">Model: ${esc(r.cli)} / ${esc(r.model)}</div>
-          ${r.slug && !['chung','chat'].includes(r.slug) ? `<div style="margin-top:8px"><button type="button" class="btn" data-ws-open-proj="${esc(r.slug)}">Xem dự án</button></div>` : ''}
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">${r.slug && !['chung','chat'].includes(r.slug) ? `<button type="button" class="btn" data-ws-open-proj="${esc(r.slug)}">Xem dự án</button>` : ''}<button type="button" class="btn danger" data-ws-cancel-job="${esc(r.job_id||'')}" data-ws-cancel-slug="${esc(r.slug||'')}" data-ws-cancel-role="${esc(st.id)}">Hủy tác vụ treo</button></div>
         </div>`).join('');
     } else if(ws === 'waiting_model'){
       currentHtml = `<div class="ws-pop-box"><b style="color:var(--ws-c-wait-model)">◷ ${esc(st.workLabel || 'Chờ model')}</b>${st.workDetail ? `<div class="meta" style="margin-top:4px">${esc(st.workDetail)}</div>` : ''}</div>`;
@@ -2626,6 +3251,9 @@ function renderWorkshopPopoverContent(st){
       closeWorkshopPopover(false);
       openProduct(slug);
     };
+  });
+  $('ws-pop-body').querySelectorAll('[data-ws-cancel-job]').forEach(b => {
+    b.onclick = () => cancelRunningJob(b.dataset.wsCancelJob, b.dataset.wsCancelSlug, b.dataset.wsCancelRole);
   });
   if(pop) pop.scrollTop = prevScroll;
 }
@@ -2736,6 +3364,7 @@ window.addEventListener('resize', () => {
 });
 
 initWorkshopControls();
+initCompanyControls();
 renderWorkshop();
 refresh(); loadChat(); setInterval(refresh,3000);
 </script>

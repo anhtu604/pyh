@@ -38,3 +38,14 @@ projects/**/.healthvideo/
 .superpowers/
 .remotion/
 graphify-out/
+
+# OAuth client secrets & local runtime state
+client_secret*.json
+topics/logs/
+topics/*.log
+topics/.*.lock
+topics/chat.jsonl
+topics/channel-publications/
+topics/channel-metrics.yaml
+topics/discovered/
+topics/inbox/

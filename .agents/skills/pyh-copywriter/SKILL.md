@@ -9,7 +9,7 @@ description: Use when the PYH posts step needs titles, descriptions, clip captio
 - Đọc prompt `posts.md`, doctor_note; lấy `active_revision` từ `{project}/project.yaml`.
 - Đọc `revisions/<rev>/script/script.yaml`, `script/outline.yaml`,
   `script/clip-plan.yaml` đã duyệt, `evidence/ledger.yaml`,
-  `reviews/medical-approval.yaml` cùng revision.
+  `reviews/medical-approval.yaml` cùng revision, và `topics/channel-insights.yaml` (nếu có) để tối ưu tiêu đề A/B & chữ thumbnail theo dữ liệu kênh thật.
 - Xác định audience/intent từ `evidence/expert-brief.md` nếu cần; đọc `title`
   và `chapters[].goal` trong outline để giữ lời hứa, tiến triển/payoff/CTA
   đã chốt; đối chiếu script thực có, không phụ thuộc scratch của writer.

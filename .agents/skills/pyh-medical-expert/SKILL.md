@@ -19,6 +19,8 @@ description: Use when the PYH research step needs verified evidence or answers t
   máy bị NCBI chặn nên dùng Europe PMC/Elsevier API chính thức, không lách chặn.
 - Ưu tiên guideline, SR/MA, RCT theo độ phù hợp câu hỏi; phân biệt cơ chế,
   liên hệ và nhân quả. Tiền lâm sàng không đủ để hứa lợi ích điều trị ở người.
+- Với claim quyết định lời khuyên hoặc có kết quả trái chiều, đánh giá theo từng kết cục. Đối chiếu đối tượng, can thiệp hoặc phơi nhiễm, nhóm so sánh, kết cục và thời gian theo dõi. Ghi điểm có thể làm sai lệch kết quả, độ nhất quán, độ chính xác và mức áp dụng cho người xem Việt Nam nếu có căn cứ.
+- Ghi lý do và locator của nhận định trong `expert-brief.md` cạnh claim. Nếu chỉ đọc abstract hoặc thiếu dữ liệu quan trọng, nêu điều chưa xác định và hạ mức khẳng định. Chỉ ghi mức GRADE khi nguồn đã đánh giá và nêu rõ kết cục tương ứng, hoặc khi đã thực hiện đầy đủ phương pháp.
 - Mỗi insight phải có claim, điểm bất ngờ được bằng chứng hỗ trợ, hệ quả
   với câu hỏi người xem và giới hạn. Không bịa sự ngạc nhiên hay số liệu.
 - `expert-brief.md` nêu đồng thuận, tranh cãi, điều không được nói quá,

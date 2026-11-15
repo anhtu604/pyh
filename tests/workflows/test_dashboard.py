@@ -650,6 +650,15 @@ def test_feedback_tab_removed():
     assert 'id="ops-feedback"' not in html
 
 
+def test_general_feedback_routes_to_chat_input():
+    html = dashboard.HTML_PATH.read_text(encoding='utf-8')
+    marker = "$('pv-general').onclick="
+    snippet = html.split(marker, 1)[1].splitlines()[0]
+    assert "$('chat-input')" in snippet
+    assert "$('chat-panel')" in snippet
+    assert "$('gen-row')" not in snippet
+
+
 def test_studio_route_launches_once_and_logs(tmp_path, monkeypatch):
     calls = []
 
@@ -1058,8 +1067,10 @@ def test_html_includes_workshop_3d_and_preserves_section_order():
     # Render machine working state must come from verified production execution, not project.state.
     assert "p => (p.state === 'medically_approved' || p.state === 'production_in_progress') && !p.blocked" not in html
     for action_cls in (
-        'ws-act-scout', 'ws-act-medical', 'ws-act-writer', 'ws-act-critic',
-        'ws-act-art', 'ws-act-editor', 'ws-act-copywriter', 'ws-act-coordinator', 'ws-act-analyst',
+        'ws-act-researcher', 'ws-act-scout', 'ws-act-medical', 'ws-act-writer',
+        'ws-act-storyboard', 'ws-act-voice', 'ws-act-critic',
+        'ws-act-art', 'ws-act-editor', 'ws-act-copywriter', 'ws-act-shorts',
+        'ws-act-coordinator', 'ws-act-analyst',
     ):
         assert action_cls in html
     assert html.count('https://fonts.googleapis.com') <= 2
@@ -1324,3 +1335,131 @@ def test_corrupt_quota_and_approval_files_keep_overview_and_status_200(tmp_path,
         assert len(json.loads(body_st)['projects']) == 1
 
     _with_server(tmp_path, check)
+
+
+def test_company_20_routes_research_channel_and_cancel_job(tmp_path, monkeypatch):
+    import subprocess
+    import sys
+
+    from healthvideo.process import process_token
+    from healthvideo.storage.queue import load_queue
+    from healthvideo.workflows import researcher
+
+    monkeypatch.setattr(factory, 'running_pid', lambda _: None)
+
+    class _FakeResp:
+        def __init__(self, payload: bytes):
+            self._payload = payload
+
+        def read(self) -> bytes:
+            return self._payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    def fake_urlopen(req, timeout=20.0):
+        url = getattr(req, 'full_url', str(req))
+        if 'gid=728612942' in url:
+            csv_text = (
+                'phát_ngôn,hook_trung_lập,câu_hỏi_kiểm_chứng,PMID_DOI,phán_quyết_sơ_bộ,điểm_cần_bác_sĩ_duyệt\n'
+                '"Uống nước chanh sáng chữa bách bệnh","Nước chanh buổi sáng có thật sự giải độc?","Uống nước chanh buổi sáng có tác dụng gì và rủi ro men răng ra sao?","PMID:31234567","Cần phân tách rõ lợi ích bù nước và hại men răng","Kiểm tra chống chỉ định dạ dày"\n'
+            )
+            return _FakeResp(csv_text.encode('utf-8'))
+        return _FakeResp('tiêu_đề_Việt\n'.encode())
+
+    monkeypatch.setattr(researcher, 'urlopen', fake_urlopen)
+
+    proc = subprocess.Popen(
+        [sys.executable, '-c', 'import time; time.sleep(30)'],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        token = process_token(proc.pid)
+        assert token
+        job_dir = tmp_path / 'topics/logs/test-hung-slug'
+        job_dir.mkdir(parents=True, exist_ok=True)
+        (job_dir / '.job-job123.json').write_text(
+            json.dumps({
+                'job_id': 'job123',
+                'slug': 'test-hung-slug',
+                'role': 'writer',
+                'step': 'draft',
+                'child_pid': proc.pid,
+                'child_process_token': token,
+            }),
+            encoding='utf-8',
+        )
+
+        def check(srv):
+            st_sync, sync_data = post_json(srv, '/api/research/sync-sheet', {})
+            assert st_sync == 200
+            assert sync_data['synced_count'] == 1
+            assert sync_data['total'] == 1
+
+            st_inbox, raw_inbox = request(srv, 'GET', '/api/research/inbox')
+            assert st_inbox == 200
+            inbox_data = json.loads(raw_inbox)
+            assert inbox_data['summary']['total'] == 1
+            topic_slug = inbox_data['items'][0]['slug']
+
+            st_prom, prom_data = post_json(
+                srv, '/api/research/promote', {'slug': topic_slug, 'doctor_note': 'Ưu tiên'}
+            )
+            assert st_prom == 200
+            assert prom_data['dossier']['status'] == 'selected'
+            assert any(e.slug == topic_slug for e in load_queue(tmp_path))
+
+            st_ch0, raw_ch0 = request(srv, 'GET', '/api/channel')
+            assert st_ch0 == 200
+            assert json.loads(raw_ch0)['videos_count'] == 0
+
+            st_up, up_data = post_json(
+                srv,
+                '/api/channel/upsert',
+                {
+                    'slug': topic_slug,
+                    'platform': 'youtube',
+                    'title_used': 'Nước chanh buổi sáng dưới góc nhìn y khoa',
+                    'views': 12500,
+                    'ctr_pct': 6.4,
+                    'retention_30s_pct': 71.0,
+                    'shares_saves': 320,
+                    'top_comments': 'Đau dạ dày uống được không?',
+                },
+            )
+            assert st_up == 200
+            assert up_data['total_videos'] == 1
+
+            csv_payload = (
+                'Video title,Views,Impressions click-through rate (%),Average percentage viewed (%),platform\n'
+                'Ngủ đủ giấc phòng tim mạch,8400,5.2,62.5,youtube\n'
+            )
+            st_imp, imp_data = post_json(
+                srv, '/api/channel/import-csv', {'csv_text': csv_payload, 'platform': 'youtube'}
+            )
+            assert st_imp == 200
+            assert imp_data['imported_count'] == 1
+            assert imp_data['total_videos'] == 2
+
+            st_ch1, raw_ch1 = request(srv, 'GET', '/api/channel')
+            assert st_ch1 == 200
+            assert json.loads(raw_ch1)['videos_count'] == 2
+
+            st_cancel, cancel_data = post_json(srv, '/api/jobs/cancel', {'job_id': 'job123'})
+            assert st_cancel == 200
+            assert len(cancel_data['cancelled']) == 1
+            assert cancel_data['cancelled'][0]['job_id'] == 'job123'
+            assert cancel_data['cancelled'][0]['terminated'] is True
+            assert not (job_dir / '.job-job123.json').exists()
+
+        _with_server(tmp_path, check)
+        proc.wait(timeout=5)
+        assert proc.poll() is not None
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait(timeout=5)

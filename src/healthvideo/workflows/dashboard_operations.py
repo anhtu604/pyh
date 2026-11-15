@@ -11,7 +11,7 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-from healthvideo.agents import RUNNING_MARKER
+from healthvideo.agents import RUNNING_MARKER, cancel_running_job
 from healthvideo.domain.asset_manifest import (
     load_asset_manifest,
     validate_asset_manifest,
@@ -24,7 +24,7 @@ from healthvideo.domain.storyboard import Storyboard
 from healthvideo.storage.files import read_yaml
 from healthvideo.storage.project_layout import resolve_project_layout
 from healthvideo.storage.queue import add_to_queue, load_queue
-from healthvideo.workflows import factory
+from healthvideo.workflows import channel_analytics, factory, researcher
 from healthvideo.workflows.gate_review import reopen_gate
 from healthvideo.workflows.review import approval_is_stale, latest_approval
 from healthvideo.workflows.runner import next_step
@@ -122,9 +122,10 @@ def _editable(root: Path, slug: str, expected_revision: str):
     if expected_revision != layout.manifest.active_revision:
         raise ValueError('Revision đã thay đổi; tải lại trước khi thao tác.')
     marker = inside(root, root / 'topics/logs' / slug / RUNNING_MARKER)
+    parallel_running = any((root / 'topics/logs' / slug).glob(f'parallel-*/{RUNNING_MARKER}'))
     # A blocked project is skipped by the factory loop, so it can be fixed while the factory runs.
     blocked = inside(root, root / 'topics/logs' / slug / 'blocked.txt').is_file()
-    if marker.exists() or (factory.running_pid(root) is not None and not blocked):
+    if marker.exists() or parallel_running or (factory.running_pid(root) is not None and not blocked):
         raise ValueError('Hãy dừng xưởng và chờ agent kết thúc trước khi thao tác.')
     check_revision_paths(layout.project_dir, layout.artifact_root)
     inside(root, root / 'profiles/doctor-feedback.yaml')
@@ -191,12 +192,31 @@ def reopen_project(root: Path, slug: str, *, expected_revision: str, reviewer: s
 def get_route(server, parts: list[str], query: dict) -> dict | bytes | None:
     from healthvideo.workflows import asset_library as library
 
+    if parts == ['api', 'channel', 'browser-status']:
+        from healthvideo.workflows import tiktok_browser
+        return tiktok_browser.browser_status(server.root)
+
+    if parts == ['api', 'channel', 'connections']:
+        from healthvideo.workflows import channel_connections
+        return channel_connections.connection_status(server.root)
+    if len(parts) == 5 and parts[:3] == ['api', 'channel', 'oauth'] and parts[4] == 'callback':
+        from healthvideo.workflows import channel_connections
+        if any(len(v) != 1 for v in query.values()):
+            raise ValueError('Duplicate OAuth parameters')
+        return channel_connections.complete_connection(server.root, parts[3], {k: v[0] for k, v in query.items()})
     if parts == ['api', 'chat']:
         from healthvideo.workflows import chat
 
         return {'messages': chat.load(server.root, query.get('slug', [None])[0] or None)[-100:]}
     if parts == ['api', 'topics']:
         return {'entries': [e.model_dump(mode='json') for e in load_queue(server.root)]}
+    if parts == ['api', 'research', 'inbox']:
+        return {
+            'summary': researcher.inbox_summary(server.root),
+            'items': researcher.load_inbox(server.root),
+        }
+    if parts == ['api', 'channel']:
+        return channel_analytics.channel_overview_payload(server.root)
     if len(parts) == 4 and parts[:2] == ['api', 'project'] and parts[3] == 'operations':
         return project_operations(server.root, parts[2])
     if parts == ['api', 'library']:
@@ -212,6 +232,11 @@ def get_route(server, parts: list[str], query: dict) -> dict | bytes | None:
 
 
 def post_route(server, parts: list[str], body: dict) -> dict | None:
+    if len(parts) == 3 and parts[:2] == ['api', 'channel'] and parts[2] in {
+        'configure', 'connect', 'disconnect', 'sync-api', 'publish-preview', 'publish', 'publish-status',
+        'browser-install', 'browser-login', 'browser-disconnect',
+    }:
+        return _channel_post(server, parts[2], body)
     if parts in (['api', 'chat'], ['api', 'chat', 'confirm']):
         from healthvideo.workflows import chat
 
@@ -225,6 +250,58 @@ def post_route(server, parts: list[str], body: dict) -> dict | None:
         return _library_post(server, parts[2], body)
     if parts == ['api', 'topics', 'add']:
         return add_topic(server.root, body)
+    if parts == ['api', 'research', 'sync-sheet']:
+        sheet_id = channel_analytics.parse_sheet_reference(body.get('sheet_url'))[0]
+        return researcher.sync_reference_sheet(server.root, spreadsheet_id=sheet_id)
+    if parts == ['api', 'research', 'discover']:
+        return researcher.discover_topics_with_agent(
+            server.root,
+            query=str(body.get('query') or '').strip() or 'phòng bệnh thường gặp tại Việt Nam',
+        )
+    if parts == ['api', 'research', 'promote']:
+        return researcher.promote_inbox_topic(
+            server.root,
+            str(body.get('slug') or ''),
+            doctor_note=body.get('doctor_note'),
+        )
+    if parts == ['api', 'research', 'reject']:
+        return researcher.reject_inbox_topic(
+            server.root,
+            str(body.get('slug') or ''),
+            reason=str(body.get('reason') or ''),
+        )
+    if parts == ['api', 'channel', 'sync-sheet']:
+        return channel_analytics.sync_channel_sheet(
+            server.root,
+            spreadsheet_id_or_url=body.get('sheet_url') or None,
+            sheet_title=str(body.get('tab') or channel_analytics.CHANNEL_TAB_TITLE),
+        )
+    if parts == ['api', 'channel', 'import-csv']:
+        return channel_analytics.import_channel_csv(
+            server.root,
+            str(body.get('csv_text') or ''),
+            platform=str(body.get('platform') or 'youtube'),
+        )
+    if parts == ['api', 'channel', 'upsert']:
+        return channel_analytics.upsert_video_metric(server.root, body)
+    if parts == ['api', 'channel', 'analyze']:
+        return channel_analytics.analyze_channel_performance(
+            server.root, focus=str(body.get('question') or '')
+        )
+    if parts == ['api', 'channel', 'create-sheet']:
+        return channel_analytics.create_channel_sheet(
+            server.root,
+            title=str(body.get('title') or 'PYH - Theo dõi Hiệu quả Kênh'),
+        )
+    if parts == ['api', 'jobs', 'cancel']:
+        return {
+            'cancelled': cancel_running_job(
+                server.root,
+                job_id=body.get('job_id'),
+                slug=body.get('slug'),
+                role=body.get('role'),
+            )
+        }
     if len(parts) == 4 and parts[:2] == ['api', 'project']:
         if parts[3] == 'retry':
             return retry_project(server.root, parts[2], expected_revision=body.get('expected_revision'))
@@ -275,3 +352,46 @@ def _library_post(server, action: str, body: dict) -> dict:
         library.bind_image(layout.project_dir, body.get('asset_id'), body.get('scene_id'),
                            expected_revision=body.get('expected_revision'))
     return {'bound': True}
+
+
+def _channel_post(server, action: str, body: dict) -> dict:
+    from healthvideo.workflows import channel_connections as connections
+    from healthvideo.workflows import channel_publishing as publishing
+
+    platform = body.get('platform')
+    if action in ('browser-install', 'browser-login', 'browser-disconnect'):
+        from healthvideo.workflows import tiktok_browser
+        if platform != 'tiktok' or set(body) != {'platform'}:
+            raise ValueError('Only TikTok browser operation is supported; no session input accepted')
+        operation = {'browser-install': tiktok_browser.install_backend,
+                     'browser-login': tiktok_browser.begin_login,
+                     'browser-disconnect': tiktok_browser.disconnect}[action]
+        return operation(server.root)
+    if action == 'configure':
+        return connections.configure_connection(server.root, platform, {key: body[key] for key in ('client_id', 'client_secret', 'credentials_json') if key in body})
+    if action == 'connect':
+        redirect_uri = f'http://127.0.0.1:{server.server_address[1]}/api/channel/oauth/{platform}/callback'
+        return connections.begin_connection(server.root, platform, redirect_uri=redirect_uri)
+    if action == 'disconnect':
+        return connections.disconnect_connection(server.root, platform)
+    if action == 'sync-api':
+        return channel_analytics.save_synced_metrics(server.root, connections.sync_connected_channel(server.root, platform))
+    if action == 'publish-status':
+        return publishing.publication_status(server.root, body.get('receipt_id'))
+    allowed = {'slug', 'platform', 'clip_id', 'title_index'}
+    if action == 'publish':
+        allowed |= {'privacy', 'confirmed', 'music_usage_confirmed', 'noncommercial_confirmed', 'expected_account_id', 'expected_revision', 'expected_sha256'}
+    if set(body) - allowed:
+        raise ValueError('Only approved publication metadata is accepted')
+    args = {'platform': platform, 'clip_id': body.get('clip_id'), 'title_index': body.get('title_index', 0)}
+    if action == 'publish-preview':
+        return publishing.publication_preview(server.root, body.get('slug'), **args)
+    if body.get('confirmed') is not True:
+        raise ValueError('Explicit per-video publication consent is required')
+    if platform == 'tiktok' and (body.get('music_usage_confirmed') is not True or body.get('noncommercial_confirmed') is not True):
+        raise ValueError('Confirm music rights and noncommercial content for this TikTok post')
+    return publishing.publish_approved(server.root, body.get('slug'), privacy=body.get('privacy'),
+        confirmed=body.get('confirmed') is True, music_usage_confirmed=body.get('music_usage_confirmed') is True,
+        noncommercial_confirmed=body.get('noncommercial_confirmed') is True,
+        expected_account_id=body.get('expected_account_id'),
+        expected_revision=body.get('expected_revision'), expected_sha256=body.get('expected_sha256'), **args)

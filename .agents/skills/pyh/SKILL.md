@@ -23,7 +23,7 @@ Daily operation:
 1. First time: the doctor runs `healthvideo review set-pin`, then `healthvideo xuong --background`.
 2. Add topics using `topic discover` / `topic add` as above.
 3. On notification, the doctor runs `healthvideo duyet`: read the packet, choose A/R/B, enter PIN for approval or rejection. Reviewer is asked once and stored outside the repo in `~/.healthvideo/operator.yaml`.
-4. The factory continues and packages approved video into `revisions/<rev>/publish/`; upload manually.
+4. The factory packages approved video into `revisions/<rev>/publish/`; authorized YouTube/TikTok posting uses the app with both gates and bytes current. Setup: `docs/channel-setup.md`.
 Use `healthvideo status` for worker PID and waiting count; `xuong --stop` stops it, `xuong --once` runs one cycle.
 Never execute approval, `duyet` or `review set-pin` for the doctor, create approval files, or accept a PIN through chat.
 Generic “ổn”, “tiếp tục”, or “render đi” không tạo medical/video approval; research không tạo approval.
@@ -35,4 +35,6 @@ For approved medical changes, use `healthvideo review reopen <project> --gate me
 
 Use `healthvideo preview <project>` for viewing; Studio edits do not save or approve anything.
 After video approval, `healthvideo package <project>` creates the local posting bundle.
-Show its path for manual upload; không tự động xuất bản.
+Show its path or use the authorized app publisher with explicit account and visibility.
+Không tự động xuất bản ngoài quyền được cấp; never bypass gates or retry uncertain uploads. TikTok requires per-post consent;
+unaudited clients are private-only and internal-only utilities may not qualify for audit.

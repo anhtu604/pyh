@@ -445,6 +445,7 @@ const sandbox = {
   setInterval: () => 1,
   setTimeout: () => 1,
   clearTimeout: () => {},
+  URL: require('node:url').URL,
   URLSearchParams,
   Date,
   Math,
@@ -596,15 +597,19 @@ def test_workshop_html_contract_and_responsive_styles():
     assert 'IntersectionObserver' in html
     assert 'prefers-reduced-motion: reduce' in html
 
-    # All 9 role action classes must exist in CSS and JS
+    # All 13 role action classes must exist in CSS and JS
     for cls in (
+        'ws-act-researcher',
         'ws-act-scout',
         'ws-act-medical',
         'ws-act-writer',
+        'ws-act-storyboard',
+        'ws-act-voice',
         'ws-act-critic',
         'ws-act-art',
         'ws-act-editor',
         'ws-act-copywriter',
+        'ws-act-shorts',
         'ws-act-coordinator',
         'ws-act-analyst',
     ):
@@ -686,10 +691,11 @@ def test_workshop_js_work_state_and_render_machine_contracts():
     }, false);
     assert(machineWorkingPid === 'working', 'non-empty production_running activates machine');
 
-    // 3. Full role rendering: all 9 ws-act-* classes when working; idle has coffee cup & no ws-act-*
+    // 3. Full role rendering: all 13 ws-act-* classes when working; idle has coffee cup & no ws-act-*
     const allRoleIds = [
-      'scout', 'medical_expert', 'writer', 'script_critic', 'art_director',
-      'editor', 'product_critic', 'copywriter', 'coordinator', 'coordinator_senior', 'feedback_analyst',
+      'researcher', 'scout', 'medical_expert', 'writer', 'storyboard_director', 'voice_director',
+      'script_critic', 'art_director', 'editor', 'product_critic', 'copywriter', 'shorts_producer',
+      'coordinator', 'coordinator_senior', 'feedback_analyst',
     ];
     pyh.setState({
       wsOffline: false,
@@ -730,8 +736,10 @@ def test_workshop_js_work_state_and_render_machine_contracts():
     assert(doc.getElementById('ws-pop-title').textContent.includes('Máy dựng (xưởng tự chạy)'), 'machine popover title check');
 
     const expectedActs = [
-      'ws-act-scout', 'ws-act-medical', 'ws-act-writer', 'ws-act-critic',
-      'ws-act-art', 'ws-act-editor', 'ws-act-copywriter', 'ws-act-coordinator', 'ws-act-analyst',
+      'ws-act-researcher', 'ws-act-scout', 'ws-act-medical', 'ws-act-writer',
+      'ws-act-storyboard', 'ws-act-voice', 'ws-act-critic',
+      'ws-act-art', 'ws-act-editor', 'ws-act-copywriter', 'ws-act-shorts',
+      'ws-act-coordinator', 'ws-act-analyst',
     ];
     const stationBtns = doc.querySelectorAll('[data-station-id]');
     for (const act of expectedActs) {
@@ -952,4 +960,81 @@ def test_workshop_js_offline_503_motion_toggle_visibility_and_observer():
         assert(btn.getAttribute('aria-pressed') === 'false', 'aria-pressed starts false');
         ''',
         pre_storage={'pyh-ws-motion': 'off'},
+    )
+
+
+def test_progress_tasks_and_cards_wrap_long_notes_without_horizontal_overflow():
+    html = DASHBOARD_HTML.read_text(encoding='utf-8')
+    assert '.prog-task .meta{margin-left:auto;white-space:nowrap}' not in html
+    assert '.prog-task{display:flex;gap:10px;align-items:baseline;padding:5px 0 5px 14px;font-size:14px;min-width:0}' in html
+    assert '.prog-task > div,.prog-body{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}' in html
+    assert '.prog-task .prog-note,.prog-task > div .meta{white-space:normal;overflow-wrap:anywhere;line-height:1.45}' in html
+    assert '.prog-task > .meta,.prog-task .prog-owner{margin-left:auto;white-space:nowrap;flex-shrink:0}' in html
+    assert '.proj-layout{display:grid;grid-template-columns:148px minmax(0,1fr);gap:16px;align-items:start}' in html
+    assert '.steps{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px;margin:12px 0 6px}' in html
+    assert '.act-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;' in html
+    assert '.row{display:grid;grid-template-columns:64px minmax(0,1fr) auto;' in html
+
+    _run_workshop_js(
+        r'''
+        const assert = (cond, msg) => { if (!cond) throw new Error(msg); };
+        const longNote = 'Sol viết, Carbon high y khoa, Carbon medium kiểm duyệt/hình/dựng, '
+          + 'Hydrogen việc nhẹ, Sonnet chấm sản phẩm; cache/pilot-archive/2026-11-14/long_unbroken_token_'
+          + 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+        ctx.setFetchHandler(async (url) => {
+          if (url.startsWith('/api/status')) {
+            return {
+              ok: true, status: 200,
+              async json() {
+                return {
+                  factory: { running: false, pid: null },
+                  waiting: 0, projects: [], stages: ['1','2','3','4','5','6','7'],
+                  log: [], agents: [], now: '2026-11-14T10:00:00Z', standards: 0,
+                };
+              },
+            };
+          }
+          if (url.startsWith('/api/company')) {
+            return { ok: true, status: 200, async json() { return { roles: [], production_running: [], production: { work_state: 'idle' } }; } };
+          }
+          if (url.startsWith('/api/overview')) {
+            return { ok: true, status: 200, async json() { return { tiles: {}, projects: [], decisions: [], resting: [] }; } };
+          }
+          if (url.startsWith('/api/activity')) {
+            return { ok: true, status: 200, async json() { return { items: [] }; } };
+          }
+          if (url.startsWith('/api/progress')) {
+            return {
+              ok: true, status: 200,
+              async json() {
+                return {
+                  total: 2, done: 1, updated: '2026-11-14',
+                  doing: [{ id: 'R1.6', title: 'Hoạt cảnh nhân viên', status: 'doing', owner: 'agy', note: longNote }],
+                  phases: [{
+                    id: 'R1', title: 'Hoàn thiện xưởng trước khi làm video mới', total: 2, done: 1,
+                    tasks: [
+                      { id: 'R1.3', title: 'Phân model ban đầu', status: 'done', owner: 'codex', note: longNote },
+                      { id: 'R1.6', title: 'Hoạt cảnh nhân viên', status: 'doing', owner: 'agy', note: longNote },
+                    ],
+                  }],
+                };
+              },
+            };
+          }
+          return { ok: true, status: 200, async json() { return { messages: [] }; } };
+        });
+
+        await ctx.pyh.refresh();
+        const doc = ctx.doc;
+        assert(doc.getElementById('prog-total').textContent === '1/2 việc · cập nhật 2026-11-14', 'renders total header');
+        const doingBody = doc.getElementById('prog-doing').querySelector('.prog-body');
+        const doingNote = doc.getElementById('prog-doing').querySelector('.prog-note');
+        const doingOwner = doc.getElementById('prog-doing').querySelector('.prog-owner');
+        assert(doingBody && doingNote && doingOwner, 'doing progress task must separate prog-body, prog-note, prog-owner');
+        assert(doingNote.textContent === longNote, 'doing note text preserved');
+        assert(doingOwner.textContent === 'agy', 'doing owner separated into .prog-owner');
+        assert(doc.getElementById('prog-phases').querySelectorAll('.prog-body').length === 2, 'phases render 2 .prog-body containers');
+        assert(doc.getElementById('prog-phases').querySelectorAll('.prog-note').length === 2, 'phases render 2 .prog-note wrappers');
+        assert(doc.getElementById('prog-phases').querySelectorAll('.prog-owner').length === 2, 'phases render 2 .prog-owner spans');
+        '''
     )

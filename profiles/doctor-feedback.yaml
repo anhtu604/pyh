@@ -417,3 +417,35 @@ entries:
   reviewer: Tu
   text: 'Ý khác: ngắn quá, độ dài video vào khoảng 10 phút'
   items: []
+- at: '2026-11-13T22:02:38+07:00'
+  slug: gout-tinh-the-urat
+  gate: medical
+  revision: '001'
+  kind: approve_note
+  reviewer: Tu
+  text: Anh Tu Vuong Dinh
+  items: []
+- at: '2026-11-13T23:56:32+07:00'
+  slug: gout-tinh-the-urat
+  gate: medical
+  revision: '001'
+  kind: reopen
+  reviewer: Tu
+  text: Bước sản xuất video gặp lỗi.
+  items: []
+- at: '2026-11-14T11:10:30+07:00'
+  slug: gout-tinh-the-urat
+  gate: medical
+  revision: '001'
+  kind: approve_note
+  reviewer: Tu
+  text: Anh Tu Vuong Dinh
+  items: []
+- at: '2026-11-14T13:35:08+07:00'
+  slug: gout-tinh-the-urat
+  gate: medical
+  revision: '001'
+  kind: reopen
+  reviewer: Tu
+  text: Bước sản xuất video gặp lỗi.
+  items: []

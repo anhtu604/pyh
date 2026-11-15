@@ -76,7 +76,7 @@ def estimate_line_ms(script: Script, project_dir: Path, *,
     if len({line.id for line in script.lines}) != len(script.lines):
         raise ValueError('Script line IDs must be unique for estimated timing')
     return {line.id: max(1, math.ceil(1000 * len(apply_pronunciation(
-        line.tts_text(expressive=profile.get('provider') == 'elevenlabs'), lexicon,
+        line.tts_text(expressive=False), lexicon,
     )) / rate)) for line in script.lines}
 
 

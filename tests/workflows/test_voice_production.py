@@ -25,7 +25,7 @@ def voice_project(tmp_path, *, delivery=False):
     return project, revision, script
 
 
-@pytest.mark.parametrize('provider', ['elevenlabs', 'vibi_minimax'])
+@pytest.mark.parametrize('provider', ['vibi_minimax'])
 def test_line_cache_survives_failed_render_and_changes_with_settings(tmp_path, provider):
     project, _, _ = voice_project(tmp_path)
     calls = []
@@ -35,7 +35,7 @@ def test_line_cache_survives_failed_render_and_changes_with_settings(tmp_path, p
         settings = 'settings-1'
 
         def cache_identity(self):
-            return {'provider': self.provider_name, 'model_id': 'eleven_v3',
+            return {'provider': self.provider_name, 'model_id': 'speech-2.8-hd',
                     'voice_id': 'test-voice', 'runtime_id': self.settings}
 
         def synthesize(self, request, output):
@@ -55,7 +55,7 @@ def test_line_cache_survives_failed_render_and_changes_with_settings(tmp_path, p
     assert len(calls) == 2 * count
 
 
-@pytest.mark.parametrize('provider', ['elevenlabs', 'command'])
+@pytest.mark.parametrize('provider', ['vibi_minimax', 'command'])
 def test_pronunciation_applied_for_all_providers(tmp_path, monkeypatch, provider):
     from healthvideo.tts import pronunciation
 
@@ -92,14 +92,14 @@ def test_captions_use_text_not_delivery(tmp_path):
     requests = []
 
     class Expressive(SilentTTS):
-        provider_name = 'elevenlabs'
+        provider_name = 'vibi_minimax'
 
         def synthesize(self, request: TTSRequest, output):
             requests.append(request.text)
             return super().synthesize(request, output)
 
     produce.produce_project(project, Expressive(), lambda argv: (_write_synthetic_output(argv) or 0))
-    assert requests[0].startswith('[sarcastic]')
+    assert not requests[0].startswith('[sarcastic]')
     rendered = (revision / 'renders/render-input.json').read_text(encoding='utf-8')
     assert '[sarcastic]' not in rendered
     assert json.loads(rendered)['scenes'][0]['narration'] == script['lines'][0]['text']
@@ -170,9 +170,8 @@ def test_vibi_normalized_cache_rejects_bad_provider_audio_and_skips_duplicate_us
     import subprocess
     import wave
 
-    from healthvideo.tts.elevenlabs import VoiceProfile
     from healthvideo.tts.normalize import NormalizedTTS
-    from healthvideo.tts.vibi import VibiError, VibiTTS
+    from healthvideo.tts.vibi import VibiError, VibiTTS, VoiceProfile
 
     profile = VoiceProfile.model_validate({
         'provider': 'vibi_minimax', 'model_id': 'speech-2.8-hd', 'voice_id': 'clone-1',
