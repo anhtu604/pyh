@@ -113,9 +113,16 @@ def test_interrupt_still_emits_terminal_activity_and_propagates(tmp_path):
     assert not (tmp_path / 'logs/.agent-running').exists()
 
 
-@pytest.mark.parametrize('message,kind', [('connection reset by peer', 'transient'),
-                                        ('permission denied', 'configuration'),
-                                        ('unexpected failure', 'agent_error')])
+@pytest.mark.parametrize(
+    'message,kind',
+    [
+        ('connection reset by peer', 'transient'),
+        ('permission denied', 'configuration'),
+        ('unexpected failure', 'agent_error'),
+        ('', 'transient'),
+        ('   \n', 'transient'),
+    ],
+)
 def test_failed_agent_output_classification(tmp_path, message, kind):
     result = _failover(tmp_path, [CODEX_SLOT], lambda *a, **kw: _completed(1, stderr=message))
     assert result.failure_kind == kind
@@ -586,3 +593,26 @@ def test_cancel_running_job_terminates_child_and_removes_job_file(tmp_path):
         if proc.poll() is None:
             proc.kill()
             proc.wait(timeout=5)
+
+
+def test_empty_nonzero_cli_exit_fails_over_as_transient(tmp_path: Path) -> None:
+    calls: list[str] = []
+
+    def failover_runner(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        calls.append(argv[0])
+        if len(calls) == 1:
+            return _completed(returncode=1, stdout="", stderr="")
+        return _completed(returncode=0, stdout="ok")
+
+    result = _failover(tmp_path, [AGY_SLOT, CODEX_SLOT], failover_runner)
+    assert result.ok is True
+    assert result.agent == "codex"
+    assert calls == ["agy", "codex"]
+
+    all_empty = _failover(
+        tmp_path,
+        [AGY_SLOT, CODEX_SLOT],
+        lambda *a, **kw: _completed(returncode=1, stdout="", stderr=""),
+    )
+    assert all_empty.ok is False
+    assert all_empty.failure_kind == "transient"

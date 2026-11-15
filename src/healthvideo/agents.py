@@ -355,8 +355,12 @@ def invoke(
     transient = (*BUSY_PATTERNS, 'connection reset', 'connection refused', 'connection timed out',
                  'network error', 'network is unreachable', 'temporary failure',
                  'timed out', 'econnreset', 'enotfound', 'http 502', 'http 504')
-    failure_kind = (None if ok else 'configuration' if any(p in lower_output for p in configuration)
-                    else 'transient' if any(p in lower_output for p in transient) else 'agent_error')
+    failure_kind = (
+        None if ok
+        else 'configuration' if any(p in lower_output for p in configuration)
+        else 'transient' if (not lower_output.strip() or any(p in lower_output for p in transient))
+        else 'agent_error'
+    )
     return AgentResult(
         agent=agent.name,
         ok=ok,

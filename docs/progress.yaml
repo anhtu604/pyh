@@ -201,13 +201,14 @@ phases:
     title: Xưởng chạy A–Z, chỉ quan sát và ghi chỗ phải can thiệp
     status: doing
     owner: xưởng
-    note: 'Xưởng nền đang tự động chạy các chủ đề thật tới cổng duyệt y khoa (an-gao-lut gặp 1 lỗi agent agy ở research; hoc-xuong-ca và men-gan-tang-va-thuoc-bo-gan đang xếp/chạy).'
+    note: 'Xưởng nền (PID 40508) đang tự động chạy các chủ đề thật tới cổng duyệt y khoa; an-gao-lut gặp 1 lần agy thoát rỗng 0 byte lúc chuyển daemon (sẽ tự thử lại ở vòng kế tiếp do fingerprint mới) và hoc-xuong-ca đang chạy research.'
   - id: '4.3'
     title: Sửa các chỗ đã ghi
     status: doing
     owner: codex
-    note: 'Đang theo dõi lượt chạy thật trong Bước 4.2 để xử lý kịp thời nếu phát sinh lỗi workflow/runtime mới.'
+    note: 'Đã sửa src/healthvideo/agents.py phân loại CLI thoát khác 0 kèm log rỗng 0 byte thành transient (failover + thử lại có giới hạn thay vì khóa agent_error); tiếp tục theo dõi lượt chạy thật trong Bước 4.2.'
   - id: '4.4'
     title: Cài thử trên checkout sạch và kiểm lệnh /pyh
-    status: todo
+    status: done
     owner: claude
+    note: 'Đã clone sạch vào TEMP chạy install/install.ps1 -SkipTts đạt exit 0 ("HealthVideo installation complete."); pyh_skill và pyh_claude_command đều OK.'
