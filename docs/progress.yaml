@@ -242,6 +242,6 @@ phases:
     note: Dùng bộ hình assets/brand/mascot qua manifest; làm sau khi PYH-003 qua Trạm 07, qua luồng mở lại cổng.
   - id: R2.5
     title: OpenMontage làm renderer
-    status: todo
-    owner: claude
+    status: doing
+    owner: codex
     note: Đề xuất hoãn tới khi có một video Remotion qua cổng video; mẫu 8 giây mới chứng minh runtime. Chờ bác sĩ quyết.
