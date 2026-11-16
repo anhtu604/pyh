@@ -1,10 +1,9 @@
 import React from 'react';
 import {Img, interpolate, staticFile, useCurrentFrame} from 'remotion';
 import {Captions} from '../components/Captions';
-import {useLayout} from '../layout';
+import {evidenceFrame, useLayout} from '../layout';
 import type {Scene} from '../types';
 import {highlightImageLayout, highlightObjectFit, localHighlightRect} from './highlightGeometry';
-import {SourceMarker} from './WhiteboardScene';
 
 type EvidenceHighlightSceneProps = {
   scene: Scene;
@@ -19,7 +18,7 @@ export const EvidenceHighlightScene: React.FC<EvidenceHighlightSceneProps> = ({s
   }
 
   const local = localHighlightRect(highlight);
-  const imageLayout = highlightImageLayout(highlight, layout.frame);
+  const imageLayout = highlightImageLayout(highlight, evidenceFrame(layout));
 
   const highlightedWidth = interpolate(frame, [0, 18], [0, local.width * imageLayout.width], {
     extrapolateRight: 'clamp',
@@ -42,7 +41,6 @@ export const EvidenceHighlightScene: React.FC<EvidenceHighlightSceneProps> = ({s
           width: highlightedWidth,
         }}
       />
-      {scene.source_marker ? <SourceMarker sourceMarker={scene.source_marker} /> : null}
       <Captions text={scene.narration} words={scene.words} durationInFrames={scene.duration_frames} />
     </>
   );

@@ -6,7 +6,6 @@ import {Captions, CAPTION_BACKGROUND_COLOR} from '../components/Captions';
 import {MascotGuide} from '../components/MascotGuide';
 import {useLayout, type Box} from '../layout';
 import {isMechanismVisual, type Scene} from '../types';
-import {SourceMarker} from './WhiteboardScene';
 import {activeSceneBeat, beatCamera} from './mechanismBeats';
 import {DiagramAnnotations} from '../anatomy/annotations';
 
@@ -148,6 +147,5 @@ export const MechanismScene: React.FC<{scene: Scene; kind: MechanismKind}> = ({s
     <div data-mechanism-caption-band="true" style={{position: 'absolute', left: caption.left, bottom: caption.bottom,
       width: caption.width, height: caption.height, backgroundColor: CAPTION_BACKGROUND_COLOR, borderRadius: 16}} />
     <Captions text={scene.narration} words={scene.words} durationInFrames={scene.duration_frames} />
-    {scene.source_marker ? <SourceMarker sourceMarker={scene.source_marker} /> : null}
   </AbsoluteFill>;
 };

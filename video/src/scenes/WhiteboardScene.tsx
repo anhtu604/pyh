@@ -20,30 +20,6 @@ export const whiteboardFontSize = (text: string, width: number, height: number, 
   return 1;
 };
 
-export const SourceMarker = ({sourceMarker}: {sourceMarker: string}): React.JSX.Element => {
-  const m = useLayout().sourceMarker;
-  return (
-  <div
-    aria-label={`Nguồn ${sourceMarker}`}
-    style={{
-      backgroundColor: '#FFD54F',
-      border: '4px solid #202124',
-      borderRadius: 18,
-      color: '#202124',
-      fontFamily: FONT_FAMILY,
-      fontSize: m.fontSize,
-      fontWeight: 800,
-      padding: '12px 22px',
-      position: 'absolute',
-      right: m.right,
-      top: m.top,
-    }}
-  >
-    {sourceMarker}
-  </div>
-  );
-};
-
 export const WhiteboardScene: React.FC<WhiteboardSceneProps> = ({scene}) => {
   const frame = useCurrentFrame();
   const layout = useLayout();
@@ -90,7 +66,6 @@ export const WhiteboardScene: React.FC<WhiteboardSceneProps> = ({scene}) => {
         {pieces.map((piece, index) => <span key={index} data-entrance-frame={piece.start_frame}
           style={{opacity: frame >= piece.start_frame ? 1 : 0}}>{piece.text}</span>)}
       </div> : null}
-      {scene.source_marker ? <SourceMarker sourceMarker={scene.source_marker} /> : null}
       <Captions text={scene.narration} words={scene.words} durationInFrames={scene.duration_frames} />
     </>
   );

@@ -72,11 +72,9 @@ describe('anatomy geometry', () => {
 });
 
 describe('mechanism scenes', () => {
-  it('renders an authored source marker outside the subject camera', () => {
+  it('never draws the internal source marker', () => {
     const output = html(AnatomyScene, {...scene, source_marker: '[12]'});
-    expect(output).toContain('Nguồn [12]');
-    expect(output).toContain('>[12]</div>');
-    expect(output.indexOf('Nguồn [12]')).toBeGreaterThan(output.indexOf('data-mechanism-caption-band'));
+    expect(output).not.toContain('[12]');
   });
   it('places readable captions and presenter after the closed subject camera', () => {
     clock.frame = 0;

@@ -46,7 +46,6 @@ export type GaugeReadoutMovesProps = {
   maxValue?: number;
   unit?: string;
   label?: string;
-  sourceMarker?: string | null;
   variant?: 'needle-sweep-selftest' | 'tape-scroll-fixed-pointer';
 };
 
@@ -55,7 +54,6 @@ export const GaugeReadoutMoves: React.FC<GaugeReadoutMovesProps> = ({
   maxValue = 10,
   unit,
   label,
-  sourceMarker,
   variant = 'needle-sweep-selftest',
 }) => {
   const frame = useCurrentFrame();
@@ -161,11 +159,6 @@ export const GaugeReadoutMoves: React.FC<GaugeReadoutMovesProps> = ({
             textAlign: isVertical ? 'center' : 'left',
           }}
         >
-          {sourceMarker ? (
-            <div style={{fontSize: u(34), fontWeight: 700, color: brand.teal}}>
-              {sourceMarker}
-            </div>
-          ) : null}
           {hasValue || unit ? (
             <div
               data-gauge-value={hasValue ? String(value) : undefined}
@@ -173,7 +166,7 @@ export const GaugeReadoutMoves: React.FC<GaugeReadoutMovesProps> = ({
                 fontSize: u(128),
                 fontWeight: 800,
                 lineHeight: 1.05,
-                marginTop: sourceMarker ? u(16) : 0,
+                marginTop: 0,
                 color: brand.yellow,
                 opacity: settled ? Math.max(0.35, pop) : 0.65,
                 transform: `scale(${settled ? (0.9 + 0.1 * pop).toFixed(3) : '0.92'})`,

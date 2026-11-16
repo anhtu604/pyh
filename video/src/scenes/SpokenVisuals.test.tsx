@@ -52,7 +52,8 @@ describe('spoken visual captions', () => {
 
 it('source card displays real metadata and a labelled interpretation without yellow highlight', () => {
   const output = markup(SourceCardScene);
-  for (const text of ['A documented study', 'Journal', '2024', 'PMID: 12345', 'DOI: 10.1000/example', 'Diễn giải', '[1]']) expect(output).toContain(text);
+  for (const text of ['A documented study', 'Journal', '2024', 'PMID: 12345', 'DOI: 10.1000/example', 'Diễn giải']) expect(output).toContain(text);
+  expect(output).not.toContain('[1]');
   expect(output).not.toContain('mix-blend-mode');
   expect(output).not.toContain('rgba(250, 204, 21');
 });

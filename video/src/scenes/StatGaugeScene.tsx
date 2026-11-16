@@ -4,7 +4,6 @@ import {ChartLiveMoves} from '../motion/ChartLiveMoves';
 import {GaugeReadoutMoves} from '../motion/GaugeReadoutMoves';
 import {TimelineTravel} from '../motion/TimelineTravel';
 import type {Scene} from '../types';
-import {SourceMarker} from './WhiteboardScene';
 
 export const StatGaugeScene: React.FC<{scene: Scene}> = ({scene}) => {
   const gauge = scene.stat_gauge;
@@ -19,7 +18,6 @@ export const StatGaugeScene: React.FC<{scene: Scene}> = ({scene}) => {
           value={gauge.value}
           unit={gauge.unit}
           label={gauge.label}
-          sourceMarker={scene.source_marker}
         />
       ) : variant === 'timeline-travel' ? (
         <TimelineTravel
@@ -36,10 +34,8 @@ export const StatGaugeScene: React.FC<{scene: Scene}> = ({scene}) => {
           maxValue={gauge.max_value ?? undefined}
           unit={gauge.unit}
           label={gauge.label}
-          sourceMarker={scene.source_marker}
         />
       )}
-      {scene.source_marker ? <SourceMarker sourceMarker={scene.source_marker} /> : null}
       <Captions text={scene.narration} words={scene.words} durationInFrames={scene.duration_frames} />
     </>
   );

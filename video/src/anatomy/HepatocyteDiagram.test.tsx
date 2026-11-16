@@ -73,7 +73,7 @@ describe('hepatic mechanism boundaries',()=>{
 
   const s29=renderToStaticMarkup(<HepatocyteDiagram view="injury" labels={{}} state="diseased" severity={0.8} emphasizeFlow cueProgress={{toxic:1,block:1,leak:1}}/>);
   expect(s29).toContain('contaminant-panel');
-  expect(s29).toContain('386 mẫu từ 91 ca tổn thương gan [E03]');
+  expect(s29).toContain('386 mẫu từ 91 ca tổn thương gan');
   expect(s29).toContain('34% mẫu vượt ngưỡng thủy ngân');
   expect(s29).toContain('27,7% mẫu');
   expect(s29).not.toContain('chronic-acute-overlay');

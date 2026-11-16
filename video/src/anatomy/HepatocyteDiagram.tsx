@@ -236,7 +236,7 @@ const InjuryMechanismsLayer: React.FC<{
         <g data-layer="contaminant-panel">
           <CalloutBox
             x={58} y={154} width={444} height={46}
-            title="386 mẫu từ 91 ca tổn thương gan [E03]" subtitle="Tỷ lệ trong mẫu nghiên cứu" leaderTo={[74, 208]}
+            title="386 mẫu từ 91 ca tổn thương gan" subtitle="Tỷ lệ trong mẫu nghiên cứu" leaderTo={[74, 208]}
             titleSize={12.5} stroke={brand.navy} strokeWidth={2}
           />
           {/* Kim loại nặng (Hg) */}

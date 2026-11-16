@@ -44,7 +44,6 @@ export type ChartLiveMovesProps = {
   value?: number | string;
   unit?: string;
   label?: string;
-  sourceMarker?: string | null;
   variant?: 'oscilloscope-stream' | 'axis-rescale-shock';
 };
 
@@ -52,7 +51,6 @@ export const ChartLiveMoves: React.FC<ChartLiveMovesProps> = ({
   value,
   unit,
   label,
-  sourceMarker,
   variant = 'oscilloscope-stream',
 }) => {
   const frame = useCurrentFrame();
@@ -114,17 +112,12 @@ export const ChartLiveMoves: React.FC<ChartLiveMovesProps> = ({
           }}
         >
           <div>
-            {sourceMarker ? (
-              <div style={{fontSize: u(34), fontWeight: 700, color: brand.teal}}>
-                {sourceMarker}
-              </div>
-            ) : null}
             {label ? (
               <div
                 style={{
                   fontSize: u(48),
                   fontWeight: 800,
-                  marginTop: sourceMarker ? u(10) : 0,
+                  marginTop: 0,
                   lineHeight: 1.2,
                 }}
               >

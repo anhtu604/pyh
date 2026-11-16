@@ -9,7 +9,8 @@ export type FrameLayout = {
   captions: {left: number; bottom: number; width: number; height: number;
     fontSize: number; maxTextWidth: number; rowY: [number, number]; maxWords: number};
   narration: {left: number; right: number; top: number; fontSize: number};
-  sourceMarker: {right: number; top: number; fontSize: number};
+  // Safe-zone: card must end SAFE_GAP above the caption band; derived from captions, never hand-placed per scene.
+  sourceCard: Box & {padding: number; fontSize: number};
   whiteboardPath: string;
   whiteboardText: Box;
   illustrationText: Box;
@@ -18,6 +19,25 @@ export type FrameLayout = {
   quote: {bottom: number; inset: number; fontSize: number};
   assets: {brand: Box; outroBrand: Box; outroMascot: Box; whiteboard: Box; explain: Box; standard: Box};
 };
+
+// Minimum clear space between the caption band and any source note.
+export const SAFE_GAP = 24;
+
+export const captionBox = (layout: FrameLayout): Box => ({
+  left: layout.captions.left,
+  top: layout.frame.height - layout.captions.bottom - layout.captions.height,
+  width: layout.captions.width,
+  height: layout.captions.height,
+});
+
+// Region above the caption band (plus SAFE_GAP) where source imagery may be placed.
+export const evidenceFrame = (layout: FrameLayout): {width: number; height: number} => ({
+  width: layout.frame.width,
+  height: captionBox(layout).top - SAFE_GAP,
+});
+
+export const boxesIntersect = (a: Box, b: Box): boolean =>
+  a.left < b.left + b.width && b.left < a.left + a.width && a.top < b.top + b.height && b.top < a.top + a.height;
 
 export const LAYOUTS: Record<FormatProfile, FrameLayout> = {
   vertical_clip: {
@@ -31,7 +51,7 @@ export const LAYOUTS: Record<FormatProfile, FrameLayout> = {
     captions: {left: 72, bottom: 150, width: 936, height: 160, fontSize: 48,
       maxTextWidth: 900, rowY: [64, 140], maxWords: 6},
     narration: {left: 96, right: 96, top: 760, fontSize: 72},
-    sourceMarker: {right: 72, top: 96, fontSize: 52},
+    sourceCard: {left: 72, top: 250, width: 936, height: 1336, padding: 48, fontSize: 40},
     whiteboardText: {left: 96, top: 760, width: 888, height: 240},
     illustrationText: {left: 96, top: 760, width: 888, height: 240},
     whiteboardPath: 'M180 1050 C 420 1010, 680 1090, 900 1040',
@@ -57,7 +77,7 @@ export const LAYOUTS: Record<FormatProfile, FrameLayout> = {
     captions: {left: 500, bottom: 32, width: 1200, height: 148, fontSize: 44,
       maxTextWidth: 1160, rowY: [60, 130], maxWords: 10},
     narration: {left: 160, right: 160, top: 380, fontSize: 64},
-    sourceMarker: {right: 72, top: 56, fontSize: 44},
+    sourceCard: {left: 500, top: 150, width: 1200, height: 726, padding: 44, fontSize: 36},
     whiteboardText: {left: 500, top: 300, width: 1200, height: 300},
     illustrationText: {left: 500, top: 650, width: 1200, height: 210},
     whiteboardPath: 'M620 640 C 900 600, 1300 680, 1580 630',
