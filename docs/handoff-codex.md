@@ -1,5 +1,77 @@
 # Bàn giao cho codex (2026-11-14, từ Claude)
 
+## Cập nhật Antigravity Swarm (2026-11-15 — nối tiếp bàn giao 18:52 UTC+7)
+
+- **7 điểm rà `repair_service` & 16 vai Company 2.0 + rà `gate_for_project` + vá deadlock + nối CLI:** đã hoàn tất toàn bộ 7 điểm rà `repair_service` (PID/token, `_maintenance` giữ lock & `recover_interrupted_repairs()` kể cả khi gián đoạn lúc `phase: diagnosing`, khóa cứng `_IGNORED_SNAPSHOT_DIRS` / `_restore_workspace` không chạm `projects/`/`topics/`/`docs/`/runtime `profiles/`, `_verify_retry_validated`, nhánh `delegate` giữ cổng, cooldown quota/timeout, `stop_background()`), cập nhật 16 vai (`company.yaml`, `dashboard.html`, `tests/test_company.py`, `tests/workflows/test_dashboard.py`), đồng bộ `factory.gate_for_project` / `require_passed_review` Trạm 07/12 trên `cli.py` & `telegram_bot.py`, vá deadlock `_maker_slots_for_critic` trong `src/healthvideo/workflows/runner.py`, nối `repair_service.ensure_background` / `stop_background` vào `cli.xuong` và chạy smoke subprocess cô lập thành công.
+- **Vá 3 bug phát hiện thêm trong đợt xử lý cuối:**
+  - `video/src/anatomy/IntestinalVitaminCAbsorption.tsx`: bổ sung `<g data-layer="intestinal-absorption">...</g>` khớp `library.json`.
+  - `src/healthvideo/agents.py`: mở rộng `QUOTA_PATTERNS`, `_RESET_AT`/`parse_reset`, `_ACCOUNT` bắt thông báo kiểu `"You've hit your weekly limit · resets 5pm (Asia/Ho_Chi_Minh)"` (+ regression tests ở `tests/test_agents.py`).
+  - `src/healthvideo/workflows/storyboard_design.py` & `src/healthvideo/workflows/draft.py`: `shutil.rmtree(staging, ignore_errors=True)` trong `finally:` để `[WinError 32]` Windows không che mất `ValueError` validation (+ test `PermissionError` ở `tests/workflows/test_draft.py`).
+- **Đồng bộ Trạm 07/12 cho toàn bộ 26 file test còn tồn:** xử lý dứt điểm từ **84 failed, 12 errors** -> **0**; bổ sung `submit_medical_review_fixture` & `submit_video_fixture` trong `tests/helpers.py`, sửa typo `submission == "medical_review"` ở `tests/workflows/test_explain_first.py`; không sửa `tests/fixtures/*`, không nới bất kỳ cổng duyệt nào.
+- **Nghiệm thu cuối cùng toàn hệ thống:** `.venv/Scripts/python.exe -m pytest -q --tb=short` đạt **2030 passed, 1 skipped, 0 failed, 0 errors** (`318.66s`); `.venv/Scripts/python.exe -m ruff check src tests tools` đạt; `git diff --check` exit 0; `git status --short tests/fixtures` rỗng; `pnpm --dir video typecheck` exit 0; `pnpm --dir video test` đạt **36/36 files, 270/270 tests**.
+- **Trạng thái xưởng sống (không ngắt `PID 48216`):** `thay-men-gan-tang-lien-voi-mua-thuoc-bo-gan-mat-gan-uong-coi` đang chạy active ở `production_in_progress` (đã có `video.mp4`, `video-qa.json`, `pronunciation-qa.json` cảnh báo 210 khác biệt phiên âm/Whisper để bác sĩ quyết định ở cổng video + PIN, active markers `.agent-running`, `.chat-step-running`, `.job-badbcb46eb594f369c4c2bc78767fa86.json`). 4 topic còn lại (`an-gao-lut-...`, `hoc-xuong-ca-...`, `men-gan-tang-va-thuoc-bo-gan`, `uong-1-vien-c-sui-...`) vẫn ở `draft_ready` với `blocked.txt` cũ từ trước khi vá; khi `PID 48216` rảnh cần `healthvideo xuong --stop` rồi `healthvideo xuong --background` từ shell thường để nạp mã mới. Chưa tự commit hay push; giữ nguyên các thay đổi của phiên khác.
+
+## Bàn giao Codex ngày 2026-11-15 lúc 18:52 UTC+7 — tạm dừng theo yêu cầu bác sĩ
+
+### Mục tiêu và yêu cầu mới nhất
+
+Bác sĩ muốn xưởng tự nhận lỗi, tìm nguyên nhân, sửa và thử lại. Leader chịu trách nhiệm phân tích, giao việc và nghiệm thu. Có thêm một agent Kỹ sư sửa lỗi chạy độc lập. Chỉ đưa bác sĩ duyệt y khoa khi trạm 07 đạt với kịch bản hiện hành. Cổng video cần cả trạm 07 và 12 đạt với dữ liệu hiện hành. Bác sĩ yêu cầu tạm dừng triển khai và bàn giao tại thời điểm này.
+
+### Đã chạy và kiểm chứng trong phiên này
+
+- Scheduler trong `src/healthvideo/workflows/runner.py` đã thay vòng chờ cả batch bằng theo dõi future và kiểm tra thay đổi hàng đợi mỗi giây khi còn tác vụ đang chạy. Nhận được dự án vừa duyệt, vừa gỡ retry hoặc mới thêm trong lúc dự án khác còn chạy. Không giao trùng cùng slug. Khóa GPU hiện hành vẫn được dùng. Có 3 test hồi quy trong `tests/workflows/test_parallel_company.py`.
+- Đã sửa `script_review.py`, `product_review.py`, `draft.py`, `produce.py`, `gate_review.py` và thêm `factory.gate_for_project`. Hết vòng sửa mà điểm chưa đạt sẽ báo lỗi tại xưởng. Không tự nộp sang bác sĩ. Cả API duyệt và dashboard kiểm kết quả critic cùng hash hiện hành. Đã sửa fixture synthetic để ghi rõ kết quả critic trong tests.
+- Bộ kiểm liên quan scheduler, critic, gate và dashboard đạt **191 test**, Ruff sạch trước khi bắt đầu phần agent sửa lỗi mới. Đã nạp phần này vào xưởng thật, PID **48216**. Đã quan sát trạm 9 dựng dự án men gan đồng thời agent làm hóc xương cá và C sủi.
+- FLUX trước đó sập `memory allocation ... failed`, exit `3221226505`. `tools/flux/generate.py` đã chuyển Qwen sang `device_map="auto"`, pipeline dùng `enable_sequential_cpu_offload()`. Tạo thật PNG 384×256 thành công tại `cache/flux-memory-smoke.png`. Chưa nghiệm thu video men gan cuối cùng.
+- Studio đã trả HTTP 200 tại `http://127.0.0.1:3000`. `dashboard.py` chờ HTTP sẵn sàng trước khi trả URL và dùng lại Studio đang chạy. Lỗi ban đầu do mở tab trước khi build xong khoảng 35 giây. Bộ dashboard + FLUX trước đợt sửa critic đạt 86 test.
+- `cli.py` lệnh `step build-ledger` đã ưu tiên `claims.yaml` + `records.yaml` hiện hành trước ledger cũ. Nguyên nhân hóc xương cá thiếu E06 là bản tổng hợp cũ được ưu tiên đọc lại. 65 test CLI đạt ở lần sửa này.
+- Validator outro chấp nhận câu kết mới trong doctor-feedback và câu cũ để đọc revision cũ. Đã khởi động lại app và xưởng để nạp mã. Tab dashboard cũ có thể báo `forbidden` sau restart vì token phiên đổi. Cần Ctrl+F5 và mở lại gói duyệt.
+- Medical expert đã được bác sĩ chọn chỉ `agy / gemini-4-carbon-medium`, một model trong override của `profiles/company.yaml`.
+
+### Agent sửa lỗi mới đang làm dở — chưa kích hoạt
+
+- `profiles/company.yaml` thêm `repair_engineer`, tên Kỹ sư sửa lỗi, tier medium, skill `pyh-repair-engineer`, step `repair`.
+- Mới tạo `.agents/skills/pyh-repair-engineer/SKILL.md`. Đã bổ sung trách nhiệm phân tích lỗi và nghiệm thu vào `.agents/skills/pyh-coordinator/SKILL.md` và `pyh-coordinator-senior/SKILL.md`.
+- Mới tạo `src/healthvideo/workflows/repair_service.py`. Prototype chạy process riêng, dùng singleton kernel lock qua `factory.FactoryLock(root / 'cache/repair-worker')`. Quét lỗi dự án khi xưởng đang chạy. Leader chuyên sâu tạo `Diagnosis`, engineer sửa file kỹ thuật được giao, Python chạy pytest và Ruff, Leader ghi `Acceptance`, rồi gỡ retry. Giới hạn 2 lượt sửa cho mỗi revision. Log tại `topics/logs/repair/<slug>/<attempt>/`, trạng thái tại `topics/logs/<slug>/leader-repair.yaml`.
+- Prototype chỉ cho sửa file hiện có dưới `src/`, `tools/`, `video/`, với pytest hiện có do Leader chỉ định. Lỗi cần đổi dữ kiện y khoa, hồ sơ đã duyệt, cấu hình tài khoản hoặc thiếu dữ kiện được giữ lại và ghi vai cần tiếp nhận. Chưa có nhánh tự giao lại writer/medical_expert cho các trường hợp đó.
+- Prototype chờ toàn xưởng rảnh trước khi sửa code dùng chung, dừng xưởng, sửa/test/nghiệm thu, khôi phục nội dung file khai báo nếu lỗi, rồi bật lại xưởng. Leader có thể chẩn đoán trong lúc dự án khác chạy. Chưa kiểm chứng sửa lỗi thật hoặc crash recovery.
+- Dashboard thêm `repair_engineer` vào `WS_COUNTER_BASE`. Chưa nạp phần giao diện mới này vào app đang chạy.
+- `tests/workflows/test_repair_service.py` có 7 trường hợp mới, đều đạt trong lần chạy chung với tests company. Tổng kết lần chạy **28 passed, 2 failed**. Hai test fail là `tests/test_company.py::test_role_skills_follow_spec_table` và `::test_split_script_roles_have_new_names`, vì kỳ vọng vẫn là 15 vai, thiếu vai mới. Chưa sửa hai kỳ vọng khi bác sĩ yêu cầu tạm dừng.
+- Ruff của repair service, CLI và test mới đã đạt. Chưa chạy toàn suite sau khi thêm vai thứ 16.
+- **Chưa gọi `ensure_background()` trên repo thật. Đã gỡ hook tự bật service khỏi CLI trước bàn giao để phần chưa nghiệm thu không tự chạy khi ai khởi động lại xưởng.** Khi tiếp tục cần hoàn thiện, kiểm thử và chủ động nối service vào lifecycle xưởng.
+
+### Điểm cần rà trước khi bật agent sửa lỗi
+
+1. `_active()` đang dùng sự tồn tại marker, cần đối chiếu PID/process token để marker cũ không giữ worker mãi. Cần test công việc đang chạy thật và marker mồ côi.
+2. `_maintenance()` đã giữ xưởng dừng tới hết kiểm thử và Leader nghiệm thu, rồi mới bật lại. Cần cơ chế phục hồi bền vững nếu process repair chết giữa lúc sửa. Hiện backup file ở RAM và việc resume nằm trong `finally`. Cần chống một app khác bật xưởng trong lúc maintenance.
+3. Kiểm việc engineer chỉ sửa đúng file Leader giao và bảo toàn mọi thay đổi đang có. Hiện phạm vi được chỉ dẫn bằng prompt, Python chỉ kiểm đường dẫn được giao và rollback các file đó khi test/acceptance fail. Chưa có phát hiện thay đổi ngoài phạm vi hoặc file mới do agent tạo.
+4. `retry_requested` hiện được đổi sang `validated` khi không còn blocked và project không active. Cần bằng chứng lượt thử lại thực sự đã chạy và validator đạt trước khi Leader kết luận đã phục hồi. Không được nhận chỉ gỡ khóa là đã sửa xong.
+5. Sau `hold` hiện giữ `needs_attention`. Cần thiết kế đường Leader giao đúng writer/medical_expert/editor khi lỗi nằm ở nội dung, với cổng hiện hành. Không cho chuyên viên kỹ thuật sửa claim hoặc tự tạo báo cáo critic để đạt.
+6. Cần kiểm quota/timeout, trạng thái service sau crash và lịch nghỉ giữa hai lượt lỗi. Chưa có smoke thật của chuỗi Leader → engineer → test → Leader nghiệm thu → thử lại.
+7. `gate_for_project` lọc dashboard và thông báo. Cần rà các đường CLI/Telegram mở gói duyệt để bảo đảm cùng quy tắc trạm 07/12. Không tự sửa hoặc thu hồi approval bác sĩ đã cấp trước yêu cầu mới.
+
+### Trạng thái máy lúc bàn giao
+
+- API dashboard `127.0.0.1:8765` trả trạng thái xưởng running, PID 48216.
+- Có marker production thật của `thay-men-gan-tang-lien-voi-mua-thuoc-bo-gan-mat-gan-uong-coi`. Không có marker agent trong lần kiểm lúc 18:52. Đây là ảnh chụp trạng thái, cần kiểm lại khi tiếp tục.
+- Bác sĩ tạm dừng phần triển khai. Phiên này giữ tác vụ dựng đang chạy để bàn giao, không ngắt render.
+- Có nhiều thay đổi từ phiên/nhân viên khác trong workspace, gồm anatomy, doctor-feedback và topics/code-review. Không revert hoặc commit gộp chúng. Phiên này chưa tự commit/push.
+
+### Bước tiếp theo khi bác sĩ yêu cầu tiếp tục
+
+1. Đọc đoạn bàn giao này, AGENTS.md, spec company, rồi kiểm status và log mới. Phân biệt lỗi cũ trong `blocked-reason.md` với log lỗi hiện tại.
+2. Rà prototype `repair_service.py` theo các điểm trên, cập nhật tests company cho 16 vai và thêm test phục hồi khi service chết, nghiệm thu sau retry, scope file, singleton và quota.
+3. Chạy `.venv/Scripts/python.exe -m pytest tests/workflows/test_repair_service.py tests/test_company.py -q`, Ruff, rồi các test scheduler/critic/gate/dashboard liên quan. Bộ 191 test trước đó không chứng minh prototype mới đã nghiệm thu.
+4. Sau khi đạt mới nối `ensure_background(root)` vào lifecycle CLI/xưởng, bật service và quan sát một lỗi fixture trong môi trường cô lập. Chỉ sau đó cho xử lý lỗi dự án thật.
+5. Kiểm toàn trình video men gan và test render liên quan trước kết luận trạm 9 đã hoàn tất. Bác sĩ vẫn tự duyệt bằng PIN.
+
+### Nơi lấy bằng chứng
+
+- Trạng thái hiện hành qua `.venv/Scripts/healthvideo.exe status` và API dashboard.
+- `topics/logs/<slug>/blocked.txt`, `agent-retry.yaml`, `production-retry.yaml` cùng log CLI mới nhất, kể cả `parallel-*`.
+- `cache/flux-memory-smoke.log`, `cache/studio.log`.
+- Không có observation ID claude-mem mới được tạo trong phiên này. Dùng file và log thật làm nguồn khi tiếp tục.
+
 ## Trạng thái mới nhất ngày 2026-11-15
 
 - Đã hoàn tất đóng gói & tích hợp **PYH Company 2.0 + Channel Connections** trên checkout chính `master` (cùng 1 worktree `E:/Protect Your Health`, 1 nhánh `* master`; đã sao lưu báo cáo và gắn tag `archive/*` cho 14 nhánh chưa gộp trước khi dọn 20 worktree phụ và 41 nhánh cũ). Đạt **35/38 `done`** trên [docs/progress.yaml](progress.yaml); còn **3/38 `doing`** (`CH.3`, `4.2`, `4.3`) đang vận hành tự động về cổng duyệt của bác sĩ.

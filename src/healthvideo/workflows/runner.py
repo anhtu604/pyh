@@ -7,7 +7,7 @@ import subprocess
 import threading
 import time
 from collections.abc import Callable, Iterator, Mapping
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, as_completed, wait
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -51,6 +51,7 @@ from healthvideo.workflows.production_retry import (
     record_agent_failure,
     record_failure,
     record_model_resume,
+    retry_deadlines,
     retry_status,
 )
 from healthvideo.workflows.script_review import (
@@ -117,6 +118,12 @@ def next_step(state: WorkflowState | None) -> StepKind | None:
 
 
 PROMPTS_DIR: Path = Path(__file__).resolve().parent.parent / "prompts"
+PAUSED_FILE: str = "paused.yaml"
+
+
+def is_project_paused(root: Path, slug: str) -> bool:
+    """Return True if automation for this project has been paused by the doctor."""
+    return (root / "topics" / "logs" / slug / PAUSED_FILE).is_file()
 
 HARD_RULES: tuple[str, ...] = (
     "Không chép toàn văn hay đoạn dài từ nguồn vào project; trích dẫn ≤ 25 từ kèm locator.",
@@ -240,34 +247,49 @@ def gpu_mutex(root: Path) -> Iterator[None]:
                 fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
 
 
-def _maker_slots_for_critic(root: Path, slug: str, critic_role: str) -> tuple[ModelSlot, ...]:
-    maker_roles = set(CRITIC_OF.get(critic_role, ()))
+def _maker_slots_for_critic(
+    root: Path,
+    slug: str,
+    critic_role: str,
+    company: Company | None = None,
+) -> tuple[ModelSlot, ...]:
+    maker_order = CRITIC_OF.get(critic_role, ())
+    maker_roles = set(maker_order)
     if not maker_roles:
         return ()
     act_path = root / ACTIVITY_FILE
     if not act_path.is_file():
         return ()
-    slots: list[ModelSlot] = []
-    seen: set[ModelSlot] = set()
+    latest_by_role: dict[str, ModelSlot] = {}
     try:
         for line in act_path.read_text(encoding="utf-8", errors="replace").splitlines():
             if not line.strip():
                 continue
             row = json.loads(line)
+            role = row.get("role")
             if (
                 row.get("slug") == slug
-                and row.get("role") in maker_roles
+                and role in maker_roles
                 and row.get("ok") is True
                 and row.get("cli")
                 and row.get("model")
             ):
-                slot = ModelSlot(cli=str(row["cli"]), model=str(row["model"]))
-                if slot not in seen:
-                    seen.add(slot)
-                    slots.append(slot)
+                latest_by_role[str(role)] = ModelSlot(cli=str(row["cli"]), model=str(row["model"]))
     except (OSError, ValueError):
         return ()
-    return tuple(slots)
+    if not latest_by_role:
+        return ()
+    excluded = tuple(dict.fromkeys(latest_by_role.values()))
+    active_company = company or load_company()
+    critic_chain = list(active_company.chain(critic_role))
+    excluded_identities = {slot.model_identity for slot in excluded}
+    if not [slot for slot in critic_chain if slot.model_identity not in excluded_identities]:
+        primary_role = maker_order[0]
+        primary_slot = latest_by_role.get(primary_role)
+        if primary_slot is not None and any(slot.model_identity != primary_slot.model_identity
+                                            for slot in critic_chain):
+            return (primary_slot,)
+    return excluded
 
 
 def _invoke_supports_exclude(invoke_fn: object) -> bool:
@@ -451,6 +473,13 @@ def _build_step_prompt(
     if rewriting:
         notes = expert.answer_notes(project_dir) if answering else revision_notes(project_dir)
         prompt_fields["reject_note"] = f"{notes}\n{prompt_fields.get('reject_note', '')}".strip()
+    if step in {"draft", "storyboard_design", "revise_product", "revise_production"}:
+        blocked = root / 'topics/logs' / entry.slug / 'blocked.txt'
+        if blocked.is_file():
+            diagnostic = _sanitize_reason(RuntimeError(blocked.read_text(encoding='utf-8', errors='replace')))
+            prompt_fields['reject_note'] = (prompt_fields.get('reject_note', '')
+                                           + '\nLỗi kiểm tra cần sửa trong phạm vi bước này: '
+                                           + diagnostic[-6000:])
     prompt = render_prompt(step, company=deps.company, **prompt_fields)
     standards_block = prompt_block(root, slug=entry.slug)
     if standards_block:
@@ -503,7 +532,7 @@ def _run_agent_invocation(
     role = deps.company.role_for_step(step)
     invoke_kwargs: dict[str, object] = {}
     if reviewing and _invoke_supports_exclude(deps.invoke):
-        excluded = _maker_slots_for_critic(root, entry.slug, role.id)
+        excluded = _maker_slots_for_critic(root, entry.slug, role.id, company=deps.company)
         if excluded:
             invoke_kwargs["exclude_slots"] = excluded
     try:
@@ -531,6 +560,8 @@ def _run_agent_invocation(
                 report.waiting_model.append(entry.slug)
         return "waiting_model", None, None, None
     except Exception as exc:  # noqa: BLE001 — a failed tool holds only this topic
+        if is_project_paused(root, entry.slug):
+            return "paused", None, None, None
         kind = (
             "transient"
             if isinstance(exc, (TimeoutError, ConnectionError, subprocess.TimeoutExpired))
@@ -555,6 +586,8 @@ def _run_agent_invocation(
         return "blocked", None, None, None
 
     if not result.ok:
+        if is_project_paused(root, entry.slug):
+            return "paused", result.log_path, None, None
         with _topic_lock(entry.slug):
             record_agent_failure(
                 root,
@@ -660,6 +693,8 @@ def _run_parallel_branches(
 
     if any(res[0] == "waiting_model" for res in outcomes.values()):
         return "waiting_model", len(branches)
+    if any(res[0] == "paused" for res in outcomes.values()):
+        return "paused", len(branches)
     for b_step in branches:
         st, log_p, err = outcomes[b_step]
         if st != "ok":
@@ -683,6 +718,8 @@ def _run_topic(
     entries = [topic]
 
     for entry in entries:
+        if is_project_paused(root, entry.slug):
+            continue
         waiting = root / "topics" / "logs" / entry.slug / WAITING_MODEL_FILE
         if waiting.exists():
             back = waiting_until(root, entry.slug)
@@ -702,6 +739,8 @@ def _run_topic(
                                     "doctor_note": entry.doctor_note}, sort_keys=True)
         while True:
             with chat.step_boundary(root, entry.slug):
+                if is_project_paused(root, entry.slug):
+                    break
                 state = deps.read_state(project_dir)
                 pending_change = change_request.pending_note(project_dir)
                 with _topic_lock(entry.slug):
@@ -872,6 +911,8 @@ def _run_topic(
                         answering=answering,
                     )
                     if outcome != "ok":
+                        break
+                    if is_project_paused(root, entry.slug):
                         break
                     if reviewing:
                         record = (record_review if step == "script_review"
@@ -1068,9 +1109,52 @@ def run_queue(
             _mark_blocked(root, entry.slug, f"lỗi xử lý chủ đề: {reason}", report, log_path=log)
             return False
 
-    if max_parallel_topics > 1 and not once and len(entries) > 1:
-        with ThreadPoolExecutor(max_workers=min(max_parallel_topics, len(entries))) as pool:
-            list(pool.map(_run_entry, entries))
+    if max_parallel_topics > 1 and not once:
+        def dispatch_signature(entry: QueueEntry) -> tuple:
+            logs = root / 'topics/logs' / entry.slug
+            paths = [root / 'projects' / entry.slug / 'project.yaml']
+            paths.extend(logs / name for name in (
+                'blocked.txt', 'production-retry.yaml', 'agent-retry.yaml',
+                WAITING_MODEL_FILE, 'waiting-model-step.yaml', PAUSED_FILE,
+            ))
+            contents = []
+            for path in paths:
+                try:
+                    contents.append(path.read_bytes())
+                except FileNotFoundError:
+                    contents.append(None)
+            quota_until = waiting_until(root, entry.slug)
+            quota_waiting = quota_until is not None and quota_until > datetime.now(UTC)
+            return (entry.model_dump_json(), *contents,
+                    tuple(retry_deadlines(root, entry.slug)), quota_waiting)
+
+        def run_and_snapshot(entry: QueueEntry) -> tuple:
+            _run_entry(entry)
+            return dispatch_signature(entry)
+
+        with ThreadPoolExecutor(max_workers=max_parallel_topics) as pool:
+            pending = {}
+            completed = {}
+            while True:
+                active = set(pending.values())
+                for entry in entries:
+                    if entry.slug in active:
+                        continue
+                    if completed.get(entry.slug) == dispatch_signature(entry):
+                        continue
+                    # A fresh retry replaces the previous blocked/gate summary.
+                    with _REPORT_LOCK:
+                        for items in (report.blocked, report.at_gate, report.waiting_model):
+                            if entry.slug in items:
+                                items.remove(entry.slug)
+                    pending[pool.submit(run_and_snapshot, entry)] = entry.slug
+                    active.add(entry.slug)
+                if not pending:
+                    break
+                finished, _ = wait(pending, timeout=1, return_when=FIRST_COMPLETED)
+                for future in finished:
+                    completed[pending.pop(future)] = future.result()
+                entries = load_queue(root)
         return report
 
     for entry in entries:

@@ -24,10 +24,13 @@ def _runner(argv: list[str]) -> int:
 
 
 def _video_approved(tmp_path: Path) -> Path:
+    from tests.helpers import submit_video_fixture
+
     project_dir = create_long_form_project_fixture(tmp_path)
     approve_gate(project_dir, GateKind.MEDICAL, reviewer=REVIEWER, now=REVIEWED_AT)
     write_posts_fixture(project_dir / "revisions" / "001")
     produce_project(project_dir, SilentTTS(), _runner)
+    submit_video_fixture(project_dir)
     approve_gate(project_dir, GateKind.VIDEO, reviewer=REVIEWER, now=REVIEWED_AT)
     return project_dir
 

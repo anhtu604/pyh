@@ -1388,3 +1388,72 @@ def test_corrupt_retry_file_blocks_without_calling_produce(tmp_path):
     report = run_queue(tmp_path, deps)
     assert report.blocked == [entry.slug]
     assert calls == []
+
+
+def test_paused_project_is_skipped_by_run_queue(tmp_path):
+    entry = _entry()
+    add_to_queue(tmp_path, entry)
+    paused = tmp_path / 'topics/logs' / entry.slug / 'paused.yaml'
+    paused.parent.mkdir(parents=True, exist_ok=True)
+    paused.write_text('paused_at: "2026-11-15T20:00:00Z"\n', encoding='utf-8')
+    calls = []
+
+    deps = RunDeps(
+        create_project=lambda *_: calls.append('create') or (tmp_path / 'projects' / entry.slug),
+        read_state=lambda _: WorkflowState.TOPIC_SELECTED,
+        reject_note=lambda _: None,
+        python_steps={},
+        invoke=lambda *_, **__: calls.append('invoke') or AgentResult('r', True, False, tmp_path / 'r.log', 'm'),
+        changed_code_paths=lambda _: [],
+        visual_review_pending=lambda _: False,
+    )
+    report = run_queue(tmp_path, deps)
+    assert calls == []
+    assert report.blocked == []
+    assert report.at_gate == []
+    assert not (tmp_path / 'projects' / entry.slug).exists()
+
+
+@pytest.mark.parametrize('mode', ['raise', 'fail_result'])
+def test_pause_during_running_step_stops_without_blocking(tmp_path, mode):
+    entry = _entry()
+    add_to_queue(tmp_path, entry)
+    project = tmp_path / 'projects' / entry.slug
+    project.mkdir(parents=True)
+    paused = tmp_path / 'topics/logs' / entry.slug / 'paused.yaml'
+    state = {'value': WorkflowState.TOPIC_SELECTED, 'calls': 0}
+
+    def fake_invoke(*_, log_dir, **__):
+        state['calls'] += 1
+        if state['calls'] == 1:
+            paused.parent.mkdir(parents=True, exist_ok=True)
+            paused.write_text('paused_at: "2026-11-15T20:00:00Z"\n', encoding='utf-8')
+            if mode == 'raise':
+                raise RuntimeError('cancelled by doctor')
+            log_file = log_dir / 'cancelled.log'
+            log_file.parent.mkdir(parents=True, exist_ok=True)
+            log_file.write_text('cancelled\n', encoding='utf-8')
+            return AgentResult('expert', False, False, log_file, 'm', 'agent_error')
+        state['value'] = WorkflowState.AWAITING_MEDICAL_REVIEW
+        return AgentResult('expert', True, False, tmp_path / 'ok.log', 'm')
+
+    deps = RunDeps(
+        create_project=lambda *_: project,
+        read_state=lambda _: state['value'],
+        reject_note=lambda _: None,
+        python_steps={},
+        invoke=fake_invoke,
+        changed_code_paths=lambda _: [],
+        visual_review_pending=lambda _: False,
+        expert_brief_ready=lambda _: state['calls'] >= 2,
+    )
+    first_report = run_queue(tmp_path, deps)
+    assert first_report.blocked == []
+    assert not (paused.parent / 'blocked.txt').exists()
+    assert not (paused.parent / 'agent-retry.yaml').exists()
+    assert state['calls'] == 1
+
+    paused.unlink()
+    resumed_report = run_queue(tmp_path, deps)
+    assert state['calls'] == 2
+    assert resumed_report.at_gate == [entry.slug]

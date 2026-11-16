@@ -54,3 +54,26 @@ def add_to_queue(root: Path, entry: QueueEntry) -> None:
         "entries": [_serialize_entry(item) for item in entries],
     }
     write_yaml_atomic(queue_path(root), payload)
+
+
+def remove_from_queue(root: Path, slug: str) -> QueueEntry | None:
+    """Remove an entry by slug from the topic queue atomically, returning it if found."""
+    path = queue_path(root)
+    if not path.exists():
+        return None
+    entries = load_queue(root)
+    removed: QueueEntry | None = None
+    remaining: list[QueueEntry] = []
+    for item in entries:
+        if item.slug == slug and removed is None:
+            removed = item
+            continue
+        remaining.append(item)
+    if removed is None:
+        return None
+    payload = {
+        "version": _QUEUE_VERSION,
+        "entries": [_serialize_entry(item) for item in remaining],
+    }
+    write_yaml_atomic(path, payload)
+    return removed

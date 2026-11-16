@@ -237,6 +237,9 @@ def test_mascot_retry_after_asset_promotion_failure_is_gate_safe(
     state = read_yaml(project / "project.yaml")
     state["state"] = "awaiting_medical_review"
     write_yaml_atomic(project / "project.yaml", state)
+    from tests.helpers import write_critic_review_fixture
+
+    write_critic_review_fixture(project)
     with pytest.raises(ValueError, match="not declared"):
         approve_gate(
             project, GateKind.MEDICAL, reviewer="test doctor", now=datetime.now(UTC)
@@ -448,6 +451,9 @@ def test_medical_gate_recovers_pending_chart_binding_before_validation(
     state = read_yaml(project / "project.yaml")
     state["state"] = "awaiting_medical_review"
     write_yaml_atomic(project / "project.yaml", state)
+    from tests.helpers import write_critic_review_fixture
+
+    write_critic_review_fixture(project)
 
     approve_gate(
         project, GateKind.MEDICAL, reviewer="test doctor", now=datetime.now(UTC)

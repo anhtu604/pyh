@@ -17,6 +17,37 @@ FIXTURE_PRODUCTION_HASH = "synthetic-production-run"
 FIXTURE_REVIEWER = "BS Nguyễn Văn An"
 
 
+def write_critic_review_fixture(project: Path, *, product: bool = False) -> None:
+    """Record an explicitly synthetic passing critic report for a gate fixture."""
+    from healthvideo.workflows import product_review, script_review
+
+    critic = product_review if product else script_review
+    revision = project / "revisions" / read_yaml(project / "project.yaml")["active_revision"]
+    write_yaml_atomic(revision / critic.REPORT, {
+        "scores": dict.fromkeys(critic.CRITERIA, 8),
+        "summary": "Synthetic passing critic fixture.", "issues": [],
+        "checked": ["Synthetic fixture artifacts"], "decisions": [],
+    })
+    digest = critic.render_hash(project) if product else critic.script_hash(project)
+    critic.record_review(project, digest)
+
+
+def submit_medical_review_fixture(project: Path) -> ProjectManifestV2:
+    """Record a synthetic passing script review and submit the draft for medical review."""
+    from healthvideo.workflows.draft import submit_medical_review
+
+    write_critic_review_fixture(project)
+    return submit_medical_review(project)
+
+
+def submit_video_fixture(project: Path) -> None:
+    """Record a synthetic passing product review and submit the render for video review."""
+    from healthvideo.workflows.produce import submit_video
+
+    write_critic_review_fixture(project, product=True)
+    submit_video(project)
+
+
 def _write_json(path: Path, data: dict[str, Any]) -> None:
     serialized = json.dumps(
         data, ensure_ascii=False, sort_keys=True, separators=(",", ":")
@@ -210,6 +241,7 @@ def create_v2_project_fixture(
         },
     )
     complete_explain_first_fixture(revision_root)
+    write_critic_review_fixture(project_dir)
     if state is not WorkflowState.DRAFT_READY:
         _advance_v2_state(project_dir, state)
     return project_dir
@@ -336,6 +368,7 @@ def create_long_form_project_fixture(root: Path) -> Path:
         },
     )
     write_posts_fixture(revision_root)
+    write_critic_review_fixture(project_dir)
     return project_dir
 
 
@@ -401,6 +434,7 @@ def advance_v2_project_to_video_review(project_dir: Path, *, now: datetime) -> N
     )
     manifest = transition_v2(manifest, WorkflowState.AWAITING_MEDICAL_REVIEW, context)
     write_yaml_atomic(project_dir / "project.yaml", manifest.model_dump(mode="json"))
+    write_critic_review_fixture(project_dir)
     approve_gate(project_dir, GateKind.MEDICAL, reviewer="BS Nguyễn Văn An", now=now)
 
     manifest = ProjectManifestV2.model_validate(read_yaml(project_dir / "project.yaml"))
@@ -429,6 +463,7 @@ def advance_v2_project_to_video_review(project_dir: Path, *, now: datetime) -> N
     manifest = transition_v2(manifest, WorkflowState.PRODUCTION_IN_PROGRESS, context)
     manifest = transition_v2(manifest, WorkflowState.AWAITING_VIDEO_REVIEW, context)
     write_yaml_atomic(project_dir / "project.yaml", manifest.model_dump(mode="json"))
+    write_critic_review_fixture(project_dir, product=True)
 
 
 def write_explainer_fixture(revision: Path, claim_id: str) -> None:
@@ -581,6 +616,7 @@ def align_fixture_script(revision: Path, board: dict[str, Any]) -> None:
         lines.append(line)
     script["lines"] = lines
     write_yaml_atomic(script_path, script)
+    write_critic_review_fixture(revision.parents[1])
 
 
 def write_passing_script_review(revision: Path) -> None:

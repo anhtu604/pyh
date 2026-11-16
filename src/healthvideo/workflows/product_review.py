@@ -1,8 +1,8 @@
 """Bounded product review: a critic agent scores the finished video before the doctor sees it.
 
 Production holds a fresh final render at ``production_in_progress`` with a pending marker.
-The critic scores it; failing issues the production agent may fix go back for a fix and a
-re-render, at most ``MAX_REVIEWS`` times per submission, then Python submits to the doctor.
+The critic scores it; fixable issues return for correction and another review.
+Only a passing current review allows submission to the doctor.
 """
 
 from pathlib import Path
@@ -90,18 +90,38 @@ def hold(artifact_root: Path, input_hash: str) -> None:
 
 def next_product_action(project: Path) -> ProductAction:
     rounds = _cycle(_root(project))
-    if len(rounds) >= MAX_REVIEWS:
-        return 'submit_video'
     if not rounds or rounds[-1]['render_sha256'] != render_hash(project):
         return 'product_review'
     latest = rounds[-1]
+    if latest['passed']:
+        require_passed_review(project)
+        return 'submit_video'
+    if len(rounds) >= MAX_REVIEWS:
+        raise ValueError('Trạm 12 chưa đạt sau các vòng sửa; cần xử lý nhận xét trước khi nộp bác sĩ.')
     if len(latest.get('decisions', [])) > MAX_DECISIONS:
         return 'product_review' if latest.get('fix_attempted') else 'revise_product'
-    if latest['passed'] or latest.get('fix_attempted'):
-        return 'submit_video'
+    if latest.get('fix_attempted'):
+        return 'product_review'
     if not any(item['fixable'] for item in latest['issues']):
-        return 'submit_video'  # only the doctor can reopen what is wrong
+        raise ValueError('Trạm 12 chưa đạt; lỗi vượt phạm vi thợ dựng, cần xử lý trước khi nộp bác sĩ.')
     return 'revise_product'
+
+
+def require_passed_review(project: Path) -> None:
+    rounds = _log(_root(project))['rounds']
+    if not rounds:
+        raise ValueError('Trạm 12 chưa có kết quả kiểm định sản phẩm.')
+    latest = rounds[-1]
+    if latest.get('render_sha256') != render_hash(project):
+        raise ValueError('Trạm 12 cần kiểm định lại bản dựng hiện hành.')
+    report = ProductReviewReport.model_validate({
+        key: latest[key] for key in ProductReviewReport.model_fields if key in latest
+    })
+    _validated(report)
+    if (latest.get('passed') is not True
+            or any(score < PASS_SCORE for score in report.scores.values())
+            or len(report.decisions) > MAX_DECISIONS):
+        raise ValueError('Trạm 12 chưa đạt; chưa được nộp bác sĩ duyệt video.')
 
 
 def _validated(report: ProductReviewReport) -> None:

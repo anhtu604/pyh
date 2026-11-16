@@ -142,6 +142,9 @@ def test_package_copies_approved_thumbnail(tmp_path):
     add_thumbnail(root, "Vì sao cần theo dõi huyết áp?")
     produce_project(project, SilentTTS(), video_runner)
     assert len(still_calls) == 2
+    from tests.helpers import submit_video_fixture
+
+    submit_video_fixture(project)
     approve_gate(project, GateKind.VIDEO, reviewer="Doctor", now=NOW)
     publish = package_project(project)
     assert (publish / "thumbnail.png").read_bytes() == (root / "posts/thumbnail.png").read_bytes()

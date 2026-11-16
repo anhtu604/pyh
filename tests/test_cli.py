@@ -241,7 +241,7 @@ def test_review_medical_requires_the_typed_confirmation(tmp_path) -> None:
 
     assert result.exit_code == 1
     assert read_yaml(project_dir / "project.yaml")["state"] == "awaiting_medical_review"
-    assert list((project_dir / "revisions" / "001" / "reviews").glob("*.yaml")) == []
+    assert not (project_dir / "revisions" / "001" / "reviews" / "medical-approval.yaml").exists()
 
 
 def test_review_medical_approves_with_authenticated_pin(tmp_path, authenticated_pin) -> None:
@@ -508,6 +508,14 @@ def test_cli_evidence_search_and_build_ledger(
 
     updated = ProjectManifestV2.model_validate(read_yaml(project_dir / "project.yaml"))
     assert updated.state == WorkflowState.EVIDENCE_READY
+
+    # A later research answer adds claims while a previously built ledger exists.
+    claims = ledger_content["claims"] + [{**ledger_content["claims"][0], "id": "C02"}]
+    write_yaml_atomic(rev_dir / "evidence/claims.yaml", {"claims": claims})
+    write_yaml_atomic(rev_dir / "evidence/records.yaml", {"records": ledger_content["records"]})
+    rebuilt = runner.invoke(app, ["step", "build-ledger", str(project_dir)])
+    assert rebuilt.exit_code == 0, rebuilt.stdout
+    assert [claim["id"] for claim in read_yaml(rev_dir / "evidence/ledger.yaml")["claims"]] == ["C01", "C02"]
 
 
 def test_cli_evidence_search_repeatable_queries_and_existing_question(tmp_path, monkeypatch):
@@ -940,3 +948,91 @@ def test_approve_has_no_yes_option(authenticated_pin, tmp_path):
     result = runner.invoke(app, ["review", "approve", str(project), "--gate", "medical", "--reviewer", "Test", "--yes"])
     assert result.exit_code == 2
     assert not (project / "revisions/001/reviews/medical-approval.yaml").exists()
+
+
+def test_review_open_refuses_missing_or_stale_critic_reviews(tmp_path: Path) -> None:
+    from datetime import UTC, datetime
+
+    from healthvideo.workflows import product_review, script_review
+    from tests.helpers import advance_v2_project_to_video_review
+
+    med = create_v2_project_fixture(tmp_path / "m", state="awaiting_medical_review")
+    (med / "revisions/001" / script_review.LOG).unlink()
+    res_med = runner.invoke(app, ["review", "open", str(med), "--gate", "medical"])
+    assert res_med.exit_code == 1
+    assert "Trạm 07" in res_med.stdout
+
+    vid = create_v2_project_fixture(tmp_path / "v", state="draft_ready")
+    advance_v2_project_to_video_review(vid, now=datetime(2026, 10, 22, tzinfo=UTC))
+    log_path = vid / "revisions/001" / product_review.LOG
+    log = read_yaml(log_path)
+    log["rounds"][-1]["render_sha256"] = "stale"
+    write_yaml_atomic(log_path, log)
+    res_vid = runner.invoke(app, ["review", "open", str(vid), "--gate", "video"])
+    assert res_vid.exit_code == 1
+    assert "Trạm 12" in res_vid.stdout
+
+
+def test_duyet_and_status_filter_by_gate_for_project_and_keep_prior_approvals(tmp_path: Path) -> None:
+    from healthvideo import cli
+    from healthvideo.workflows import script_review
+
+    project = create_v2_project_fixture(tmp_path / "projects", state="awaiting_medical_review")
+    # Prior approval artifact (simulating an earlier doctor approval) must never be modified or deleted.
+    prior = project / "revisions/001/reviews/medical-approval.yaml"
+    prior_bytes = b"kind: medical\nreviewer: BS Cu\n"
+    prior.write_bytes(prior_bytes)
+
+    (project / "revisions/001" / script_review.LOG).unlink()
+    assert cli._gate_for_project(project) is None
+
+    status_res = runner.invoke(app, ["status", "--root", str(tmp_path)])
+    assert status_res.exit_code == 0
+    assert "Đang chờ bác sĩ: 0" in status_res.output
+
+    duyet_res = runner.invoke(app, ["duyet", "--root", str(tmp_path)], input="n\n")
+    assert duyet_res.exit_code == 0
+    assert "Không có project đang chờ bác sĩ." in duyet_res.output
+    assert prior.read_bytes() == prior_bytes
+
+
+def test_xuong_lifecycle_hooks_repair_service(tmp_path: Path, monkeypatch) -> None:
+    from healthvideo import cli
+    from healthvideo.workflows import factory, repair_service, telegram_bot
+
+    calls: list[tuple[str, object]] = []
+
+    monkeypatch.setattr(factory, "start_background", lambda root, interval=120: calls.append(("factory_start", interval)) or 111)
+    monkeypatch.setattr(factory, "stop_background", lambda root: calls.append(("factory_stop", root)) or 111)
+    monkeypatch.setattr(factory, "run_factory", lambda root, deps, **kw: calls.append(("run_factory", kw.get("once"))))
+    monkeypatch.setattr(cli, "default_run_deps", lambda root: object())
+    monkeypatch.setattr(telegram_bot, "ensure_background", lambda root: calls.append(("tg_ensure", root)) or 222)
+    monkeypatch.setattr(repair_service, "ensure_background", lambda root: calls.append(("repair_ensure", root)) or 333)
+    monkeypatch.setattr(repair_service, "stop_background", lambda root: calls.append(("repair_stop", root)) or 333)
+
+    bg_res = runner.invoke(app, ["xuong", "--root", str(tmp_path), "--background"])
+    assert bg_res.exit_code == 0
+    assert "Xưởng đang chạy (PID 111)." in bg_res.output
+    assert ("repair_ensure", tmp_path) in calls
+
+    calls.clear()
+    fg_res = runner.invoke(app, ["xuong", "--root", str(tmp_path)])
+    assert fg_res.exit_code == 0
+    assert ("tg_ensure", tmp_path) in calls
+    assert ("repair_ensure", tmp_path) in calls
+    assert ("run_factory", False) in calls
+
+    calls.clear()
+    once_res = runner.invoke(app, ["xuong", "--root", str(tmp_path), "--once"])
+    assert once_res.exit_code == 0
+    assert ("repair_ensure", tmp_path) not in calls
+    assert ("tg_ensure", tmp_path) not in calls
+    assert ("run_factory", True) in calls
+
+    calls.clear()
+    stop_res = runner.invoke(app, ["xuong", "--root", str(tmp_path), "--stop"])
+    assert stop_res.exit_code == 0
+    assert "Đã dừng xưởng PID 111." in stop_res.output
+    assert "Đã dừng tiến trình sửa lỗi PID 333." in stop_res.output
+    assert ("factory_stop", tmp_path) in calls
+    assert ("repair_stop", tmp_path) in calls

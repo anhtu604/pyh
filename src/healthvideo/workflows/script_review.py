@@ -17,7 +17,7 @@ from healthvideo.workflows.decision_card import (
 REPORT = 'reviews/script-review.yaml'
 LOG = 'reviews/script-review-log.yaml'
 PASS_SCORE = 7
-MAX_REVIEWS = 2  # one first read plus one rewrite, then the doctor sees the score (2026-11-14: speed)
+MAX_REVIEWS = 2
 CRITERIA: dict[str, str] = {
     'giong_nguoi_that': 'Giọng người thật, không lộ ngôn ngữ rào đón nguồn',
     'nhip_cau': 'Nhịp câu đa dạng, không lặp khuôn rào đón',
@@ -81,11 +81,32 @@ def mark_submitted(artifact_root: Path) -> None:
 def next_script_action(project: Path) -> ScriptAction:
     """Choose the next step for a draft_ready script from the recorded rounds."""
     rounds = _cycle(_root(project))
-    if len(rounds) >= MAX_REVIEWS:
-        return 'submit_medical'
     if not rounds or rounds[-1]['script_sha256'] != script_hash(project):
         return 'script_review'
-    return 'submit_medical' if rounds[-1]['passed'] else 'draft'
+    if rounds[-1]['passed']:
+        require_passed_review(project)
+        return 'submit_medical'
+    if len(rounds) >= MAX_REVIEWS:
+        raise ValueError('Trạm 07 chưa đạt sau các vòng sửa; cần xử lý nhận xét trước khi nộp bác sĩ.')
+    return 'draft'
+
+
+def require_passed_review(project: Path) -> None:
+    rounds = _rounds(_root(project))
+    if not rounds:
+        raise ValueError('Trạm 07 chưa có kết quả kiểm duyệt kịch bản.')
+    latest = rounds[-1]
+    if latest.get('script_sha256') != script_hash(project):
+        raise ValueError('Trạm 07 cần kiểm duyệt lại kịch bản hiện hành.')
+    report = ScriptReviewReport.model_validate({
+        key: latest[key] for key in ScriptReviewReport.model_fields if key in latest
+    })
+    script = read_yaml(script_path(project))
+    _validated(report, {str(line.get('id')) for line in script.get('lines', [])})
+    if (latest.get('passed') is not True
+            or any(score < PASS_SCORE for score in report.scores.values())
+            or len(report.decisions) > MAX_DECISIONS):
+        raise ValueError('Trạm 07 chưa đạt; chưa được nộp bác sĩ duyệt y khoa.')
 
 
 def _validated(report: ScriptReviewReport, line_ids: set[str]) -> None:

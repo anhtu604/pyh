@@ -1,133 +1,234 @@
-# Bậc model và bảng vai của công ty (PYH Company 2.0 · spec 2026-11-15).
-# Mỗi chuỗi được thử theo thứ tự; mục hết lượt thì "nghỉ" và chuyển sang mục kế tiếp.
-# skills: tên thư mục trong .agents/skills/ (tối đa 3 mỗi vai).
-# Không dùng model chứa 'opus' hoặc 'astra'; critic phải khác model khởi đầu của maker.
+# PYH Company 2.0: OmniRoute first, explicit models, no Claude (2026-11-16).
+# Live probes and limits: docs/reference/omniroute.md.
+# Codex direct is a fallback; routes using the same account may share quota.
 tiers:
-  hard:  # 2026-11-12 bác sĩ: dùng model vừa phải, không dùng Opus hay astra
-    - {cli: agy, model: gemini-4-carbon-high}
-    - {cli: codex, model: gpt-6.1-sol}
-    - {cli: claude, model: claude-sonnet-5-5}
-    - {cli: codex, model: gpt-6.1-terra}
-  medium:  # nhiệm vụ cần tư duy phân tích, lập kế hoạch, phân cảnh
-    - {cli: agy, model: gemini-4-carbon-medium}
-    - {cli: codex, model: gpt-6.1-sol}
-    - {cli: claude, model: claude-sonnet-5-5}
-    - {cli: codex, model: gpt-6.1-terra}
-  bulk:  # việc nhẹ/chuẩn hóa nhanh: ưu tiên Hydrogen medium
-    - {cli: agy, model: gemini-4-hydrogen-medium}
-    - {cli: codex, model: gpt-6-luna}
-    - {cli: claude, model: claude-haiku-5-5}
-    - {cli: codex, model: gpt-6.1-terra}
-
+  hard:
+  - {cli: omniroute, model: codex/gpt-6.1-sol}
+  - {cli: omniroute, model: codex/gpt-6.1-terra}
+  - {cli: omniroute, model: agy/gemini-4-hydrogen-medium}
+  - {cli: omniroute, model: agy/gemini-3.8-flash-medium}
+  - {cli: codex, model: gpt-6.1-sol}
+  - {cli: codex, model: gpt-6.1-terra}
+  medium:
+  - {cli: omniroute, model: codex/gpt-6.1-terra}
+  - {cli: omniroute, model: agy/gemini-4-hydrogen-medium}
+  - {cli: omniroute, model: agy/gemini-3.8-flash-medium}
+  - {cli: omniroute, model: codex/gpt-6.1-sol}
+  - {cli: codex, model: gpt-6.1-terra}
+  - {cli: codex, model: gpt-6.1-sol}
+  bulk:
+  - {cli: omniroute, model: codex/gpt-6-luna}
+  - {cli: omniroute, model: agy/gemini-4-hydrogen-medium}
+  - {cli: omniroute, model: agy/gemini-3.8-flash-medium}
+  - {cli: codex, model: gpt-6-luna}
+  - {cli: codex, model: gpt-6.1-sol}
 roles:
-  coordinator:  # Trưởng nhóm Điều phối: phân tích chỉ thị và giao việc cho nhân viên
+  coordinator:
     name: Trưởng nhóm Điều phối
-    skills: [pyh-coordinator]
-    steps: [chat]
+    skills:
+    - pyh-coordinator
+    steps:
+    - chat
     tier: medium
     models:
-      - {cli: agy, model: gemini-4-carbon-medium}
-      - {cli: codex, model: gpt-6.1-sol}
-      - {cli: claude, model: claude-sonnet-5-5}
+    - {cli: omniroute, model: codex/gpt-6-luna}
+    - {cli: omniroute, model: agy/gemini-4-hydrogen-medium}
+    - {cli: omniroute, model: agy/gemini-3.8-flash-medium}
+    - {cli: omniroute, model: codex/gpt-6.1-terra}
+    - {cli: codex, model: gpt-6-luna}
+    - {cli: codex, model: gpt-6.1-terra}
   coordinator_senior:
     name: Điều phối viên trưởng · Chuyên sâu
-    skills: [pyh-coordinator, pyh-coordinator-senior]
-    steps: [chat_deep]
+    skills:
+    - pyh-coordinator
+    - pyh-coordinator-senior
+    steps:
+    - chat_deep
     tier: medium
-    models:  # khác nhà cung cấp đầu tiên với Trưởng nhóm Điều phối
-      - {cli: codex, model: gpt-6.1-sol}
-      - {cli: claude, model: claude-sonnet-5-5}
-      - {cli: agy, model: gemini-4-carbon-medium}
-  researcher:  # Săn đề tài, đồng bộ Google Sheet 100 điểm và phân tích hiệu quả kênh
+    models:
+    - {cli: omniroute, model: codex/gpt-6.1-sol}
+    - {cli: omniroute, model: codex/gpt-6.1-terra}
+    - {cli: omniroute, model: agy/gemini-4-hydrogen-medium}
+    - {cli: codex, model: gpt-6.1-sol}
+    - {cli: codex, model: gpt-6.1-terra}
+  researcher:
     name: Chuyên viên Nghiên cứu & Phân tích Kênh
-    skills: [content-strategy, systematic-literature-review, pyh-researcher]
-    steps: [topic_research, channel_analytics]
+    skills:
+    - content-strategy
+    - systematic-literature-review
+    - pyh-researcher
+    steps:
+    - topic_research
+    - channel_analytics
     tier: medium
+    models:
+    - {cli: omniroute, model: agy/gemini-4-hydrogen-medium}
+    - {cli: omniroute, model: codex/gpt-6.1-terra}
+    - {cli: omniroute, model: agy/gemini-3.8-flash-medium}
+    - {cli: omniroute, model: codex/gpt-6.1-sol}
+    - {cli: codex, model: gpt-6.1-terra}
+    - {cli: codex, model: gpt-6.1-sol}
   scout:
     name: Trinh sát chủ đề
-    skills: [content-strategy, pyh-scout]
-    steps: [scout]
+    skills:
+    - content-strategy
+    - pyh-scout
+    steps:
+    - scout
     tier: bulk
-  medical_expert:  # Chuyên gia y học kiểm chứng PubMed/PMC và viết expert-brief
+  medical_expert:
     name: Chuyên gia y học
-    skills: [pyh-medical-expert]
-    steps: [research]
+    skills:
+    - pyh-medical-expert
+    steps:
+    - research
     tier: medium
     models:
-      - {cli: agy, model: gemini-4-carbon-medium}
+    - {cli: omniroute, model: codex/gpt-6.1-terra}
+    - {cli: omniroute, model: codex/gpt-6.1-sol}
+    - {cli: omniroute, model: agy/gemini-4-hydrogen-medium}
+    - {cli: codex, model: gpt-6.1-terra}
+    - {cli: codex, model: gpt-6.1-sol}
   writer:
     name: Biên kịch viral
-    skills: [youtube-scriptwriting, short-form-video, pyh-writer]
-    steps: [draft, revise_medical]
+    skills:
+    - youtube-scriptwriting
+    - short-form-video
+    - pyh-writer
+    steps:
+    - draft
+    - revise_medical
     tier: hard
     models:
-      - {cli: codex, model: gpt-6.1-sol}
-      - {cli: agy, model: gemini-4-carbon-medium}
-      - {cli: claude, model: claude-sonnet-5-5}
-  storyboard_director:  # Thiết kế phân cảnh, visual budget và component SVG độc lập
+    - {cli: omniroute, model: codex/gpt-6.1-sol}
+    - {cli: omniroute, model: codex/gpt-6.1-terra}
+    - {cli: omniroute, model: agy/gemini-4-hydrogen-medium}
+    - {cli: codex, model: gpt-6.1-sol}
+    - {cli: codex, model: gpt-6.1-terra}
+  storyboard_director:
     name: Đạo diễn Phân cảnh & Đồ họa
-    skills: [scripting-and-storyboarding, visual-style, pyh-storyboard-director]
-    steps: [storyboard_design]
+    skills:
+    - scripting-and-storyboarding
+    - visual-style
+    - pyh-storyboard-director
+    steps:
+    - storyboard_design
     tier: medium
-    models:  # cùng nhà cung cấp maker với writer (khác script_critic khởi đầu bằng agy)
-      - {cli: codex, model: gpt-6.1-sol}
-      - {cli: claude, model: claude-sonnet-5-5}
-      - {cli: agy, model: gemini-4-carbon-medium}
-  voice_director:  # Chuẩn hóa phiên âm thuật ngữ y khoa và nhịp đọc trước khi chạy TTS
+    models:
+    - {cli: omniroute, model: codex/gpt-6.1-sol}
+    - {cli: omniroute, model: codex/gpt-6.1-terra}
+    - {cli: omniroute, model: agy/gemini-4-hydrogen-medium}
+    - {cli: omniroute, model: agy/gemini-3.8-flash-medium}
+    - {cli: codex, model: gpt-6.1-sol}
+    - {cli: codex, model: gpt-6.1-terra}
+  voice_director:
     name: Đạo diễn Giọng đọc & Phiên âm
-    skills: [pyh-voice-director]
-    steps: [voice_prep]
+    skills:
+    - pyh-voice-director
+    steps:
+    - voice_prep
     tier: bulk
+    models:
+    - {cli: omniroute, model: agy/gemini-4-hydrogen-medium}
+    - {cli: omniroute, model: codex/gpt-6.1-terra}
+    - {cli: omniroute, model: agy/gemini-3.8-flash-medium}
+    - {cli: omniroute, model: codex/gpt-6.1-sol}
+    - {cli: codex, model: gpt-6.1-terra}
   script_critic:
     name: Kiểm duyệt kịch bản
-    skills: [copy-editing, pyh-script-critic]
-    steps: [script_review]
+    skills:
+    - copy-editing
+    - pyh-script-critic
+    steps:
+    - script_review
     tier: hard
-    models:  # bắt đầu từ nhà cung cấp khác với biên kịch và đạo diễn phân cảnh (codex)
-      - {cli: agy, model: gemini-4-carbon-medium}
-      - {cli: claude, model: claude-sonnet-5-5}
-      - {cli: codex, model: gpt-6.1-sol}
+    models:
+    - {cli: omniroute, model: codex/gpt-6.1-terra}
+    - {cli: omniroute, model: agy/gemini-4-hydrogen-medium}
+    - {cli: omniroute, model: agy/gemini-3.8-flash-medium}
+    - {cli: codex, model: gpt-6.1-terra}
   art_director:
     name: Đạo diễn hình
-    skills: [pyh-art-director]
-    steps: [visual_review]
+    skills:
+    - pyh-art-director
+    steps:
+    - visual_review
     tier: medium
     models:
-      - {cli: agy, model: gemini-4-carbon-medium}
-      - {cli: claude, model: claude-sonnet-5-5}
-      - {cli: codex, model: gpt-6.1-sol}
-      - {cli: codex, model: gpt-6.1-terra}
+    - {cli: omniroute, model: agy/gemini-4-hydrogen-medium}
+    - {cli: omniroute, model: codex/gpt-6.1-terra}
+    - {cli: omniroute, model: agy/gemini-3.8-flash-medium}
+    - {cli: codex, model: gpt-6.1-terra}
   editor:
     name: Thợ dựng
-    skills: [remotion-best-practices, motion-design, pyh-editor]
-    steps: [revise_production, revise_product]
+    skills:
+    - remotion-best-practices
+    - motion-design
+    - pyh-editor
+    steps:
+    - revise_production
+    - revise_product
     tier: medium
     models:
-      - {cli: agy, model: gemini-4-carbon-medium}
-      - {cli: claude, model: claude-sonnet-5-5}
-      - {cli: codex, model: gpt-6.1-sol}
-      - {cli: codex, model: gpt-6.1-terra}
+    - {cli: omniroute, model: codex/gpt-6.1-sol}
+    - {cli: omniroute, model: codex/gpt-6.1-terra}
+    - {cli: omniroute, model: agy/gemini-4-hydrogen-medium}
+    - {cli: codex, model: gpt-6.1-sol}
+    - {cli: codex, model: gpt-6.1-terra}
   product_critic:
     name: Kiểm định sản phẩm
-    skills: [character-animation-qa, pyh-product-critic]
-    steps: [product_review]
+    skills:
+    - character-animation-qa
+    - pyh-product-critic
+    steps:
+    - product_review
     tier: hard
-    models:  # khác Thợ dựng (agy) để không tự chấm bài mình
-      - {cli: claude, model: claude-sonnet-5-5}
-      - {cli: codex, model: gpt-6.1-sol}
-      - {cli: agy, model: gemini-4-carbon-medium}
+    models:
+    - {cli: omniroute, model: codex/gpt-6.1-terra}
+    - {cli: omniroute, model: agy/gemini-4-hydrogen-medium}
+    - {cli: omniroute, model: agy/gemini-3.8-flash-medium}
+    - {cli: codex, model: gpt-6.1-terra}
   copywriter:
     name: Chiến lược Đóng gói & Bài đăng
-    skills: [social, copy-editing, pyh-copywriter]
-    steps: [posts]
+    skills:
+    - social
+    - copy-editing
+    - pyh-copywriter
+    steps:
+    - posts
     tier: bulk
   shorts_producer:
     name: Nhà sản xuất Shorts & Reels
-    skills: [short-form-video, social, pyh-shorts-producer]
-    steps: [shorts_plan]
+    skills:
+    - short-form-video
+    - social
+    - pyh-shorts-producer
+    steps:
+    - shorts_plan
     tier: medium
+    models:
+    - {cli: omniroute, model: agy/gemini-4-hydrogen-medium}
+    - {cli: omniroute, model: codex/gpt-6.1-terra}
+    - {cli: omniroute, model: agy/gemini-3.8-flash-medium}
+    - {cli: omniroute, model: codex/gpt-6.1-sol}
+    - {cli: codex, model: gpt-6.1-terra}
   feedback_analyst:
     name: Phân tích ý kiến
-    skills: [pyh-feedback-analyst]
-    steps: [feedback_inbox]
+    skills:
+    - pyh-feedback-analyst
+    steps:
+    - feedback_inbox
     tier: bulk
+  repair_engineer:
+    name: Kỹ sư sửa lỗi
+    skills:
+    - pyh-repair-engineer
+    steps:
+    - repair
+    tier: medium
+    models:
+    - {cli: omniroute, model: codex/gpt-6.1-sol}
+    - {cli: omniroute, model: codex/gpt-6.1-terra}
+    - {cli: omniroute, model: agy/gemini-4-hydrogen-medium}
+    - {cli: codex, model: gpt-6.1-sol}
+    - {cli: codex, model: gpt-6.1-terra}

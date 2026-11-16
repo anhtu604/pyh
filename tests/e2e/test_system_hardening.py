@@ -56,6 +56,10 @@ def test_golden_v2_crosses_process_boundaries_to_a_package(
         # to the configured Vibi/VieNeu channel voice.
         options = ("--tts", "silent") if following == "produce" else ()
         _assert_cli_ok(following, project, *options)
+        if following == "produce":
+            from tests.helpers import submit_video_fixture
+
+            submit_video_fixture(project)
 
     scenes = json.loads((revision / "renders/render-input.json").read_text(encoding="utf-8"))[
         "scenes"
@@ -137,7 +141,9 @@ def _prepare_v2_awaiting_medical(
         license="synthetic_test_only", rights_basis="fixture nội bộ", creator="repository_fixture",
     )
     bind_chart_asset(project, scene_id="S04", asset_path="assets/chart-count.svg")
+    from tests.helpers import write_critic_review_fixture
 
+    write_critic_review_fixture(project)
     return project
 
 

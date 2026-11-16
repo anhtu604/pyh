@@ -15,7 +15,7 @@ from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.workflows.create_project_v2 import create_project_v2
 from healthvideo.workflows.evidence import build_evidence_ledger, record_question
 from healthvideo.workflows.topic import select_topic
-from tests.helpers import write_explainer_fixture
+from tests.helpers import write_critic_review_fixture, write_explainer_fixture
 
 SOURCE = Path("tests/fixtures/golden-project-v2/revisions/001")
 NOW = datetime(2026, 9, 17, tzinfo=UTC)
@@ -71,6 +71,7 @@ def test_cli_submits_draft_then_opens_medical_gate(tmp_path: Path) -> None:
     assert (project / "revisions/001/script/script.yaml").is_file()
     assert not (project / "revisions/001/reviews/medical-approval.yaml").exists()
 
+    write_critic_review_fixture(project)
     submitted = runner.invoke(app, ["step", "submit-medical", str(project)])
     assert submitted.exit_code == 0, submitted.stdout
     assert _state(project) is WorkflowState.AWAITING_MEDICAL_REVIEW
@@ -130,6 +131,8 @@ def test_unsupported_anatomy_subject_refused_before_submission(tmp_path: Path, m
     board_file = (project / "revisions/001/storyboard/storyboard.yaml" if medical
                   else tmp_path / "unsupported.yaml")
     write_yaml_atomic(board_file, board)
+    if medical:
+        write_critic_review_fixture(project)
     before = (project / "project.yaml").read_bytes()
     with pytest.raises(ValueError, match="unsupported anatomy subject"):
         if medical:
@@ -138,3 +141,26 @@ def test_unsupported_anatomy_subject_refused_before_submission(tmp_path: Path, m
             submit_draft(project, SOURCE / "script/script.yaml", board_file,
                          SOURCE / "assets/asset-manifest.yaml")
     assert (project / "project.yaml").read_bytes() == before
+
+
+def test_submit_draft_preserves_validation_value_error_when_staging_cleanup_hits_permission_error(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from healthvideo.workflows.draft import submit_draft
+
+    project = _evidence_ready(tmp_path)
+    board = read_yaml(SOURCE / "storyboard/storyboard.yaml")
+    board["scenes"][1]["visual"] = "anatomy_animation"
+    board["scenes"][1]["anatomy"] = {"subject": "kidney", "state": "normal", "motion": "pulse"}
+    board_file = tmp_path / "unsupported.yaml"
+    write_yaml_atomic(board_file, board)
+
+    def fail_rmtree(path, *args, **kwargs):
+        if kwargs.get("ignore_errors"):
+            return
+        raise PermissionError("WinError 5: locked staging dir")
+
+    monkeypatch.setattr(shutil, "rmtree", fail_rmtree)
+    with pytest.raises(ValueError, match="unsupported anatomy subject"):
+        submit_draft(project, SOURCE / "script/script.yaml", board_file,
+                     SOURCE / "assets/asset-manifest.yaml")

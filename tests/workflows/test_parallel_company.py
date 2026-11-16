@@ -5,6 +5,8 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from healthvideo.agents import AgentResult
 from healthvideo.domain.gate_review import GateKind
 from healthvideo.domain.project_v2 import WorkflowState
@@ -26,6 +28,77 @@ from healthvideo.workflows.gate_review import approve_gate, check_revision_posts
 from healthvideo.workflows.runner import RunDeps, gpu_mutex, run_queue
 from tests.helpers import create_v2_project_fixture, write_posts_fixture
 from tests.workflows.test_draft import SOURCE, _evidence_ready
+
+
+def test_storyboard_ready_requires_estimated_layout_preflight(tmp_path, monkeypatch):
+    project = create_v2_project_fixture(tmp_path / 'projects')
+
+    def fail_preflight(*args, **kwargs):
+        raise ValueError('Estimated layout precheck failed: visual budget')
+
+    monkeypatch.setattr(storyboard_design, 'validate_estimated_layout', fail_preflight)
+    assert not storyboard_design.storyboard_ready(project)
+
+
+@pytest.mark.parametrize('change', ['approval', 'retry', 'new_topic'])
+def test_dispatches_newly_ready_topic_while_another_is_running(tmp_path, monkeypatch, change):
+    from healthvideo.domain.queue import QueueEntry
+    from healthvideo.workflows import runner
+
+    entries = [QueueEntry(slug=slug, title=slug, question='Fixture?', added='2026-11-15')
+               for slug in ('slow-topic', 'ready-topic')]
+    queue = tmp_path / 'topics/queue.yaml'
+    write_yaml_atomic(queue, {'version': 1, 'entries': [e.model_dump(mode='json') for e in entries]})
+    control = (tmp_path / 'projects/ready-topic/project.yaml' if change == 'approval'
+               else tmp_path / 'topics/logs/ready-topic/agent-retry.yaml')
+    write_yaml_atomic(control, {'status': 'held'})
+    slow_started = threading.Event()
+    checked = threading.Event()
+    dispatched = threading.Event()
+    release = threading.Event()
+    calls = []
+    failures = []
+
+    def run_topic(root, deps, entry, report, **kwargs):
+        calls.append(entry.slug)
+        if entry.slug == 'slow-topic':
+            slow_started.set()
+            assert release.wait(8)
+        elif entry.slug == 'new-topic' or (read_yaml(control).get('status') == 'ready'):
+            dispatched.set()
+        else:
+            checked.set()
+        return False
+
+    monkeypatch.setattr(runner, '_run_topic', run_topic)
+
+    def dispatch():
+        try:
+            run_queue(tmp_path, object(), max_parallel_topics=2)
+        except (AssertionError, OSError, ValueError, RuntimeError) as error:
+            failures.append(error)
+
+    thread = threading.Thread(target=dispatch)
+    thread.start()
+    try:
+        assert slow_started.wait(2)
+        assert checked.wait(2)
+        # Allow the first ready-topic invocation to finish before changing its input.
+        time.sleep(0.1)
+        if change == 'new_topic':
+            new = QueueEntry(slug='new-topic', title='New', question='Fixture?', added='2026-11-15')
+            write_yaml_atomic(queue, {'version': 1, 'entries': [e.model_dump(mode='json') for e in [*entries, new]]})
+        else:
+            write_yaml_atomic(control, {'status': 'ready'})
+        assert dispatched.wait(3), 'Ready work waited for the unrelated slow topic'
+        time.sleep(0.1)
+        assert calls.count('slow-topic') == 1
+        assert calls.count('ready-topic') == (1 if change == 'new_topic' else 2)
+    finally:
+        release.set()
+        thread.join(5)
+    assert not thread.is_alive()
+    assert failures == []
 
 
 def test_submit_script_draft_then_parallel_storyboard_and_voice_prep_before_critic(
@@ -363,3 +436,66 @@ def test_leader_coordinator_dispatch_auto_executes_safe_ops_and_holds_approved_g
     assert not (approved_proj / "revisions/001/reviews/medical-approval.yaml").exists()
     assert not (approved_proj / "revisions/001/reviews/video-approval.yaml").exists()
     assert list(approved_proj.rglob("*-superseded-approval.yaml"))
+
+
+def test_maker_slots_for_critic_uses_latest_per_role_and_falls_back_to_primary_author(tmp_path):
+    import json
+
+    from healthvideo.agents import ACTIVITY_FILE
+    from healthvideo.company import Company, ModelSlot, Role
+    from healthvideo.workflows.runner import _maker_slots_for_critic
+
+    slot_a = ModelSlot(cli="agy", model="model-a")
+    slot_b = ModelSlot(cli="codex", model="model-b")
+    slot_c = ModelSlot(cli="claude", model="model-c")
+    company = Company(
+        roles={
+            "script_critic": Role(
+                id="script_critic",
+                name="Kiểm duyệt kịch bản",
+                tier="hard",
+                skills=("pyh-script-critic",),
+                steps=("script_review",),
+                models=(slot_a, slot_b, slot_c),
+            ),
+        },
+        tiers={"hard": (slot_a, slot_b, slot_c)},
+    )
+    act_path = tmp_path / ACTIVITY_FILE
+    act_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # (a) 3 historical writer runs on 3 models + storyboard_director -> excludes only latest writer (slot_b) + latest storyboard_director (slot_a), leaving slot_c
+    rows_a = [
+        {"slug": "topic-a", "role": "writer", "ok": True, "cli": slot_a.cli, "model": slot_a.model},
+        {"slug": "topic-a", "role": "writer", "ok": True, "cli": slot_c.cli, "model": slot_c.model},
+        {"slug": "topic-a", "role": "writer", "ok": True, "cli": slot_b.cli, "model": slot_b.model},
+        {"slug": "topic-a", "role": "storyboard_director", "ok": True, "cli": slot_a.cli, "model": slot_a.model},
+    ]
+    act_path.write_text("\n".join(json.dumps(r) for r in rows_a) + "\n", encoding="utf-8")
+    excluded_a = _maker_slots_for_critic(tmp_path, "topic-a", "script_critic", company=company)
+    assert set(excluded_a) == {slot_b, slot_a}
+    assert [s for s in company.chain("script_critic") if s not in excluded_a] == [slot_c]
+
+    # (b) writer + storyboard_director occupy all models in script_critic's chain -> falls back to excluding only latest writer (slot_b)
+    company_two = Company(
+        roles={
+            "script_critic": Role(
+                id="script_critic",
+                name="Kiểm duyệt kịch bản",
+                tier="hard",
+                skills=("pyh-script-critic",),
+                steps=("script_review",),
+                models=(slot_a, slot_b),
+            ),
+        },
+        tiers={"hard": (slot_a, slot_b)},
+    )
+    rows_b = [
+        {"slug": "topic-b", "role": "writer", "ok": True, "cli": slot_b.cli, "model": slot_b.model},
+        {"slug": "topic-b", "role": "storyboard_director", "ok": True, "cli": slot_a.cli, "model": slot_a.model},
+    ]
+    act_path.write_text("\n".join(json.dumps(r) for r in rows_b) + "\n", encoding="utf-8")
+    excluded_b = _maker_slots_for_critic(tmp_path, "topic-b", "script_critic", company=company_two)
+    assert excluded_b == (slot_b,)
+    remaining_b = [s for s in company_two.chain("script_critic") if s not in excluded_b]
+    assert remaining_b == [slot_a]

@@ -35,6 +35,7 @@ from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.queue import QueueEntry
 from healthvideo.env import child_env, hide_child_consoles
 from healthvideo.process import is_same_process, resolve_pnpm_argv
+from healthvideo.project_codes import project_codes
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.storage.queue import load_queue
 from healthvideo.workflows import (
@@ -1020,6 +1021,117 @@ def _project_preview_url(path: Path, project: ProjectManifestV2) -> str | None:
     return None
 
 
+def _json_safe(value: object) -> object:
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe(v) for v in value]
+    if isinstance(value, Path):
+        return value.as_posix()
+    if hasattr(value, 'isoformat'):
+        return value.isoformat()
+    return value
+
+
+def _safe_yaml(path: Path) -> dict:
+    """Read a YAML mapping defensively; return {} on missing, corrupt, or non-dict files."""
+    if not path.is_file():
+        return {}
+    try:
+        data = read_yaml(path)
+    except (OSError, ValueError, TypeError, yaml.YAMLError):
+        return {}
+    return _json_safe(data) if isinstance(data, dict) else {}
+
+
+def _safe_yaml_any(path: Path) -> dict | list:
+    """Read a YAML dict or list defensively; return {} on missing or corrupt files."""
+    if not path.is_file():
+        return {}
+    try:
+        data = read_yaml(path)
+    except (OSError, ValueError, TypeError, yaml.YAMLError):
+        return {}
+    return _json_safe(data) if isinstance(data, (dict, list)) else {}
+
+
+def _safe_json(path: Path) -> dict:
+    """Read a JSON object defensively; return {} on missing, corrupt, or non-dict files."""
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding='utf-8', errors='replace'))
+    except (OSError, ValueError, TypeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _summarize_pronunciation_qa(path: Path) -> dict:
+    """Summarize reviews/pronunciation-qa.json for the detail inspector."""
+    raw = _safe_json(path)
+    if not raw:
+        return {}
+    flags = raw.get('flags')
+    if not isinstance(flags, list):
+        flags = [
+            item for item in (raw.get('lines') or [])
+            if isinstance(item, dict) and (item.get('flagged') or item.get('flags'))
+        ]
+    return {
+        'status': raw.get('status'),
+        'blocked': bool(raw.get('blocked')),
+        'note': str(raw.get('note') or ''),
+        'model_id': str(raw.get('model_id') or ''),
+        'checked_count': len(raw.get('lines') or []) if isinstance(raw.get('lines'), list) else 0,
+        'flagged': [f for f in flags if isinstance(f, dict)][:30],
+    }
+
+
+def _project_assets_view(root: Path, slug: str) -> list[dict]:
+    """List active revision visual/media assets with safe /media/ library URLs."""
+    try:
+        items = asset_library.list_assets(root, slug=slug)
+    except (OSError, ValueError, LookupError, TypeError, yaml.YAMLError):
+        return []
+    return [
+        {**item, 'preview_url': f'/media/{slug}/library/{item["id"]}'}
+        for item in items
+        if isinstance(item, dict) and item.get('id')
+    ]
+
+
+def _recent_cli_logs(root: Path, slug: str, limit: int = 6) -> list[dict]:
+    """Return recent *.log tails under topics/logs/<slug>/ and parallel-*/."""
+    log_dir = root / 'topics' / 'logs' / slug
+    if not log_dir.is_dir():
+        return []
+    files = [*log_dir.glob('*.log'), *log_dir.glob('parallel-*/*.log')]
+    entries: list[tuple[float, Path]] = []
+    for path in files:
+        if not path.is_file():
+            continue
+        try:
+            st = path.stat()
+        except OSError:
+            continue
+        entries.append((st.st_mtime, path))
+    entries.sort(key=lambda pair: pair[0], reverse=True)
+    items: list[dict] = []
+    for mtime, path in entries[:limit]:
+        try:
+            size = path.stat().st_size
+        except OSError:
+            size = 0
+        items.append({
+            'name': path.name,
+            'rel_path': path.relative_to(log_dir).as_posix(),
+            'updated_at': datetime.fromtimestamp(mtime, tz=UTC).astimezone().isoformat(timespec='seconds'),
+            'size_bytes': size,
+            'tail': _tail(path, 80),
+        })
+    return items
+
+
 def _project_status_line(
     root: Path,
     path: Path,
@@ -1033,6 +1145,10 @@ def _project_status_line(
         role = running_job.get('role_name') or running_job.get('role') or 'Agent'
         model = running_job.get('model') or running_job.get('cli') or ''
         return f'{step} · {role} · {model}'.strip(' ·')
+    paused_file = root / 'topics/logs' / path.name / 'paused.yaml'
+    if paused_file.is_file():
+        paused_reason = str(_safe_yaml(paused_file).get('reason') or '').strip()
+        return f'Đã tạm dừng · {paused_reason}' if paused_reason else 'Đã tạm dừng tự động'
     waiting_file = root / 'topics/logs' / path.name / 'waiting-model.txt'
     if waiting_file.is_file():
         until_raw = waiting_file.read_text(encoding='utf-8', errors='replace').strip()
@@ -1056,6 +1172,7 @@ def overview(
     now: Callable[[], datetime] = lambda: datetime.now().astimezone(),
 ) -> dict:
     """Company overview payload for the home page: KPI tiles, decision strip, projects, resting models."""
+    codes = project_codes(root)
     current_now = _safe_astimezone(now())
     act = activity(root, limit=30, now=lambda: current_now)
     running_by_slug = {str(item.get('slug')): item for item in act['running'] if item.get('slug')}
@@ -1094,6 +1211,7 @@ def overview(
         if current_card is not None:
             decisions.append({
                 'slug': path.name,
+                'code': codes[path.name],
                 'title': title,
                 'gate': current_card['gate'],
                 'count': len(current_card['decisions']),
@@ -1134,17 +1252,42 @@ def overview(
             if start_dt is not None and done_dt >= start_dt:
                 lead_days.append((done_dt - start_dt).total_seconds() / 86400.0)
 
+        is_paused = (logs / path.name / 'paused.yaml').is_file()
+        rev_dir = path / 'revisions' / project.active_revision
+        claims_raw = _safe_yaml(rev_dir / 'evidence/ledger.yaml').get('claims')
+        lines_raw = _safe_yaml(rev_dir / 'script/script.yaml').get('lines')
+        scenes_raw = _safe_yaml(rev_dir / 'storyboard/storyboard.yaml').get('scenes')
+        counts = {
+            'claims': len(claims_raw) if isinstance(claims_raw, list) else 0,
+            'lines': len(lines_raw) if isinstance(lines_raw, list) else 0,
+            'scenes': len(scenes_raw) if isinstance(scenes_raw, list) else 0,
+            'has_brief': (rev_dir / 'evidence/expert-brief.md').is_file(),
+            'has_video': (rev_dir / 'renders/video.mp4').is_file(),
+            'has_posts': (rev_dir / 'posts/posts.yaml').is_file(),
+        }
         label = STATE_LABELS.get(project.state, project.state.value)
+        state_label = (
+            f'Tạm dừng · {STAGES[stage_index(project)].lower()}'
+            if is_paused and current_card is None
+            else f'Bị chặn · {STAGES[stage_index(project)].lower()}'
+            if note
+            else label
+        )
         project_cards.append({
             'slug': path.name,
+            'code': codes[path.name],
             'title': title,
             'stage_index': stage_index(project),
             'stage': stage_index(project),
             'state': project.state.value,
-            'state_label': f'Bị chặn · {STAGES[stage_index(project)].lower()}' if note else label,
-            'gate': factory.GATES.get(project.state),
+            'state_label': state_label,
+            'gate': factory.gate_for_project(path, project),
             'revision': project.active_revision,
             'blocked': note,
+            'paused': is_paused,
+            'is_running': is_running,
+            'in_queue': path.name in queue_dates,
+            'counts': counts,
             'preview_url': _project_preview_url(path, project),
             'status_line': _project_status_line(
                 root, path, project,
@@ -1232,7 +1375,8 @@ def timeline(project_dir: Path) -> list[dict]:
 
 
 def snapshot(root: Path, *, agents: Callable[[], list[str]] | None = None) -> dict:
-    """Plain-JSON view of the factory for the dashboard; reads files only."""
+    """Plain-JSON factory view, assigning stable display codes when first seen."""
+    codes = project_codes(root)
     now_dt = _safe_astimezone(datetime.now(UTC))
     logs = root / 'topics' / 'logs'
     items = []
@@ -1244,15 +1388,26 @@ def snapshot(root: Path, *, agents: Callable[[], list[str]] | None = None) -> di
             source = reason if reason.exists() else blocked
             note = source.read_text(encoding='utf-8', errors='replace').strip() if source.exists() else ''
         manifest = path / 'project.yaml'
+        gate = factory.gate_for_project(path, project)
+        is_paused = (logs / path.name / 'paused.yaml').is_file()
         label = STATE_LABELS.get(project.state, project.state.value)
+        state_label = (
+            f'Tạm dừng · {STAGES[stage_index(project)].lower()}'
+            if is_paused and not gate
+            else f'Bị chặn · {STAGES[stage_index(project)].lower()}'
+            if note
+            else label
+        )
         items.append({
             'slug': path.name,
+            'code': codes[path.name],
             'title': factory.project_title(path, project),
             'state': project.state.value,
-            'state_label': f'Bị chặn · {STAGES[stage_index(project)].lower()}' if note else label,
+            'state_label': state_label,
             'stage': stage_index(project),
-            'gate': factory.GATES.get(project.state),
+            'gate': gate,
             'blocked': note,
+            'paused': is_paused,
             'revision': project.active_revision,
             'comments': len(load_draft(root, path.name)),
             'updated_at': _safe_mtime(manifest, now_dt).isoformat(timespec='seconds'),
@@ -1315,25 +1470,44 @@ def _read_text(path: Path, limit: int = 20_000) -> str:
 
 
 def review_bundle(root: Path, project_dir: Path, project: ProjectManifestV2) -> dict:
-    """Everything the doctor needs to accept a topic, read straight from the active revision."""
+    """Everything the doctor needs to inspect or accept a topic, read straight from the active revision."""
     rev = project_dir / 'revisions' / project.active_revision
-    script = read_yaml(rev / 'script/script.yaml') if (rev / 'script/script.yaml').is_file() else {}
-    ledger = read_yaml(rev / 'evidence/ledger.yaml') if (rev / 'evidence/ledger.yaml').is_file() else {}
+    logs_dir = root / 'topics' / 'logs' / project_dir.name
+    is_paused = (logs_dir / 'paused.yaml').is_file()
+    paused_info = _safe_yaml(logs_dir / 'paused.yaml') if is_paused else {}
+
+    script = _safe_yaml(rev / 'script/script.yaml')
+    ledger = _safe_yaml(rev / 'evidence/ledger.yaml')
+    voice_prep = _safe_yaml(rev / 'script/voice-prep.yaml')
+    vp_lines: dict[str, dict | str] = {}
+    if isinstance(voice_prep.get('lines'), list):
+        for vp in voice_prep['lines']:
+            if isinstance(vp, dict) and vp.get('id'):
+                vp_lines[str(vp['id'])] = vp.get('delivery') or vp
+
+    raw_lines = script.get('lines')
     lines = [{
         'id': line.get('id'), 'text': line.get('text', ''), 'purpose': line.get('purpose'),
         'claim_id': line.get('claim_id'), 'source_marker': line.get('source_marker'),
-    } for line in script.get('lines', [])]
+        'delivery': line.get('delivery') or vp_lines.get(str(line.get('id') or ''), ''),
+    } for line in (raw_lines if isinstance(raw_lines, list) else []) if isinstance(line, dict)]
+
+    raw_claims = ledger.get('claims')
     claims = [{
         'id': c.get('id'), 'text': c.get('text_public', ''), 'type': c.get('type'),
         'sources': c.get('sources', []), 'applicability': c.get('applicability', ''),
         'technical': c.get('text_technical', ''),
         'support': [{'source_id': s.get('source_id'), 'locator': s.get('locator'), 'quote': s.get('quote')}
-                    for s in c.get('support', [])],
-    } for c in ledger.get('claims', [])]
+                    for s in (c.get('support') if isinstance(c.get('support'), list) else [])
+                    if isinstance(s, dict)],
+    } for c in (raw_claims if isinstance(raw_claims, list) else []) if isinstance(c, dict)]
+
+    raw_records = ledger.get('records')
     records = [{
         'id': r.get('id'), 'title': r.get('title'), 'year': r.get('year'), 'journal': r.get('journal'),
         'doi': r.get('doi'), 'pmid': r.get('pmid'), 'url': r.get('url'),
-    } for r in ledger.get('records', [])]
+    } for r in (raw_records if isinstance(raw_records, list) else []) if isinstance(r, dict)]
+
     media = []
     renders = rev / 'renders'
     for rel, label in (('video.mp4', 'Video hoàn chỉnh'), ('audio/narration-voice.wav', 'Giọng đọc')):
@@ -1345,21 +1519,66 @@ def review_bundle(root: Path, project_dir: Path, project: ProjectManifestV2) -> 
     if (renders / 'frames').is_dir():
         for frame in sorted((renders / 'frames').glob('*.png')):
             frames.append({'name': frame.name, 'url': f'/media/{project_dir.name}/frames/{frame.name}'})
-    expert_brief = (
-        read_yaml(rev / 'evidence/expert-brief.yaml')
-        if (rev / 'evidence/expert-brief.yaml').is_file() else {}
+
+    expert_brief = _safe_yaml(rev / 'evidence/expert-brief.yaml')
+    expert_brief_md = _read_text(rev / 'evidence/expert-brief.md', limit=40_000)
+    storyboard = _safe_yaml(rev / 'storyboard/storyboard.yaml')
+    qa = _safe_json(rev / 'reviews/video-qa.json')
+
+    queue_entry: dict | None = None
+    try:
+        for item in load_queue(root):
+            if item.slug == project_dir.name:
+                queue_entry = item.model_dump(mode='json')
+                break
+    except (OSError, ValueError, TypeError, yaml.YAMLError):
+        queue_entry = None
+
+    revs_dir = project_dir / 'revisions'
+    revisions = (
+        sorted(p.name for p in revs_dir.iterdir() if p.is_dir())
+        if revs_dir.is_dir() else [project.active_revision]
     )
-    storyboard = (
-        read_yaml(rev / 'storyboard/storyboard.yaml')
-        if (rev / 'storyboard/storyboard.yaml').is_file() else {}
+    gate = factory.gate_for_project(project_dir, project)
+    blocked = _blocked_note(root, project_dir, project)
+    label = STATE_LABELS.get(project.state, project.state.value)
+    state_label = (
+        f'Tạm dừng · {STAGES[stage_index(project)].lower()}'
+        if is_paused and not gate
+        else f'Bị chặn · {STAGES[stage_index(project)].lower()}'
+        if blocked
+        else label
     )
-    qa = read_yaml(rev / 'reviews/video-qa.json') if (rev / 'reviews/video-qa.json').is_file() else {}
     return {
         'slug': project_dir.name, 'title': factory.project_title(project_dir, project),
-        'state': project.state.value, 'state_label': STATE_LABELS.get(project.state, project.state.value),
-        'gate': factory.GATES.get(project.state), 'revision': project.active_revision,
+        'code': project_codes(root)[project_dir.name],
+        'state': project.state.value, 'state_label': state_label,
+        'gate': gate, 'revision': project.active_revision,
+        'paused': is_paused, 'paused_info': paused_info, 'blocked': blocked,
+        'stage_index': stage_index(project), 'stages': list(STAGES), 'revisions': revisions,
+        'topic_card': _safe_yaml(rev / 'topic/card.yaml'),
+        'dossier': _safe_yaml(rev / 'topic/dossier.yaml'),
+        'queue_entry': queue_entry,
         'lines': lines, 'claims': claims, 'records': records, 'media': media,
-        'frames': frames, 'expert_brief': expert_brief, 'storyboard': storyboard,
+        'frames': frames, 'expert_brief': expert_brief, 'expert_brief_md': expert_brief_md,
+        'research_meta': {
+            'question': _safe_yaml(rev / 'evidence/question.yaml'),
+            'search_log': _safe_yaml_any(rev / 'evidence/search-log.yaml'),
+            'included_sources': _safe_yaml_any(rev / 'evidence/included-sources.yaml'),
+            'excluded_sources': _safe_yaml_any(rev / 'evidence/excluded-sources.yaml'),
+        },
+        'storyboard': storyboard,
+        'outline': _safe_yaml(rev / 'script/outline.yaml'),
+        'clip_plan': _safe_yaml(rev / 'script/clip-plan.yaml') or _safe_yaml(rev / 'storyboard/clip-plan.yaml'),
+        'voice_prep': voice_prep,
+        'style_lint': _safe_json(rev / 'reviews/style-lint.json'),
+        'script_review_rounds': _safe_yaml_any(rev / 'reviews/script-review-log.yaml'),
+        'product_review_rounds': _safe_yaml_any(rev / 'reviews/product-review-log.yaml'),
+        'visual_review': _safe_yaml(rev / 'reviews/visual-review.yaml'),
+        'assets': _project_assets_view(root, project_dir.name),
+        'posts': _safe_yaml(rev / 'posts/posts.yaml'),
+        'shorts_plan': _safe_yaml(rev / 'posts/shorts-plan.yaml'),
+        'thumbnail_url': _project_preview_url(project_dir, project),
         'timeline': timeline(project_dir),
         'card': decision_card.card(project_dir),
         'activity': activity(root, limit=50, slug=project_dir.name)['items'],
@@ -1368,7 +1587,19 @@ def review_bundle(root: Path, project_dir: Path, project: ProjectManifestV2) -> 
         'video_stale': project.state in {WorkflowState.MEDICALLY_APPROVED, WorkflowState.PRODUCTION_IN_PROGRESS,
                                          WorkflowState.AWAITING_MEDICAL_REVIEW, WorkflowState.DRAFT_READY},
         'notes': _read_text(rev / 'reviews/medical-revision-notes.md'),
-        'qa': {'status': qa.get('status'), 'warnings': [*qa.get('warnings', []), *qa.get('errors', [])]},
+        'qa': {'status': qa.get('status'),
+               'warnings': [*(qa.get('warnings') or []), *(qa.get('errors') or [])]},
+        'qa_detail': {
+            'video_qa': qa,
+            'pronunciation_qa': _summarize_pronunciation_qa(rev / 'reviews/pronunciation-qa.json'),
+        },
+        'approvals': {
+            'medical': _safe_yaml(rev / 'reviews/medical-approval.yaml'),
+            'video': _safe_yaml(rev / 'reviews/video-approval.yaml'),
+        },
+        'running_jobs': [j for j in _active_running_jobs(root) if j.get('slug') == project_dir.name],
+        'repair': _safe_yaml(logs_dir / 'leader-repair.yaml'),
+        'cli_logs': _recent_cli_logs(root, project_dir.name),
         'draft': load_draft(root, project_dir.name),
         'feedback': [e for e in standards.load(root) if e.get('slug') == project_dir.name][::-1],
     }
@@ -1710,6 +1941,13 @@ class DashboardServer(ThreadingHTTPServer):
 
     def start_studio(self) -> dict[str, str]:
         with self._studio_lock:
+            if self._studio_proc is None:
+                try:
+                    with urlopen('http://127.0.0.1:3000', timeout=2) as response:
+                        if b'<title>Remotion Studio</title>' in response.read(65536):
+                            return {'url': 'http://127.0.0.1:3000'}
+                except (OSError, URLError):
+                    pass
             log_path = self.root / 'cache/studio.log'
             log_path.parent.mkdir(parents=True, exist_ok=True)
             if self._studio_proc is None or getattr(self._studio_proc, 'poll', lambda: None)() is not None:
@@ -1737,6 +1975,19 @@ class DashboardServer(ThreadingHTTPServer):
                 match = re.search(r'https?://(?:localhost|127\.0\.0\.1):\d+', text)
                 if match:
                     url = match.group(0)
+            deadline = time.monotonic() + 60
+            while True:
+                try:
+                    with urlopen(url, timeout=2) as response:
+                        if response.status == HTTPStatus.OK:
+                            break
+                except (OSError, URLError):
+                    pass
+                if self._studio_proc.poll() is not None:
+                    raise RuntimeError('Remotion Studio đã dừng khi khởi động. Xem cache/studio.log.')
+                if time.monotonic() >= deadline:
+                    raise RuntimeError('Remotion Studio đang khởi động lâu. Thử mở lại sau ít giây; xem cache/studio.log.')
+                time.sleep(0.3)
             return {'url': url}
 
     def server_close(self) -> None:

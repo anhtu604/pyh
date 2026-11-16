@@ -412,6 +412,12 @@ def approve_gate(
         )
     artifact_hashes = hash_reviewed_artifacts(paths)
 
+    from healthvideo.workflows import product_review, script_review
+
+    script_review.require_passed_review(project_dir)
+    if kind is GateKind.VIDEO:
+        product_review.require_passed_review(project_dir)
+
     record = GateApprovalRecord(
         kind=kind,
         reviewer=reviewer,

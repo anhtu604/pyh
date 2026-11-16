@@ -43,6 +43,9 @@ def test_m64_production_records_measured_audio_and_rejects_stale_qa(tmp_path: Pa
         return 0
 
     produce_project(project, SilentTTS(), runner)
+    from tests.helpers import submit_video_fixture
+
+    submit_video_fixture(project)
     qa_path = revision / "reviews/video-qa.json"
     qa = json.loads(qa_path.read_text(encoding="utf-8"))
     assert qa["audio_duration_ms"] > 0
@@ -93,6 +96,12 @@ def test_m64_production_retry_reuses_promoted_timing_qa(tmp_path: Path) -> None:
         NoSynthesis(),
         lambda _: pytest.fail("renderer invoked during recovery"),
     ) == first
+    assert read_yaml(project / "project.yaml")["state"] == (
+        WorkflowState.PRODUCTION_IN_PROGRESS.value
+    )
+    from tests.helpers import submit_video_fixture
+
+    submit_video_fixture(project)
     assert read_yaml(project / "project.yaml")["state"] == (
         WorkflowState.AWAITING_VIDEO_REVIEW.value
     )
@@ -308,7 +317,9 @@ def test_m65_cache_rejects_each_tampered_visual_qa_field(
     else:
         qa["visual_budget"][tamper]["whiteboard_svg"] += 1
     qa_path.write_text(json.dumps(qa), encoding="utf-8")
+    from tests.helpers import submit_video_fixture
 
+    submit_video_fixture(project)
     with pytest.raises(ValueError, match="medically_approved"):
         produce_project(
             project,
@@ -348,6 +359,10 @@ def test_m65_recovery_verifies_staged_visual_qa_before_promotion(
 
     assert json.loads(promoted.read_text(encoding="utf-8"))["visual_budget"] == expected
     assert (tts.calls, len(render_calls)) == ((6, 2) if tampered else (3, 1))
+    assert read_yaml(project / "project.yaml")["state"] == "production_in_progress"
+    from tests.helpers import submit_video_fixture
+
+    submit_video_fixture(project)
     assert read_yaml(project / "project.yaml")["state"] == "awaiting_video_review"
 
 
@@ -539,6 +554,10 @@ def test_v2_pronunciation_is_cache_bound_and_preserves_approved_script(
     assert "proof" in requests[0].text
     assert "evidence" in script_before.decode("utf-8")
     assert script_path.read_bytes() == script_before
+    assert read_yaml(project_dir / "project.yaml")["state"] == "production_in_progress"
+    from tests.helpers import submit_video_fixture
+
+    submit_video_fixture(project_dir)
     assert read_yaml(project_dir / "project.yaml")["state"] == "awaiting_video_review"
 
     video_approval = approve_gate(
@@ -623,6 +642,12 @@ def test_v2_produce_uses_active_revision_and_reuses_its_cache(
     assert (revision_root / "renders" / "render-manifest.json").is_file()
     assert (revision_root / "reviews" / "video-qa.json").is_file()
     assert read_yaml(project_dir / "project.yaml")["state"] == (
+        WorkflowState.PRODUCTION_IN_PROGRESS.value
+    )
+    from tests.helpers import submit_video_fixture
+
+    submit_video_fixture(project_dir)
+    assert read_yaml(project_dir / "project.yaml")["state"] == (
         WorkflowState.AWAITING_VIDEO_REVIEW.value
     )
 
@@ -684,6 +709,9 @@ def test_v2_runtime_timing_is_hash_bound_and_preserves_approved_content(tmp_path
     ]
     assert board_path.read_bytes() == approved_bytes
     assert timing["scenes"][0]["duration_frames"] != 1350
+    from tests.helpers import submit_video_fixture
+
+    submit_video_fixture(project)
     timing["scenes"][0]["duration_frames"] += 1
     timing_path.write_text(json.dumps(timing), encoding="utf-8")
     with pytest.raises(ValueError, match="medically_approved"):
@@ -701,6 +729,9 @@ def test_v2_all_profiles_refuse_missing_or_changed_timing_qa(tmp_path, field):
         return 0
 
     produce_project(project, SilentTTS(), runner)
+    from tests.helpers import submit_video_fixture
+
+    submit_video_fixture(project)
     qa_path = revision / "reviews/video-qa.json"
     original = json.loads(qa_path.read_text(encoding="utf-8"))
     for missing in (True, False):
@@ -789,6 +820,9 @@ def test_v2_cache_tail_qa_uses_speech_end_despite_full_length_padded_wav(tmp_pat
         return 0
 
     produce_project(project, SilentTTS(), runner)
+    from tests.helpers import submit_video_fixture
+
+    submit_video_fixture(project)
     qa_path = revision / "reviews/video-qa.json"
     qa = json.loads(qa_path.read_text(encoding="utf-8"))
     assert abs(qa["composition_duration_ms"] - qa["audio_duration_ms"]) <= 1
@@ -893,6 +927,9 @@ def test_production_carries_alignment_and_reuses_it_on_retry(tmp_path, monkeypat
     (revision/'reviews/pronunciation-qa.json').unlink()
     produce_project(project, SilentTTS(), lambda _: pytest.fail('render on cache hit'))
     assert read_yaml(revision/'reviews/pronunciation-qa.json') == qa
+    from tests.helpers import submit_video_fixture
+
+    submit_video_fixture(project)
     path = next((revision/'renders/audio/alignment').glob('*.json'))
     path.write_text('[]', encoding='utf-8')
     with pytest.raises(ValueError, match='medically_approved'):

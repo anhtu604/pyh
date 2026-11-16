@@ -26,10 +26,42 @@ from tests.helpers import (
     advance_v2_project_to_video_review,
     align_fixture_script,
     create_v2_project_fixture,
+    write_critic_review_fixture,
 )
 
 REVIEWER = "BS Nguyễn Văn An"
 NOW = datetime(2026, 9, 11, 9, 0, tzinfo=UTC)
+
+
+@pytest.mark.parametrize('kind', [GateKind.MEDICAL, GateKind.VIDEO])
+@pytest.mark.parametrize('problem', ['missing', 'failed', 'stale'])
+def test_doctor_gate_refuses_missing_failed_or_stale_critic(tmp_path, kind, problem):
+    from healthvideo.workflows import factory, product_review, script_review
+
+    project = create_v2_project_fixture(tmp_path / 'projects')
+    if kind is GateKind.VIDEO:
+        advance_v2_project_to_video_review(project, now=NOW)
+        critic, digest_key, station = product_review, 'render_sha256', 'Trạm 12'
+    else:
+        _advance_to_awaiting_medical_review(project)
+        critic, digest_key, station = script_review, 'script_sha256', 'Trạm 07'
+    log_path = project / 'revisions/001' / critic.LOG
+    if problem == 'missing':
+        log_path.unlink()
+    else:
+        log = read_yaml(log_path)
+        if problem == 'failed':
+            log['rounds'][-1]['passed'] = False
+        else:
+            log['rounds'][-1][digest_key] = 'stale'
+        write_yaml_atomic(log_path, log)
+    manifest = ProjectManifestV2.model_validate(read_yaml(project / 'project.yaml'))
+    assert factory.gate_for_project(project, manifest) is None
+    before = (project / 'project.yaml').read_bytes()
+    with pytest.raises(ValueError, match=station):
+        approve_gate(project, kind, reviewer=REVIEWER, now=NOW)
+    assert (project / 'project.yaml').read_bytes() == before
+    assert not (project / 'revisions/001/reviews' / f'{kind.value}-approval.yaml').exists()
 
 
 def _advance_to_awaiting_medical_review(project_dir: Path) -> None:
@@ -576,6 +608,7 @@ def test_reopen_resume_resubmit_and_approve(tmp_path: Path) -> None:
     write_yaml_atomic(board_file, board)
     submit_draft(project, revision / "script/script.yaml", board_file,
                  revision / "assets/asset-manifest.yaml")
+    write_critic_review_fixture(project)
     submit_medical_review(project)
     approval = approve_gate(project, GateKind.MEDICAL, reviewer=REVIEWER, now=NOW)
     assert approval.artifact_hashes != record.prior_approval_hashes
@@ -613,3 +646,51 @@ def test_reopen_missing_current_approval_writes_nothing(tmp_path: Path) -> None:
                     resume_state=WorkflowState.DRAFT_READY, now=NOW)
     assert (project / "project.yaml").read_bytes() == original
     assert not (revision / "reviews/medical").exists()
+
+
+def test_telegram_bot_gates_match_station_07_and_12_without_revoking_approvals(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from healthvideo.workflows import product_review, script_review, telegram_bot
+
+    root = tmp_path
+    med = create_v2_project_fixture(root / "projects", state=WorkflowState.AWAITING_MEDICAL_REVIEW)
+    prior_approval = med / "revisions/001" / MEDICAL_APPROVAL_ARTIFACT
+    prior_bytes = b"kind: medical\nreviewer: BS Cu\n"
+    prior_approval.write_bytes(prior_bytes)
+
+    # Break Station 07 (missing script-review-log.yaml)
+    (med / "revisions/001" / script_review.LOG).unlink()
+
+    # Also test video gate with stale Station 12
+    vid_root = tmp_path / "vid_root"
+    vid = create_v2_project_fixture(vid_root / "projects", state=WorkflowState.DRAFT_READY)
+    advance_v2_project_to_video_review(vid, now=NOW)
+    vid_log = vid / "revisions/001" / product_review.LOG
+    log_data = read_yaml(vid_log)
+    log_data["rounds"][-1]["render_sha256"] = "stale"
+    write_yaml_atomic(vid_log, log_data)
+
+    monkeypatch.setattr(telegram_bot.channel_analytics, "channel_overview_payload", lambda _r: {})
+    monkeypatch.setattr(telegram_bot.researcher, "inbox_summary", lambda _r: {"total": 0, "tier_a": 0, "tier_b": 0})
+
+    sent: list[str] = []
+
+    def capture_send(text: str, *, reply_markup=None, chat_id=None, **_kwargs):
+        sent.append(text)
+        return {"ok": True}
+
+    state = telegram_bot.load_state(root)
+    telegram_bot._send_gate_review(root, state, None, "1", send_fn=capture_send)
+    assert "không có project nào đang chờ" in sent[-1]
+    telegram_bot._send_gate_review(root, state, med.name, "1", send_fn=capture_send)
+    assert "Trạm 07/12" in sent[-1]
+    telegram_bot._send_status(root, state, "1", capture_send)
+    assert "Chờ bác sĩ duyệt cổng: 0" in sent[-1]
+    telegram_bot._send_projects(root, state, "1", capture_send)
+    assert "CHỜ DUYỆT CỔNG" not in sent[-1]
+    assert prior_approval.read_bytes() == prior_bytes
+
+    state_vid = telegram_bot.load_state(vid_root)
+    telegram_bot._send_gate_review(vid_root, state_vid, vid.name, "1", send_fn=capture_send)
+    assert "Trạm 07/12" in sent[-1]

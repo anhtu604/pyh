@@ -598,7 +598,7 @@ def run_coordinator(root: Path, message_id: str, *, invoke=invoke_with_failover)
                 skills = role_skill_block(role_id, company)
                 role_prompt = f'{prompt}\n{skills}' if skills else prompt
                 result = invoke(company.chain(role_id), role_prompt, cwd=root, log_dir=log_dir,
-                                role=role_id, slug=slug or 'chung', step='coordinator')
+                                role=role_id, slug=slug or 'chung', step=role_id)
                 if not result.ok:
                     raise ValueError('Điều phối viên chưa trả lời được; hãy gửi lại.')
                 reply = _guard_channel_readiness(root, guard(CoordinatorReply.model_validate(read_yaml(report))))

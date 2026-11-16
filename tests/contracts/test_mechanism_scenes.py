@@ -352,6 +352,9 @@ def test_produce_mechanism_needs_no_generated_asset_and_rejects_unknown_subject(
     script_data["lines"] = lines
     write_yaml_atomic(revision / "script/script.yaml", script_data)
     write_yaml_atomic(revision / "storyboard/storyboard.yaml", board)
+    from tests.helpers import write_critic_review_fixture
+
+    write_critic_review_fixture(project)
     approve_gate(project, GateKind.MEDICAL, reviewer="test", now=V2_REVIEWED_AT)
 
     def runner(argv: list[str]) -> int:

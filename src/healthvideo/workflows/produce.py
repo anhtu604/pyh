@@ -1056,7 +1056,10 @@ def _completed_v2_project(
 
 def submit_video(project_dir: Path) -> None:
     """Submit a held final render to the doctor's video gate after product review."""
-    from healthvideo.workflows.product_review import mark_submitted
+    from healthvideo.workflows.product_review import (
+        mark_submitted,
+        require_passed_review,
+    )
 
     layout = resolve_project_layout(project_dir)
     project = layout.manifest
@@ -1066,6 +1069,10 @@ def submit_video(project_dir: Path) -> None:
     input_hash = project.artifact_hashes.get(PRODUCTION_ARTIFACT)
     if not input_hash:
         raise ValueError("Chưa có bản dựng cuối để nộp bác sĩ.")
+    from healthvideo.workflows import script_review
+
+    script_review.require_passed_review(project_dir)
+    require_passed_review(project_dir)
     _ensure_v2_medical_approval_current(layout.artifact_root)
     write_yaml_atomic(
         layout.project_dir / "project.yaml",
@@ -1077,7 +1084,16 @@ def submit_video(project_dir: Path) -> None:
 def _production_project(layout: ProjectLayout, project: ProjectManifestV2, input_hash: str,
                         *, hold: bool = False) -> ProjectManifestV2:
     if review_complete(layout.artifact_root) and not hold:
-        return _completed_v2_project(project, input_hash)
+        from healthvideo.workflows import script_review
+        from healthvideo.workflows.product_review import require_passed_review
+
+        try:
+            script_review.require_passed_review(layout.project_dir)
+            require_passed_review(layout.project_dir)
+        except ValueError:
+            pass
+        else:
+            return _completed_v2_project(project, input_hash)
     if review_complete(layout.artifact_root):
         from healthvideo.workflows.product_review import hold as hold_for_review
 

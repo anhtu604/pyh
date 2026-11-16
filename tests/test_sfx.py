@@ -135,6 +135,9 @@ def test_sfx_production_package_and_cache(tmp_path):
     assert (root / 'renders/audio/sfx/tick.wav').is_file()
     produce_project(project, SilentTTS(), lambda _: pytest.fail('cache missed'), music=False)
     write_posts_fixture(root)
+    from tests.helpers import submit_video_fixture
+
+    submit_video_fixture(project)
     approve_gate(project, GateKind.VIDEO, reviewer='test', now=now)
     package = package_project(project)
     assert json.loads((package / 'audio/sfx.json').read_text())[0]['id'] == 'tick'

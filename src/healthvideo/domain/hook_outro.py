@@ -5,6 +5,11 @@ OUTRO_TEXT = (
     "Nếu mình có gì sai sót, hoặc bạn có bất kỳ câu hỏi nào, "
     "hãy để lại phản hồi dưới phần bình luận nhé. Cảm ơn bạn đã xem video."
 )
+CHANNEL_OUTRO_TEXT = (
+    "Trên đây chỉ là thông tin tổng hợp, không phải là lời khuyên y khoa. "
+    "Nếu thấy hay và thích video, xin hãy để lại 1 lượt like và subscribe cho chúng mình. "
+    "Cảm ơn bạn đã xem video!"
+)
 
 
 def validate_hook_outro(
@@ -15,7 +20,9 @@ def validate_hook_outro(
         raise ValueError("M6.4 script and storyboard must align with one outro")
     if [line.purpose for line in script.lines].count("outro") != 1:
         raise ValueError("M6.4 requires exactly one outro")
-    if script.lines[-1].purpose != "outro" or script.lines[-1].text != OUTRO_TEXT:
+    outro = script.lines[-1]
+    # Existing revisions can still carry the original pinned outro.
+    if outro.purpose != "outro" or outro.text not in {CHANNEL_OUTRO_TEXT, OUTRO_TEXT}:
         raise ValueError("M6.4 final outro must match pinned text")
     if storyboard.scenes[0].start_frame != 0 or any(
         scene.visual == "brand_outro" for scene in storyboard.scenes[:-1]

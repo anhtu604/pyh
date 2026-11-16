@@ -67,12 +67,13 @@ def test_old_logs_without_new_fields_still_load(tmp_path, gate):
 @pytest.mark.parametrize('keeps', [0, 2])
 def test_decision_needs_exactly_one_keep(tmp_path, gate, keeps):
     project = create_v2_project_fixture(tmp_path / 'projects')
+    module = sr if gate == 'medical' else pr
+    (project / 'revisions/001' / module.LOG).unlink(missing_ok=True)
     item = decision()
     for option in item['options']:
         option['keep'] = keeps == 2
     with pytest.raises(ValueError, match='keep'):
         report(project, gate=gate, decisions=[item])
-    module = sr if gate == 'medical' else pr
     assert not (project / 'revisions/001' / module.LOG).exists()
 
 
@@ -84,6 +85,7 @@ def test_script_where_must_be_real_line(tmp_path):
 
 def test_resubmission_starts_new_review_cycle(tmp_path):
     project = create_v2_project_fixture(tmp_path / 'projects')
+    (project / 'revisions/001' / sr.LOG).unlink(missing_ok=True)
     for _ in range(sr.MAX_REVIEWS):
         report(project)
     assert sr.next_script_action(project) == 'submit_medical'
@@ -145,13 +147,20 @@ def test_decision_ids_options_and_recommendation_are_validated(tmp_path, change)
 @pytest.mark.parametrize('gate', ['medical', 'video'])
 def test_excess_decisions_require_bounded_rewrite(tmp_path, gate):
     project = create_v2_project_fixture(tmp_path / 'projects')
+    (project / 'revisions/001' / (sr.LOG if gate == 'medical' else pr.LOG)).unlink(missing_ok=True)
     for _ in range(3):
         entry = report(project, gate=gate, decisions=[decision(id=f'D{i}') for i in range(7)])
         assert not entry['passed']
         if gate == 'medical':
-            action = sr.next_script_action(project)
-            assert action == ('submit_medical' if entry['round'] >= sr.MAX_REVIEWS else 'draft')
+            if entry['round'] >= sr.MAX_REVIEWS:
+                with pytest.raises(ValueError, match='Trạm 07'):
+                    sr.next_script_action(project)
+            else:
+                assert sr.next_script_action(project) == 'draft'
         else:
-            action = pr.next_product_action(project)
-            assert action == ('submit_video' if entry['round'] == 3 else 'revise_product')
+            if entry['round'] >= pr.MAX_REVIEWS:
+                with pytest.raises(ValueError, match='Trạm 12'):
+                    pr.next_product_action(project)
+            else:
+                assert pr.next_product_action(project) == 'revise_product'
     assert read_yaml(project / 'revisions/001' / (sr.LOG if gate == 'medical' else pr.LOG))

@@ -653,33 +653,38 @@ def test_telegram_duyet_gates_with_pin_auto_delete_and_card_toggle(tmp_path: Pat
     assert not (med_project / "chat.jsonl").exists()
 
     # 2. Video gate decision card toggle + reject flow
+    from datetime import UTC, datetime
+
+    from healthvideo.workflows import product_review
+    from tests.helpers import advance_v2_project_to_video_review
+
     root2 = tmp_path / "vid"
-    vid_project = create_v2_project_fixture(root2 / "projects", state=WorkflowState.AWAITING_VIDEO_REVIEW)
+    vid_project = create_v2_project_fixture(root2 / "projects", state=WorkflowState.DRAFT_READY)
+    advance_v2_project_to_video_review(vid_project, now=datetime(2026, 10, 22, tzinfo=UTC))
     vid_slug = vid_project.name
     state2 = telegram_bot.load_state(root2)
     write_yaml_atomic(
-        vid_project / "revisions/001/reviews/product-review-log.yaml",
+        vid_project / "revisions/001" / product_review.REPORT,
         {
-            "rounds": [
+            "scores": dict.fromkeys(product_review.CRITERIA, 8),
+            "summary": "Synthetic passing product review with decision card.",
+            "issues": [],
+            "checked": ["Audio đạt chuẩn"],
+            "decisions": [
                 {
-                    "checked": ["Audio đạt chuẩn"],
-                    "passed": True,
-                    "decisions": [
-                        {
-                            "id": "D1",
-                            "where": "S01",
-                            "question": "Giữ góc quay hiện tại?",
-                            "why_hard": "Chữ nhỏ trên mobile",
-                            "options": [
-                                {"id": "a", "label": "Giữ nguyên", "effect": "keep", "keep": True, "recommended": True},
-                                {"id": "b", "label": "Phóng to chữ", "effect": "Sửa hình S01", "keep": False},
-                            ],
-                        }
+                    "id": "D1",
+                    "where": "S01",
+                    "question": "Giữ góc quay hiện tại?",
+                    "why_hard": "Chữ nhỏ trên mobile",
+                    "options": [
+                        {"id": "a", "label": "Giữ nguyên", "effect": "keep", "keep": True, "recommended": True},
+                        {"id": "b", "label": "Phóng to chữ", "effect": "Sửa hình S01", "keep": False},
                     ],
                 }
-            ]
+            ],
         },
     )
+    product_review.record_review(vid_project, product_review.render_hash(vid_project))
     telegram_bot.handle_update(
         root2,
         state2,

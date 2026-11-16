@@ -516,6 +516,9 @@ def app(tmp_path, monkeypatch):
     queue = tmp_path / 'topics/queue.yaml'
     queue.parent.mkdir(parents=True)
     queue.write_text('version: 1\nentries: []\n', encoding='utf-8')
+    # Codes are allocated once and persisted; allocate before the snapshot so reads stay write-free.
+    from healthvideo.project_codes import project_codes
+    project_codes(tmp_path)
     server.protected_bytes = {p: p.read_bytes() for folder in ('projects', 'topics')
                               for p in (tmp_path / folder).rglob('*') if p.is_file()}
     thread = threading.Thread(target=server.serve_forever, daemon=True)

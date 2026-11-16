@@ -200,6 +200,10 @@ def test_explain_first_rejects_legacy_script_without_changes(
     script = read_yaml(revision / "script/script.yaml")
     script["format_profile"] = "legacy"
     write_yaml_atomic(revision / "script/script.yaml", script)
+    if submission == "medical_review":
+        from tests.helpers import write_critic_review_fixture
+
+        write_critic_review_fixture(project)
     before = {path: path.read_bytes() for path in project.rglob("*") if path.is_file()}
 
     with pytest.raises(

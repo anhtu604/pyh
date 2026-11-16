@@ -54,7 +54,8 @@ def generate(
     tokenizer = Qwen2TokenizerFast.from_pretrained(weights / "tokenizer", local_files_only=True)
     text_encoder = Qwen3ForCausalLM.from_pretrained(
         weights / "text_encoder", dtype=torch.bfloat16, low_cpu_mem_usage=True, local_files_only=True,
-    ).to("cuda")
+        device_map="auto",
+    )
     with torch.inference_mode():
         prompt_embeds = Flux2KleinPipeline._get_qwen3_prompt_embeds(
             text_encoder=text_encoder, tokenizer=tokenizer, prompt=full_prompt,
@@ -67,7 +68,8 @@ def generate(
     pipe = Flux2KleinPipeline.from_pretrained(
         weights, text_encoder=None, tokenizer=None, dtype=torch.bfloat16,
         low_cpu_mem_usage=True, local_files_only=True,
-    ).to("cuda")
+    )
+    pipe.enable_sequential_cpu_offload()
     pipe.vae.enable_tiling()
     multiple = pipe.vae_scale_factor * 2
     native_width = max(multiple, round(width / multiple) * multiple)

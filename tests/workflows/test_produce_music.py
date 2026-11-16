@@ -76,6 +76,9 @@ def test_music_license_recorded(approved_project, fake_music):
     # Hash all generated audio and provenance on reuse, including the original voice.
     assert produce.produce_project(approved_project, SilentTTS(),
                                    lambda _: pytest.fail("cache missed")) == renders / "video.mp4"
+    from tests.helpers import submit_video_fixture
+
+    submit_video_fixture(approved_project)
     (renders / "audio/music.wav").write_bytes(b"corrupt")
     with pytest.raises(ValueError, match="medically_approved"):
         produce.produce_project(approved_project, SilentTTS(), renderer)
@@ -94,6 +97,9 @@ def test_music_failure_blocks_production_with_clear_error(approved_project, monk
 
 def test_music_setting_invalidates_render(approved_project, fake_music):
     produce.produce_project(approved_project, SilentTTS(), renderer)
+    from tests.helpers import submit_video_fixture
+
+    submit_video_fixture(approved_project)
     with pytest.raises(ValueError, match="medically_approved"):
         produce.produce_project(approved_project, SilentTTS(), renderer, music=False)
 
@@ -113,6 +119,9 @@ def test_music_mood_from_outline(tmp_path):
 
 def test_music_manifest_parameters_verified_on_reuse(approved_project, fake_music):
     produce.produce_project(approved_project, SilentTTS(), renderer)
+    from tests.helpers import submit_video_fixture
+
+    submit_video_fixture(approved_project)
     manifest_path = approved_project / "revisions/001/renders/render-manifest.json"
     manifest = json.loads(manifest_path.read_text())
     manifest["music"]["duck_db"] = -1.0

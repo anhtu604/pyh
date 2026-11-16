@@ -117,12 +117,14 @@ def test_package_preserves_snapshot_and_rejects_edits(tmp_path):
     from healthvideo.workflows.gate_review import approve_gate
     from healthvideo.workflows.package import package_project
     from healthvideo.workflows.produce import produce_project
+    from tests.helpers import submit_video_fixture
     from tests.workflows.test_package import _fake_renderer
     project = create_v2_project_fixture(tmp_path / 'projects', state='awaiting_medical_review')
     _seed_standards(tmp_path, [_standard_entry(stage) for stage in range(1, 5)])
     snapshot = module().pin_standards(tmp_path, project)
     approve_gate(project, GateKind.MEDICAL, reviewer='Fixture reviewer', now=datetime.now(UTC))
     produce_project(project, SilentTTS(), _fake_renderer)
+    submit_video_fixture(project)
     approve_gate(project, GateKind.VIDEO, reviewer='Fixture reviewer', now=datetime.now(UTC))
     original = snapshot.read_bytes()
     snapshot.write_bytes(original + b'\nchanged: true\n')

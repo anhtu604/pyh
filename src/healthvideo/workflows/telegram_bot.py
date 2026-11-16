@@ -609,9 +609,9 @@ def _project_action_buttons(
     media_row.append(("📜 Kịch bản & Nguồn", _cb_token(state, "scr", {"kind": "scr", "slug": slug}, direct_value=slug)))
     if media_row:
         rows.append(media_row[:3])
-    if include_duyet and project.state in factory.GATES:
+    if include_duyet and (gate := factory.gate_for_project(rev.parent.parent, project)) is not None:
         duy_cb = _cb_token(state, "duy", {"kind": "duy", "slug": slug}, direct_value=slug)
-        rows.append([(f"🪪 Mở thẻ duyệt ({factory.GATES[project.state]})", duy_cb)])
+        rows.append([(f"🪪 Mở thẻ duyệt ({gate})", duy_cb)])
     return rows
 
 
@@ -790,8 +790,8 @@ def _send_project_script(
     rows: list[list[tuple[str, str]]] = []
     if (rev / "renders/video.mp4").is_file():
         rows.append([("🎬 Xem video", _cb_token(state, "vid", {"kind": "vid", "slug": slug}, direct_value=slug))])
-    if project.state in factory.GATES:
-        rows.append([(f"🪪 Mở thẻ duyệt ({factory.GATES[project.state]})", _cb_token(state, "duy", {"kind": "duy", "slug": slug}, direct_value=slug))])
+    if (gate := factory.gate_for_project(project_dir, project)) is not None:
+        rows.append([(f"🪪 Mở thẻ duyệt ({gate})", _cb_token(state, "duy", {"kind": "duy", "slug": slug}, direct_value=slug))])
     save_state(root, state)
     send_fn("\n".join(lines_out), reply_markup=_inline_markup(rows), chat_id=chat_id)
 
@@ -833,15 +833,18 @@ def _send_gate_review(
     send_fn: Callable[..., dict | None],
 ) -> None:
     if not slug:
-        pending = [(p.name, proj) for p, proj in factory.projects(root) if proj.state in factory.GATES]
+        pending = [
+            (p.name, proj, gate)
+            for p, proj in factory.projects(root)
+            if (gate := factory.gate_for_project(p, proj)) is not None
+        ]
         if not pending:
             send_fn("✅ Hiện không có project nào đang chờ bác sĩ duyệt cổng.", chat_id=chat_id)
             return
         if len(pending) > 1:
             lines = [f"🪪 Có {len(pending)} project đang chờ duyệt cổng:"]
             rows: list[list[tuple[str, str]]] = []
-            for s, proj in pending[:8]:
-                gate = factory.GATES[proj.state]
+            for s, proj, gate in pending[:8]:
                 lines.append(f"- `{s}` · cổng `{gate}` (rev {proj.active_revision})")
                 cb = _cb_token(state, "duy", {"kind": "duy", "slug": s}, direct_value=s)
                 rows.append([(f"🪪 Duyệt {s[:22]} ({gate})", cb)])
@@ -855,11 +858,16 @@ def _send_gate_review(
         send_fn(f"❌ Không tìm thấy project `{slug}`.", chat_id=chat_id)
         return
     project_dir, project, rev = loaded
-    if project.state not in factory.GATES:
-        send_fn(f"ℹ️ Project `{slug}` hiện ở trạng thái `{project.state.value}`, không ở cổng duyệt.", chat_id=chat_id)
+    gate = factory.gate_for_project(project_dir, project)
+    if gate is None:
+        if project.state in factory.GATES:
+            send_fn(
+                f"⚠️ Project `{slug}` ở trạng thái `{project.state.value}` nhưng chưa đạt kiểm duyệt tự động (Trạm 07/12) cho dữ liệu hiện hành.",
+                chat_id=chat_id,
+            )
+        else:
+            send_fn(f"ℹ️ Project `{slug}` hiện ở trạng thái `{project.state.value}`, không ở cổng duyệt.", chat_id=chat_id)
         return
-
-    gate = factory.GATES[project.state]
     title = factory.project_title(project_dir, project)
     card = decision_card.card(project_dir)
     session = _init_review_session(state, slug, project.active_revision, card)
@@ -1012,7 +1020,7 @@ def _send_status(root: Path, state: dict[str, Any], chat_id: str, send_fn: Calla
     summary = researcher.inbox_summary(root)
     ch = channel_analytics.channel_overview_payload(root)
     items = list(factory.projects(root))
-    gates = [p.name for p, proj in items if factory.GATES.get(proj.state)]
+    gates = [p.name for p, proj in items if factory.gate_for_project(p, proj) is not None]
     scope_lbl = state.get("active_slug") or "Toàn xưởng"
     lines = [
         "📊 Trạng thái Xưởng PYH",
@@ -1065,7 +1073,7 @@ def _send_projects(root: Path, state: dict[str, Any], chat_id: str, send_fn: Cal
     lines = [f"📁 Danh sách project ({len(items)}) — Ngữ cảnh hiện tại: {active or 'Toàn xưởng'}:"]
     rows: list[list[tuple[str, str]]] = []
     for path, proj in items[:8]:
-        gate = factory.GATES.get(proj.state)
+        gate = factory.gate_for_project(path, proj)
         gate_note = f" [CHỜ DUYỆT CỔNG: {gate}]" if gate else ""
         mark = "👉 " if active == path.name else ""
         lines.append(f"{mark}- {path.name} · {proj.state.value} (rev {proj.active_revision}){gate_note}")

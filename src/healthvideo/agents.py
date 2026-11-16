@@ -1,6 +1,7 @@
 """Invoke coding agents with quota-exhaustion failover."""
 
 import json
+import logging
 import os
 import re
 import subprocess
@@ -10,6 +11,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from time import sleep
 
 from healthvideo.company import REPO_ROOT, ModelSlot
 from healthvideo.env import child_env
@@ -25,6 +27,7 @@ from healthvideo.process import (
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 
 RUNNING_MARKER = ".agent-running"
+_LOG = logging.getLogger(__name__)
 QUOTA_FILE = Path("cache/agent-quota.yaml")
 ACTIVITY_FILE = Path("topics/logs/activity.jsonl")
 # A CLI that does not say when its quota resets rests this long.
@@ -34,6 +37,7 @@ MAX_ARGV_PROMPT = 8000
 AGENT_TIMEOUT = 15 * 60
 STEP_TIMEOUTS = {
     'chat': 120, 'chat_deep': 300, 'posts': 600, 'feedback_inbox': 300,
+    'coordinator': 120, 'coordinator_senior': 300,
     'topic_research': 600, 'channel_analytics': 600,
     'storyboard_design': 900, 'voice_prep': 300, 'shorts_plan': 600,
     'script_review': 900, 'visual_review': 900, 'product_review': 900,
@@ -71,7 +75,7 @@ AGY = AgentCli(
         "--print-timeout",
         "0s",
         "--model",
-        "gemini-4-argon-medium",
+        "gemini-pro-orchestrator",
     ),
     False,
 )
@@ -91,7 +95,19 @@ CLAUDE = AgentCli(
     ),
     True,
 )
-AGENT_CLIS: dict[str, AgentCli] = {"claude": CLAUDE, "codex": CODEX, "agy": AGY}
+OMNIROUTE = AgentCli(
+    'omniroute',
+    ('codex', 'exec', '--dangerously-bypass-approvals-and-sandbox',
+     '-c', 'model_provider="pyh_omniroute"',
+     '-c', 'model_providers.pyh_omniroute.name="PYH OmniRoute"',
+     '-c', 'model_providers.pyh_omniroute.wire_api="responses"',
+     '-c', 'model_providers.pyh_omniroute.env_key="PYH_OMNIROUTE_API_KEY"',
+     '-c', 'model_reasoning_effort="medium"', '-'),
+    True,
+)
+AGENT_CLIS: dict[str, AgentCli] = {
+    "claude": CLAUDE, "codex": CODEX, "agy": AGY, 'omniroute': OMNIROUTE,
+}
 
 QUOTA_PATTERNS: tuple[str, ...] = (
     "usage limit",
@@ -101,6 +117,10 @@ QUOTA_PATTERNS: tuple[str, ...] = (
     "429",
     "limit reached",
     "hit your limit",
+    "hit your weekly limit",
+    "weekly limit",
+    "daily limit",
+    "spending limit",
     # Claude CLI login without a usable plan: fail over instead of blocking the topic.
     "can't use your claude subscription",
 )
@@ -110,6 +130,11 @@ PERMISSION_DENIED_PATTERNS: tuple[str, ...] = ("auto-denied",)
 # Provider overload (seen 2026-11-13: agy 503 "No capacity available for model ...").
 BUSY_PATTERNS: tuple[str, ...] = ("no capacity available", "high traffic", "code 503", "overloaded")
 BUSY_REST = timedelta(minutes=10)
+MODEL_UNAVAILABLE = re.compile(
+    r'model_not_found|unknown model|invalid model|unsupported model|'
+    r'model[^\n]{0,180}?(?:not available|not found|not supported|does not exist)',
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -218,18 +243,22 @@ class QuotaBook:
         return [entry for entry in self._entries() if _when(entry["resting_until"]) > now]
 
 
-_RESET_AT = re.compile(r"try again at\s+(\d{1,2}):(\d{2})\s*(am|pm)?", re.IGNORECASE)
+_RESET_AT = re.compile(
+    r"(?:try again|resets?)(?:\s+at)?\s+(\d{1,2})(?::(\d{2})\s*(am|pm)?|\s*(am|pm))\b",
+    re.IGNORECASE,
+)
 _RESET_IN = re.compile(
     r"(?:resets?|try again)\s+in\s+(\d+)\s*(hours?|hrs?|minutes?|mins?)", re.IGNORECASE
 )
-_ACCOUNT = re.compile(r"\b(account|plan)\b", re.IGNORECASE)
+_ACCOUNT = re.compile(r"\b(account|plan|weekly|subscription|session)\b", re.IGNORECASE)
 
 
 def parse_reset(output: str, now: datetime) -> datetime | None:
     """Read the reset time a CLI printed; None when it gave none."""
     match = _RESET_AT.search(output)
     if match:
-        hour, minute, half = int(match[1]), int(match[2]), (match[3] or "").lower()
+        hour, minute = int(match[1]), int(match[2] or 0)
+        half = (match[3] or match[4] or "").lower()
         if half:
             hour = hour % 12 + (12 if half == "pm" else 0)
         if hour > 23 or minute > 59:
@@ -244,10 +273,25 @@ def parse_reset(output: str, now: datetime) -> datetime | None:
 
 
 def _quota_reason(output: str) -> str:
-    for line in output.splitlines():
+    for line in reversed(output.splitlines()):
         if any(pattern in line.lower() for pattern in QUOTA_PATTERNS):
             return line.strip()[:200]
     return "hết lượt"
+
+
+def _remove_job_marker(path: Path) -> bool:
+    """Retry a Windows sharing violation without losing the agent result."""
+    for delay in (0.0, 0.02, 0.05, 0.1, 0.2):
+        if delay:
+            sleep(delay)
+        try:
+            path.unlink(missing_ok=True)
+            return True
+        except PermissionError as error:
+            if getattr(error, 'winerror', None) not in {32, 33}:
+                raise
+    _LOG.warning("Could not remove agent status file after retry: %s", path)
+    return False
 
 
 def invoke(
@@ -279,6 +323,7 @@ def invoke(
         stdin_input = None
 
     env = child_env()
+    credentials: dict[str, str] = {}
     marker = log_dir / RUNNING_MARKER
     job_file = log_dir / f".job-{actual_job_id}.json"
     cancel_file = log_dir / f".cancelled-{actual_job_id}"
@@ -298,6 +343,14 @@ def invoke(
         job_file.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
     try:
+        if agent.name == 'omniroute':
+            from healthvideo.omniroute import agent_environment
+
+            config, credentials = agent_environment(cwd)
+            env.update(credentials)
+            dash = argv.index('-')
+            argv[dash:dash] = ['-c', 'model_providers.pyh_omniroute.base_url='
+                              + json.dumps(config.base_url)]
         completed = run_with_deadline(
             prepare_subprocess_argv(argv),
             timeout=timeout,
@@ -313,12 +366,15 @@ def invoke(
         )
     except Exception as exc:  # noqa: BLE001 -- persist unexpected tool failures; never catch Ctrl+C.
         detail = timeout_diagnostic(exc) if isinstance(exc, subprocess.TimeoutExpired) else str(exc)
+        for secret in credentials.values():
+            detail = detail.replace(secret, '[redacted]')
         log_path.write_text(f"{type(exc).__name__}: {detail}\n", encoding="utf-8")
         was_cancelled = cancel_file.is_file()
         cancel_file.unlink(missing_ok=True)
         kind = ('cancelled' if was_cancelled
                 else 'transient' if isinstance(exc, (subprocess.TimeoutExpired, ConnectionError, TimeoutError))
                 else 'configuration' if isinstance(exc, (FileNotFoundError, PermissionError, UnsafeBatchLauncherError))
+                or (agent.name == 'omniroute' and isinstance(exc, ValueError))
                 else 'agent_error')
         return AgentResult(
             agent=agent.name,
@@ -328,12 +384,15 @@ def invoke(
             failure_kind=kind,
         )
     finally:
-        marker.unlink(missing_ok=True)
-        job_file.unlink(missing_ok=True)
+        # Keep the child identity available if the running marker survives.
+        if _remove_job_marker(marker):
+            _remove_job_marker(job_file)
 
     was_cancelled = cancel_file.is_file()
     cancel_file.unlink(missing_ok=True)
     output = f"{completed.stdout or ''}{completed.stderr or ''}"
+    for secret in credentials.values():
+        output = output.replace(secret, '[redacted]')
     log_path.write_text(output, encoding="utf-8")
     if was_cancelled:
         return AgentResult(
@@ -394,8 +453,8 @@ def invoke_with_failover(
     activity = activity or cwd / ACTIVITY_FILE
     deadline = timeout if timeout is not None else STEP_TIMEOUTS.get(step, AGENT_TIMEOUT)
     last_transient = None
-    excluded = set(exclude_slots)
-    candidate_slots = [slot for slot in slots if slot not in excluded]
+    excluded = {slot.model_identity for slot in exclude_slots}
+    candidate_slots = [slot for slot in slots if slot.model_identity not in excluded]
     if slots and excluded and not candidate_slots:
         raise ValueError("Không còn model độc lập nào cho critic sau khi loại trừ model của maker.")
 
@@ -433,8 +492,14 @@ def invoke_with_failover(
             log(slot, "end", result.ok if result is not None else False)
         if result.failure_kind == 'cancelled':
             return result
-        if not result.ok and not result.quota_exhausted:
+        if not result.ok:
             output = result.log_path.read_text(encoding="utf-8", errors="replace").lower()
+            if MODEL_UNAVAILABLE.search(output[-8000:]):
+                log(slot, 'model_unavailable', False)
+                quota.rest(slot, now() + BUSY_REST, 'model chưa khả dụng; đã chuyển model kế tiếp')
+                last_transient = replace(result, failure_kind='configuration')
+                continue
+        if not result.ok and not result.quota_exhausted:
             if any(pattern in output for pattern in BUSY_PATTERNS):
                 # Server overload is not our quota: rest briefly and try the next model.
                 log(slot, "busy", False)
@@ -444,6 +509,9 @@ def invoke_with_failover(
             if result.failure_kind == 'transient':
                 # No in-call loop/backoff: each configured slot gets one attempt.
                 # Returning failure after the chain lets the queue own its durable cap.
+                last_transient = result
+                continue
+            if slot.cli == 'omniroute' and result.failure_kind == 'configuration':
                 last_transient = result
                 continue
         if result.ok or not result.quota_exhausted:

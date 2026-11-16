@@ -43,10 +43,40 @@ def test_critic_first_slot_differs_from_maker():
 
 def test_chain_uses_override_then_tier():
     company = load_company()
-    assert company.chain('script_critic')[0] == ModelSlot(cli='agy', model='gemini-4-carbon-medium')
-    assert company.chain('writer')[0] == ModelSlot(cli='codex', model='gpt-6.1-sol')
-    assert company.chain('medical_expert') == [ModelSlot(cli='agy', model='gemini-4-carbon-medium')]
+    assert company.chain('script_critic')[0] == ModelSlot(cli='omniroute', model='codex/gpt-6.1-terra')
+    assert company.chain('writer')[0] == ModelSlot(cli='omniroute', model='codex/gpt-6.1-sol')
+    assert company.chain('medical_expert')[0] == ModelSlot(cli='omniroute', model='codex/gpt-6.1-terra')
+    assert all(any(slot.cli == 'omniroute' for slot in company.chain(role)) for role in company.roles)
     assert company.chain('scout') == company.tiers['bulk']
+
+
+def test_every_role_prioritizes_explicit_non_claude_omniroute_models():
+    company = load_company()
+    for chain in company.tiers.values():
+        assert chain[0].cli == 'omniroute'
+        assert all(slot.cli != 'claude' and 'claude' not in slot.model.lower() for slot in chain)
+    for role in company.roles:
+        chain = company.chain(role)
+        assert chain[0].cli == 'omniroute', role
+        assert len({slot.model_identity for slot in chain if slot.cli == 'omniroute'}) == sum(
+            slot.cli == 'omniroute' for slot in chain
+        ), role
+        for slot in chain:
+            assert slot.cli != 'claude' and 'claude' not in slot.model.lower(), role
+            assert 'orchestrator' not in slot.model and not slot.model.startswith('auto/'), role
+
+
+def test_verified_model_families_are_used_and_visual_roles_keep_image_models():
+    company = load_company()
+    routed = {slot.model for role in company.roles for slot in company.chain(role) if slot.cli == 'omniroute'}
+    assert {'codex/gpt-6.1-sol', 'codex/gpt-6.1-terra', 'codex/gpt-6-luna',
+            'agy/gemini-4-hydrogen-medium', 'agy/gemini-3.8-flash-medium'} <= routed
+    # DeepSeek passes simple API calls but not the real Codex CLI tool loop yet.
+    assert not any('deepseek' in model for model in routed)
+    image_models = {'codex/gpt-6.1-terra', 'agy/gemini-4-hydrogen-medium',
+                    'agy/gemini-3.8-flash-medium'}
+    for role in ('art_director', 'product_critic'):
+        assert all(slot.model in image_models for slot in company.chain(role) if slot.cli == 'omniroute')
 
 
 def test_duplicate_step_rejected(tmp_path):
@@ -102,7 +132,7 @@ def test_every_role_skill_exists():
 
 
 def test_role_skills_follow_spec_table():
-    # Company 2.0 standardized 15-role skills (1-3 skills per role).
+    # Company 2.0 standardized 16-role skills (1-3 skills per role).
     expected = {
         'coordinator': ['pyh-coordinator'],
         'coordinator_senior': ['pyh-coordinator', 'pyh-coordinator-senior'],
@@ -119,6 +149,7 @@ def test_role_skills_follow_spec_table():
         'copywriter': ['social', 'copy-editing', 'pyh-copywriter'],
         'shorts_producer': ['short-form-video', 'social', 'pyh-shorts-producer'],
         'feedback_analyst': ['pyh-feedback-analyst'],
+        'repair_engineer': ['pyh-repair-engineer'],
     }
     company = load_company()
     assert {role_id: role.skills for role_id, role in company.roles.items()} == expected
@@ -127,14 +158,17 @@ def test_role_skills_follow_spec_table():
 
 def test_split_script_roles_have_new_names():
     company = load_company()
-    assert len(company.roles) == 15
+    assert len(company.roles) == 16
     assert 'researcher' in company.roles
+    assert 'repair_engineer' in company.roles
     assert company.role_for_step('topic_research').id == 'researcher'
     assert company.role_for_step('channel_analytics').id == 'researcher'
     assert company.role_for_step('research').id == 'medical_expert'
+    assert company.role_for_step('repair').id == 'repair_engineer'
     assert company.roles['medical_expert'].name == 'Chuyên gia y học'
     assert company.roles['writer'].name == 'Biên kịch viral'
     assert company.roles['coordinator'].name == 'Trưởng nhóm Điều phối'
+    assert company.roles['repair_engineer'].name == 'Kỹ sư sửa lỗi'
 
 
 def test_critic_of_invariant_for_all_makers_and_no_banned_models():
@@ -143,7 +177,7 @@ def test_critic_of_invariant_for_all_makers_and_no_banned_models():
         critic_first = company.chain(critic_id)[0]
         for maker_id in maker_ids:
             maker_first = company.chain(maker_id)[0]
-            assert critic_first.cli != maker_first.cli, (critic_id, maker_id)
+            assert critic_first.model_identity != maker_first.model_identity, (critic_id, maker_id)
     for role_id in company.roles:
         for slot in company.chain(role_id):
             assert 'opus' not in slot.model.lower()

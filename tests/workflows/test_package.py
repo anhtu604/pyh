@@ -13,7 +13,7 @@ from healthvideo.tts.silent import SilentTTS
 from healthvideo.workflows.gate_review import approve_gate
 from healthvideo.workflows.package import package_project
 from healthvideo.workflows.produce import produce_project
-from tests.helpers import create_v2_project_fixture
+from tests.helpers import create_v2_project_fixture, submit_video_fixture
 
 NOW = datetime(2026, 9, 12, 8, 0, tzinfo=UTC)
 
@@ -148,6 +148,7 @@ def _v2_awaiting_video_review_project(tmp_path: Path) -> Path:
         now=NOW,
     )
     produce_project(project_dir, SilentTTS(), _fake_renderer)
+    submit_video_fixture(project_dir)
     return project_dir
 
 

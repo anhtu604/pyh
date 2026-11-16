@@ -94,9 +94,12 @@ def test_run_queue_runs_posts_step_before_produce(tmp_path: Path) -> None:
         )
 
     def fake_produce(target_dir: Path) -> None:
+        from tests.helpers import submit_video_fixture
+
         assert posts_ready(target_dir)
         events.append("produce")
         produce_project(target_dir, SilentTTS(), _fake_renderer)
+        submit_video_fixture(target_dir)
 
     deps = RunDeps(
         create_project=lambda root, item: root / "projects" / item.slug,
@@ -279,12 +282,15 @@ def test_video_packet_contains_posts(tmp_path: Path) -> None:
 
 
 def test_package_copies_approved_posts_unchanged(tmp_path: Path) -> None:
+    from tests.helpers import submit_video_fixture
+
     project_dir = create_v2_project_fixture(
         tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW
     )
     revision_root = project_dir / "revisions" / "001"
     approve_gate(project_dir, GateKind.MEDICAL, reviewer=REVIEWER, now=NOW)
     produce_project(project_dir, SilentTTS(), _fake_renderer)
+    submit_video_fixture(project_dir)
 
     posts_path = revision_root / "posts" / "posts.yaml"
     raw_with_comment = (
@@ -306,12 +312,15 @@ def test_package_copies_approved_posts_unchanged(tmp_path: Path) -> None:
 
 
 def test_post_edit_after_video_approval_blocks_package(tmp_path: Path) -> None:
+    from tests.helpers import submit_video_fixture
+
     project_dir = create_v2_project_fixture(
         tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW
     )
     revision_root = project_dir / "revisions" / "001"
     approve_gate(project_dir, GateKind.MEDICAL, reviewer=REVIEWER, now=NOW)
     produce_project(project_dir, SilentTTS(), _fake_renderer)
+    submit_video_fixture(project_dir)
     approve_gate(project_dir, GateKind.VIDEO, reviewer=REVIEWER, now=NOW)
 
     posts_path = revision_root / "posts" / "posts.yaml"

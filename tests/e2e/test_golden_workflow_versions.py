@@ -137,8 +137,12 @@ def test_m64_hook_outro_through_both_manual_gates_and_package(tmp_path: Path) ->
     logo = next(asset for asset in read_yaml(revision / "assets/asset-manifest.yaml")["assets"]
                 if asset.get("storyboard_role") == "brand")
     assert logo["sha256"] in packet and logo["license"] in packet
+    from tests.helpers import submit_video_fixture, write_critic_review_fixture
+
+    write_critic_review_fixture(project)
     approve_gate(project, GateKind.MEDICAL, reviewer="doctor", now=GOLDEN_ENTERED_AT)
     video = produce_project(project, SilentTTS(), _write_golden_video)
+    submit_video_fixture(project)
     assert video.is_file()
     assert read_yaml(project / "project.yaml")["state"] == "awaiting_video_review"
     render_input = json.loads((revision / "renders/render-input.json").read_text(encoding="utf-8"))
@@ -186,7 +190,10 @@ def test_m65_zero_ai_budget_through_chart_outro_gates_and_package(tmp_path: Path
     )
     rights = read_yaml(revision / "assets/license-ledger.yaml")["entries"]
     assert any(entry["path"] == chart_record.path for entry in rights)
+    from tests.helpers import submit_video_fixture, write_critic_review_fixture
+
     assert any(record.storyboard_role == "brand" and record.sha256 for record in records.values())
+    write_critic_review_fixture(project)
     approve_gate(project, GateKind.MEDICAL, reviewer="doctor", now=GOLDEN_ENTERED_AT)
 
     tts = GoldenSceneTTS(revision)
@@ -198,6 +205,7 @@ def test_m65_zero_ai_budget_through_chart_outro_gates_and_package(tmp_path: Path
         return _write_golden_video(argv)
 
     produce_project(project, tts, runner)
+    submit_video_fixture(project)
     assert staged_charts == [chart.read_bytes()]
     assert tts.calls == [line["text"] for line in read_yaml(revision / "script/script.yaml")["lines"]]
     render_input = json.loads((revision / "renders/render-input.json").read_text(encoding="utf-8"))
@@ -384,7 +392,10 @@ def test_dual_golden_medical_gate_approves_on_a_copy_without_touching_the_tracke
     before = _snapshot_tree(v2_source)
     copy_dir = tmp_path / "copy"
     shutil.copytree(v2_source, copy_dir)
+    from tests.helpers import write_critic_review_fixture
+
     _advance_v2_state(copy_dir, WorkflowState.AWAITING_MEDICAL_REVIEW)
+    write_critic_review_fixture(copy_dir)
 
     record = approve_gate(
         copy_dir, GateKind.MEDICAL, reviewer="BS Nguyễn Văn An", now=GOLDEN_ENTERED_AT
@@ -411,7 +422,10 @@ def test_v2_golden_copy_produces_and_packages_without_touching_either_fixture(
         assert scene["narration"] == line["text"]
         scene["script_line_id"] = line["id"]
     write_yaml_atomic(board_path, board)
+    from tests.helpers import submit_video_fixture, write_critic_review_fixture
+
     _advance_v2_state(project_dir, WorkflowState.AWAITING_MEDICAL_REVIEW)
+    write_critic_review_fixture(project_dir)
     approve_gate(
         project_dir,
         GateKind.MEDICAL,
@@ -420,6 +434,7 @@ def test_v2_golden_copy_produces_and_packages_without_touching_either_fixture(
     )
 
     video = produce_project(project_dir, SilentTTS(), _write_golden_video)
+    submit_video_fixture(project_dir)
     approve_gate(
         project_dir,
         GateKind.VIDEO,

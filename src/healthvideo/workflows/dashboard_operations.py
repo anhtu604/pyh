@@ -6,9 +6,12 @@ Retry releases the runner's existing hold; it never starts a second worker.
 from __future__ import annotations
 
 import importlib
+import json
 import re
+import shutil
 import threading
-from datetime import datetime
+import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 from healthvideo.agents import RUNNING_MARKER, cancel_running_job
@@ -21,11 +24,13 @@ from healthvideo.domain.project_v2 import WorkflowState
 from healthvideo.domain.queue import QueueEntry
 from healthvideo.domain.script import Script
 from healthvideo.domain.storyboard import Storyboard
-from healthvideo.storage.files import read_yaml
+from healthvideo.process import is_same_process
+from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.storage.project_layout import resolve_project_layout
-from healthvideo.storage.queue import add_to_queue, load_queue
-from healthvideo.workflows import channel_analytics, factory, researcher
+from healthvideo.storage.queue import add_to_queue, load_queue, remove_from_queue
+from healthvideo.workflows import channel_analytics, chat, factory, researcher
 from healthvideo.workflows.gate_review import reopen_gate
+from healthvideo.workflows.production_retry import AGENT_RETRY_FILE
 from healthvideo.workflows.review import approval_is_stale, latest_approval
 from healthvideo.workflows.runner import next_step
 
@@ -112,8 +117,298 @@ def project_operations(root: Path, slug: str) -> dict:
         'next_step': next_step(layout.manifest.state), 'retry_status': retry,
         'scenes': [{'id': s['id'], 'label': s.get('narration', '')[:100]} for s in scenes if s.get('visual') == 'whiteboard'],
         'blocked': blocked.read_text(encoding='utf-8')[:4000] if blocked.is_file() else '',
+        'paused': (root / 'topics/logs' / slug / 'paused.yaml').is_file(),
         'cache': {'files': cached, 'lines': len(lines), 'verified_hits': None, 'max_requests': len(lines),
                   'note': 'File cache chưa kiểm hash/giọng/provider; số yêu cầu tối đa cho một lượt TTS.'},
+    }
+
+
+_SLUG_RE = re.compile(r'^[a-z0-9-]+$')
+_ARCHIVE_ID_RE = re.compile(r'^[A-Za-z0-9_.-]+$')
+
+
+def _validate_slug(slug: str) -> str:
+    if not slug or len(slug) > 80 or '/' in slug or '\\' in slug or '..' in slug or not _SLUG_RE.fullmatch(slug):
+        raise ValueError(f'Slug không hợp lệ: {slug!r}')
+    return slug
+
+
+def _production_marker_live(root: Path, slug: str) -> dict | None:
+    marker = root / 'topics' / 'logs' / slug / '.production-running'
+    if not marker.is_file():
+        return None
+    try:
+        data = json.loads(marker.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    pid = data.get('pid')
+    token = data.get('process_token')
+    if (
+        isinstance(pid, int)
+        and not isinstance(pid, bool)
+        and pid > 0
+        and isinstance(token, str)
+        and token.strip()
+        and is_same_process(pid, token)
+    ):
+        return data
+    return None
+
+
+def _assert_safe_project_tree(root: Path, slug: str, *, deep: bool = False) -> tuple[Path, Path]:
+    _validate_slug(slug)
+    projects_base = root / 'projects'
+    logs_base = root / 'topics' / 'logs'
+    project_dir = projects_base / slug
+    logs_dir = logs_base / slug
+    if project_dir.is_symlink() or logs_dir.is_symlink():
+        raise ValueError(f'Thư mục dự án không an toàn: {slug}')
+    inside(projects_base, project_dir)
+    inside(logs_base, logs_dir)
+    revs_dir = project_dir / 'revisions'
+    if project_dir.exists() and revs_dir.exists():
+        if revs_dir.is_symlink():
+            raise ValueError(f'Thư mục revision không an toàn: {slug}')
+        inside(project_dir, revs_dir)
+        for rev in sorted(revs_dir.iterdir()):
+            if rev.is_symlink():
+                raise ValueError(f'Thư mục revision không an toàn: {rev.name}')
+            if rev.is_dir():
+                check_revision_paths(project_dir, rev)
+    if deep and project_dir.exists():
+        for child in project_dir.rglob('*'):
+            if child.is_symlink():
+                raise ValueError(f'Đường dẫn dự án chứa liên kết ngoài phạm vi cho phép: {child.name}')
+            inside(project_dir, child)
+    return project_dir, logs_dir
+
+
+def pause_project(root: Path, slug: str, *, reason: str = '') -> dict:
+    """Pause factory and repair automation for a project without stopping the xuong daemon."""
+    project_dir, logs_dir = _assert_safe_project_tree(root, slug)
+    with _MUTATION_LOCK:
+        in_queue = any(item.slug == slug for item in load_queue(root))
+        if not project_dir.exists() and not in_queue:
+            raise LookupError(f'Không tìm thấy dự án: {slug}')
+        paused_path = logs_dir / 'paused.yaml'
+        payload = {
+            'paused_at': datetime.now(UTC).isoformat(timespec='seconds'),
+            'reason': (reason or '').strip(),
+        }
+        write_yaml_atomic(paused_path, payload)
+        cancelled = cancel_running_job(root, slug=slug)
+        prod_live = _production_marker_live(root, slug)
+    note = (
+        'Đã đặt tạm dừng; bước dựng video đang chạy sẽ tự dừng sau khi hoàn tất lượt hiện tại.'
+        if prod_live
+        else f'Đã tạm dừng và huỷ {len(cancelled)} tiến trình agent đang chạy.'
+        if cancelled
+        else 'Đã tạm dừng tự động cho dự án.'
+    )
+    return {
+        'ok': True,
+        'slug': slug,
+        'paused': True,
+        'paused_at': payload['paused_at'],
+        'cancelled_jobs': len(cancelled),
+        'production_running': prod_live is not None,
+        'note': note,
+    }
+
+
+def resume_project(root: Path, slug: str) -> dict:
+    """Clear the pause marker so xuong can pick up the project on its next pass."""
+    project_dir, logs_dir = _assert_safe_project_tree(root, slug)
+    with _MUTATION_LOCK:
+        in_queue = any(item.slug == slug for item in load_queue(root))
+        paused_path = logs_dir / 'paused.yaml'
+        if not project_dir.exists() and not in_queue and not paused_path.exists():
+            raise LookupError(f'Không tìm thấy dự án: {slug}')
+        was_paused = paused_path.exists()
+        paused_path.unlink(missing_ok=True)
+    return {
+        'ok': True,
+        'slug': slug,
+        'paused': False,
+        'resumed': was_paused,
+        'note': (
+            'Đã tiếp tục tự động; xưởng sẽ chạy lại dự án ở vòng kế tiếp.'
+            if was_paused
+            else 'Dự án hiện không tạm dừng.'
+        ),
+    }
+
+
+def delete_project(root: Path, slug: str, *, confirmed: bool = False, reason: str = '') -> dict:
+    """Safely remove a project from queue and archive its files into cache/deleted-projects."""
+    if confirmed is not True:
+        raise ValueError('Bác sĩ cần xác nhận xoá dự án trên app.')
+    project_dir, logs_dir = _assert_safe_project_tree(root, slug, deep=True)
+    with _MUTATION_LOCK:
+        in_queue = any(item.slug == slug for item in load_queue(root))
+        if not project_dir.exists() and not logs_dir.exists() and not in_queue:
+            raise LookupError(f'Không tìm thấy dự án: {slug}')
+        if _production_marker_live(root, slug) is not None:
+            raise ValueError(
+                'Dự án đang kết xuất video (.production-running). Hãy bấm Tạm dừng và chờ lượt dựng hiện tại xong rồi hãy xoá.'
+            )
+        paused_path = logs_dir / 'paused.yaml'
+        paused_payload = {
+            'paused_at': datetime.now(UTC).isoformat(timespec='seconds'),
+            'reason': (reason or 'Đã xoá từ Dashboard').strip(),
+        }
+        write_yaml_atomic(paused_path, paused_payload)
+        cancel_running_job(root, slug=slug)
+        step_marker = logs_dir / chat.STEP_MARKER
+        deadline = time.monotonic() + 1.0
+        while step_marker.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        if step_marker.exists():
+            raise ValueError('Bước xử lý vừa kết thúc chưa kịp đóng; thử lại sau vài giây.')
+
+        title = ''
+        if (project_dir / 'project.yaml').is_file():
+            try:
+                manifest = read_yaml(project_dir / 'project.yaml')
+                if isinstance(manifest, dict):
+                    title = str(manifest.get('title') or '')
+            except (OSError, ValueError):
+                title = ''
+
+        stamp = datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')
+        archive_base = root / 'cache' / 'deleted-projects'
+        archive_dir = archive_base / f'{stamp}-{slug}'
+        suffix = 1
+        while archive_dir.exists():
+            archive_dir = archive_base / f'{stamp}-{slug}-{suffix}'
+            suffix += 1
+        archive_dir.mkdir(parents=True, exist_ok=False)
+
+        removed_entry = remove_from_queue(root, slug)
+        if not title and removed_entry is not None:
+            title = removed_entry.title
+
+        moved_project = False
+        try:
+            if project_dir.exists():
+                shutil.move(str(project_dir), str(archive_dir / 'project'))
+                moved_project = True
+            if logs_dir.exists():
+                shutil.move(str(logs_dir), str(archive_dir / 'logs'))
+        except OSError:
+            if removed_entry is not None and not (archive_dir / 'project').exists():
+                try:
+                    add_to_queue(root, removed_entry)
+                except ValueError:
+                    pass
+            shutil.rmtree(archive_dir, ignore_errors=True)
+            raise
+
+        queue_entry_data = (
+            json.loads(removed_entry.model_dump_json()) if removed_entry is not None else None
+        )
+        meta = {
+            'id': archive_dir.name,
+            'slug': slug,
+            'title': title or slug,
+            'deleted_at': datetime.now(UTC).isoformat(timespec='seconds'),
+            'reason': (reason or '').strip(),
+            'has_project': moved_project,
+            'queue_entry': queue_entry_data,
+        }
+        write_yaml_atomic(archive_dir / 'meta.yaml', meta)
+    return {
+        'ok': True,
+        'slug': slug,
+        'deleted': True,
+        'archive_id': archive_dir.name,
+        'removed_from_queue': removed_entry is not None,
+    }
+
+
+def list_deleted_projects(root: Path) -> list[dict]:
+    """List deleted project archives stored under cache/deleted-projects."""
+    deleted_root = root / 'cache' / 'deleted-projects'
+    if not deleted_root.is_dir():
+        return []
+    items: list[dict] = []
+    for entry in sorted(deleted_root.iterdir(), key=lambda p: p.name, reverse=True):
+        if entry.is_symlink() or not entry.is_dir():
+            continue
+        try:
+            inside(deleted_root, entry)
+        except ValueError:
+            continue
+        meta_path = entry / 'meta.yaml'
+        if not meta_path.is_file():
+            continue
+        try:
+            meta = read_yaml(meta_path)
+        except (OSError, ValueError):
+            continue
+        if not isinstance(meta, dict) or not meta.get('slug'):
+            continue
+        items.append({
+            'id': entry.name,
+            'slug': str(meta['slug']),
+            'title': str(meta.get('title') or meta['slug']),
+            'deleted_at': str(meta.get('deleted_at') or ''),
+            'reason': str(meta.get('reason') or ''),
+            'has_project': (entry / 'project').is_dir(),
+            'has_queue_entry': isinstance(meta.get('queue_entry'), dict),
+        })
+    return items
+
+
+def restore_project(root: Path, archive_id: str) -> dict:
+    """Restore an archived deleted project back into projects/ and topics/queue.yaml (paused)."""
+    if not archive_id or not _ARCHIVE_ID_RE.fullmatch(archive_id) or '..' in archive_id:
+        raise ValueError('Mã lưu trữ dự án không hợp lệ.')
+    deleted_root = root / 'cache' / 'deleted-projects'
+    archive_dir = deleted_root / archive_id
+    if archive_dir.is_symlink() or not archive_dir.is_dir():
+        raise LookupError(f'Không tìm thấy bản lưu dự án: {archive_id}')
+    inside(deleted_root, archive_dir)
+    meta = read_yaml(archive_dir / 'meta.yaml')
+    if not isinstance(meta, dict) or not meta.get('slug'):
+        raise ValueError('Metadata lưu trữ dự án không hợp lệ.')
+    slug = _validate_slug(str(meta['slug']))
+    with _MUTATION_LOCK:
+        project_target = root / 'projects' / slug
+        logs_target = root / 'topics' / 'logs' / slug
+        if project_target.exists():
+            raise ValueError(f'Dự án {slug} đã tồn tại trong thư mục projects/.')
+        if any(item.slug == slug for item in load_queue(root)):
+            raise ValueError(f'Chủ đề {slug} đã có trong hàng đợi.')
+        if (archive_dir / 'logs').is_dir() and not logs_target.exists():
+            logs_target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(archive_dir / 'logs'), str(logs_target))
+        write_yaml_atomic(logs_target / 'paused.yaml', {
+            'paused_at': datetime.now(UTC).isoformat(timespec='seconds'),
+            'reason': 'Khôi phục từ mục đã xoá — bấm Tiếp tục để chạy lại.',
+        })
+        queue_added = False
+        raw_entry = meta.get('queue_entry')
+        if isinstance(raw_entry, dict):
+            entry = QueueEntry.model_validate(raw_entry)
+            add_to_queue(root, entry)
+            queue_added = True
+        try:
+            if (archive_dir / 'project').is_dir():
+                project_target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(archive_dir / 'project'), str(project_target))
+        except OSError:
+            if queue_added:
+                remove_from_queue(root, slug)
+            raise
+        shutil.rmtree(archive_dir, ignore_errors=True)
+    return {
+        'ok': True,
+        'slug': slug,
+        'paused': True,
+        'queue_added': queue_added,
     }
 
 
@@ -133,8 +428,11 @@ def _editable(root: Path, slug: str, expected_revision: str):
 
 
 def retry_project(root: Path, slug: str, *, expected_revision: str) -> dict:
-    with _MUTATION_LOCK:
+    with _MUTATION_LOCK, chat.locked(root):
         layout = _editable(root, slug, expected_revision)
+        log_dir = root / 'topics/logs' / slug
+        if inside(root, log_dir / chat.STEP_MARKER).exists():
+            raise ValueError('Bước đang chạy. Tải lại sau khi bước kết thúc.')
         if next_step(layout.manifest.state) is None:
             raise ValueError('Project không có bước có thể thử lại; giữ nguyên cổng duyệt.')
         # Validate local inputs before releasing the hold. No provider calls here.
@@ -158,11 +456,17 @@ def retry_project(root: Path, slug: str, *, expected_revision: str) -> dict:
         api = _retry_api()
         if api is None:
             raise ValueError('API retry chưa sẵn sàng; chưa thay đổi trạng thái.')
-        inside(root, root / 'topics/logs' / slug / 'production-retry.yaml')
+        inside(root, log_dir / 'production-retry.yaml')
+        agent_hold = log_dir / AGENT_RETRY_FILE
+        blocked_note = log_dir / 'blocked.txt'
+        inside(root, agent_hold)
+        inside(root, blocked_note)
         retry = api.retry_status(root, layout.project_dir, layout.manifest.state)
         if retry.get('kind') == 'validation' and not retry.get('allowed'):
             raise ValueError(retry.get('reason') or 'Sửa đầu vào trước khi thử lại.')
         api.clear_retry(root, slug)
+        agent_hold.unlink(missing_ok=True)
+        blocked_note.unlink(missing_ok=True)
         return project_operations(root, slug)
 
 
@@ -217,6 +521,8 @@ def get_route(server, parts: list[str], query: dict) -> dict | bytes | None:
         }
     if parts == ['api', 'channel']:
         return channel_analytics.channel_overview_payload(server.root)
+    if parts == ['api', 'projects', 'deleted']:
+        return {'items': list_deleted_projects(server.root)}
     if len(parts) == 4 and parts[:2] == ['api', 'project'] and parts[3] == 'operations':
         return project_operations(server.root, parts[2])
     if parts == ['api', 'library']:
@@ -302,7 +608,20 @@ def post_route(server, parts: list[str], body: dict) -> dict | None:
                 role=body.get('role'),
             )
         }
+    if parts == ['api', 'projects', 'restore']:
+        return restore_project(server.root, str(body.get('id', '')))
     if len(parts) == 4 and parts[:2] == ['api', 'project']:
+        if parts[3] == 'pause':
+            return pause_project(server.root, parts[2], reason=str(body.get('reason', '')))
+        if parts[3] == 'resume':
+            return resume_project(server.root, parts[2])
+        if parts[3] == 'delete':
+            return delete_project(
+                server.root,
+                parts[2],
+                confirmed=body.get('confirmed') is True,
+                reason=str(body.get('reason', '')),
+            )
         if parts[3] == 'retry':
             return retry_project(server.root, parts[2], expected_revision=body.get('expected_revision'))
         if parts[3] == 'reopen':

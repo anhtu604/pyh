@@ -12,12 +12,11 @@ from healthvideo.workflows.change_request import (
 )
 from healthvideo.workflows.factory_deps import reject_note
 from healthvideo.workflows.script_review import (
-    LOG,
     mark_submitted,
     next_script_action,
-    script_hash,
 )
 from tests.helpers import create_v2_project_fixture as _fixture
+from tests.helpers import write_critic_review_fixture
 
 
 def create_v2_project_fixture(root, *, state=WorkflowState.DRAFT_READY):
@@ -60,7 +59,7 @@ def test_script_change_after_medical_approval_reopens_without_pin(tmp_path):
 def test_script_change_at_draft_ready_restarts_review(tmp_path):
     project = create_v2_project_fixture(tmp_path)
     rev = project / 'revisions/001'
-    write_yaml_atomic(rev / LOG, {'rounds': [{'script_sha256': script_hash(project), 'passed': True}]})
+    write_critic_review_fixture(project)
     assert next_script_action(project) == 'submit_medical'
     request_change(project, 'edit_script', 'Viết lại N01', CONTEXT, now=NOW)
     assert resolve_project_layout(project).manifest.state == WorkflowState.DRAFT_READY
@@ -89,8 +88,10 @@ def test_production_request_restarts_critic_cycle(tmp_path):
 
     project = create_v2_project_fixture(tmp_path, state=WorkflowState.PRODUCTION_IN_PROGRESS)
     rev = project / 'revisions/001'
-    rounds = [{'passed': True}] * product_review.MAX_REVIEWS
-    write_yaml_atomic(rev / product_review.LOG, {'rounds': rounds, 'submitted': 0})
+    (rev / 'renders').mkdir(parents=True, exist_ok=True)
+    (rev / product_review.RENDER_MANIFEST).write_text('{"render": 1}', encoding='utf-8')
+    for _ in range(product_review.MAX_REVIEWS):
+        write_critic_review_fixture(project, product=True)
     assert product_review.next_product_action(project) == 'submit_video'
     request_change(project, 'edit_production', 'Đổi hình S07', CONTEXT, now=NOW)
-    assert read_yaml(rev / product_review.LOG)['submitted'] == len(rounds)
+    assert read_yaml(rev / product_review.LOG)['submitted'] == product_review.MAX_REVIEWS

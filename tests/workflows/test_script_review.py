@@ -31,6 +31,7 @@ SLUG = 'muoi-va-huyet-ap-v2'
 
 def _project(root: Path) -> Path:
     project = create_v2_project_fixture(root / 'projects')
+    (project / 'revisions/001' / LOG).unlink()
     _script(project, 'Bộ tài liệu đã kiểm tra chưa chứng minh được.')
     return project
 
@@ -76,12 +77,13 @@ def test_one_criterion_below_pass_score_fails_even_with_high_average(tmp_path):
     assert record_review(project, script_hash(project))['passed'] is False
 
 
-def test_reviews_are_bounded_then_doctor_sees_the_failed_score(tmp_path):
+def test_reviews_are_bounded_and_failed_script_stays_before_doctor_gate(tmp_path):
     project = _project(tmp_path)
     for attempt in range(MAX_REVIEWS):
         _script(project, f'Bản {attempt}')
         _review(project, 5)
-    assert next_script_action(project) == 'submit_medical'
+    with pytest.raises(ValueError, match='Trạm 07 chưa đạt'):
+        next_script_action(project)
     root = project / 'revisions/001'
     assert review_view(root)['round'] == MAX_REVIEWS
     assert 'Chưa đạt' in _render_script_review_section(root)
@@ -95,8 +97,39 @@ def test_medical_submission_marks_review_cycle_without_losing_history(tmp_path):
     record_review(project, script_hash(project))
     submit_medical_review(project)
     log = read_yaml(project / 'revisions/001' / LOG)
-    assert log['submitted'] == len(log['rounds']) == 1
+    assert log['submitted'] == len(log['rounds']) == 2
     assert next_script_action(project) == 'script_review'
+
+
+@pytest.mark.parametrize('problem', ['missing', 'stale'])
+def test_medical_submission_and_approval_require_current_passing_critic(tmp_path, problem):
+    from datetime import UTC, datetime
+
+    from healthvideo.domain.gate_review import GateKind
+    from healthvideo.domain.project_v2 import ProjectManifestV2
+    from healthvideo.workflows import factory
+    from healthvideo.workflows.draft import submit_medical_review
+    from healthvideo.workflows.gate_review import approve_gate
+
+    project = create_v2_project_fixture(tmp_path / 'projects')
+    log_path = project / 'revisions/001' / LOG
+    if problem == 'missing':
+        log_path.unlink()
+    else:
+        log = read_yaml(log_path)
+        log['rounds'][-1]['script_sha256'] = 'stale'
+        write_yaml_atomic(log_path, log)
+    before = (project / 'project.yaml').read_bytes()
+    with pytest.raises(ValueError, match='Trạm 07'):
+        submit_medical_review(project)
+    assert (project / 'project.yaml').read_bytes() == before
+    manifest = read_yaml(project / 'project.yaml')
+    write_yaml_atomic(project / 'project.yaml', {**manifest, 'state': 'awaiting_medical_review'})
+    assert factory.gate_for_project(project, ProjectManifestV2.model_validate(
+        read_yaml(project / 'project.yaml'))) is None
+    with pytest.raises(ValueError, match='Trạm 07'):
+        approve_gate(project, GateKind.MEDICAL, reviewer='Fixture doctor', now=datetime.now(UTC))
+    assert not (project / 'revisions/001/reviews/medical-approval.yaml').exists()
 
 
 @pytest.mark.parametrize(('change', 'message'), [
@@ -157,7 +190,7 @@ def test_run_reviews_rewrites_with_notes_then_submits_without_approving(tmp_path
         del cwd
         log_dir.mkdir(parents=True, exist_ok=True)
         reviewing = '(`script_review`)' in prompt
-        calls.append((agents[0].cli, 'review' if reviewing else 'draft'))
+        calls.append((agents[0].model, 'review' if reviewing else 'draft'))
         if reviewing:
             _report(project, 6 if len(calls) == 1 else 8)
         else:
@@ -168,8 +201,8 @@ def test_run_reviews_rewrites_with_notes_then_submits_without_approving(tmp_path
 
     report = run_queue(tmp_path, _deps(state, invoke))
 
-    # The critic (codex first) never starts on the writer's model (claude first).
-    assert calls == [('agy', 'review'), ('codex', 'draft'), ('agy', 'review')]
+    # The critic never starts on the writer's model.
+    assert calls == [('codex/gpt-6.1-terra', 'review'), ('codex/gpt-6.1-sol', 'draft'), ('codex/gpt-6.1-terra', 'review')]
     assert state['submitted'] is True
     assert report.at_gate == [SLUG]
     assert report.blocked == []

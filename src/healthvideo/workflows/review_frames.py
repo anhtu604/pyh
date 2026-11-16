@@ -315,25 +315,27 @@ def review_frames(
             source_path.write_text(json.dumps(source), encoding="utf-8")
     video_hash = sha256_file(video)
     with TemporaryDirectory(prefix=".frames-", dir=output) as temp:
-        images = []
-        for index, sample in enumerate(samples):
-            image = Path(temp) / f"frame-{index:05}.png"
-            argv = [
-                "ffmpeg",
-                "-y",
-                "-v",
-                "error",
-                "-i",
-                str(video.resolve()),
-                "-vf",
-                f"select=eq(n\\,{sample.frame})",
-                "-frames:v",
-                "1",
-                str(image.resolve()),
-            ]
-            if runner(argv) != 0 or not image.is_file():
-                raise RuntimeError(f"FFmpeg extraction failed at frame {sample.frame}")
-            images.append(image)
+        # Decode once instead of replaying the video from the beginning for each sample.
+        selected_frames = sorted({sample.frame for sample in samples})
+        selection = Path(temp) / 'select.txt'
+        # FFmpeg's expression parser has a recursion limit for long addition chains.
+        terms = [f'eq(n\\,{frame})' for frame in selected_frames]
+        while len(terms) > 1:
+            terms = ['(' + '+'.join(terms[i:i + 2]) + ')' for i in range(0, len(terms), 2)]
+        selection.write_text('select=' + terms[0], encoding='ascii')
+        pattern = Path(temp) / 'frame-%05d.png'
+        argv = ['ffmpeg', '-y', '-v', 'error', '-i', str(video.resolve()),
+                '-filter_script:v', str(selection.resolve()), '-fps_mode', 'vfr',
+                '-frames:v', str(len(selected_frames)), '-start_number', '0',
+                str(pattern.resolve())]
+        if runner(argv) != 0:
+            raise RuntimeError('FFmpeg batch frame extraction failed')
+        frame_images = {frame: Path(temp) / f'frame-{index:05}.png'
+                        for index, frame in enumerate(selected_frames)}
+        for frame, image in frame_images.items():
+            if not image.is_file():
+                raise RuntimeError(f'FFmpeg extraction failed at frame {frame}')
+        images = [frame_images[sample.frame] for sample in samples]
         entries = tile_frames(samples, images, output, data)
         mechanism_ids = {s.id for s in data.scenes if s.visual in MECHANISM_VISUALS}
         selected = [

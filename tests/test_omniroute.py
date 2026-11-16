@@ -177,6 +177,36 @@ def test_automatic_model_selection_is_rejected_for_critic_independence():
         ModelSlot(cli='omniroute', model='auto/best-coding')
 
 
+@pytest.mark.parametrize('provider', ['ds-web', 'deepseek-web'])
+def test_deepseek_web_router_aliases_have_one_model_identity(provider):
+    slot = ModelSlot(cli='omniroute', model=f'{provider}/deepseek-chat')
+    assert slot.model_identity == ('deepseek-web', 'deepseek-chat')
+
+
+@pytest.mark.parametrize('maker_provider,critic_provider', [
+    ('ds-web', 'deepseek-web'), ('deepseek-web', 'ds-web'),
+])
+def test_deepseek_web_alias_cannot_grade_same_maker_model(
+    tmp_path, maker_provider, critic_provider,
+):
+    maker = ModelSlot(cli='omniroute', model=f'{maker_provider}/deepseek-chat')
+    critic = ModelSlot(cli='omniroute', model=f'{critic_provider}/deepseek-chat')
+
+    def run(*args, **kwargs):
+        pytest.fail('Same-model critic must be excluded before invoking the runner')
+
+    with pytest.raises(ValueError, match='độc lập'):
+        invoke_with_failover([critic], '', cwd=tmp_path, log_dir=tmp_path / 'logs',
+                             role='product_critic', slug='fixture', step='product_review',
+                             exclude_slots=[maker], runner=run)
+
+
+@pytest.mark.parametrize('model', ['unsupported-provider/deepseek-chat', 'ds-web/', 'deepseek-web/'])
+def test_unverified_router_provider_or_empty_model_remains_rejected(model):
+    with pytest.raises(ValueError, match='provider/model'):
+        ModelSlot(cli='omniroute', model=model)
+
+
 def test_company_rejects_same_maker_model_through_different_transport(tmp_path):
     import yaml
 

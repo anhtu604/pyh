@@ -95,6 +95,196 @@ def test_retry_does_not_release_unchanged_validation_failure(project, monkeypatc
     assert cleared == []
 
 
+def test_retry_releases_blocked_research_while_factory_is_running(tmp_path, monkeypatch):
+    from healthvideo.workflows import production_retry
+
+    project = create_v2_project_fixture(tmp_path / 'projects')
+    manifest = project / 'project.yaml'
+    write_yaml_atomic(manifest, {**read_yaml(manifest), 'state': 'research_in_progress'})
+    logs = tmp_path / 'topics/logs' / project.name
+    fingerprint = production_retry.agent_fingerprint(tmp_path, project, 'research', 'fixture')
+    production_retry.record_agent_failure(
+        tmp_path, project, 'research', fingerprint, 'agent_error', RuntimeError('agy failed'),
+    )
+    blocked = logs / 'blocked.txt'
+    blocked.write_text('bước research: agy failed', encoding='utf-8')
+    before = (project / 'project.yaml').read_bytes()
+    monkeypatch.setattr(ops.factory, 'running_pid', lambda _: 99)
+
+    marker = logs / ops.chat.STEP_MARKER
+    marker.touch()
+    with pytest.raises(ValueError, match='Bước đang chạy'):
+        ops.retry_project(tmp_path, project.name, expected_revision='001')
+    assert blocked.is_file()
+    assert production_retry.outstanding_agent_retry(tmp_path, project, 'fixture') is not None
+    marker.unlink()
+
+    result = ops.retry_project(tmp_path, project.name, expected_revision='001')
+
+    assert result['next_step'] == 'research'
+    assert result['blocked'] == ''
+    assert production_retry.outstanding_agent_retry(tmp_path, project, 'fixture') is None
+    assert (project / 'project.yaml').read_bytes() == before
+
+
+def test_pause_and_resume_writes_sidecar_without_killing_production(project, monkeypatch):
+    import json
+    import os
+
+    from healthvideo.process import process_token
+    from healthvideo.workflows import dashboard_operations as ops
+
+    root, project = project
+    slug = project.name
+    logs = root / 'topics/logs' / slug
+    logs.mkdir(parents=True, exist_ok=True)
+    token = process_token(os.getpid())
+    (logs / '.production-running').write_text(
+        json.dumps({'pid': os.getpid(), 'process_token': token, 'started_at': '2026-11-15T10:00:00Z'}),
+        encoding='utf-8',
+    )
+    cancelled_calls = []
+    monkeypatch.setattr(ops, 'cancel_running_job', lambda r, *, slug=None, **kw: cancelled_calls.append(slug) or [])
+
+    paused = ops.pause_project(root, slug, reason='Trùng chủ đề')
+    assert paused['paused'] is True
+    assert paused['production_running'] is True
+    assert cancelled_calls == [slug]
+    assert (logs / 'paused.yaml').is_file()
+    assert ops.project_operations(root, slug)['paused'] is True
+
+    resumed = ops.resume_project(root, slug)
+    assert resumed['paused'] is False
+    assert resumed['resumed'] is True
+    assert not (logs / 'paused.yaml').exists()
+    assert ops.project_operations(root, slug)['paused'] is False
+
+
+def test_delete_project_guards_confirmation_production_and_step_marker(project, monkeypatch):
+    import json
+    import os
+
+    from healthvideo.process import process_token
+    from healthvideo.storage.queue import load_queue
+    from healthvideo.workflows import chat
+    from healthvideo.workflows import dashboard_operations as ops
+
+    root, project = project
+    slug = project.name
+    logs = root / 'topics/logs' / slug
+    logs.mkdir(parents=True, exist_ok=True)
+    write_yaml_atomic(root / 'topics/queue.yaml', {
+        'version': 1,
+        'entries': [{
+            'slug': slug,
+            'title': 'Men gan tăng',
+            'question': 'Men gan tăng có nên tự uống thuốc bổ gan?',
+            'added': '2026-11-10',
+        }],
+    })
+
+    with pytest.raises(ValueError, match='xác nhận'):
+        ops.delete_project(root, slug, confirmed=False)
+
+    token = process_token(os.getpid())
+    prod_marker = logs / '.production-running'
+    prod_marker.write_text(
+        json.dumps({'pid': os.getpid(), 'process_token': token}),
+        encoding='utf-8',
+    )
+    with pytest.raises(ValueError, match='production-running'):
+        ops.delete_project(root, slug, confirmed=True)
+    prod_marker.unlink()
+
+    step_marker = logs / chat.STEP_MARKER
+    step_marker.touch()
+    monkeypatch.setattr(ops.time, 'sleep', lambda _s: None)
+    ticks = iter([0.0, 0.2, 2.0])
+    monkeypatch.setattr(ops.time, 'monotonic', lambda: next(ticks, 2.0))
+    monkeypatch.setattr(ops, 'cancel_running_job', lambda *_, **__: [])
+    with pytest.raises(ValueError, match='chưa kịp đóng'):
+        ops.delete_project(root, slug, confirmed=True)
+    assert project.exists()
+    assert [e.slug for e in load_queue(root)] == [slug]
+
+
+def test_delete_and_restore_project_archives_cleanly_and_starts_paused(project, monkeypatch):
+    from healthvideo.storage.queue import load_queue
+    from healthvideo.workflows import dashboard_operations as ops
+
+    root, project = project
+    slug = project.name
+    logs = root / 'topics/logs' / slug
+    logs.mkdir(parents=True, exist_ok=True)
+    (logs / 'blocked.txt').write_text('lỗi thử\n', encoding='utf-8')
+    write_yaml_atomic(root / 'topics/queue.yaml', {
+        'version': 1,
+        'entries': [{
+            'slug': slug,
+            'title': 'Men gan tăng',
+            'question': 'Men gan tăng có nên tự uống thuốc bổ gan?',
+            'added': '2026-11-10',
+        }],
+    })
+    monkeypatch.setattr(ops, 'cancel_running_job', lambda *_, **__: [])
+
+    deleted = ops.delete_project(root, slug, confirmed=True, reason='Trùng chủ đề')
+    assert deleted['deleted'] is True
+    assert deleted['removed_from_queue'] is True
+    assert not project.exists()
+    assert not logs.exists()
+    assert load_queue(root) == []
+
+    archives = ops.list_deleted_projects(root)
+    assert len(archives) == 1
+    assert archives[0]['id'] == deleted['archive_id']
+    assert archives[0]['slug'] == slug
+    assert archives[0]['reason'] == 'Trùng chủ đề'
+    assert archives[0]['has_project'] is True
+    assert archives[0]['has_queue_entry'] is True
+
+    restored = ops.restore_project(root, deleted['archive_id'])
+    assert restored['slug'] == slug
+    assert restored['paused'] is True
+    assert restored['queue_added'] is True
+    assert project.is_dir()
+    assert (logs / 'paused.yaml').is_file()
+    assert [e.slug for e in load_queue(root)] == [slug]
+    assert ops.list_deleted_projects(root) == []
+
+
+def test_delete_project_refuses_unsafe_path_before_mutating(project, monkeypatch):
+    from healthvideo.storage.queue import load_queue
+    from healthvideo.workflows import dashboard_operations as ops
+
+    root, project = project
+    slug = project.name
+    write_yaml_atomic(root / 'topics/queue.yaml', {
+        'version': 1,
+        'entries': [{
+            'slug': slug,
+            'title': 'Men gan tăng',
+            'question': 'Men gan tăng có nên tự uống thuốc bổ gan?',
+            'added': '2026-11-10',
+        }],
+    })
+    with pytest.raises(ValueError, match='Slug không hợp lệ'):
+        ops.delete_project(root, '../escape', confirmed=True)
+
+    real_inside = ops.inside
+
+    def bad_inside(base, target):
+        if target == project:
+            raise ValueError('Đường dẫn nằm ngoài thư mục cho phép.')
+        return real_inside(base, target)
+
+    monkeypatch.setattr(ops, 'inside', bad_inside)
+    with pytest.raises(ValueError, match='ngoài thư mục cho phép'):
+        ops.delete_project(root, slug, confirmed=True)
+    assert project.exists()
+    assert [e.slug for e in load_queue(root)] == [slug]
+
+
 def test_reopen_requires_explicit_reviewer_and_preserves_history(project):
     root, project = project
     args = {'limiter': dashboard.PinLimiter(), 'pin': '918273', 'expected_revision': '001', 'reviewer': '', 'reason': 'Fixture edit', 'changed': ['storyboard/storyboard.yaml']}

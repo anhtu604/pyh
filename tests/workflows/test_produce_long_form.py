@@ -45,6 +45,10 @@ def test_youtube_long_renders_by_chapter(tmp_path: Path) -> None:
     end = render_input["scenes"][0]["duration_frames"] - 1
     assert any(f"--frames=0-{end}" in call and "--muted" in call for call in calls)
     assert calls[-1][0] == "ffmpeg"
+    assert read_yaml(project_dir / "project.yaml")["state"] == "production_in_progress"
+    from tests.helpers import submit_video_fixture
+
+    submit_video_fixture(project_dir)
     assert read_yaml(project_dir / "project.yaml")["state"] == "awaiting_video_review"
     # project-level so a new revision reuses unchanged chapters (spec 4.1)
     assert list((project_dir / "renders-cache").glob("CH01-*.mp4"))

@@ -83,6 +83,9 @@ def test_illustration_license_recorded(illustrated_project, music, monkeypatch):
     assert final_sheets['render_sha256'] == sha256_file(root / 'renders/video.mp4')
     # Both generated provenance and staged PNG bytes must be verified on reuse.
     produce.produce_project(illustrated_project, SilentTTS(), lambda _: pytest.fail('cache missed'), music=music)
+    from tests.helpers import submit_video_fixture
+
+    submit_video_fixture(illustrated_project)
     (root / 'renders/license-ledger.yaml').write_text('tampered')
     with pytest.raises(ValueError, match='medically_approved'):
         produce.produce_project(illustrated_project, SilentTTS(), renderer, music=music)

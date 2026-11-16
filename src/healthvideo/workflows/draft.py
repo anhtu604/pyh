@@ -243,7 +243,7 @@ def submit_script_draft(
         return changed
     finally:
         if not promoted and staging.exists():
-            shutil.rmtree(staging)
+            shutil.rmtree(staging, ignore_errors=True)
 
 
 def submit_draft(
@@ -298,7 +298,7 @@ def submit_draft(
         return changed
     finally:
         if not promoted and staging.exists():
-            shutil.rmtree(staging)
+            shutil.rmtree(staging, ignore_errors=True)
 
 
 def submit_medical_review(project_dir: Path) -> ProjectManifestV2:
@@ -306,6 +306,9 @@ def submit_medical_review(project_dir: Path) -> ProjectManifestV2:
     project = _project(project_dir)
     if project.state is not WorkflowState.DRAFT_READY:
         raise ValueError("medical submission requires draft_ready")
+    from healthvideo.workflows.script_review import require_passed_review
+
+    require_passed_review(project_dir)
     revision = project_dir / "revisions" / project.active_revision
     script_data = read_yaml(revision / "script/script.yaml")
     script = Script.model_validate(script_data)

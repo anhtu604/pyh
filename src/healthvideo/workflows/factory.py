@@ -36,6 +36,22 @@ GATES = {
 }
 
 
+def gate_for_project(path: Path, project: ProjectManifestV2) -> str | None:
+    """Expose a doctor gate only after a passing critic review of current artifacts."""
+    gate = GATES.get(project.state)
+    if gate is None:
+        return None
+    from healthvideo.workflows import product_review, script_review
+
+    try:
+        script_review.require_passed_review(path)
+        if gate == 'video':
+            product_review.require_passed_review(path)
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    return gate
+
+
 def projects(root: Path):
     """Yield queue projects first, followed by other local projects, once each."""
     paths = [root / 'projects' / entry.slug for entry in load_queue(root)]
@@ -222,6 +238,9 @@ class FactoryLock:
 
 
 def start_background(root: Path, interval: float = 120) -> int:
+    from healthvideo.omniroute import ensure_ready
+
+    ensure_ready(root)
     hide_child_consoles()
     existing = running_pid(root)
     if existing:
@@ -345,7 +364,7 @@ def run_factory(root: Path, deps: RunDeps, *, interval: float = 120, once: bool 
                         wait = (min(backs) - datetime.now(UTC)).total_seconds()
                         delay = min(interval, max(1.0, wait))
                     for path, project in projects(root):
-                        event = GATES.get(project.state)
+                        event = gate_for_project(path, project)
                         signature = f'{project.active_revision}:{project.artifact_hashes}'
                         if project.state == WorkflowState.VIDEO_APPROVED:
                             try:
@@ -366,7 +385,7 @@ def run_factory(root: Path, deps: RunDeps, *, interval: float = 120, once: bool 
                             if event == 'đã đóng gói':
                                 signature = project.active_revision
                             announce(path.name, project_title(path, project), event, (event, signature), current,
-                                     gate=event == GATES.get(project.state))
+                                     gate=event is not None and event == gate_for_project(path, project))
                     previous = current
                 except (OSError, TypeError, ValueError, RuntimeError) as error:
                     announce('__factory__', 'Xưởng', f'bị chặn: {error}', str(error), current)

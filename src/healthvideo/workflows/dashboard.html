@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Xưởng video · Protect Your Health</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2317cfaa' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 21s-7-4.4-9.3-9A5.2 5.2 0 0 1 12 6.6 5.2 5.2 0 0 1 21.3 12C19 16.6 12 21 12 21z'/%3E%3Cpath d='M8 12h2l1.2-2.4L13 14l1.2-2H16'/%3E%3C/svg%3E">
-<meta name="description" content="Bảng điều khiển xưởng-công ty video y tế dự phòng: KPI, thẻ quyết định, tiến độ 7 bước, hoạt động agent và khung chat điều phối.">
+<meta name="description" content="Bảng điều khiển xưởng-công ty video y tế dự phòng: Dự án, yêu cầu duyệt và hoạt động của xưởng.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -68,7 +68,17 @@ html[data-theme="light"] .btn.primary{color:#fff}
 .section-title{font-size:13px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.07em;margin:16px 2px 10px}
 
 /* 1. KPI Tiles */
-.tiles-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:18px}
+.home-nav{display:flex;flex-wrap:wrap;gap:4px;border-bottom:1px solid var(--line);margin:0 0 20px}
+.home-nav a{padding:10px 14px;border-bottom:2px solid transparent;color:var(--muted);font-size:14px;font-weight:600;text-decoration:none}
+.home-nav a:hover,.home-nav a[aria-current="page"]{color:var(--text)}
+.home-nav a[aria-current="page"]{border-bottom-color:var(--teal)}
+[data-home-view][hidden]{display:none}
+.home-title{font-size:clamp(22px,3vw,30px);margin:0 0 12px}
+.tiles-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:18px}
+.project-more{margin-top:10px;color:var(--muted);font-size:13px}
+.project-more summary,.activity-history summary{cursor:pointer;width:fit-content;padding:6px 0;font-weight:600}
+.activity-history{margin-top:8px}
+@media (max-width:480px){.home-nav a{padding:9px}.tile{padding:10px}.tile .k{letter-spacing:0}}
 .tile{padding:13px 14px}
 .tile .k{color:var(--muted);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
 .tile .v{font-size:22px;font-weight:800;margin-top:4px;display:flex;align-items:baseline;gap:6px}
@@ -103,15 +113,8 @@ html[data-theme="light"] .btn.primary{color:#fff}
 .chip.gate{background:hsl(38 96% 60% / .16);color:var(--amber);border-color:hsl(38 96% 60% / .4)}
 .chip.done{background:hsl(168 78% 52% / .15);color:var(--teal);border:1px solid hsl(168 78% 52% / .4)}
 .chip.bad{background:hsl(350 88% 64% / .15);color:var(--rose);border-color:hsl(350 88% 64% / .4)}
+.chip.paused{background:hsl(38 96% 60% / .16);color:var(--amber);border-color:hsl(38 96% 60% / .42)}
 .chip.work{background:hsl(258 90% 70% / .16);color:var(--violet);border-color:hsl(258 90% 70% / .38)}
-.prog-bar{height:6px;border-radius:999px;background:var(--line-strong);overflow:hidden;margin:6px 0 2px}
-.prog-bar i{display:block;height:100%;background:var(--teal)}
-#prog-phases details{padding:8px 0;border-top:1px solid var(--line-strong)}
-#prog-phases summary{cursor:pointer;font-weight:600;overflow-wrap:anywhere}
-.prog-task{display:flex;gap:10px;align-items:baseline;padding:5px 0 5px 14px;font-size:14px;min-width:0}
-.prog-task > div,.prog-body{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
-.prog-task .prog-note,.prog-task > div .meta{white-space:normal;overflow-wrap:anywhere;line-height:1.45}
-.prog-task > .meta,.prog-task .prog-owner{margin-left:auto;white-space:nowrap;flex-shrink:0}
 .chip.pending{background:rgba(148,173,255,.09);color:var(--muted);border-color:var(--line-strong)}
 
 .steps{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px;margin:12px 0 6px}
@@ -266,6 +269,21 @@ blockquote cite{display:block;margin-top:4px;font-style:normal;font-size:12px;co
 .src{font-size:13.5px;color:var(--muted);margin-top:6px}
 .src a{color:var(--sky)}
 .warnbox{padding:11px 14px;border-radius:10px;margin-bottom:12px;font-size:13.5px;background:hsl(38 96% 60% / .12);border:1px solid hsl(38 96% 60% / .38)}
+.steps.clickable .step{cursor:pointer;transition:transform .12s,opacity .15s}
+.steps.clickable .step:hover{transform:translateY(-1px);opacity:.95}
+.proj-quick{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 2px}
+.qpill{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;font-size:12px;border:1px solid var(--line);background:rgba(148,173,255,.06);color:var(--muted);cursor:pointer;transition:.15s}
+.qpill:hover{border-color:var(--line-strong);color:var(--text);background:rgba(148,173,255,.14)}
+.qpill.has{color:var(--text);border-color:rgba(94,234,212,.28);background:rgba(94,234,212,.08)}
+.sec-card{padding:14px 16px;border-radius:14px;background:rgba(148,173,255,.04);border:1px solid var(--line);margin-bottom:12px}
+.sec-card h3{margin:0 0 8px;font-size:15px}
+.kv-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin:8px 0}
+.kv{padding:8px 10px;border-radius:10px;background:rgba(8,12,24,.35);border:1px solid var(--line);font-size:13px;overflow-wrap:anywhere}
+.kv b{display:block;font-size:11.5px;color:var(--muted);margin-bottom:2px}
+.copy-row{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:10px;background:rgba(8,12,24,.35);border:1px solid var(--line);margin-top:6px}
+.log-box{margin-top:8px;padding:10px;border-radius:10px;background:#070b14;border:1px solid var(--line);font-family:var(--mono,monospace);font-size:12px;line-height:1.45;white-space:pre-wrap;overflow:auto;max-height:260px}
+.danger-box{padding:12px 14px;border-radius:12px;background:hsl(350 88% 64% / .1);border:1px solid hsl(350 88% 64% / .35);margin:10px 0}
+.ops-row{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:10px;background:rgba(148,173,255,.05);border:1px solid var(--line)}
 .media{display:grid;gap:14px}
 .media figure{padding:14px 16px;border-radius:14px;background:rgba(148,173,255,.04);border:1px solid var(--line)}
 .media figcaption{font-size:14px;color:var(--muted);margin-bottom:8px;font-weight:700}
@@ -526,11 +544,10 @@ html[data-theme="light"]{
       </div>
       <div>
         <h1>Xưởng video</h1>
-        <div class="sub">Protect Your Health · công ty sản xuất video y tế dự phòng</div>
+        <div class="sub">Protect Your Health</div>
       </div>
     </div>
     <div class="controls">
-      <a class="btn ghost" href="#channel">Kết nối kênh</a>
       <span class="pill" id="factory-pill"><span class="dot"></span><span id="factory-text">Đang kiểm tra…</span></span>
       <span class="start-group">
         <button class="btn primary" id="btn-start" type="button" title="Bật xưởng sản xuất">
@@ -546,21 +563,25 @@ html[data-theme="light"]{
 
   <div class="offline" id="offline">Mất kết nối với app. Bấm đúp lại biểu tượng <b>Xưởng video</b> trên Desktop để mở lại.</div>
 
-  <!-- 1. KPI Tiles -->
-  <section class="tiles-grid" id="tiles" aria-label="Chỉ số tổng quan">
+  <nav class="home-nav" aria-label="Điều hướng xưởng">
+    <a href="#home" data-home-tab="home" aria-current="page">Tổng quan</a>
+    <a href="#workshop" data-home-tab="workshop">Sơ đồ xưởng</a>
+    <a href="#research-panel" data-home-tab="research-panel">Kho đề tài</a>
+    <a href="#channel" data-home-tab="channel">Kênh</a>
+  </nav>
+
+  <h2 class="home-title" data-home-view="home">Tổng quan xưởng</h2>
+  <section class="tiles-grid" id="tiles" data-home-view="home" aria-label="Chỉ số tổng quan">
     <div class="glass tile"><div class="k">Đang làm</div><div class="v" id="kpi-running">0</div></div>
     <div class="glass tile"><div class="k">Chờ bác sĩ</div><div class="v" id="kpi-waiting">0</div></div>
-    <div class="glass tile"><div class="k">Xong 7 ngày</div><div class="v" id="kpi-done7">0</div></div>
-    <div class="glass tile"><div class="k">Xong 30 ngày</div><div class="v" id="kpi-done30">0</div></div>
-    <div class="glass tile"><div class="k">TB ngày xong</div><div class="v" id="kpi-avg">—</div></div>
-    <div class="glass tile"><div class="k">Model đang nghỉ</div><div class="v" id="kpi-resting">0</div></div>
+    <div class="glass tile"><div class="k">Cần chú ý</div><div class="v" id="kpi-blocked">0</div></div>
   </section>
 
   <!-- 2. "Cần bạn quyết" strip -->
-  <section class="decisions-strip" id="decisions" aria-live="polite"></section>
+  <section class="decisions-strip" id="decisions" data-home-view="home" aria-live="polite"></section>
 
   <!-- 2b. Xưởng 3D -->
-  <section class="ws-shell" id="workshop" aria-labelledby="ws-title" data-motion="on" data-paused="false" data-live-flow="false">
+  <section class="ws-shell" id="workshop" data-home-view="workshop" hidden aria-labelledby="ws-title" data-motion="on" data-paused="false" data-live-flow="false">
     <div class="ws-head">
       <div>
         <h2 id="ws-title">Xưởng sản xuất 3D</h2>
@@ -622,11 +643,11 @@ html[data-theme="light"]{
   </section>
 
   <!-- 3. Project cards -->
-  <div class="section-title">Dự án video (7 bước)</div>
-  <section id="projects"><div class="glass empty">Đang tải…</div></section>
+  <h2 class="section-title" data-home-view="home">Dự án video</h2>
+  <section id="projects" data-home-view="home"><div class="glass empty">Đang tải…</div></section>
 
   <!-- 3b. Kho đề tài & Researcher (Google Sheet 100đ + AI) -->
-  <section class="glass card" id="research-panel">
+  <section class="glass card" id="research-panel" data-home-view="research-panel" hidden>
     <div class="res-bar">
       <div>
         <h3 style="margin:0;font-size:15.5px">Kho đề tài &amp; Researcher (Google Sheet 100đ)</h3>
@@ -651,24 +672,20 @@ html[data-theme="light"]{
   </section>
 
   <!-- 4. "Công ty đang làm gì" -->
-  <div class="section-title">Công ty đang làm gì</div>
-  <section class="glass card" id="activity">
+  <h2 class="section-title" data-home-view="home">Hoạt động xưởng</h2>
+  <section class="glass card" id="activity" data-home-view="home">
     <div class="agent" id="agent">
       <div class="orb" id="agent-orb"></div>
       <div><b id="agent-title">—</b><p id="agent-sub" class="sub"></p></div>
     </div>
-    <div class="act-list" id="activity-list"><div class="empty">Chưa có hoạt động agent nào.</div></div>
-  </section>
-
-  <!-- 4b. Tiến độ hoàn thiện xưởng (docs/progress.yaml) -->
-  <div class="section-title">Tiến độ hoàn thiện xưởng <span class="tag" id="prog-total"></span></div>
-  <section class="glass card" id="progress">
-    <div id="prog-doing"></div>
-    <div id="prog-phases"><div class="empty">Chưa có kế hoạch.</div></div>
+    <details class="activity-history">
+      <summary>Nhật ký gần đây</summary>
+      <div class="act-list" id="activity-list"><div class="empty">Chưa có hoạt động agent nào.</div></div>
+    </details>
   </section>
 
   <!-- 5. "Kết quả kênh" -->
-  <section class="glass channel-box" id="channel">
+  <section class="glass channel-box" id="channel" data-home-view="channel" hidden>
     <div class="ch-head">
       <div id="channel-status"><span><b>Kết quả kênh:</b> chưa kết nối</span> <span class="tag">YouTube / TikTok / Facebook</span></div>
       <div class="ch-actions">
@@ -756,6 +773,11 @@ html[data-theme="light"]{
           <button class="btn danger" type="submit">Xác nhận mở lại</button>
         </form>
       </div>
+      <div class="glass card">
+        <h2>Dự án đã xoá gần đây</h2>
+        <p class="sub">Dự án đã xoá được lưu an toàn tại <code>cache/deleted-projects/</code>. Khi khôi phục sẽ ở trạng thái Tạm dừng để bác sĩ kiểm tra trước khi chạy lại.</p>
+        <div id="ops-deleted-list" class="ops-form" aria-live="polite"></div>
+      </div>
     </section>
 
     <section id="ops-library" hidden aria-label="Thư viện ảnh">
@@ -820,7 +842,11 @@ html[data-theme="light"]{
     <button class="btn ghost" id="pv-back" type="button">← Quay lại</button>
     <div class="grow"><h2 id="pv-title">Sản phẩm</h2><div class="meta" id="pv-meta"></div></div>
     <span class="chip" id="pv-chip"></span>
+    <button class="btn" id="pv-pause" type="button" hidden>⏸ Tạm dừng</button>
+    <button class="btn warn" id="pv-retry" type="button" hidden>Làm lại bước lỗi</button>
+    <button class="btn ghost" id="pv-folder" type="button">Mở thư mục</button>
     <button class="btn" id="pv-packet" type="button">Mở gói duyệt đầy đủ</button>
+    <button class="btn danger" id="pv-delete" type="button">Xoá dự án</button>
   </div>
   <nav class="tabs" id="pv-tabs" role="tablist"></nav>
   <div class="vbody" id="pv-scroll">
@@ -903,6 +929,29 @@ html[data-theme="light"]{
   <div id="ws-pop-body"></div>
 </div>
 
+<!-- Safe Project Delete Confirmation Modal -->
+<div class="backdrop" id="del-dlg" role="dialog" aria-modal="true" aria-labelledby="del-title">
+  <form class="modal" id="del-form" autocomplete="off">
+    <h2 id="del-title">Xoá dự án</h2>
+    <div class="meta" id="del-meta"></div>
+    <div class="danger-box">
+      <p id="del-summary"></p>
+      <p id="del-warn" class="sub" style="margin-top:6px;color:var(--amber)" hidden></p>
+    </div>
+    <label class="f" for="del-reason">Lý do xoá (tùy chọn)</label>
+    <input class="inp" id="del-reason" maxlength="500" placeholder="Ví dụ: Trùng chủ đề với video khác">
+    <label class="f" style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;margin-top:12px">
+      <input type="checkbox" id="del-confirm" style="width:auto;margin-top:3px" required>
+      <span>Tôi xác nhận xoá dự án này khỏi danh sách và hàng đợi (dữ liệu được lưu an toàn tại <code>cache/deleted-projects/</code> để khôi phục khi cần).</span>
+    </label>
+    <div class="err-box" id="del-err"></div>
+    <div class="modal-foot">
+      <button class="btn ghost" type="button" id="del-cancel">Huỷ</button>
+      <button class="btn danger" type="submit" id="del-submit" style="border-color:var(--rose);color:var(--rose)">Xoá &amp; lưu trữ an toàn</button>
+    </div>
+  </form>
+</div>
+
 <script>
 const TOKEN = '__TOKEN__';
 const $ = (id) => document.getElementById(id);
@@ -929,6 +978,11 @@ $('btn-theme').onclick = () => {
 $('btn-admin-toggle').onclick = () => {
   const open = $('admin-drawer').classList.toggle('show');
   $('btn-admin-toggle').setAttribute('aria-expanded', String(open));
+  if(open && typeof opsTab !== 'undefined' && opsTab === 'queue'){
+    if(typeof opsLoadProjects === 'function') opsLoadProjects().catch(()=>{});
+    if(typeof opsQueue === 'function') opsQueue().catch(()=>{});
+    if(typeof opsDeleted === 'function') opsDeleted().catch(()=>{});
+  }
 };
 
 const STEP_VI = {
@@ -970,6 +1024,7 @@ async function postJson(path, body){
   const r=await fetch(path,{method:'POST',headers:{'X-Dashboard-Token':TOKEN,'Content-Type':'application/json'},
     body:body?JSON.stringify(body):undefined});
   const j=await r.json().catch(()=>({}));
+  if(r.status===403 && j.error==='forbidden') throw new Error('Phiên app đã thay đổi. Tải lại trang bằng Ctrl+F5, mở lại gói duyệt rồi nhập PIN.');
   if(!r.ok) throw new Error(j.error||('Lỗi '+r.status));
   return j;
 }
@@ -985,6 +1040,7 @@ async function act(path, confirmMsg){
 }
 function chipClass(p){
   if(p.gate) return 'gate';
+  if(p.paused) return 'paused';
   if(p.blocked || p.state==='blocked') return 'bad';
   if(['packaged','published_manual','video_approved'].includes(p.state)) return 'done';
   return 'work';
@@ -1002,12 +1058,6 @@ function renderOverview(ov){
   const t = ov.tiles || {};
   $('kpi-running').textContent = t.running ?? 0;
   $('kpi-waiting').innerHTML = t.waiting_doctor ? `<span style="color:var(--amber)">${t.waiting_doctor}</span>` : '0';
-  $('kpi-done7').textContent = t.done_7d ?? 0;
-  $('kpi-done30').textContent = t.done_30d ?? 0;
-  $('kpi-avg').innerHTML = t.avg_days_topic_to_video != null ? `${t.avg_days_topic_to_video}<small>ngày</small>` : '—';
-  const restingList = (ov.resting || []).map(r => `${r.cli}/${r.model} (đến ${String(r.until||'').slice(11,16)})`).join(', ');
-  $('kpi-resting').innerHTML = `<span title="${esc(restingList)}">${t.models_resting ?? 0}</span>`;
-
   const decBox = $('decisions');
   const decs = ov.decisions || [];
   if(!decs.length){
@@ -1016,7 +1066,7 @@ function renderOverview(ov){
     decBox.innerHTML = decs.map(d => `
       <div class="decision-banner">
         <div>
-          <h3>Cần bạn quyết · ${esc(d.title)}</h3>
+          <h3>Cần bạn quyết · ${esc(d.code || '')} · ${esc(d.title)}</h3>
           <p>${d.gate==='video'?'Cổng duyệt video':'Cổng duyệt y khoa'} · <b>${d.count}</b> điểm cần quyết</p>
         </div>
         <button class="btn warn" type="button" data-decide-slug="${esc(d.slug)}">Mở thẻ quyết định (${d.count})</button>
@@ -1456,29 +1506,6 @@ function initCompanyControls(){
   }
 }
 
-const PROG_CHIP = {todo:['pending','Chưa làm'], doing:['work','Đang làm'], done:['done','Xong'], blocked:['bad','Bị chặn']};
-function progTask(t){
-  const [cls,label] = PROG_CHIP[t.status] || PROG_CHIP.todo;
-  return `<div class="prog-task"><span class="chip ${cls}">${label}</span>
-    <div class="prog-body"><b>${esc(t.id)}</b> ${esc(t.title)}${t.note ? `<div class="meta prog-note">${esc(t.note)}</div>` : ''}</div>
-    <span class="meta prog-owner">${esc(t.owner)}</span></div>`;
-}
-function renderProgress(p){
-  if(!p) return;
-  $('prog-total').textContent = p.total ? `${p.done}/${p.total} việc · cập nhật ${p.updated || '—'}` : '';
-  $('prog-doing').innerHTML = (p.doing || []).map(progTask).join('');
-  const openState = {};
-  document.querySelectorAll('#prog-phases details').forEach(d => openState[d.dataset.phase] = d.open);
-  $('prog-phases').innerHTML = (p.phases || []).map(ph => {
-    const pct = ph.total ? Math.round(100 * ph.done / ph.total) : 0;
-    const open = openState[ph.id] ?? (ph.done < ph.total && ph.tasks.some(t => t.status !== 'todo'));
-    return `<details data-phase="${esc(ph.id)}" ${open ? 'open' : ''}>
-      <summary>${esc(ph.id)} · ${esc(ph.title)} <span class="meta">${ph.done}/${ph.total}</span>
-        <div class="prog-bar"><i style="width:${pct}%"></i></div></summary>
-      ${ph.tasks.map(progTask).join('')}</details>`;
-  }).join('') || '<div class="empty">Chưa có kế hoạch.</div>';
-}
-
 function renderActivityFeed(actData){
   if(!actData) return;
   activityData = actData;
@@ -1510,54 +1537,166 @@ function renderActivityFeed(actData){
   });
 }
 
+const STAGE_TABS = ['overview', 'sources', 'script', 'script', 'storyboard', 'video', 'posts'];
+
 function renderProjects(d){
   const box=$('projects');
+  $('kpi-blocked').textContent = d.projects.filter(p => p.blocked && !p.gate).length;
+  const expanded = new Set([...box.querySelectorAll('.project-more[open]')].map(el => el.dataset.projectMore));
   if(!d.projects.length){box.innerHTML='<div class="glass empty">Chưa có chủ đề nào.</div>';return}
   const ovMap = {};
   (overviewData?.projects || []).forEach(p => ovMap[p.slug] = p);
-  const order=p=>p.gate?0:(p.blocked?1:2);
-  box.innerHTML=[...d.projects].sort((a,b)=>order(a)-order(b)).map((p,i)=>{
+  const order=p=>p.gate?0:(p.blocked?1:(p.paused?3:2));
+  box.innerHTML=[...d.projects].sort((a,b)=>order(a)-order(b)).map(p=>{
     const ovp = ovMap[p.slug] || {};
-    const cls=chipClass(p);
+    const isPaused = Boolean(ovp.paused ?? p.paused);
+    const cls=chipClass({...p, paused: isPaused});
     const done=['packaged','published_manual'].includes(p.state);
-    const stageIdx = ovp.stage_index ?? p.stage ?? 0;
-    const steps=d.stages.map((name,k)=>{
-      let c='step'; if(k<stageIdx||done) c+=' done'; else if(k===stageIdx){c+=' cur'; if(p.gate) c+=' wait'; if(cls==='bad') c+=' bad'}
-      return `<div class="${c}"><div class="bar"></div><span>${esc(name)}</span></div>`}).join('');
-    const acts=[];
+    const acts=[], more=[];
     const q=encodeURIComponent(p.slug);
     if(p.gate){
-      acts.push(`<button class="btn warn" data-product="${esc(p.slug)}">Nghiệm thu · quyết định</button>`);
+      acts.push(`<button type="button" class="btn warn" data-product="${esc(p.slug)}">Nghiệm thu · quyết định</button>`);
     } else {
-      acts.push(`<button class="btn" data-product="${esc(p.slug)}">Xem sản phẩm</button>`);
+      acts.push(`<button type="button" class="btn" data-product="${esc(p.slug)}">Xem chi tiết</button>`);
     }
-    if(p.comments) acts.push(`<span class="tag" style="align-self:center;color:var(--amber)">${p.comments} góp ý nháp</span>`);
+    if(p.comments) more.push(`<span class="tag" style="align-self:center;color:var(--amber)">${p.comments} góp ý nháp</span>`);
     if(p.blocked && !p.gate && !done) acts.push(`<button type="button" class="btn warn" data-retry-project="${esc(p.slug)}" data-revision="${esc(p.revision)}">Làm lại bước lỗi</button>`);
-    if(p.blocked && REOPENABLE.includes(p.state)) acts.push(`<button class="btn warn" data-reopen="${esc(p.slug)}">Mở lại cổng y khoa để sửa</button>`);
-    acts.push(`<button class="btn ghost" data-act="/api/project/${q}/folder">Mở thư mục</button>`);
+    if(p.blocked && REOPENABLE.includes(p.state)) acts.push(`<button type="button" class="btn warn" data-reopen="${esc(p.slug)}">Mở lại cổng y khoa để sửa</button>`);
+    if(!done){
+      if(isPaused){
+        acts.push(`<button type="button" class="btn primary" data-resume-project="${esc(p.slug)}">▶ Tiếp tục</button>`);
+      } else {
+        more.push(`<button type="button" class="btn" data-pause-project="${esc(p.slug)}">${ovp.is_running ? '⏸ Dừng bước / Tạm hoãn' : '⏸ Tạm dừng'}</button>`);
+      }
+    }
+    more.push(`<button type="button" class="btn ghost" data-chat-project="${esc(p.slug)}" data-revision="${esc(p.revision)}">💬 Nhắn điều phối</button>`);
+    more.push(`<button type="button" class="btn ghost" data-act="/api/project/${q}/folder">Mở thư mục</button>`);
+    more.push(`<button type="button" class="btn danger" data-delete-project="${esc(p.slug)}">Xoá dự án</button>`);
     const noteHtml=p.blocked?`<div class="note"><div class="note-msg">${esc(friendlyError(p.blocked))}</div><details class="note-raw"><summary>Chi tiết lỗi</summary><code>${esc(p.blocked)}</code></details></div>`:'';
-    const previewHtml = ovp.preview_url
-      ? `<div class="proj-thumb"><img loading="lazy" alt="${esc(p.title)}" src="${esc(ovp.preview_url)}"></div>`
-      : `<div class="proj-thumb"><span>Bước ${stageIdx+1}/7<br>${esc(p.state_label)}</span></div>`;
     const statusLine = ovp.status_line || p.state_label;
     return `<article class="glass card ${p.gate?'gate':''} ${cls==='bad'?'blocked':''}">
-      <div class="proj-layout">
-        ${previewHtml}
-        <div>
-          <div class="card-top"><div><h3>${esc(p.title)}</h3>
-            <div class="meta">${esc(p.slug)} · rev ${esc(p.revision)} · ${esc(ago(p.updated_at))}</div></div>
+          <div class="card-top"><div><h3>${p.code ? `<span class="tag">${esc(p.code)}</span> ` : ''}${esc(p.title)}</h3>
+            </div>
             <span class="chip ${cls}">${esc(p.state_label)}</span></div>
           <div class="status-line">${esc(statusLine)}</div>
-          <div class="steps">${steps}</div>
           ${noteHtml}
           <div class="actions">${acts.join('')}</div>
-        </div>
-      </div></article>`}).join('');
+          <details class="project-more" data-project-more="${esc(p.slug)}" ${expanded.has(p.slug)?'open':''}>
+            <summary>Thao tác khác</summary>
+            <div class="actions">${more.join('')}</div>
+          </details>
+      </article>`}).join('');
   box.querySelectorAll('[data-act]').forEach(b=>b.onclick=()=>act(b.dataset.act));
   box.querySelectorAll('[data-product]').forEach(b=>b.onclick=()=>openProduct(b.dataset.product));
   box.querySelectorAll('[data-retry-project]').forEach(b=>b.onclick=()=>retryBlockedProject(b));
   box.querySelectorAll('[data-reopen]').forEach(b=>b.onclick=()=>openReopen(d.projects.find(p=>p.slug===b.dataset.reopen)).catch(e=>toast(e.message,true)));
+  box.querySelectorAll('[data-pause-project]').forEach(b=>b.onclick=()=>pauseProject(b.dataset.pauseProject, b));
+  box.querySelectorAll('[data-resume-project]').forEach(b=>b.onclick=()=>resumeProject(b.dataset.resumeProject, b));
+  box.querySelectorAll('[data-chat-project]').forEach(b=>b.onclick=()=>openChatForProject(b.dataset.chatProject, b.dataset.revision, 'overview'));
+  box.querySelectorAll('[data-delete-project]').forEach(b=>b.onclick=()=>openDeleteModal(b.dataset.deleteProject));
 }
+
+async function pauseProject(slug, button){
+  if(busy) return;
+  busy = true;
+  if(button) button.disabled = true;
+  try{
+    const res = await postJson(`/api/project/${encodeURIComponent(slug)}/pause`, {});
+    toast(res.note || 'Đã tạm dừng tự động cho dự án.');
+    await refresh();
+    if(pv && pv.slug === slug) await openProduct(slug, pvTab);
+  }catch(e){toast(e.message, true)}
+  finally{busy = false; if(button) button.disabled = false}
+}
+
+async function resumeProject(slug, button){
+  if(busy) return;
+  busy = true;
+  if(button) button.disabled = true;
+  try{
+    const res = await postJson(`/api/project/${encodeURIComponent(slug)}/resume`, {});
+    toast(res.note || 'Đã tiếp tục tự động cho dự án.');
+    await refresh();
+    if(pv && pv.slug === slug) await openProduct(slug, pvTab);
+  }catch(e){toast(e.message, true)}
+  finally{busy = false; if(button) button.disabled = false}
+}
+
+function openChatForProject(slug, revision, view){
+  const panel = $('chat-panel');
+  if(panel) panel.classList.add('open');
+  updateChatContext({slug, revision: revision || null, view: view || 'overview', scene: null, time_s: null});
+  loadChat();
+  const inp = $('chat-input');
+  if(inp){
+    inp.placeholder = `Nhắn điều phối viên về ${slug}…`;
+    inp.focus();
+  }
+}
+
+let delTargetSlug = null;
+function openDeleteModal(slug, fallbackTitle){
+  const sp = (state && state.projects || []).find(x => x.slug === slug);
+  const ovp = (overviewData && overviewData.projects || []).find(x => x.slug === slug);
+  const p = ovp || sp || {slug, title: fallbackTitle || slug, revision: '—', state_label: 'Đang chờ trong hàng đợi', is_running: false, paused: false};
+  delTargetSlug = slug;
+  $('del-title').textContent = 'Xoá dự án: ' + (p.title || slug);
+  $('del-meta').textContent = `${slug} · rev ${p.revision || '—'} · ${p.state_label || ''}`;
+  $('del-summary').textContent = 'Thao tác này sẽ xoá dự án khỏi danh sách đang chạy và gỡ khỏi topics/queue.yaml để xưởng không tự tạo lại.';
+  const warn = $('del-warn');
+  if(ovp && ovp.is_running){
+    warn.textContent = 'Cảnh báo: dự án đang chạy. Xoá sẽ huỷ tiến trình agent đang chạy (nếu đang dựng video thật .production-running thì cần bấm Tạm dừng trước).';
+    warn.hidden = false;
+  } else {
+    warn.hidden = true;
+  }
+  $('del-reason').value = '';
+  $('del-confirm').checked = false;
+  $('del-err').className = 'err-box';
+  $('del-err').textContent = '';
+  $('del-dlg').classList.add('show');
+  $('del-reason').focus();
+}
+function closeDeleteModal(){
+  $('del-dlg').classList.remove('show');
+  delTargetSlug = null;
+}
+$('del-cancel').onclick = closeDeleteModal;
+$('del-dlg').onclick = e => { if(e.target === $('del-dlg')) closeDeleteModal(); };
+$('del-form').onsubmit = async e => {
+  e.preventDefault();
+  if(!delTargetSlug) return;
+  const err = $('del-err');
+  err.className = 'err-box';
+  if(!$('del-confirm').checked){
+    err.textContent = 'Hãy tick ô xác nhận trước khi xoá.';
+    err.className = 'err-box show';
+    return;
+  }
+  const btn = $('del-submit');
+  btn.disabled = true;
+  const slug = delTargetSlug;
+  try{
+    await postJson(`/api/project/${encodeURIComponent(slug)}/delete`, {
+      confirmed: true,
+      reason: $('del-reason').value.trim(),
+    });
+    closeDeleteModal();
+    if(pv && pv.slug === slug) closeProduct();
+    toast('Đã xoá dự án và chuyển vào kho lưu trữ an toàn.');
+    await refresh();
+    if(typeof opsQueue === 'function' && $('admin-drawer')?.classList.contains('show')){
+      await opsQueue().catch(()=>{});
+      if(typeof opsDeleted === 'function') await opsDeleted().catch(()=>{});
+      if(typeof opsLoadProjects === 'function') await opsLoadProjects().catch(()=>{});
+    }
+  }catch(ex){
+    err.textContent = ex.message;
+    err.className = 'err-box show';
+  }finally{
+    btn.disabled = false;
+  }
+};
 
 async function retryBlockedProject(button){
   if(busy) return;
@@ -1624,7 +1763,7 @@ function syncStartGate(){
 function render(d){
   const on=d.factory.running;
   $('factory-pill').classList.toggle('on',on);
-  $('factory-text').textContent=on?`Xưởng đang chạy · PID ${d.factory.pid}`:'Xưởng đang tắt';
+  $('factory-text').textContent=on?'Xưởng đang chạy':'Xưởng đang tắt';
   $('s-factory').innerHTML=on?'Đang chạy':'Tắt';
   $('s-waiting').textContent=String(d.waiting||0);
   $('s-projects').textContent=d.projects.length;
@@ -1643,11 +1782,10 @@ function render(d){
 }
 async function refresh(){
   try{
-    const [rStatus, rOv, rAct, rProg, rComp] = await Promise.all([
+    const [rStatus, rOv, rAct, rComp] = await Promise.all([
       fetch('/api/status',{cache:'no-store'}),
       fetch('/api/overview',{cache:'no-store'}),
       fetch('/api/activity?limit=10',{cache:'no-store'}),
-      fetch('/api/progress',{cache:'no-store'}),
       fetch('/api/company',{cache:'no-store'}),
     ]);
     if(!rStatus.ok || !rComp.ok){
@@ -1657,13 +1795,11 @@ async function refresh(){
     const compData = await rComp.json();
     const ov = rOv.ok ? await rOv.json().catch(()=>null) : null;
     const actData = rAct.ok ? await rAct.json().catch(()=>null) : null;
-    const progData = rProg.ok ? await rProg.json().catch(()=>null) : null;
     wsOffline = false;
     $('offline').classList.remove('show');
     if(ov) renderOverview(ov);
     if(actData) renderActivityFeed(actData);
     companyData = compData;
-    if(progData) renderProgress(progData);
     state=d; render(d);
     renderWorkshop();
     if(!busy) document.querySelectorAll('main button, header button').forEach(b=>{if(!b.closest('#channel')) b.disabled=false;});
@@ -1699,9 +1835,9 @@ async function openProduct(slug, tab){
     const r=await fetch(`/api/project/${encodeURIComponent(slug)}/bundle`,{cache:'no-store'}); const b=await r.json();
     if(!r.ok) throw new Error(b.error||r.status);
     pv=b; seen.add(b.slug+'@'+b.revision);
-    pvTab=tab||(b.gate==='video'?'video':(b.lines.length?'script':(b.media.length?'video':'sources')));
-    $('pv-title').textContent=b.title; $('pv-meta').textContent=`${b.slug} · revision ${b.revision}`;
-    const chip=$('pv-chip'); chip.textContent=b.state_label; chip.className='chip '+(b.gate?'gate':'work');
+    pvTab=tab||(b.gate==='video'?'video':(b.gate==='medical'?'script':'overview'));
+    $('pv-title').textContent=[b.code,b.title].filter(Boolean).join(' · '); $('pv-meta').textContent=`${b.slug} · revision ${b.revision}`;
+    const chip=$('pv-chip'); chip.textContent=b.state_label; chip.className='chip '+chipClass(b);
     $('pv').classList.add('show'); document.body.style.overflow='hidden'; $('pv-scroll').scrollTop=0;
     updateChatContext({slug: b.slug, revision: b.revision, view: pvTab, scene: null, time_s: null});
     renderDecisionCardSlot(b);
@@ -1827,11 +1963,128 @@ function scoreCard(r){
   const issues=(r.issues||[]).map(i=>`<li><b>${esc(i.line)}</b> · ${esc(i.criterion)}: ${esc(i.problem)} Hướng sửa: ${esc(i.fix)}</li>`).join('');
   return `<div class="glass" style="padding:14px;margin-bottom:12px"><b>${esc(r.title||'Biên tập viên')} · lần chấm ${esc(r.round)} · ${r.passed?'Đạt':'Chưa đạt'}</b><p>${esc(r.summary)}</p><ul style="margin-left:18px">${rows}</ul>${issues?`<details><summary>Chỗ cần sửa (${r.issues.length})</summary><ul style="margin-left:18px">${issues}</ul></details>`:''}</div>`;
 }
+function strVal(v){
+  if(v===null||v===undefined||v==='') return '—';
+  if(Array.isArray(v)) return v.map(x=>x&&typeof x==='object'?JSON.stringify(x):String(x)).join(', ');
+  if(typeof v==='object') return JSON.stringify(v);
+  return String(v);
+}
+function kvGrid(pairs){
+  const items=(pairs||[]).filter(([,v])=>v!==null&&v!==undefined&&v!==''&&(!Array.isArray(v)||v.length>0));
+  if(!items.length) return '';
+  return `<div class="kv-grid">${items.map(([k,v])=>`<div class="kv"><b>${esc(k)}</b><span>${esc(strVal(v))}</span></div>`).join('')}</div>`;
+}
+async function copyToClip(text){
+  const val=String(text||'');
+  try{
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      await navigator.clipboard.writeText(val);
+      toast('Đã sao chép vào clipboard.');
+      return;
+    }
+  }catch(_){}
+  const ta=document.createElement('textarea');
+  ta.value=val; ta.style.position='fixed'; ta.style.opacity='0';
+  document.body.appendChild(ta); ta.select();
+  try{document.execCommand('copy'); toast('Đã sao chép vào clipboard.');}
+  catch(_){toast('Không sao chép tự động được.',true);}
+  finally{ta.remove()}
+}
+function copyBlock(label, text){
+  if(!text) return '';
+  return `<div style="margin-top:8px"><div class="sub" style="margin-bottom:4px"><b>${esc(label)}</b></div><div class="copy-row"><div style="white-space:pre-wrap;flex:1">${esc(text)}</div><button type="button" class="btn ghost" data-copy="${esc(text)}">Sao chép</button></div></div>`;
+}
+function tabOverview(b,dm,opts={}){
+  const pi=b.paused_info||{};
+  const pausedBox=b.paused?`<div class="sec-card" style="border-color:rgba(251,191,36,.45);background:rgba(251,191,36,.08)">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+      <div><b>⏸ Dự án đang tạm dừng tự động</b>${pi.paused_at?` · <span class="sub">${esc(pi.paused_at)}</span>`:''}${pi.reason?`<div class="sub" style="margin-top:4px">${esc(pi.reason)}</div>`:''}</div>
+      ${opts.readOnly?'':'<button type="button" class="btn primary" id="pv-inline-resume">▶ Tiếp tục tự động</button>'}
+    </div></div>`:'';
+  const done=['packaged','published_manual'].includes(b.state);
+  const blockedBox=b.blocked?`<div class="danger-box"><b>Đang bị chặn:</b> ${esc(friendlyError(b.blocked))}
+    <details class="note-raw" style="margin-top:6px"><summary>Chi tiết lỗi gốc</summary><code>${esc(b.blocked)}</code></details>
+    ${(!opts.readOnly&&!b.gate&&!done)?'<div style="margin-top:8px"><button type="button" class="btn warn" id="pv-inline-retry">Làm lại bước lỗi</button></div>':''}</div>`:'';
+  const stageIdx=b.stage_index??0;
+  const stages=b.stages||[];
+  const stepsHtml=stages.length?`<div class="sec-card"><h3>Tiến trình 7 bước</h3><div class="steps clickable">${stages.map((name,k)=>{
+    let c='step'; if(k<stageIdx||done) c+=' done'; else if(k===stageIdx){c+=' cur'; if(b.gate) c+=' wait'; if(chipClass(b)==='bad') c+=' bad'}
+    const stTab=STAGE_TABS[k]||'overview';
+    return `<div class="${c}" role="button" tabindex="0" data-stage-tab="${esc(stTab)}"><div class="bar"></div><span>${esc(name)}</span></div>`;
+  }).join('')}</div></div>`:'';
+  const appMed=b.approvals?.medical||{};
+  const appVid=b.approvals?.video||{};
+  const revs=(b.revisions||[]).length?b.revisions.join(', '):b.revision;
+  const metaHtml=`<div class="sec-card"><h3>Thông tin tổng hợp</h3>${kvGrid([
+    ['Trạng thái', b.state_label||b.state],
+    ['Revision hiện tại', b.revision],
+    ['Tất cả revision', revs],
+    ['Cổng duyệt', b.gate||'Chưa tới cổng'],
+    ['Hàng đợi', b.queue_entry?`Trong queue · ưu tiên ${b.queue_entry.priority??'—'}`:'Không có trong queue'],
+    ['Tiến trình đang chạy', (b.running_jobs||[]).length?`${b.running_jobs.length} tiến trình`:'Không'],
+    ['Duyệt y khoa', appMed.decision?(appMed.decision+(appMed.reviewed_at?' · '+appMed.reviewed_at.slice(0,16):'')):'Chưa duyệt'],
+    ['Duyệt video', appVid.decision?(appVid.decision+(appVid.reviewed_at?' · '+appVid.reviewed_at.slice(0,16):'')):'Chưa duyệt'],
+    ['Số liệu sản phẩm', `${(b.claims||[]).length} claim · ${(b.lines||[]).length} dòng kịch bản · ${(b.storyboard?.scenes||[]).length} cảnh · ${(b.media||[]).length} media`],
+  ])}</div>`;
+  const dos=b.dossier||{};
+  const card=b.topic_card||{};
+  const qe=b.queue_entry||{};
+  const pts=Array.isArray(dos.doctor_review_points)?dos.doctor_review_points:[];
+  const srcLink=dos.source_url&&/^https?:/i.test(dos.source_url)?`<a href="${esc(dos.source_url)}" target="_blank" rel="noopener">Mở link nguồn đề xuất</a>`:'';
+  const hasTopic=Boolean(Object.keys(dos).length||Object.keys(card).length||Object.keys(qe).length);
+  const topicHtml=hasTopic?`<div class="sec-card"><h3>Hồ sơ chủ đề</h3>
+    ${dos.question||card.question||qe.question?`<p style="margin-bottom:8px"><b>Câu hỏi y khoa:</b> ${esc(dos.question||card.question||qe.question)}</p>`:''}
+    ${kvGrid([
+      ['Tiêu đề/claim gốc', dos.claim_or_headline],
+      ['Nhận định sơ bộ', dos.preliminary_verdict],
+      ['Hạng & điểm rubric', (dos.tier||dos.rubric_total!=null)?`${dos.tier||'—'} · ${dos.rubric_total??'—'}/100`:''],
+      ['Định dạng & thời lượng', (dos.recommended_format||dos.target_seconds)?`${dos.recommended_format||'—'} · ${dos.target_seconds??'—'}s`:''],
+      ['Nguồn phát hiện', [dos.origin||card.origin, dos.source_tab, dos.source_row, dos.recorded_date].filter(Boolean).join(' · ')],
+      ['PMID/DOI gợi ý', dos.pmid_doi],
+      ['Đối tượng', card.target_audience],
+      ['Ghi chú thêm', qe.notes],
+    ])}
+    ${dos.neutral_hook?`<p class="sub" style="margin-top:6px"><b>Góc mở trung tính:</b> ${esc(dos.neutral_hook)}</p>`:''}
+    ${dos.nuance_notes?`<p class="sub" style="margin-top:6px"><b>Lưu ý sắc thái:</b> ${esc(dos.nuance_notes)}</p>`:''}
+    ${srcLink?`<p style="margin-top:6px">${srcLink}</p>`:''}
+    ${pts.length?`<div style="margin-top:8px"><b class="sub">Điểm bác sĩ cần lưu ý:</b><ul style="margin:4px 0 0 18px">${pts.map(x=>`<li>${esc(strVal(x))}</li>`).join('')}</ul></div>`:''}
+  </div>`:'';
+  return pausedBox+blockedBox+stepsHtml+metaHtml+topicHtml;
+}
 function tabScript(b,dm,opts={}){
-  if(!b.lines.length) return '<div class="glass empty">Chưa có kịch bản ở revision này.</div>';
-  return scoreCard(b.script_review)+b.lines.map(l=>{const id=l.id||'?';
+  let h=scoreCard(b.script_review);
+  const rounds=Array.isArray(b.script_review_rounds)?b.script_review_rounds:(Array.isArray(b.script_review_rounds?.rounds)?b.script_review_rounds.rounds:[]);
+  if(rounds.length>1){
+    h+=`<div class="sec-card"><details><summary>Lịch sử các vòng chấm kịch bản (${rounds.length} vòng)</summary><ul style="margin:8px 0 0 18px">${rounds.map((r,idx)=>`<li>Vòng ${esc(r.round??idx+1)} · ${r.passed?'Đạt':'Chưa đạt'}${r.summary?' — '+esc(r.summary):''}</li>`).join('')}</ul></details></div>`;
+  }
+  const lintIssues=b.style_lint?.issues||[];
+  if(lintIssues.length){
+    h+=`<div class="warnbox"><b>Style lint (${lintIssues.length} lưu ý)</b><ul style="margin:6px 0 0 18px">${lintIssues.slice(0,25).map(i=>`<li>${esc(i.line?`${i.line}: `:'')}${esc(i.message||i.problem||i.rule||JSON.stringify(i))}</li>`).join('')}</ul></div>`;
+  }
+  const outl=b.outline||{};
+  const chs=Array.isArray(outl.chapters)?outl.chapters:[];
+  if(chs.length||outl.title||outl.format_profile){
+    h+=`<div class="sec-card"><details><summary>Dàn ý kịch bản (${chs.length} chương${outl.format_profile?' · '+esc(outl.format_profile):''})</summary><ul style="margin:8px 0 0 18px">${chs.map(c=>`<li><b>${esc(c.title||c.id||'')}</b>${c.goal||c.summary?': '+esc(c.goal||c.summary):''}</li>`).join('')}</ul></details></div>`;
+  }
+  const clips=Array.isArray(b.clip_plan?.clips)?b.clip_plan.clips:[];
+  if(clips.length){
+    h+=`<div class="sec-card"><details><summary>Kế hoạch cắt clip (${clips.length} clip)</summary><ul style="margin:8px 0 0 18px">${clips.map(c=>`<li><b>${esc(c.id||'')}:</b> ${esc(c.title||'')} (${esc(c.first_scene_id||'?')} → ${esc(c.last_scene_id||'?')})</li>`).join('')}</ul></details></div>`;
+  }
+  const vp=b.voice_prep||{};
+  const prons=Array.isArray(vp.pronunciations)?vp.pronunciations:[];
+  const paces=Array.isArray(vp.pacing_notes)?vp.pacing_notes:[];
+  if(prons.length||paces.length||vp.notes){
+    h+=`<div class="sec-card"><details><summary>Chuẩn bị giọng đọc (${prons.length} thuật ngữ phát âm)</summary>
+      ${prons.length?`<ul style="margin:8px 0 0 18px">${prons.map(p=>`<li><b>${esc(p.written)}</b> → <code>${esc(p.spoken)}</code>${p.note?' · '+esc(p.note):''}${p.needs_doctor_review?' <span class="tag">Cần bác sĩ kiểm tra</span>':''}</li>`).join('')}</ul>`:''}
+      ${paces.length?`<div style="margin-top:8px"><b class="sub">Ghi chú nhịp đọc:</b><ul style="margin:4px 0 0 18px">${paces.map(n=>`<li>${esc(strVal(n))}</li>`).join('')}</ul></div>`:''}
+      ${vp.notes?`<p class="sub" style="margin-top:6px">${esc(vp.notes)}</p>`:''}
+    </details></div>`;
+  }
+  if(!b.lines.length) return h+'<div class="glass empty">Chưa có kịch bản ở revision này.</div>';
+  return h+b.lines.map(l=>{const id=l.id||'?';
+    const deliv=l.delivery?`<span class="tag">${esc(typeof l.delivery==='string'?l.delivery:JSON.stringify(l.delivery))}</span>`:'';
     return `<div class="row ${dm[id]?'has-c':''}"><div class="rid">${esc(id)}</div>
-      <div><div class="rtext">${esc(l.text)}</div><div class="rmeta">${l.purpose&&l.purpose!=='content'?`<span class="tag">${esc(l.purpose)}</span>`:''}${l.claim_id?`<span class="tag claim" data-goto="${esc(l.claim_id)}" title="Xem bằng chứng">${esc(l.claim_id)}${l.source_marker?' · '+esc(l.source_marker):''}</span>`:''}</div></div>
+      <div><div class="rtext">${esc(l.text)}</div><div class="rmeta">${l.purpose&&l.purpose!=='content'?`<span class="tag">${esc(l.purpose)}</span>`:''}${deliv}${l.claim_id?`<span class="tag claim" data-goto="${esc(l.claim_id)}" title="Xem bằng chứng">${esc(l.claim_id)}${l.source_marker?' · '+esc(l.source_marker):''}</span>`:''}</div></div>
       ${opts.readOnly?'':cbtn(id,dm)+cmtRow(id,dm)}</div>`}).join('');
 }
 function srcLine(r){
@@ -1841,16 +2094,41 @@ function srcLine(r){
   return `<b style="color:var(--text)">${esc(r.id)}</b> ${esc(r.title||'')}${r.journal?` — <i>${esc(r.journal)}</i>`:''}${r.year?` (${esc(r.year)})`:''}${links?' · '+links:''}`;
 }
 function tabClaims(b,dm,opts={}){
-  let h = '';
-  const eb = b.expert_brief || {};
-  if(eb.question || (eb.findings && eb.findings.length)){
-    const finds = (eb.findings || []).map(f => `<li><b>${esc(f.id||'')}</b>: ${esc(f.statement||f.summary||'')}</li>`).join('');
-    h += `<div class="glass card"><h3>Hồ sơ chuyên gia y khoa</h3>${eb.question?`<p class="sub">${esc(eb.question)}</p>`:''}${finds?`<ul style="margin:8px 0 0 18px">${finds}</ul>`:''}</div>`;
+  let h='';
+  if(b.expert_brief_md){
+    h+=`<div class="sec-card"><h3>Hồ sơ chuyên gia (expert-brief.md)</h3><details open><summary>Xem tóm tắt nghiên cứu chuyên sâu</summary><pre class="md" style="margin-top:8px;max-height:420px;overflow:auto">${esc(b.expert_brief_md)}</pre></details></div>`;
   }
-  if(!b.claims.length) return h + '<div class="glass empty">Chưa có claim nào.</div>';
+  const eb=b.expert_brief||{};
+  if(eb.question||(eb.findings&&eb.findings.length)){
+    const finds=(eb.findings||[]).map(f=>`<li><b>${esc(f.id||'')}</b>: ${esc(f.statement||f.summary||'')}</li>`).join('');
+    h+=`<div class="glass card"><h3>Hồ sơ chuyên gia (YAML)</h3>${eb.question?`<p class="sub">${esc(eb.question)}</p>`:''}${finds?`<ul style="margin:8px 0 0 18px">${finds}</ul>`:''}</div>`;
+  }
+  const rm=b.research_meta||{};
+  const pq=rm.question||{};
+  if(Object.keys(pq).length){
+    h+=`<div class="sec-card"><h3>Câu hỏi PICO &amp; từ khoá</h3>${kvGrid([
+      ['Đối tượng (P)', pq.patient_population],
+      ['Can thiệp (I)', pq.intervention],
+      ['Đối chứng (C)', pq.comparison],
+      ['Kết cục (O)', pq.outcome],
+      ['Từ khoá tìm kiếm', pq.search_keywords],
+      ['Ngôn ngữ', pq.language],
+    ])}</div>`;
+  }
+  const inc=Array.isArray(rm.included_sources)?rm.included_sources:(rm.included_sources?.sources||rm.included_sources?.items||[]);
+  const exc=Array.isArray(rm.excluded_sources)?rm.excluded_sources:(rm.excluded_sources?.sources||rm.excluded_sources?.items||[]);
+  const slog=Array.isArray(rm.search_log)?rm.search_log:(rm.search_log?.searches||rm.search_log?.queries||[]);
+  if((Array.isArray(inc)&&inc.length)||(Array.isArray(exc)&&exc.length)||(Array.isArray(slog)&&slog.length)){
+    h+=`<div class="sec-card"><h3>Quá trình sàng lọc nguồn</h3>
+      ${inc.length?`<details><summary>Nguồn đã chọn (${inc.length})</summary><ul style="margin:6px 0 0 18px">${inc.map(x=>`<li>${esc(typeof x==='string'?x:(x.title||x.id||JSON.stringify(x)))}</li>`).join('')}</ul></details>`:''}
+      ${exc.length?`<details style="margin-top:6px"><summary>Nguồn đã loại (${exc.length})</summary><ul style="margin:6px 0 0 18px">${exc.map(x=>`<li>${esc(typeof x==='string'?x:((x.title||x.id||'')+(x.reason?' — '+x.reason:'')))}</li>`).join('')}</ul></details>`:''}
+      ${slog.length?`<details style="margin-top:6px"><summary>Nhật ký tìm kiếm (${slog.length})</summary><ul style="margin:6px 0 0 18px">${slog.map(x=>`<li>${esc(typeof x==='string'?x:JSON.stringify(x))}</li>`).join('')}</ul></details>`:''}
+    </div>`;
+  }
+  if(!b.claims.length) return h+'<div class="glass empty">Chưa có claim nào trong evidence/ledger.yaml.</div>';
   const rec={}; b.records.forEach(r=>rec[r.id]=r);
   const used={}; b.lines.forEach(l=>{if(l.claim_id)(used[l.claim_id]=used[l.claim_id]||[]).push(l.id)});
-  return h + b.claims.map(c=>{const id=c.id||'?';
+  return h+b.claims.map(c=>{const id=c.id||'?';
     const quotes=(c.support||[]).map(s=>`<blockquote>“${esc(s.quote)}”<cite>${esc(s.source_id)}${s.locator?' · '+esc(s.locator):''}</cite></blockquote>`).join('');
     const srcs=(c.sources||[]).map(sid=>srcLine(rec[sid]||{id:sid})).join('<br>');
     return `<div class="claim-card ${dm[id]?'has-c':''}" id="${opts.idPrefix||'claim-'}${esc(id)}">
@@ -1861,25 +2139,57 @@ function tabClaims(b,dm,opts={}){
       <div class="src">${srcs}</div>${opts.readOnly?'':`<div style="margin-top:8px">${cmtRow(id,dm)}</div>`}</div>`}).join('');
 }
 function tabStoryboard(b){
-  const scenes = b.storyboard?.scenes || [];
-  const frames = b.frames || [];
-  if(!scenes.length && !frames.length) return '<div class="glass empty">Chưa có storyboard ở revision này.</div>';
-  const frameGrid = frames.length ? `<div class="ops-assets" style="margin-bottom:14px">${frames.map(f => `<div class="ops-asset"><img loading="lazy" alt="${esc(f.name)}" src="${esc(f.url)}"><p class="meta">${esc(f.name)}</p></div>`).join('')}</div>` : '';
-  const rows = scenes.map(s => `<div class="row"><div class="rid">${esc(s.id)}</div><div><div class="rtext">${esc(s.narration || s.description || '')}</div><div class="rmeta"><span class="tag">${esc(s.visual || 'scene')}</span>${s.script_line?`<span class="tag">dòng ${esc(s.script_line)}</span>`:''}${s.expected_duration_seconds?`<span class="tag">${esc(s.expected_duration_seconds)}s</span>`:''}</div></div><div></div></div>`).join('');
-  return frameGrid + rows;
+  const scenes=b.storyboard?.scenes||[];
+  const frames=b.frames||[];
+  const assets=b.assets||[];
+  const vr=b.visual_review||{};
+  let h='';
+  if(Object.keys(vr).length){
+    const insp=Array.isArray(vr.inspected_images)?vr.inspected_images.length:(vr.inspected_count??'');
+    h+=`<div class="sec-card"><h3>Kiểm tra hình ảnh (visual-review.yaml)</h3>${kvGrid([
+      ['Ảnh đã kiểm tra', insp],
+      ['Số cảnh được duyệt', vr.scenes?Object.keys(vr.scenes).length:''],
+      ['Nhận xét', vr.summary||vr.note],
+    ])}</div>`;
+  }
+  if(!scenes.length&&!frames.length&&!assets.length) return h+'<div class="glass empty">Chưa có storyboard ở revision này.</div>';
+  if(frames.length){
+    h+=`<div class="sec-card"><h3>Khung hình render (${frames.length})</h3><div class="ops-assets">${frames.map(f=>`<div class="ops-asset"><img loading="lazy" alt="${esc(f.name)}" src="${esc(f.url)}"><p class="meta">${esc(f.name)}</p></div>`).join('')}</div></div>`;
+  }
+  if(assets.length){
+    h+=`<div class="sec-card"><h3>Tài sản hình ảnh &amp; SVG (${assets.length})</h3><div class="ops-assets">${assets.map(a=>`<div class="ops-asset"><img loading="lazy" alt="${esc(a.title||a.name||a.id)}" src="${esc(a.preview_url)}" onerror="this.style.display='none'"><p class="meta"><b>${esc(a.title||a.name||a.id)}</b>${a.kind?' · '+esc(a.kind):''}${a.scene_id?' · '+esc(a.scene_id):''}</p></div>`).join('')}</div></div>`;
+  }
+  const rows=scenes.map(s=>`<div class="row"><div class="rid">${esc(s.id)}</div><div><div class="rtext">${esc(s.narration||s.description||'')}</div>${s.visual_notes||s.prompt?`<div class="sub" style="margin-top:4px">${esc(s.visual_notes||s.prompt)}</div>`:''}<div class="rmeta"><span class="tag">${esc(s.visual||'scene')}</span>${s.script_line?`<span class="tag">dòng ${esc(s.script_line)}</span>`:''}${s.expected_duration_seconds?`<span class="tag">${esc(s.expected_duration_seconds)}s</span>`:''}</div></div><div></div></div>`).join('');
+  return h+rows;
 }
 function tabVideo(b,dm){
   let h=scoreCard(b.product_review);
+  const pRounds=Array.isArray(b.product_review_rounds)?b.product_review_rounds:(Array.isArray(b.product_review_rounds?.rounds)?b.product_review_rounds.rounds:[]);
+  if(pRounds.length>1){
+    h+=`<div class="sec-card"><details><summary>Lịch sử nghiệm thu sản phẩm (${pRounds.length} vòng)</summary><ul style="margin:8px 0 0 18px">${pRounds.map((r,idx)=>`<li>Vòng ${esc(r.round??idx+1)} · ${r.passed?'Đạt':'Chưa đạt'}${r.summary?' — '+esc(r.summary):''}</li>`).join('')}</ul></details></div>`;
+  }
   if(b.video_stale&&b.media.length) h+='<div class="warnbox">Video/giọng dưới đây là bản dựng trước của revision này, có thể chưa khớp kịch bản mới nhất. Bản mới sẽ có sau bước sản xuất.</div>';
   const warns=(b.qa&&b.qa.warnings)||[];
   if(warns.length) h+=`<div class="warnbox"><b>QA video${b.qa.status?' · '+esc(b.qa.status):''}</b><ul style="margin:6px 0 0 18px">${warns.map(w=>`<li>${esc(typeof w==='string'?w:JSON.stringify(w))}</li>`).join('')}</ul></div>`;
-  h += `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+  const pqa=b.qa_detail?.pronunciation_qa||{};
+  const flags=pqa.flagged||[];
+  if(pqa.status||flags.length||pqa.checked_count){
+    h+=`<div class="${(pqa.blocked||flags.length)?'warnbox':'sec-card'}"><b>QA phát âm${pqa.status?' · '+esc(pqa.status):''}</b> · Đã kiểm ${esc(pqa.checked_count??0)} dòng${pqa.model_id?' ('+esc(pqa.model_id)+')':''}
+      ${pqa.note?`<div class="sub" style="margin-top:4px">${esc(pqa.note)}</div>`:''}
+      ${flags.length?`<ul style="margin:6px 0 0 18px">${flags.map(f=>`<li>${f.line?`<b>${esc(f.line)}</b> · `:''}Viết: <code>${esc(f.script_word||'')}</code> → Nghe: <code>${esc(f.heard||'')}</code>${f.suggestion?' · Gợi ý: '+esc(f.suggestion):''}</li>`).join('')}</ul>`:''}
+    </div>`;
+  }
+  const vqa=b.qa_detail?.video_qa||{};
+  if(Object.keys(vqa).length){
+    h+=`<div class="sec-card"><details><summary>Chi tiết QA kỹ thuật (video-qa.json)</summary><pre class="log-box">${esc(JSON.stringify(vqa,null,2))}</pre></details></div>`;
+  }
+  h+=`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
     <span class="sub">Bấm vào từng cảnh trên thanh timeline để tua video và gắn ngữ cảnh vào khung chat.</span>
     <button class="btn" type="button" id="btn-open-studio">Mở Remotion Studio</button>
   </div>`;
-  const tl = b.timeline || [];
+  const tl=b.timeline||[];
   if(tl.length){
-    h += `<div class="scene-strip" id="pv-scene-strip">${tl.map(s =>
+    h+=`<div class="scene-strip" id="pv-scene-strip">${tl.map(s=>
       `<button type="button" class="scene-chip ${s.open_change?'open-change':''}" data-scene="${esc(s.scene)}" data-start="${s.start_s}">
         ${esc(s.scene)} (${s.start_s}s–${s.end_s}s)${s.open_change?' · Đang sửa':''}
       </button>`
@@ -1894,6 +2204,54 @@ function tabVideo(b,dm){
     <div class="rtext" style="font-size:14.5px;color:var(--muted)">Góp ý về hình, giọng, nhịp, phát âm — ghi mốc thời gian nếu được (ví dụ 0:42).</div>${cbtn('video',dm)}${cmtRow('video',dm)}</div>`;
   return h;
 }
+function tabPosts(b){
+  const posts=b.posts||{};
+  const sp=b.shorts_plan||{};
+  const shorts=Array.isArray(sp.clips)?sp.clips:[];
+  if(!b.thumbnail_url&&!Object.keys(posts).length&&!shorts.length){
+    return '<div class="glass empty">Chưa có bài đăng hoặc kế hoạch Shorts ở revision này.</div>';
+  }
+  let h='';
+  if(b.thumbnail_url||posts.thumbnail){
+    h+=`<div class="sec-card"><h3>Thumbnail</h3>
+      ${b.thumbnail_url?`<img src="${esc(b.thumbnail_url)}" alt="Thumbnail" style="max-width:360px;width:100%;border-radius:10px;border:1px solid var(--line);margin-bottom:8px">`:''}
+      ${posts.thumbnail?kvGrid(Object.entries(posts.thumbnail)):''}
+    </div>`;
+  }
+  const titles=Array.isArray(posts.youtube_titles)?posts.youtube_titles:[];
+  if(titles.length){
+    h+=`<div class="sec-card"><h3>Tiêu đề YouTube đề xuất</h3>${titles.map((t,idx)=>copyBlock(`Tiêu đề #${idx+1}`, typeof t==='string'?t:(t.title||JSON.stringify(t)))).join('')}</div>`;
+  }
+  const tags=Array.isArray(posts.youtube_tags)?posts.youtube_tags.join(', '):(posts.youtube_tags||'');
+  if(posts.youtube_description||tags||posts.youtube_community||posts.facebook_post){
+    h+=`<div class="sec-card"><h3>Nội dung đăng kênh</h3>
+      ${copyBlock('Mô tả YouTube', posts.youtube_description)}
+      ${copyBlock('Thẻ (Tags)', tags)}
+      ${copyBlock('Bài đăng Cộng đồng YouTube', posts.youtube_community)}
+      ${copyBlock('Bài đăng Facebook', posts.facebook_post)}
+    </div>`;
+  }
+  const cc=posts.clip_captions;
+  if(cc&&typeof cc==='object'&&Object.keys(cc).length){
+    const entries=Array.isArray(cc)?cc.map((v,i)=>[`Clip ${i+1}`,v]):Object.entries(cc);
+    h+=`<div class="sec-card"><h3>Caption cho clip ngắn</h3>${entries.map(([k,v])=>copyBlock(k, typeof v==='string'?v:JSON.stringify(v))).join('')}</div>`;
+  }
+  if(shorts.length){
+    h+=`<div class="sec-card"><h3>Kế hoạch Shorts / Reels / TikTok (${shorts.length} clip)</h3>${shorts.map(c=>`
+      <div class="sec-card" style="margin-top:8px">
+        <b>${esc(c.id||'clip')}: ${esc(c.title||'')}</b>
+        ${kvGrid([
+          ['Cảnh', `${c.start_scene_id||'?'} → ${c.end_scene_id||'?'}`],
+          ['Thời lượng', c.target_seconds?c.target_seconds+'s':''],
+          ['Hook', c.hook_text],
+          ['Loop bridge', c.loop_bridge],
+          ['Lưu ý an toàn', c.safety_caveat],
+        ])}
+        ${copyBlock('Caption', c.caption)}
+      </div>`).join('')}</div>`;
+  }
+  return h||'<div class="glass empty">Chưa có nội dung bài đăng.</div>';
+}
 function fbCard(e){
   const cls=e.kind==='reject'||e.kind==='reopen'?'bad':(e.kind==='approve_note'?'done':'work');
   const when=(e.at||'').slice(0,16).replace('T',' ');
@@ -1901,22 +2259,48 @@ function fbCard(e){
     ${e.text?`<div class="fb-text">${esc(e.text)}</div>`:''}${(e.items||[]).length?`<ul>${e.items.map(i=>`<li>${i.target?`<b>${esc(i.target)}</b>: `:''}${esc(i.text)}</li>`).join('')}</ul>`:''}</div>`;
 }
 function tabLog(b){
-  const acts = (b.activity || []).map(it =>
+  const jobs=b.running_jobs||[];
+  const jobsHtml=jobs.length?`<div class="sec-card"><h3>Tiến trình đang chạy (${jobs.length})</h3>${jobs.map(j=>`<div class="ops-row" style="margin-top:6px">
+    <div><b>${esc(j.role_name||j.role||'Agent')}</b> · ${esc(j.step_label||j.step||'')} <span class="sub">(${esc(j.model||j.cli||'')}${j.pid?' · PID '+esc(j.pid):''})</span></div>
+    <button type="button" class="btn danger" data-cancel-job="${esc(j.job_id)}">Huỷ tiến trình</button>
+  </div>`).join('')}</div>`:'';
+  const rep=b.repair||{};
+  const repairHtml=Object.keys(rep).length?`<div class="sec-card"><h3>Tự sửa lỗi kỹ thuật (leader-repair.yaml)</h3><pre class="log-box">${esc(JSON.stringify(rep,null,2))}</pre></div>`:'';
+  const acts=(b.activity||[]).map(it=>
     `<div class="act-row"><div><b>${esc(it.role_name||it.role)}</b> · ${esc(it.step_label||it.step)} <span class="meta">(${esc(it.cli)}/${esc(it.model)})</span></div><div class="meta">${it.duration_s!=null?it.duration_s+'s':''}</div></div>`
   ).join('');
-  const notes = b.notes ? `<pre class="md" style="margin:10px 0">${esc(b.notes)}</pre>` : '';
-  const fbs = (b.feedback || []).map(fbCard).join('');
-  if(!acts && !notes && !fbs) return '<div class="glass empty">Chưa có nhật ký hoặc góp ý nào cho dự án này.</div>';
-  return `${acts?`<div class="act-list" style="margin-bottom:14px">${acts}</div>`:''}${notes}${fbs}`;
+  const cliLogs=b.cli_logs||[];
+  const cliHtml=cliLogs.length?`<div class="sec-card"><h3>Log agent gần đây (${cliLogs.length} file)</h3>${cliLogs.map((l,idx)=>`<details ${idx===0?'open':''} style="margin-top:6px"><summary>${esc(l.rel_path||l.name)} · ${esc((l.updated_at||'').slice(0,19).replace('T',' '))} (${esc(l.size_bytes)} B)</summary><pre class="log-box">${esc(l.tail||'')}</pre></details>`).join('')}</div>`:'';
+  const notes=b.notes?`<div class="sec-card"><h3>Ghi chú sửa y khoa</h3><pre class="md">${esc(b.notes)}</pre></div>`:'';
+  const fbs=(b.feedback||[]).map(fbCard).join('');
+  if(!jobsHtml&&!repairHtml&&!acts&&!cliHtml&&!notes&&!fbs) return '<div class="glass empty">Chưa có nhật ký hoặc góp ý nào cho dự án này.</div>';
+  return `${jobsHtml}${repairHtml}${acts?`<div class="act-list" style="margin-bottom:14px">${acts}</div>`:''}${cliHtml}${notes}${fbs}`;
 }
 function renderPv(){
   const b=pv, dm=draftMap(), nD=Object.keys(dm).length;
+  const done=['packaged','published_manual'].includes(b.state);
+  const chip=$('pv-chip');
+  if(chip){chip.textContent=b.state_label; chip.className='chip '+chipClass(b)}
+  const pauseBtn=$('pv-pause');
+  if(pauseBtn){
+    pauseBtn.hidden=done;
+    pauseBtn.textContent=b.paused?'▶ Tiếp tục':((b.running_jobs||[]).length?'⏸ Dừng bước / Tạm hoãn':'⏸ Tạm dừng');
+    pauseBtn.className='btn '+(b.paused?'primary':'');
+    pauseBtn.onclick=()=>b.paused?resumeProject(b.slug,pauseBtn):pauseProject(b.slug,pauseBtn);
+  }
+  const retryBtn=$('pv-retry');
+  if(retryBtn){
+    retryBtn.hidden=!(b.blocked&&!b.gate&&!done);
+  }
+  const postsCount=(b.posts?.youtube_titles?.length||0)+(b.shorts_plan?.clips?.length||0);
   const tabs=[
+    ['overview','Tổng quan',''],
     ['sources','Nguồn',b.claims.length],
     ['script','Kịch bản',b.lines.length],
     ['storyboard','Storyboard',(b.storyboard?.scenes||[]).length],
     ['video','Video',b.media.length],
-    ['log','Nhật ký',(b.activity||[]).length + (b.feedback||[]).length]
+    ['posts','Bài đăng',postsCount||''],
+    ['log','Nhật ký',(b.activity||[]).length+(b.feedback||[]).length+(b.cli_logs||[]).length]
   ];
   $('pv-tabs').innerHTML=tabs.map(([k,l,n])=>`<button class="tab ${k===pvTab?'on':''}" type="button" role="tab" aria-selected="${k===pvTab}" data-tab="${k}">${esc(l)}${n!==''?`<span class="n">${n}</span>`:''}</button>`).join('');
   $('pv-tabs').querySelectorAll('[data-tab]').forEach(t=>t.onclick=()=>{
@@ -1927,34 +2311,59 @@ function renderPv(){
   });
   pauseMedia();
   const body=$('pv-body');
-  const tabFn={sources:tabClaims,script:tabScript,storyboard:tabStoryboard,video:tabVideo,log:tabLog}[pvTab] || tabScript;
-  body.innerHTML=(pvTab==='log'?'':generalRow(dm))+tabFn(b,dm);
+  const tabFn={overview:tabOverview,sources:tabClaims,script:tabScript,storyboard:tabStoryboard,video:tabVideo,posts:tabPosts,log:tabLog}[pvTab]||tabOverview;
+  const hideGeneral=['overview','posts','log'].includes(pvTab);
+  body.innerHTML=(hideGeneral?'':generalRow(dm))+tabFn(b,dm);
   wireComments(body);
   body.querySelectorAll('[data-goto]').forEach(t=>t.onclick=()=>gotoClaim(t.dataset.goto));
-  const studioBtn = body.querySelector('#btn-open-studio');
+  body.querySelectorAll('[data-stage-tab]').forEach(el=>{
+    el.onclick=()=>{pvTab=el.dataset.stageTab; updateChatContext({view:pvTab}); renderPv(); $('pv-scroll').scrollTop=0};
+    el.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault(); el.click();}};
+  });
+  const inResume=body.querySelector('#pv-inline-resume');
+  if(inResume) inResume.onclick=()=>resumeProject(b.slug,inResume);
+  const inRetry=body.querySelector('#pv-inline-retry');
+  if(inRetry) inRetry.onclick=async()=>{
+    try{
+      await postJson(`/api/project/${encodeURIComponent(b.slug)}/retry`,{expected_revision:b.revision});
+      toast('Đã cho phép làm lại bước lỗi.');
+      await refresh();
+      await openProduct(b.slug,pvTab);
+    }catch(e){toast(e.message,true)}
+  };
+  body.querySelectorAll('[data-copy]').forEach(btn=>btn.onclick=()=>copyToClip(btn.dataset.copy));
+  body.querySelectorAll('[data-cancel-job]').forEach(btn=>btn.onclick=async()=>{
+    try{
+      await postJson('/api/jobs/cancel',{job_id:btn.dataset.cancelJob});
+      toast('Đã yêu cầu huỷ tiến trình.');
+      await refresh();
+      await openProduct(b.slug,'log');
+    }catch(e){toast(e.message,true)}
+  });
+  const studioBtn=body.querySelector('#btn-open-studio');
   if(studioBtn){
-    studioBtn.onclick = async () => {
+    studioBtn.onclick=async()=>{
       try{
-        const res = await postJson('/api/studio', {});
-        if(res.url) window.open(res.url, '_blank', 'noopener');
-        toast('Đã bật Remotion Studio: ' + (res.url || ''));
-      }catch(e){toast(e.message, true)}
+        const res=await postJson('/api/studio',{});
+        if(res.url) window.open(res.url,'_blank','noopener');
+        toast('Đã bật Remotion Studio: '+(res.url||''));
+      }catch(e){toast(e.message,true)}
     };
   }
-  body.querySelectorAll('[data-scene]').forEach(chip => {
-    chip.onclick = () => {
-      const start = parseFloat(chip.dataset.start || '0');
-      const vid = $('pv-video');
-      if(vid){ vid.currentTime = start; vid.play().catch(()=>{}); }
-      updateChatContext({scene: chip.dataset.scene, time_s: Math.round(start)});
+  body.querySelectorAll('[data-scene]').forEach(chip=>{
+    chip.onclick=()=>{
+      const start=parseFloat(chip.dataset.start||'0');
+      const vid=$('pv-video');
+      if(vid){vid.currentTime=start; vid.play().catch(()=>{})}
+      updateChatContext({scene:chip.dataset.scene,time_s:Math.round(start)});
     };
   });
-  const vid = $('pv-video');
+  const vid=$('pv-video');
   if(vid){
-    vid.ontimeupdate = () => {
-      const cur = vid.currentTime;
-      const hit = (b.timeline || []).find(s => cur >= s.start_s && cur <= s.end_s);
-      updateChatContext({scene: hit ? hit.scene : chatCtx.scene, time_s: Math.round(cur)});
+    vid.ontimeupdate=()=>{
+      const cur=vid.currentTime;
+      const hit=(b.timeline||[]).find(s=>cur>=s.start_s&&cur<=s.end_s);
+      updateChatContext({scene:hit?hit.scene:chatCtx.scene,time_s:Math.round(cur)});
     };
   }
   $('pv-foot-text').innerHTML=b.gate
@@ -1988,6 +2397,9 @@ function gotoClaim(id){
   el.scrollIntoView({behavior:'smooth',block:'center'});
 }
 $('pv-back').onclick=closeProduct;
+$('pv-folder').onclick=()=>{if(pv) act(`/api/project/${encodeURIComponent(pv.slug)}/folder`)};
+$('pv-retry').onclick=async()=>{if(!pv) return; try{await postJson(`/api/project/${encodeURIComponent(pv.slug)}/retry`,{expected_revision:pv.revision}); toast('Đã cho phép làm lại bước lỗi.'); await refresh(); await openProduct(pv.slug,pvTab)}catch(e){toast(e.message,true)}};
+$('pv-delete').onclick=()=>{if(pv) openDeleteModal(pv.slug,pv.title)};
 $('pv-packet').onclick=async()=>{if(!pv) return; try{toast(await post(`/api/project/${encodeURIComponent(pv.slug)}/packet`))}catch(e){toast(e.message,true)}};
 $('pv-general').onclick=()=>{const p=$('chat-panel'); if(p) p.classList.add('open'); if(pv) updateChatContext({slug: pv.slug, revision: pv.revision, view: pvTab}); const inp=$('chat-input'); if(inp){inp.placeholder='Góp ý sửa sản phẩm này hoặc góp ý chung cho xưởng…'; inp.focus();}};
 $('pv-decide').onclick=()=>{if(pv) openReview(pv.slug)};
@@ -2225,7 +2637,7 @@ const WS_LINE_2 = [
   {id:'copywriter', num:'14', short:'Đóng gói & Bài đăng'},
   {id:'shorts_producer', num:'15', short:'Shorts & Reels'},
 ];
-const WS_COUNTER_BASE = ['coordinator', 'coordinator_senior', 'feedback_analyst'];
+const WS_COUNTER_BASE = ['coordinator', 'coordinator_senior', 'feedback_analyst', 'repair_engineer'];
 const WS_SHIRTS = {
   researcher:'#38bdf8', scout:'#38bdf8', medical_expert:'#f8fafc', writer:'#2dd4bf',
   storyboard_director:'#a78bfa', voice_director:'#f472b6', script_critic:'#a78bfa',
@@ -3366,6 +3778,17 @@ window.addEventListener('resize', () => {
 initWorkshopControls();
 initCompanyControls();
 renderWorkshop();
+function showHomeView(){
+  const links = [...document.querySelectorAll('[data-home-tab]')];
+  const active = links.find(link => link.hash === window.location.hash)?.dataset.homeTab || 'home';
+  for(const link of links){
+    if(link.dataset.homeTab === active) link.setAttribute('aria-current','page');
+    else link.removeAttribute('aria-current');
+  }
+  document.querySelectorAll('[data-home-view]').forEach(el => { el.hidden = el.dataset.homeView !== active; });
+}
+window.addEventListener('hashchange', showHomeView);
+showHomeView();
 refresh(); loadChat(); setInterval(refresh,3000);
 </script>
 <script>
@@ -3383,7 +3806,30 @@ async function opsLoadProjects(){
 }
 async function opsQueue(){
   const d=await opsGet('/api/topics');
-  $('ops-topic-list').innerHTML=d.entries.length?d.entries.map(e=>`<div><b>${esc(e.title)}</b><div class="sub">${esc(e.slug)} · ${esc(e.question)}</div></div>`).join(''):'<p class="sub">Hàng đợi trống.</p>';
+  const box=$('ops-topic-list');
+  box.innerHTML=d.entries.length?d.entries.map(e=>`<div class="ops-row">
+    <div><b>${esc(e.title)}</b><div class="sub">${esc(e.slug)} · ${esc(e.question)}</div></div>
+    <button type="button" class="btn danger" data-qdel="${esc(e.slug)}" data-qtitle="${esc(e.title)}">Xoá</button>
+  </div>`).join(''):'<p class="sub">Hàng đợi trống.</p>';
+  box.querySelectorAll('[data-qdel]').forEach(btn=>btn.onclick=()=>openDeleteModal(btn.dataset.qdel, btn.dataset.qtitle));
+}
+async function opsDeleted(){
+  const d=await opsGet('/api/projects/deleted');
+  const items=d.items||[];
+  const box=$('ops-deleted-list');
+  if(!box) return;
+  box.innerHTML=items.length?items.map(it=>`<div class="ops-row">
+    <div><b>${esc(it.title||it.slug)}</b><div class="sub">${esc(it.slug)}${it.deleted_at?' · xoá lúc '+esc(it.deleted_at.slice(0,16).replace('T',' ')):''}${it.reason?' · '+esc(it.reason):''}</div></div>
+    <button type="button" class="btn primary" data-restore-id="${esc(it.id)}">Khôi phục</button>
+  </div>`).join(''):'<p class="sub">Chưa có dự án nào được xoá.</p>';
+  box.querySelectorAll('[data-restore-id]').forEach(btn=>btn.onclick=async()=>{
+    btn.disabled=true;
+    try{
+      const res=await postJson('/api/projects/restore',{id:btn.dataset.restoreId});
+      toast(`Đã khôi phục ${res.slug||'dự án'} (ở trạng thái Tạm dừng).`);
+      await Promise.all([opsDeleted(),opsQueue(),opsLoadProjects(),refresh()]);
+    }catch(ex){toast(ex.message,true); btn.disabled=false}
+  });
 }
 async function opsPreview(){
   opsCurrent=null; const slug=$('ops-project').value;
@@ -3398,9 +3844,9 @@ $('ops-tabs').querySelectorAll('[data-ops-tab]').forEach(button=>button.onclick=
   $('ops-queue').hidden=opsTab!=='queue';
   $('ops-library').hidden=opsTab!=='library';
   $('ops-tabs').querySelectorAll('button').forEach(b=>{b.classList.toggle('primary',b===button);b.setAttribute('aria-pressed',String(b===button))});
-  try{await opsLoadProjects();if(opsTab==='queue'){await opsQueue();await opsPreview()}if(opsTab==='library')await libLoad()}catch(e){toast(e.message,true)}
+  try{await opsLoadProjects();if(opsTab==='queue'){await opsQueue();await opsDeleted();await opsPreview()}if(opsTab==='library')await libLoad()}catch(e){toast(e.message,true)}
 });
-$('ops-topic').onsubmit=async e=>{e.preventDefault();try{await post('/api/topics/add',Object.fromEntries(new FormData(e.target)));e.target.reset();await opsQueue();toast('Đã thêm chủ đề vào hàng đợi.')}catch(ex){toast(ex.message,true)}};
+$('ops-topic').onsubmit=async e=>{e.preventDefault();try{await post('/api/topics/add',Object.fromEntries(new FormData(e.target)));e.target.reset();await opsQueue();await refresh();toast('Đã thêm chủ đề vào hàng đợi.')}catch(ex){toast(ex.message,true)}};
 $('ops-project').onchange=()=>{ $('ops-reopen').hidden=true;opsPreview().catch(e=>toast(e.message,true))};
 $('ops-retry').onclick=async()=>{if(!opsCurrent)return;const d=opsCurrent;if(!confirm(`Thử lại bước ${d.next_step||'—'}? Tối đa ${d.cache.max_requests} yêu cầu TTS cho một lượt; cache chưa kiểm hash/giọng/provider.`))return;try{await post(`/api/project/${encodeURIComponent(d.slug)}/retry`,{expected_revision:d.revision});await opsPreview();toast('Đã cho phép thử lại. Bật xưởng khi sẵn sàng.')}catch(e){toast(e.message,true)}};
 const REOPENABLE=['medically_approved','production_in_progress','needs_production_revision'];

@@ -115,7 +115,13 @@ def test_duyet_reject_default_resume_medical(operator):
 
 
 def test_duyet_reject_video_semantic_uses_reason_code(operator):
+    from tests.helpers import write_critic_review_fixture
+
     path = operator[1] / 'project.yaml'
+    rev = operator[1] / 'revisions/001'
+    (rev / 'renders').mkdir(parents=True, exist_ok=True)
+    (rev / 'renders/render-manifest.json').write_text('{"render": 1}', encoding='utf-8')
+    write_critic_review_fixture(operator[1], product=True)
     data = read_yaml(path)
     data['state'] = 'awaiting_video_review'
     write_yaml_atomic(path, data)
@@ -129,8 +135,8 @@ def test_duyet_reject_video_semantic_uses_reason_code(operator):
 
 
 def test_semantic_rejection_creates_revision_and_can_be_approved_again(operator, monkeypatch):
-    from healthvideo.workflows.draft import submit_medical_review
     from healthvideo.workflows.factory_deps import reject_note
+    from tests.helpers import submit_medical_review_fixture
     from tests.workflows.test_package import _v2_awaiting_video_review_project
 
     project = _v2_awaiting_video_review_project(operator[0] / 'projects')
@@ -150,7 +156,7 @@ def test_semantic_rejection_creates_revision_and_can_be_approved_again(operator,
             for entry in data[key]:
                 entry['revision'] = '002'
             write_yaml_atomic(asset_path, data)
-        submit_medical_review(project)
+        submit_medical_review_fixture(project)
         return RunReport(at_gate=[project.name])
     monkeypatch.setattr(factory, 'run_queue', run)
     factory.run_factory(operator[0], object(), once=True, notify=lambda *a: None)

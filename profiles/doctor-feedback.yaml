@@ -449,3 +449,36 @@ entries:
   reviewer: Tu
   text: Bước sản xuất video gặp lỗi.
   items: []
+- at: '2026-11-15T17:15:48+07:00'
+  slug: an-gao-lut-muoi-me-de-bo-doi-ung-thu-tu-chua-lanh-hay-tu-day
+  gate: medical
+  revision: '001'
+  kind: reject
+  reviewer: Tu
+  text: 'sửa lại theo :: Biên tập viên · lần chấm 2 · Chưa đạt'
+  items: []
+- at: '2026-11-15T17:17:24+07:00'
+  slug: men-gan-tang-va-thuoc-bo-gan
+  gate: medical
+  revision: '001'
+  kind: reject
+  reviewer: Tu
+  text: sửa lại đến khi đạt :Biên tập viên · lần chấm 2 · Chưa đạt
+  items: []
+- at: '2026-11-15T17:40:31+07:00'
+  slug: thay-men-gan-tang-lien-voi-mua-thuoc-bo-gan-mat-gan-uong-coi
+  gate: medical
+  revision: '001'
+  kind: approve_note
+  reviewer: Tu
+  text: Anh Tu Vuong Dinh
+  items: []
+- at: '2026-11-16T08:30:43+00:00'
+  slug: thay-men-gan-tang-lien-voi-mua-thuoc-bo-gan-mat-gan-uong-coi
+  gate: medical
+  revision: '001'
+  kind: reopen
+  reviewer: Codex theo yêu cầu bác sĩ trong chat
+  text: 'PYH-003: sửa minh họa S06, S31, S34; đổi bố cục các cảnh lặp, bỏ mã nguồn
+    nội bộ trên bản xem, sửa vùng phụ đề; giữ lời và dữ kiện y khoa.'
+  items: []

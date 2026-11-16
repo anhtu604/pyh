@@ -55,6 +55,22 @@ def test_status_reports_gate_stage_and_agents(server):
     assert data['stages'][item['stage']] == 'Duyệt y khoa'
 
 
+def test_project_code_is_consistent_in_status_overview_and_detail(server):
+    srv, project, _ = server
+    before = (project / 'project.yaml').read_bytes()
+    codes = []
+    for route, collection in [('/api/status', 'projects'), ('/api/overview', 'projects'),
+                              (f'/api/project/{project.name}/bundle', None)]:
+        status, body = request(srv, 'GET', route)
+        assert status == 200
+        payload = json.loads(body)
+        item = next(p for p in payload[collection] if p['slug'] == project.name) if collection else payload
+        codes.append(item['code'])
+        assert item['slug'] == project.name
+    assert codes == ['PYH-001'] * 3
+    assert (project / 'project.yaml').read_bytes() == before
+
+
 def test_index_embeds_token(server):
     srv, _, _ = server
     status, body = request(srv, 'GET', '/')
@@ -661,6 +677,18 @@ def test_general_feedback_routes_to_chat_input():
 
 def test_studio_route_launches_once_and_logs(tmp_path, monkeypatch):
     calls = []
+    checks = []
+
+    def ready(url, **kwargs):
+        from contextlib import nullcontext
+        from types import SimpleNamespace
+
+        checks.append(url)
+        if len(checks) == 1:
+            raise OSError('Connection refused during startup')
+        return nullcontext(SimpleNamespace(status=200))
+
+    monkeypatch.setattr(dashboard, 'urlopen', ready)
 
     class FakeProc:
         def poll(self):
@@ -682,6 +710,7 @@ def test_studio_route_launches_once_and_logs(tmp_path, monkeypatch):
         assert status2 == 200
         assert data2['url'] == data['url']
         assert len(calls) == 1
+        assert len(checks) >= 3
 
     _with_server(tmp_path, check)
 
@@ -747,9 +776,10 @@ def test_company_route_returns_all_roles_recent_five_and_drops_dead_pid(tmp_path
         expected_roles = {
             'scout', 'medical_expert', 'writer', 'script_critic', 'art_director',
             'editor', 'product_critic', 'copywriter', 'coordinator',
-            'coordinator_senior', 'feedback_analyst',
+            'coordinator_senior', 'feedback_analyst', 'repair_engineer',
         }
         assert expected_roles <= set(by_id)
+        assert len(by_id) == 16
         assert by_id['writer']['running'] == []
         assert by_id['writer']['last_error'] is False
         assert len(by_id['copywriter']['running']) == 1
@@ -1075,6 +1105,24 @@ def test_html_includes_workshop_3d_and_preserves_section_order():
         assert action_cls in html
     assert html.count('https://fonts.googleapis.com') <= 2
     assert 'cdn.' not in html.lower() and 'unpkg' not in html.lower() and 'jsdelivr' not in html.lower()
+
+
+def test_html_workshop_places_all_16_roles_including_repair_engineer():
+    import re
+
+    from healthvideo.company import load_company
+
+    html = dashboard.HTML_PATH.read_text(encoding='utf-8')
+    counter_match = re.search(r"const WS_COUNTER_BASE = \[([^\]]+)\];", html)
+    assert counter_match is not None
+    counter_ids = re.findall(r"'([^']+)'", counter_match.group(1))
+    assert counter_ids == ['coordinator', 'coordinator_senior', 'feedback_analyst', 'repair_engineer']
+
+    workshop_slice = html[html.index('const WS_LINE_1 ='):html.index('const WS_SHIRTS =')]
+    company = load_company()
+    assert len(company.roles) == 16
+    for role_id in company.roles:
+        assert f"'{role_id}'" in workshop_slice, role_id
 
 
 def test_marker_non_string_job_id_is_rejected(tmp_path, monkeypatch):
@@ -1463,3 +1511,151 @@ def test_company_20_routes_research_channel_and_cancel_job(tmp_path, monkeypatch
         if proc.poll() is None:
             proc.kill()
             proc.wait(timeout=5)
+
+
+def test_review_bundle_and_overview_include_rich_inspector_fields(tmp_path):
+    from healthvideo.storage.files import write_yaml_atomic
+
+    project = _create_named_v2_project(tmp_path / 'projects', 'rich-topic', 'awaiting_video_review')
+    rev = project / 'revisions/001'
+    (rev / 'evidence/expert-brief.md').write_text('# Tom tat chuyen gia\nKhong dung thuoc tuy tien.', encoding='utf-8')
+    write_yaml_atomic(rev / 'evidence/question.yaml', {
+        'patient_population': 'Nguoi truong thanh',
+        'intervention': 'Thuoc bo gan',
+        'comparison': 'Khong dung',
+        'outcome': 'An toan gan',
+    })
+    write_yaml_atomic(rev / 'script/voice-prep.yaml', {
+        'pronunciations': [{'written': 'AST', 'spoken': 'a-es-te', 'note': 'Doc cham'}],
+    })
+    write_yaml_atomic(rev / 'posts/posts.yaml', {
+        'youtube_titles': ['Tieu de thu nghiem'],
+        'youtube_description': 'Mo ta ngan',
+        'youtube_tags': ['gan', 'suc khoe'],
+    })
+    write_yaml_atomic(rev / 'posts/shorts-plan.yaml', {
+        'clips': [{'id': 'clip-1', 'title': 'Hook ngan', 'start_scene_id': 's1', 'end_scene_id': 's2', 'target_seconds': 45}],
+    })
+    (rev / 'reviews/pronunciation-qa.json').write_text(json.dumps({
+        'status': 'flagged',
+        'blocked': True,
+        'note': 'Can nghe lai',
+        'model_id': 'whisper-test',
+        'lines': [{'id': 'L01'}],
+        'flags': [{'line': 'L01', 'script_word': 'ALT', 'heard': 'an-te'}],
+    }), encoding='utf-8')
+    logs_dir = tmp_path / 'topics' / 'logs' / 'rich-topic'
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    write_yaml_atomic(logs_dir / 'paused.yaml', {'reason': 'Tam dung kiem tra'})
+    (logs_dir / 'writer.log').write_text('dong 1\ndong 2\n', encoding='utf-8')
+
+    def check(srv):
+        st_ov, raw_ov = request(srv, 'GET', '/api/overview')
+        assert st_ov == 200
+        ov = json.loads(raw_ov)
+        card = next(p for p in ov['projects'] if p['slug'] == 'rich-topic')
+        assert card['paused'] is True
+        assert card['counts']['has_brief'] is True
+        assert card['counts']['has_posts'] is True
+        assert card['counts']['claims'] >= 1
+
+        st_b, raw_b = request(srv, 'GET', '/api/project/rich-topic/bundle')
+        assert st_b == 200
+        bundle = json.loads(raw_b)
+        assert bundle['paused'] is True
+        assert 'Tom tat chuyen gia' in bundle['expert_brief_md']
+        assert bundle['research_meta']['question']['intervention'] == 'Thuoc bo gan'
+        assert bundle['voice_prep']['pronunciations'][0]['written'] == 'AST'
+        assert bundle['posts']['youtube_titles'] == ['Tieu de thu nghiem']
+        assert bundle['shorts_plan']['clips'][0]['id'] == 'clip-1'
+        assert bundle['qa_detail']['pronunciation_qa']['blocked'] is True
+        assert bundle['qa_detail']['pronunciation_qa']['flagged'][0]['script_word'] == 'ALT'
+        assert len(bundle['cli_logs']) == 1
+        assert 'dong 2' in bundle['cli_logs'][0]['tail']
+
+    _with_server(tmp_path, check)
+
+
+def test_project_pause_resume_delete_and_restore_http_lifecycle(tmp_path):
+    from datetime import date
+
+    from healthvideo.domain.queue import QueueEntry
+    from healthvideo.storage.queue import add_to_queue, load_queue
+
+    add_to_queue(tmp_path, QueueEntry(
+        slug='dup-topic',
+        title='Chu de trung lap',
+        question='Cau hoi thu nghiem trung lap?',
+        added=date(2026, 11, 15),
+    ))
+    project = _create_named_v2_project(tmp_path / 'projects', 'dup-topic', 'draft_ready')
+
+    def check(srv):
+        assert request(srv, 'POST', '/api/project/dup-topic/pause')[0] == 403
+        assert request(srv, 'POST', '/api/project/dup-topic/delete')[0] == 403
+        assert post_json(srv, '/api/project/khong-ton-tai/pause', {})[0] == 404
+        assert post_json(srv, '/api/project/khong-ton-tai/delete', {'confirmed': True})[0] == 404
+        assert post_json(srv, '/api/project/dup-topic/delete', {'confirmed': False})[0] == 400
+
+        st_pause, res_pause = post_json(srv, '/api/project/dup-topic/pause', {'reason': 'Cho kiem tra'})
+        assert st_pause == 200
+        assert res_pause['paused'] is True
+        paused_file = tmp_path / 'topics/logs/dup-topic/paused.yaml'
+        assert paused_file.is_file()
+
+        st_resume, res_resume = post_json(srv, '/api/project/dup-topic/resume', {})
+        assert st_resume == 200
+        assert res_resume['paused'] is False
+        assert not paused_file.exists()
+
+        st_del, res_del = post_json(srv, '/api/project/dup-topic/delete', {
+            'confirmed': True,
+            'reason': 'Trung chu de',
+        })
+        assert st_del == 200
+        assert res_del['deleted'] is True
+        assert res_del['removed_from_queue'] is True
+        assert not project.exists()
+        assert load_queue(tmp_path) == []
+
+        st_list, raw_list = request(srv, 'GET', '/api/projects/deleted')
+        assert st_list == 200
+        deleted_items = json.loads(raw_list)['items']
+        assert len(deleted_items) == 1
+        assert deleted_items[0]['id'] == res_del['archive_id']
+        assert deleted_items[0]['slug'] == 'dup-topic'
+
+        st_rest, res_rest = post_json(srv, '/api/projects/restore', {'id': res_del['archive_id']})
+        assert st_rest == 200
+        assert res_rest['paused'] is True
+        assert res_rest['queue_added'] is True
+        assert project.is_dir()
+        assert paused_file.is_file()
+        assert [e.slug for e in load_queue(tmp_path)] == ['dup-topic']
+
+    _with_server(tmp_path, check)
+
+
+def test_dashboard_html_contains_lifecycle_and_seven_tabs(server):
+    srv, _, _ = server
+    status, body = request(srv, 'GET', '/')
+    assert status == 200
+    lowered = body.lower()
+    for bad in ('cdn.', 'unpkg', 'jsdelivr'):
+        assert bad not in lowered
+    for marker in (
+        'id="del-dlg"',
+        'id="ops-deleted-list"',
+        'id="pv-pause"',
+        'id="pv-retry"',
+        'id="pv-folder"',
+        'id="pv-delete"',
+        'Tổng quan',
+        'Nguồn',
+        'Kịch bản',
+        'Storyboard',
+        'Video',
+        'Bài đăng',
+        'Nhật ký',
+    ):
+        assert marker in body

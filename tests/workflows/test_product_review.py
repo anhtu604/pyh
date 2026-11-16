@@ -69,15 +69,16 @@ def test_failed_fixable_review_asks_for_fix_then_new_render_is_reviewed(tmp_path
     assert pr.next_product_action(project) == 'submit_video'
 
 
-def test_unchanged_render_after_fix_or_unfixable_faults_go_to_doctor(tmp_path):
+def test_unchanged_render_after_fix_requires_review_and_unfixable_faults_stay_held(tmp_path):
     project = _project(tmp_path)
     _review(project, 5)
     pr.mark_fix_attempted(project)
-    assert pr.next_product_action(project) == 'submit_video'
+    assert pr.next_product_action(project) == 'product_review'
 
     other = _project(tmp_path / 'b')
     _review(other, 5, fixable=False)
-    assert pr.next_product_action(other) == 'submit_video'
+    with pytest.raises(ValueError, match='Trạm 12 chưa đạt'):
+        pr.next_product_action(other)
     assert 'cần bác sĩ mở cổng y khoa' in pr.review_view(other / REV)['issues'][0]['fix']
 
 
@@ -86,7 +87,8 @@ def test_rounds_are_bounded_and_reset_after_submission(tmp_path):
     for version in range(pr.MAX_REVIEWS):
         _render(project, version + 10)
         _review(project, 5)
-    assert pr.next_product_action(project) == 'submit_video'
+    with pytest.raises(ValueError, match='Trạm 12 chưa đạt'):
+        pr.next_product_action(project)
     pr.mark_submitted(project / REV)
     assert not pr.pending(project)
     _render(project, 99)
@@ -102,7 +104,8 @@ def test_excess_decisions_recheck_after_unchanged_fix_and_stay_bounded(tmp_path)
     for attempt in range(pr.MAX_REVIEWS):
         _review(project, 8, decisions=decisions)
         if attempt == pr.MAX_REVIEWS - 1:
-            assert pr.next_product_action(project) == 'submit_video'
+            with pytest.raises(ValueError, match='Trạm 12 chưa đạt'):
+                pr.next_product_action(project)
         else:
             assert pr.next_product_action(project) == 'revise_product'
             pr.mark_fix_attempted(project)
@@ -170,7 +173,7 @@ def test_run_reviews_fixes_rerenders_then_submits_without_approving(tmp_path):
         del cwd
         log_dir.mkdir(parents=True, exist_ok=True)
         reviewing = '(`product_review`)' in prompt
-        calls.append((agents[0].cli, 'review' if reviewing else 'fix'))
+        calls.append((agents[0].model, 'review' if reviewing else 'fix'))
         if reviewing:
             _report(project, 6 if len(calls) == 1 else 8)
         else:
@@ -181,7 +184,7 @@ def test_run_reviews_fixes_rerenders_then_submits_without_approving(tmp_path):
     report = run_queue(tmp_path, _deps(project, state, invoke))
 
     # product_critic starts on claude, the editor who fixes the cut on agy.
-    assert calls == [('claude', 'review'), ('agy', 'fix'), ('claude', 'review')]
+    assert calls == [('codex/gpt-6.1-terra', 'review'), ('codex/gpt-6.1-sol', 'fix'), ('codex/gpt-6.1-terra', 'review')]
     assert state['renders'] == 2
     assert state['value'] == WorkflowState.AWAITING_VIDEO_REVIEW
     assert report.at_gate == [SLUG]
@@ -227,6 +230,9 @@ def test_submit_video_moves_held_render_to_the_doctor_gate(tmp_path):
     write_yaml_atomic(project / 'project.yaml', manifest.model_dump(mode='json'))
     _render(project, 1)
 
+    with pytest.raises(ValueError, match='Trạm 12 chưa có'):
+        submit_video(project)
+    _review(project, 8)
     submit_video(project)
 
     assert read_yaml(project / 'project.yaml')['state'] == 'awaiting_video_review'

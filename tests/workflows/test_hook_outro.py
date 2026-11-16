@@ -120,6 +120,9 @@ def test_declared_logo_unblocks_medical_review(project: Path) -> None:
     assert create_brand_logo_asset(
         project, scene_id="OUTRO", asset_name="pyh-logo", variant=LogoVariant.MONOGRAM
     ) == path
+    from tests.helpers import write_critic_review_fixture
+
+    write_critic_review_fixture(project)
     approve_gate(project, GateKind.MEDICAL, reviewer="doctor", now=datetime.now(UTC))
     assert (project / "revisions/001/reviews/medical-approval.yaml").is_file()
     assert "asset:assets/pyh-logo.svg" in medical_reviewed_paths(project / "revisions/001")

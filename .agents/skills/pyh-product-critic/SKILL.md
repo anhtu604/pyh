@@ -6,6 +6,7 @@ description: Use when PYH product_review independently evaluates the final video
 # Kiểm định sản phẩm xưởng PYH
 
 ## Đầu vào
+- Tự thực hiện lượt kiểm định, chờ các lệnh hoàn tất trước khi ghi báo cáo. Không mở tác vụ nền hay giao agent con cho bước này.
 - Đọc prompt `product_review.md`, lấy `active_revision` từ `{project}/project.yaml`.
   Mọi sản phẩm dưới đây thuộc `revisions/<rev>/`.
 - Chạy `healthvideo step review-frames {project} --every 4` theo prompt;

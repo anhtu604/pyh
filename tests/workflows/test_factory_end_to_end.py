@@ -89,6 +89,9 @@ def test_legacy_project_reads_accepted_standards_without_mutation(
             if path.is_file()
         }
 
+    # Codes are allocated once and persisted; allocate before the snapshot.
+    from healthvideo.project_codes import project_codes
+    project_codes(tmp_path)
     before_bytes = _snapshot_production_bytes()
 
     write_yaml_atomic(

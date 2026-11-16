@@ -6,7 +6,12 @@ from pydantic import ValidationError
 
 from healthvideo.domain.queue import QueueEntry, QueueError
 from healthvideo.storage.files import read_yaml
-from healthvideo.storage.queue import add_to_queue, load_queue, queue_path
+from healthvideo.storage.queue import (
+    add_to_queue,
+    load_queue,
+    queue_path,
+    remove_from_queue,
+)
 
 
 def test_add_then_load_roundtrip(tmp_path: Path) -> None:
@@ -111,3 +116,30 @@ def test_order_preserved(tmp_path: Path) -> None:
         "chu-de-hai",
         "chu-de-ba",
     ]
+
+
+def test_remove_from_queue_missing_file_and_unknown_slug(tmp_path: Path) -> None:
+    assert remove_from_queue(tmp_path, "khong-ton-tai") is None
+
+    first = QueueEntry(
+        slug="chu-de-mot",
+        title="Chủ đề 1",
+        question="Câu hỏi 1 là gì?",
+        added=date(2026, 10, 20),
+    )
+    second = QueueEntry(
+        slug="chu-de-hai",
+        title="Chủ đề 2",
+        question="Câu hỏi 2 là gì?",
+        added=date(2026, 10, 21),
+    )
+    add_to_queue(tmp_path, first)
+    add_to_queue(tmp_path, second)
+
+    assert remove_from_queue(tmp_path, "khong-co") is None
+    assert [item.slug for item in load_queue(tmp_path)] == ["chu-de-mot", "chu-de-hai"]
+
+    removed = remove_from_queue(tmp_path, "chu-de-mot")
+    assert removed == first
+    assert [item.slug for item in load_queue(tmp_path)] == ["chu-de-hai"]
+    assert read_yaml(queue_path(tmp_path))["version"] == 1

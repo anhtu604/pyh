@@ -1,0 +1,4 @@
+# Khóa riêng nằm ngoài repository; không chép token tài khoản provider vào xưởng.
+enabled: true
+base_url: http://127.0.0.1:20128/v1
+key_file: ~/.codex/pyh/omniroute-key

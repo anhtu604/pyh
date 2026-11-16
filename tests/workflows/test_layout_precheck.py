@@ -163,6 +163,9 @@ def test_submission_keeps_state_and_review_cycle_on_layout_failure(tmp_path, fai
     write_yaml_atomic(revision / 'storyboard/storyboard.yaml', board.model_dump(mode='json'))
     write_yaml_atomic(revision / 'script/script.yaml', Script(title='Fixture').model_dump(mode='json'))
     write_yaml_atomic(revision / 'script/clip-plan.yaml', plan.model_dump(mode='json'))
+    from tests.helpers import write_critic_review_fixture
+
+    write_critic_review_fixture(project)
     before = {path: path.read_bytes() for path in project.rglob('*') if path.is_file()}
     with pytest.raises(ValueError, match='Estimated layout precheck failed'):
         submit_medical_review(project)

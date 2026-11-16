@@ -8,6 +8,7 @@ Bạn là người duyệt sản phẩm độc lập của kênh. Bản dựng c
 - Ghi chú bác sĩ: `{doctor_note}`
 
 ## Việc cần làm
+Thực hiện trực tiếp trong lượt này, không giao agent con hoặc để tác vụ nền tiếp tục sau khi kết thúc. Chờ lệnh lấy contact sheet hoàn tất, rồi xem ảnh và ghi báo cáo. Nếu lệnh thất bại, ghi nguyên nhân và phần chưa kiểm; không khởi động nhiều lượt lấy khung cùng lúc.
 1. Đọc `active_revision` trong `{project}/project.yaml`; `<rev>` là giá trị đó. Mọi file dưới đây nằm trong `{project}/revisions/<rev>/`.
 2. Chạy `healthvideo step review-frames {project} --every 4` để lấy contact sheet của video cuối. Lệnh in ra thư mục kết quả; đọc `index.json` trong đó rồi dùng công cụ xem ảnh mở TỪNG contact sheet. Không đoán nội dung hình từ tên file hay prompt.
 3. Đối chiếu với `script/script.yaml`, `storyboard/storyboard.yaml`, `renders/scene-timing.json` (cảnh nào đọc câu nào, dài bao lâu) và `reviews/video-qa.json`.

@@ -1,4 +1,7 @@
 import json
+import re
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -101,10 +104,51 @@ def fake_runner(calls):
         if argv[0] == "pnpm":
             Path(argv[argv.index("--output") + 1]).write_bytes(b"draft")
         else:
-            Image.new("RGB", (54, 96), "red").save(argv[-1])
+            selection = Path(argv[argv.index('-filter_script:v') + 1]).read_text()
+            for index, _ in enumerate(re.findall(r'eq\(n\\,\d+\)', selection)):
+                Image.new("RGB", (54, 96), "red").save(argv[-1] % index)
         return 0
 
     return run
+
+
+@pytest.mark.skipif(shutil.which('ffmpeg') is None, reason='FFmpeg unavailable')
+@pytest.mark.parametrize('dense', [False, True])
+def test_batch_extraction_matches_individual_video_frames(tmp_path, monkeypatch, dense):
+    project, renders, _ = setup_project(tmp_path, video=True)
+    video = renders / 'video.mp4'
+    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 'lavfi', '-i',
+                    'testsrc2=size=64x64:rate=30:duration=6', '-c:v', 'libx264', str(video)],
+                   check=True, capture_output=True)
+    expected = []
+    for frame in (9, 99):
+        image = tmp_path / f'expected-{frame}.png'
+        subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', str(video),
+                        '-vf', f'select=eq(n\\,{frame})', '-frames:v', '1', str(image)],
+                       check=True, capture_output=True)
+        with Image.open(image) as decoded:
+            expected.append(decoded.tobytes())
+    observed = []
+    tile = frames.tile_frames
+
+    def capture(samples, images, *args):
+        if not observed:
+            for image in images:
+                with Image.open(image) as decoded:
+                    observed.append(decoded.tobytes())
+        return tile(samples, images, *args)
+
+    monkeypatch.setattr(frames, 'tile_frames', capture)
+    calls = []
+
+    def run(argv):
+        calls.append(argv)
+        return subprocess.run(argv, capture_output=True, check=False).returncode
+
+    frames.review_frames(project, runner=run, every=1 / 30 if dense else None)
+    assert ([observed[9], observed[99]] if dense else observed) == expected
+    assert len(observed) == (180 if dense else 2)
+    assert len(calls) == 1
 
 
 def test_scene_samples_clamp_offset_and_dense_range():
@@ -175,7 +219,8 @@ def test_workflow_uses_active_input_fake_runner_and_preserves_state(
         assert render_calls[0][render_calls[0].index("--public-dir") + 1] == str(
             renders.resolve()
         )
-    assert "select=eq(n\\,9)" in calls[-2]
+    assert len([call for call in calls if call[0] == 'ffmpeg']) == 1
+    assert '-filter_script:v' in calls[-1]
 
 
 def test_cli_dense_sampling_and_invalid_clip(tmp_path, monkeypatch):

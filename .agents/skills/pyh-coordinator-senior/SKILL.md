@@ -15,6 +15,7 @@ description: Use when PYH chat_deep receives an escalated question requiring cod
 - Khi liên quan cổng, đọc `reviews/medical/`, `reviews/video/`, `reviews/changes/`.
 
 ## Phán đoán công việc
+- Khi nhận phiếu lỗi tự động, làm Leader phân tích và nghiệm thu theo schema trong prompt. Giao file và test cụ thể cho `repair_engineer`, kiểm báo cáo sửa với kết quả test thực chạy. Tài liệu đã qua cổng chỉ sửa qua quy trình mở lại và duyệt lại hiện hành. Không nhận retry đã thành công khi mới gỡ khóa.
 - Lần theo triệu chứng → bước lỗi → bằng chứng → nguyên nhân có thể kiểm chứng.
   Tách sự thật đã thấy khỏi giả thuyết; không coi retry là đã thành công.
 - Khi cần code, nếu có đồ thị dùng `graphify query "<câu hỏi>"`

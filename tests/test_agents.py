@@ -34,6 +34,26 @@ def isolated_executables(monkeypatch):
     monkeypatch.setattr('healthvideo.process.shutil.which', lambda command: None)
 
 
+def test_quota_reason_uses_latest_diagnostic_after_echoed_instructions():
+    from healthvideo.agents import _quota_reason
+
+    diagnostic = "You've hit your weekly limit · resets 5pm (Asia/Ho_Chi_Minh)"
+    assert _quota_reason('Giữ fallback khi hết quota.\n' + diagnostic) == diagnostic
+
+
+@pytest.mark.parametrize(('step', 'seconds'), [('coordinator', 120), ('coordinator_senior', 300)])
+def test_coordinator_invocations_use_their_role_deadline(tmp_path, step, seconds):
+    observed = []
+
+    def runner(argv, **kwargs):
+        observed.append(kwargs['timeout'])
+        return _completed()
+
+    invoke_with_failover([CODEX_SLOT], 'fixture', cwd=tmp_path, log_dir=tmp_path / 'logs',
+                         role=step, slug='chung', step=step, runner=runner, now=lambda: NOW)
+    assert observed == [seconds]
+
+
 def _failover(tmp_path: Path, slots: Any, runner: Any, **kwargs: Any):
     return invoke_with_failover(
         slots,
@@ -98,6 +118,30 @@ def test_running_marker_keeps_legacy_lines_and_adds_identity(tmp_path):
         return _completed()
 
     assert _failover(tmp_path, [CODEX_SLOT], runner).ok
+
+
+@pytest.mark.parametrize('locked_attempts', [2, 5])
+def test_windows_marker_lock_does_not_discard_agent_output(tmp_path, monkeypatch, locked_attempts):
+    original_unlink = Path.unlink
+    attempts = 0
+
+    def unlink(path, *args, **kwargs):
+        nonlocal attempts
+        if path.name == '.agent-running':
+            attempts += 1
+            if attempts <= locked_attempts:
+                error = PermissionError('sharing violation')
+                error.winerror = 32
+                raise error
+        return original_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'unlink', unlink)
+    monkeypatch.setattr('healthvideo.agents.sleep', lambda _: None)
+    result = _failover(tmp_path, [CODEX_SLOT], lambda *args, **kwargs: _completed(stdout='review saved'))
+    assert result.ok
+    assert result.log_path.read_text(encoding='utf-8') == 'review saved'
+    assert attempts == min(locked_attempts + 1, 5)
+    assert (tmp_path / 'logs/.agent-running').exists() == (locked_attempts == 5)
 
 
 def test_interrupt_still_emits_terminal_activity_and_propagates(tmp_path):
@@ -362,18 +406,45 @@ def test_claude_runs_with_a_tool_allowlist_not_a_permission_bypass():
 def test_factory_uses_moderate_models_and_critics_away_from_the_author():
     from healthvideo.workflows.factory_deps import default_run_deps
     company = default_run_deps(Path('.')).company
-    for role in ('coordinator', 'researcher', 'medical_expert', 'script_critic', 'art_director', 'editor', 'shorts_producer'):
-        assert company.chain(role)[0].model == 'gemini-4-carbon-medium', role
-    for step in ('draft', 'revise_medical', 'storyboard_design', 'chat_deep'):
-        assert company.chain(company.role_for_step(step).id)[0].model == 'gpt-6.1-sol', step
-    for role in ('scout', 'voice_director', 'copywriter', 'feedback_analyst'):
-        assert company.chain(role)[0].model == 'gemini-4-hydrogen-medium', role
+    for role in company.roles:
+        assert company.chain(role)[0].cli == 'omniroute', role
+    for step in ('draft', 'revise_medical', 'storyboard_design', 'chat_deep', 'repair'):
+        assert company.chain(company.role_for_step(step).id)[0].model_identity == ('codex', 'gpt-6.1-sol'), step
+    for role in ('coordinator', 'scout', 'copywriter', 'feedback_analyst'):
+        assert company.chain(role)[0].model_identity == ('codex', 'gpt-6-luna'), role
+    for role in ('researcher', 'art_director', 'shorts_producer', 'voice_director'):
+        assert company.chain(role)[0].model_identity == ('agy', 'gemini-4-hydrogen-medium'), role
+    for role in ('medical_expert', 'script_critic', 'product_critic'):
+        assert company.chain(role)[0].model_identity == ('codex', 'gpt-6.1-terra'), role
     for role in company.roles:
         for slot in company.chain(role):
             assert 'opus' not in slot.model and 'astra' not in slot.model, (role, slot)
+            assert slot.cli != 'claude' and 'claude' not in slot.model, (role, slot)
     for critic_id, makers in CRITIC_OF.items():
         for maker_id in makers:
-            assert company.chain(critic_id)[0].cli != company.chain(maker_id)[0].cli, (critic_id, maker_id)
+            assert company.chain(critic_id)[0].model_identity != company.chain(maker_id)[0].model_identity, (critic_id, maker_id)
+
+
+@pytest.mark.parametrize('message', [
+    "ERROR: Model 'gemini-pro-orchestrator' is not available in the active live catalog",
+    'Error: unknown model gemini-pro-orchestrator',
+    '{"error":{"code":"model_not_found","message":"Missing model"}}',
+    'Error: model gemini-pro-orchestrator is not supported',
+])
+def test_unavailable_model_falls_back_immediately_without_resting_account(tmp_path, message):
+    carbon = ModelSlot(cli='agy', model='gemini-pro-orchestrator')
+    argon = ModelSlot(cli='agy', model='gemini-pro-orchestrator-argon')
+    calls = []
+
+    def run(argv, **kwargs):
+        calls.append(argv)
+        return _completed(1, stderr=message) if len(calls) == 1 else _completed()
+
+    result = _failover(tmp_path, [carbon, argon], run)
+    assert result.ok and result.model == argon.model and len(calls) == 2
+    book = QuotaBook(tmp_path / 'cache/agent-quota.yaml')
+    assert book.resting(carbon, NOW)
+    assert not book.resting(argon, NOW)
 
 
 def test_resting_slot_is_skipped(tmp_path):
@@ -408,9 +479,36 @@ def test_quota_rests_slot_default_five_hours(tmp_path):
 def test_parse_reset_reads_cli_hint():
     assert parse_reset('try again at 21:30', NOW) == NOW.replace(hour=21, minute=30)
     assert parse_reset('try again at 17:30', NOW) == NOW.replace(hour=17, minute=30) + timedelta(days=1)
+    assert parse_reset("You've hit your weekly limit · resets 5pm (Asia/Ho_Chi_Minh)", NOW) == NOW.replace(hour=17, minute=0) + timedelta(days=1)
+    assert parse_reset('resets at 5pm', NOW) == NOW.replace(hour=17, minute=0) + timedelta(days=1)
+    assert parse_reset('resets 17:00', NOW) == NOW.replace(hour=17, minute=0) + timedelta(days=1)
     assert parse_reset('resets in 2 hours', NOW) == NOW + timedelta(hours=2)
     assert parse_reset('resets in 15 minutes', NOW) == NOW + timedelta(minutes=15)
     assert parse_reset('usage limit', NOW) is None
+    assert parse_reset('resets 5', NOW) is None
+
+
+def test_weekly_limit_fails_over_and_rests_all_slots_until_reset(tmp_path):
+    other = ModelSlot(cli='codex', model='gpt-6.1-sol')
+    calls = []
+
+    def runner(argv, **kwargs):
+        calls.append(argv[0])
+        if argv[0] == 'codex':
+            return _completed(1, "You've hit your weekly limit · resets 5pm (Asia/Ho_Chi_Minh)")
+        return _completed()
+
+    result = _failover(tmp_path, [CODEX_SLOT, other, AGY_SLOT], runner)
+    assert result.ok and result.agent == 'agy'
+    assert calls == ['codex', 'agy']
+    book = QuotaBook(tmp_path / 'cache/agent-quota.yaml')
+    assert book.resting(CODEX_SLOT, NOW)
+    assert book.resting(other, NOW)
+    assert book.resting(ModelSlot(cli='codex', model='gpt-6-luna'), NOW)
+    assert not book.resting(AGY_SLOT, NOW)
+    expected_reset = NOW.replace(hour=17, minute=0) + timedelta(days=1)
+    entries = {e['model']: e['resting_until'] for e in book.snapshot(NOW) if e['cli'] == 'codex'}
+    assert entries.get('*') == expected_reset.isoformat()
 
 
 def test_account_quota_rests_all_slots_of_cli(tmp_path):

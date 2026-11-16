@@ -22,7 +22,7 @@ from healthvideo.storage.files import (
     write_yaml_atomic,
 )
 from healthvideo.storage.revision_lock import revision_lock
-from healthvideo.workflows.draft import _project, _validate
+from healthvideo.workflows.draft import _project, _validate, validate_estimated_layout
 
 
 def storyboard_ready(project_dir: Path) -> bool:
@@ -47,6 +47,7 @@ def storyboard_ready(project_dir: Path) -> bool:
         storyboard = Storyboard.model_validate(read_yaml(required[1]))
         assets = AssetManifest.model_validate(read_yaml(required[2]))
         _validate(revision, script, storyboard, assets, project=project)
+        validate_estimated_layout(project_dir, script, storyboard, assets)
         clip_path = revision / "script/clip-plan.yaml"
         if storyboard.format_profile == "youtube_long" and clip_path.is_file():
             ClipPlan.model_validate(read_yaml(clip_path))
@@ -131,6 +132,7 @@ def _submit_storyboard_design(
                 staging / "script/outline.yaml", outline.model_dump(mode="json")
             )
         style_issues = _validate(staging, script, storyboard, assets, project=project)
+        validate_estimated_layout(project_dir, script, storyboard, assets, clip_plan=clip_plan)
         if (staging / "script/outline.yaml").is_file():
             ledger = read_yaml(staging / "evidence/ledger.yaml")
             claim_ids = [
@@ -167,4 +169,4 @@ def _submit_storyboard_design(
         return changed
     finally:
         if not promoted and staging.exists():
-            shutil.rmtree(staging)
+            shutil.rmtree(staging, ignore_errors=True)

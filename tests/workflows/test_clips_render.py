@@ -55,6 +55,9 @@ def test_clips_reuse_line_wavs_and_match_measured_scene_boundaries(tmp_path: Pat
     assert qa["max_scene_drift_ms"] == 0
     qa["max_scene_drift_ms"] = 121
     qa_path.write_text(json.dumps(qa), encoding="utf-8")
+    from tests.helpers import submit_video_fixture
+
+    submit_video_fixture(project)
     with pytest.raises(ValueError, match="medically_approved"):
         produce_project(project, tts, lambda _: pytest.fail("Bad cached clip reused"))
 
@@ -80,6 +83,9 @@ def _produced(tmp_path: Path) -> tuple[Path, list[list[str]]]:
     write_posts_fixture(project_dir / "revisions" / "001")
     calls: list[list[str]] = []
     produce_project(project_dir, SilentTTS(), _runner(calls))
+    from tests.helpers import submit_video_fixture
+
+    submit_video_fixture(project_dir)
     return project_dir, calls
 
 
@@ -187,6 +193,9 @@ def test_mascot_warning_in_both_review_packets_and_produce_qa(tmp_path: Path) ->
         scene["duration_frames"] for scene in rendered["scenes"][:3]
     )
     assert qa["visual_budget"]["warnings"]
+    from tests.helpers import submit_video_fixture
+
+    submit_video_fixture(project)
     approve_gate(project, GateKind.VIDEO, reviewer=REVIEWER, now=REVIEWED_AT)
 
 

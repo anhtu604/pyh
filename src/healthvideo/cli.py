@@ -503,9 +503,14 @@ def review_frames(
 def review_open(project_dir: ProjectDir, gate: Gate) -> None:
     """In gói HTML duyệt hiện tại ra stdout, không ghi vào dự án."""
     try:
+        from healthvideo.workflows import product_review, script_review
+
         manifest = ProjectManifestV2.model_validate(
             read_yaml(project_dir / "project.yaml")
         )
+        script_review.require_passed_review(project_dir)
+        if gate is GateKind.VIDEO:
+            product_review.require_passed_review(project_dir)
         revision_root = project_dir / "revisions" / manifest.active_revision
         html = _RENDER_PACKET[gate](revision_root)
     except (FileNotFoundError, TypeError, ValueError) as error:
@@ -555,7 +560,11 @@ def duyet(root: Root = Path('.')) -> None:
     from healthvideo.storage.files import write_yaml_atomic
 
     try:
-        pending = [(p, m) for p, m in factory.projects(root) if m.state in factory.GATES]
+        pending = [
+            (p, m, gate_name)
+            for p, m in factory.projects(root)
+            if (gate_name := factory.gate_for_project(p, m)) is not None
+        ]
         if pending:
             _require_tty()
             config = pin_path().parent / 'operator.yaml'
@@ -563,8 +572,8 @@ def duyet(root: Root = Path('.')) -> None:
             if not reviewer:
                 reviewer = _nonempty_prompt('Tên bác sĩ duyệt (lưu cho lần sau)')
                 write_yaml_atomic(config, {'reviewer': reviewer})
-            for project_dir, project in pending:
-                gate = GateKind(factory.GATES[project.state])
+            for project_dir, project, gate_name in pending:
+                gate = GateKind(gate_name)
                 revision = project_dir / 'revisions' / project.active_revision
                 packet = factory.write_review_packet(root, project_dir, project)
                 factory.open_packet(packet)
@@ -638,18 +647,26 @@ def xuong(
     """Chạy xưởng liên tục, tự đóng gói sau cổng video; Ctrl+C để dừng."""
     if sum([once, background, stop]) > 1:
         raise typer.BadParameter('Chỉ chọn một trong --once, --background, --stop')
-    from healthvideo.workflows import telegram_bot
+    from healthvideo.workflows import repair_service, telegram_bot
 
     try:
         if stop:
             pid = factory.stop_background(root)
+            repair_pid = repair_service.stop_background(root)
             typer.echo(f'Đã dừng xưởng PID {pid}.' if pid else 'Xưởng không chạy.')
+            if repair_pid is not None:
+                typer.echo(f'Đã dừng tiến trình sửa lỗi PID {repair_pid}.')
         elif background:
             typer.echo(f'Xưởng đang chạy (PID {factory.start_background(root, interval)}).')
             telegram_bot.ensure_background(root)
+            repair_service.ensure_background(root)
         else:
+            from healthvideo.omniroute import ensure_ready
+
+            ensure_ready(root)
             if not once:
                 telegram_bot.ensure_background(root)
+                repair_service.ensure_background(root)
             factory.run_factory(root, default_run_deps(root), interval=interval, once=once, echo=typer.echo)
     except factory.FactoryAlreadyRunning as error:
         typer.echo(str(error))
@@ -735,16 +752,15 @@ def app_command(
         raise typer.Exit(code=1) from error
 
 
-def _gate_for_project(project_dir: Path) -> str:
+def _gate_for_project(project_dir: Path) -> str | None:
     manifest_path = project_dir / "project.yaml"
     if manifest_path.is_file():
         try:
             manifest = ProjectManifestV2.model_validate(read_yaml(manifest_path))
-            if manifest.state == WorkflowState.AWAITING_VIDEO_REVIEW:
-                return "video"
+            return factory.gate_for_project(project_dir, manifest)
         except (OSError, TypeError, ValueError):
             pass
-    return "medical"
+    return None
 
 
 @app.command()
@@ -764,14 +780,14 @@ def run(
     advanced_text = ", ".join(report.advanced) if report.advanced else "không có"
     typer.echo(f"Chủ đề đã tiến: {advanced_text}")
 
-    if report.at_gate:
-        for slug in report.at_gate:
-            project_dir = root / "projects" / slug
-            gate = _gate_for_project(project_dir)
-            typer.echo(
-                f"Chủ đề đang chờ cổng: {slug} — "
-                f"healthvideo review open {project_dir} --gate {gate}"
-            )
+    gate_lines = [
+        f"Chủ đề đang chờ cổng: {slug} — healthvideo review open {root / 'projects' / slug} --gate {gate}"
+        for slug in report.at_gate
+        if (gate := _gate_for_project(root / "projects" / slug)) is not None
+    ]
+    if gate_lines:
+        for line in gate_lines:
+            typer.echo(line)
     else:
         typer.echo("Chủ đề đang chờ cổng: không có")
 
@@ -827,7 +843,7 @@ def status(
         _queue_table(root, include_next=True)
         pid = factory.running_pid(root)
         typer.echo(f'Xưởng nền: PID {pid}' if pid else 'Xưởng nền: không chạy')
-        waiting = sum(m.state in factory.GATES for _, m in factory.projects(root))
+        waiting = sum(factory.gate_for_project(p, m) is not None for p, m in factory.projects(root))
         typer.echo(f'Đang chờ bác sĩ: {waiting}')
 
 
@@ -1141,11 +1157,7 @@ def evidence_build_ledger(project_dir: ProjectDir) -> None:
         claims: list[EvidenceClaim] = []
         sources: list[SourceRecord] = []
 
-        if ledger_path.is_file():
-            data = read_yaml(ledger_path)
-            claims = [EvidenceClaim.model_validate(c) for c in data.get("claims", [])]
-            sources = [SourceRecord.model_validate(r) for r in data.get("records", [])]
-        elif claims_path.is_file() and sources_path.is_file():
+        if claims_path.is_file() and sources_path.is_file():
             c_data = read_yaml(claims_path)
             s_data = read_yaml(sources_path)
             claims = [
@@ -1162,6 +1174,10 @@ def evidence_build_ledger(project_dir: ProjectDir) -> None:
                     else s_data
                 )
             ]
+        elif ledger_path.is_file():
+            data = read_yaml(ledger_path)
+            claims = [EvidenceClaim.model_validate(c) for c in data.get("claims", [])]
+            sources = [SourceRecord.model_validate(r) for r in data.get("records", [])]
         else:
             typer.echo(f"Không tìm thấy file bằng chứng tại: {ledger_path}")
             raise typer.Exit(code=1)

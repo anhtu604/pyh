@@ -18,6 +18,13 @@ def test_run_prints_gate_hint(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from healthvideo.domain.project_v2 import WorkflowState
+    from tests.helpers import create_v2_project_fixture
+
+    project = create_v2_project_fixture(
+        tmp_path / "projects", state=WorkflowState.AWAITING_MEDICAL_REVIEW
+    )
+
     def fake_run_queue(
         root: Path,
         deps: RunDeps,
@@ -27,8 +34,8 @@ def test_run_prints_gate_hint(
     ) -> RunReport:
         del deps, once, kwargs
         return RunReport(
-            advanced=["tang-huyet-ap"],
-            at_gate=["tang-huyet-ap"],
+            advanced=[project.name],
+            at_gate=[project.name],
             blocked=["gan-nhiem-mo"],
             code_changes=[Path("video/src/anatomy/ArteryWall.tsx")],
         )
@@ -38,7 +45,7 @@ def test_run_prints_gate_hint(
     result = runner.invoke(app, ["run", "--root", str(tmp_path)])
 
     assert result.exit_code == 0, result.output
-    assert "tang-huyet-ap" in result.output
+    assert project.name in result.output
     assert "healthvideo review open" in result.output
     assert "--gate medical" in result.output
     assert "topics/logs/gan-nhiem-mo/blocked.txt" in result.output

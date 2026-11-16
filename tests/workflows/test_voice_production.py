@@ -21,6 +21,9 @@ def voice_project(tmp_path, *, delivery=False):
     if delivery:
         script['lines'][0]['delivery'] = '[sarcastic] ' + script['lines'][0]['text']
         write_yaml_atomic(revision / 'script/script.yaml', script)
+        from tests.helpers import write_critic_review_fixture
+
+        write_critic_review_fixture(project)
     approve_gate(project, GateKind.MEDICAL, reviewer='doctor', now=V2_REVIEWED_AT)
     return project, revision, script
 
@@ -118,6 +121,9 @@ def test_blocking_pronunciation_renders_but_fails_video_qa(tmp_path, monkeypatch
     assert qa['status'] == 'failed'
     assert qa['pronunciation']['passed'] is False
     assert qa['pronunciation']['blocking_count'] == 1
+    from tests.helpers import submit_video_fixture
+
+    submit_video_fixture(project)
     with pytest.raises(ValueError, match='blocking pronunciation'):
         approve_gate(project, GateKind.VIDEO, reviewer='doctor', now=V2_REVIEWED_AT)
     # A flagged render remains inspectable and idempotent while awaiting listening.

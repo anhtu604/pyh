@@ -19,7 +19,7 @@ from healthvideo.domain.topic import TopicCard
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.tts.silent import SilentTTS
 from healthvideo.workflows.create_project_v2 import create_project_v2
-from healthvideo.workflows.draft import submit_draft, submit_medical_review
+from healthvideo.workflows.draft import submit_draft
 from healthvideo.workflows.evidence import build_evidence_ledger, record_question
 from healthvideo.workflows.gate_review import approve_gate
 from healthvideo.workflows.operator import OperatorActionKind, get_next_action
@@ -99,13 +99,15 @@ def test_pyh_golden_stops_at_both_human_gates(tmp_path: Path) -> None:
         scene["script_line_id"] = line["id"]
     board_path = tmp_path / "bound-storyboard.yaml"
     write_yaml_atomic(board_path, board)
+    from tests.helpers import submit_medical_review_fixture, submit_video_fixture
+
     submit_draft(
         project,
         SOURCE / "script/script.yaml",
         board_path,
         SOURCE / "assets/asset-manifest.yaml",
     )
-    submit_medical_review(project)
+    submit_medical_review_fixture(project)
 
     assert "Gói duyệt y khoa" in render_medical_packet(revision)
     assert get_next_action(project).kind is OperatorActionKind.AWAIT_MEDICAL_APPROVAL
@@ -116,6 +118,7 @@ def test_pyh_golden_stops_at_both_human_gates(tmp_path: Path) -> None:
     )
     write_posts_fixture(revision)
     produce_project(project, SilentTTS(), _fake_render)
+    submit_video_fixture(project)
     assert "Gói duyệt video" in render_video_packet(revision)
     assert get_next_action(project).kind is OperatorActionKind.AWAIT_VIDEO_APPROVAL
     with pytest.raises(ValueError):

@@ -208,10 +208,13 @@ def test_approved_youtube_clip_caption_tags_and_gate_bytes(tmp_path, monkeypatch
     clip = rev / 'renders/clips/CL01.mp4'
     clip.parent.mkdir(parents=True)
     clip.write_bytes(b'approved-clip-bytes')
+    from tests.helpers import write_critic_review_fixture
+
     manifest_path = rev / 'renders/render-manifest.json'
     manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
     manifest['clips'] = {'CL01': 'clips/CL01.mp4'}
     manifest_path.write_text(json.dumps(manifest), encoding='utf-8')
+    write_critic_review_fixture(project, product=True)
     approve_gate(project, GateKind.VIDEO, reviewer='Doctor', now=NOW)
     package_project(project)
     fake = SimpleNamespace(connection_status=lambda root: {'youtube': {'account_id': 'acct', 'connected': True}},

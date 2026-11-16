@@ -4,7 +4,14 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    ValidationError,
+    model_validator,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 COMPANY_PATH = REPO_ROOT / 'profiles/company.yaml'
@@ -27,8 +34,27 @@ SkillName = Annotated[str, StringConstraints(pattern=r'^[a-z0-9][a-z0-9-]*$')]
 class ModelSlot(BaseModel):
     model_config = ConfigDict(extra='forbid', frozen=True)
 
-    cli: Literal['claude', 'codex', 'agy']
+    cli: Literal['claude', 'codex', 'agy', 'omniroute']
     model: str
+
+    @model_validator(mode='after')
+    def explicit_router_model(self):
+        if self.cli == 'omniroute':
+            provider, _, model = self.model.partition('/')
+            if provider not in ('codex', 'cx', 'agy', 'antigravity', 'claude', 'cc',
+                                'ds-web', 'deepseek-web') or not model:
+                raise ValueError('OmniRoute cần provider/model cụ thể để giữ critic độc lập.')
+        return self
+
+    @property
+    def model_identity(self) -> tuple[str, str]:
+        """Routing through a proxy does not make the maker a different critic."""
+        if self.cli == 'omniroute':
+            provider, _, model = self.model.partition('/')
+            provider = {'cx': 'codex', 'cc': 'claude', 'antigravity': 'agy',
+                        'ds-web': 'deepseek-web'}.get(provider, provider)
+            return provider, model
+        return self.cli, self.model
 
 
 class Role(BaseModel):
@@ -91,7 +117,8 @@ def load_company(path: Path = COMPANY_PATH) -> Company:
             continue
         maker_ids = (makers,) if isinstance(makers, str) else tuple(makers)
         for maker in maker_ids:
-            if maker in company.roles and company.chain(critic)[0] == company.chain(maker)[0]:
+            if (maker in company.roles and company.chain(critic)[0].model_identity
+                    == company.chain(maker)[0].model_identity):
                 raise ValueError(f'{path.name}: {critic!r} không được bắt đầu cùng model với {maker!r}')
     return company
 
