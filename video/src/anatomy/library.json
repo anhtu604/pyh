@@ -610,6 +610,1198 @@
           ]
         }
       }
+    },
+    "esophagus_aortic_arch_impaction": {
+      "file": "EsophagusAorticArch.tsx",
+      "layers": [
+        "esophagus-aortic-arch"
+      ],
+      "focus_regions": {
+        "overview": {
+          "left": 0,
+          "top": 0,
+          "width": 560,
+          "height": 560
+        },
+        "detail": {
+          "left": 115,
+          "top": 150,
+          "width": 330,
+          "height": 330
+        }
+      },
+      "labels": {
+        "tube": {
+          "text": "Thực quản",
+          "region": "detail",
+          "x": 28,
+          "y": 12,
+          "width": 226,
+          "height": 36,
+          "anchor": [
+            210,
+            330
+          ]
+        },
+        "arch": {
+          "text": "Cung động mạch chủ",
+          "region": "detail",
+          "x": 306,
+          "y": 12,
+          "width": 226,
+          "height": 36,
+          "anchor": [
+            399,
+            143
+          ]
+        },
+        "narrow": {
+          "text": "Chỗ hẹp",
+          "region": "detail",
+          "x": 28,
+          "y": 512,
+          "width": 226,
+          "height": 36,
+          "anchor": [
+            216,
+            250
+          ]
+        }
+      }
+    },
+    "esophagus_food_bolus": {
+      "file": "EsophagusFoodBolus.tsx",
+      "layers": [
+        "bolus-and-contraction"
+      ],
+      "focus_regions": {
+        "overview": {
+          "left": 0,
+          "top": 0,
+          "width": 560,
+          "height": 560
+        },
+        "detail": {
+          "left": 115,
+          "top": 150,
+          "width": 330,
+          "height": 330
+        }
+      },
+      "labels": {
+        "tube": {
+          "text": "Thành thực quản",
+          "region": "detail",
+          "x": 28,
+          "y": 12,
+          "width": 226,
+          "height": 36,
+          "anchor": [
+            145,
+            330
+          ]
+        },
+        "bolus": {
+          "text": "Khối thức ăn mềm",
+          "region": "detail",
+          "x": 306,
+          "y": 12,
+          "width": 226,
+          "height": 36,
+          "anchor": [
+            280,
+            145
+          ]
+        },
+        "muscle": {
+          "text": "Cơ thực quản",
+          "region": "detail",
+          "x": 28,
+          "y": 512,
+          "width": 226,
+          "height": 36,
+          "anchor": [
+            90,
+            260
+          ]
+        }
+      }
+    },
+    "esophagus_wall_penetration": {
+      "file": "EsophagusWallPenetration.tsx",
+      "layers": [
+        "penetration-and-tissue"
+      ],
+      "focus_regions": {
+        "overview": {
+          "left": 0,
+          "top": 0,
+          "width": 560,
+          "height": 560
+        },
+        "detail": {
+          "left": 115,
+          "top": 150,
+          "width": 330,
+          "height": 330
+        }
+      },
+      "labels": {
+        "tip": {
+          "text": "Mũi xương",
+          "region": "detail",
+          "x": 28,
+          "y": 12,
+          "width": 226,
+          "height": 36,
+          "anchor": [
+            280,
+            295
+          ]
+        },
+        "mucosa": {
+          "text": "Niêm mạc",
+          "region": "detail",
+          "x": 306,
+          "y": 12,
+          "width": 226,
+          "height": 36,
+          "anchor": [
+            430,
+            300
+          ]
+        },
+        "muscle": {
+          "text": "Lớp cơ",
+          "region": "detail",
+          "x": 28,
+          "y": 512,
+          "width": 226,
+          "height": 36,
+          "anchor": [
+            430,
+            450
+          ]
+        }
+      }
+    },
+    "esophagus_transverse_impaction": {
+      "file": "EsophagusTransverseImpaction.tsx",
+      "layers": [
+        "transverse-impaction"
+      ],
+      "focus_regions": {
+        "overview": {
+          "left": 0,
+          "top": 0,
+          "width": 560,
+          "height": 560
+        },
+        "detail": {
+          "left": 115,
+          "top": 150,
+          "width": 330,
+          "height": 330
+        }
+      },
+      "labels": {
+        "bone": {
+          "text": "Xương cá",
+          "region": "detail",
+          "x": 28,
+          "y": 12,
+          "width": 226,
+          "height": 36,
+          "anchor": [
+            340,
+            274
+          ]
+        },
+        "lumen": {
+          "text": "Lòng thực quản",
+          "region": "detail",
+          "x": 306,
+          "y": 12,
+          "width": 226,
+          "height": 36,
+          "anchor": [
+            220,
+            210
+          ]
+        },
+        "wall": {
+          "text": "Thành thực quản",
+          "region": "detail",
+          "x": 28,
+          "y": 512,
+          "width": 226,
+          "height": 36,
+          "anchor": [
+            430,
+            430
+          ]
+        }
+      }
+    },
+    "muscle_tumor_amino_acid_balance": {
+      "file": "MuscleTumorAminoAcidBalance.tsx",
+      "layers": [
+        "muscle-fibres",
+        "circulating-amino-acids",
+        "protein-recycling",
+        "tumor-uptake",
+        "inflammatory-signal",
+        "muscle-withdrawal"
+      ],
+      "focus_regions": {
+        "overview": {
+          "left": 0,
+          "top": 0,
+          "width": 560,
+          "height": 560
+        },
+        "muscle": {
+          "left": 35,
+          "top": 155,
+          "width": 205,
+          "height": 320
+        },
+        "blood": {
+          "left": 245,
+          "top": 120,
+          "width": 85,
+          "height": 370
+        },
+        "tumor": {
+          "left": 345,
+          "top": 175,
+          "width": 190,
+          "height": 300
+        }
+      },
+      "labels": {
+        "muscle": {
+          "text": "Cơ xương",
+          "region": "muscle",
+          "x": 35,
+          "y": 45,
+          "width": 155,
+          "height": 36,
+          "anchor": [
+            130,
+            215
+          ]
+        },
+        "blood": {
+          "text": "Máu",
+          "region": "blood",
+          "x": 215,
+          "y": 45,
+          "width": 125,
+          "height": 36,
+          "anchor": [
+            285,
+            170
+          ]
+        },
+        "tumor": {
+          "text": "Khối u",
+          "region": "tumor",
+          "x": 370,
+          "y": 45,
+          "width": 155,
+          "height": 36,
+          "anchor": [
+            430,
+            230
+          ]
+        },
+        "amino": {
+          "text": "Axit amin",
+          "region": "blood",
+          "x": 207,
+          "y": 479,
+          "width": 145,
+          "height": 36,
+          "anchor": [
+            280,
+            390
+          ]
+        }
+      }
+    },
+    "muscle_protein_turnover": {
+      "file": "MuscleProteinTurnover.tsx",
+      "layers": [
+        "muscle-fibres",
+        "protein-recycling"
+      ],
+      "focus_regions": {
+        "overview": {
+          "left": 0,
+          "top": 0,
+          "width": 560,
+          "height": 560
+        },
+        "muscle": {
+          "left": 55,
+          "top": 100,
+          "width": 425,
+          "height": 405
+        },
+        "blood": {
+          "left": 245,
+          "top": 120,
+          "width": 85,
+          "height": 370
+        },
+        "tumor": {
+          "left": 345,
+          "top": 175,
+          "width": 190,
+          "height": 300
+        }
+      },
+      "labels": {
+        "muscle": {
+          "text": "Sợi cơ",
+          "region": "muscle",
+          "x": 35,
+          "y": 45,
+          "width": 155,
+          "height": 36,
+          "anchor": [
+            130,
+            215
+          ]
+        },
+        "amino": {
+          "text": "Axit amin",
+          "region": "blood",
+          "x": 207,
+          "y": 505,
+          "width": 145,
+          "height": 36,
+          "anchor": [
+            280,
+            120
+          ]
+        }
+      }
+    },
+    "tumor_protein_uptake": {
+      "file": "TumorProteinUptake.tsx",
+      "layers": [
+        "circulating-amino-acids",
+        "tumor-uptake"
+      ],
+      "focus_regions": {
+        "overview": {
+          "left": 0,
+          "top": 0,
+          "width": 560,
+          "height": 560
+        },
+        "muscle": {
+          "left": 35,
+          "top": 155,
+          "width": 205,
+          "height": 320
+        },
+        "blood": {
+          "left": 35,
+          "top": 85,
+          "width": 130,
+          "height": 410
+        },
+        "tumor": {
+          "left": 155,
+          "top": 100,
+          "width": 375,
+          "height": 420
+        }
+      },
+      "labels": {
+        "blood": {
+          "text": "Máu",
+          "region": "blood",
+          "x": 215,
+          "y": 45,
+          "width": 125,
+          "height": 36,
+          "anchor": [
+            100,
+            170
+          ]
+        },
+        "tumor": {
+          "text": "Khối u",
+          "region": "tumor",
+          "x": 370,
+          "y": 45,
+          "width": 155,
+          "height": 36,
+          "anchor": [
+            350,
+            250
+          ]
+        },
+        "amino": {
+          "text": "Axit amin",
+          "region": "blood",
+          "x": 207,
+          "y": 479,
+          "width": 145,
+          "height": 36,
+          "anchor": [
+            100,
+            390
+          ]
+        }
+      }
+    },
+    "muscle_wasting_section": {
+      "file": "MuscleWastingSection.tsx",
+      "layers": [
+        "muscle-fibres"
+      ],
+      "focus_regions": {
+        "overview": {
+          "left": 0,
+          "top": 0,
+          "width": 560,
+          "height": 560
+        },
+        "muscle": {
+          "left": 40,
+          "top": 70,
+          "width": 480,
+          "height": 420
+        },
+        "blood": {
+          "left": 245,
+          "top": 120,
+          "width": 85,
+          "height": 370
+        },
+        "tumor": {
+          "left": 345,
+          "top": 175,
+          "width": 190,
+          "height": 300
+        }
+      },
+      "labels": {
+        "muscle": {
+          "text": "Cơ xương",
+          "region": "muscle",
+          "x": 35,
+          "y": 45,
+          "width": 155,
+          "height": 36,
+          "anchor": [
+            280,
+            280
+          ]
+        }
+      }
+    },
+    "renal_tubule_oxalate": {
+      "file": "RenalTubuleOxalate.tsx",
+      "layers": [
+        "tubule"
+      ],
+      "focus_regions": {
+        "overview": {
+          "left": 0,
+          "top": 0,
+          "width": 560,
+          "height": 560
+        },
+        "detail": {
+          "left": 65,
+          "top": 125,
+          "width": 430,
+          "height": 310
+        }
+      },
+      "labels": {
+        "lumen": {
+          "text": "Lòng ống thận",
+          "region": "detail",
+          "x": 30,
+          "y": 55,
+          "width": 230,
+          "height": 36,
+          "anchor": [
+            240,
+            245
+          ]
+        },
+        "wall": {
+          "text": "Tế bào ống thận",
+          "region": "detail",
+          "x": 300,
+          "y": 55,
+          "width": 230,
+          "height": 36,
+          "anchor": [
+            130,
+            170
+          ]
+        },
+        "oxalate": {
+          "text": "Oxalat hòa tan",
+          "region": "detail",
+          "x": 160,
+          "y": 490,
+          "width": 230,
+          "height": 36,
+          "anchor": [
+            370,
+            280
+          ]
+        }
+      }
+    },
+    "vitamin_c_transport": {
+      "file": "VitaminCTransport.tsx",
+      "layers": [
+        "transport"
+      ],
+      "focus_regions": {
+        "overview": {
+          "left": 0,
+          "top": 0,
+          "width": 560,
+          "height": 560
+        },
+        "detail": {
+          "left": 65,
+          "top": 125,
+          "width": 430,
+          "height": 310
+        }
+      },
+      "labels": {
+        "lumen": {
+          "text": "Dịch lọc",
+          "region": "detail",
+          "x": 30,
+          "y": 55,
+          "width": 230,
+          "height": 36,
+          "anchor": [
+            230,
+            245
+          ]
+        },
+        "wall": {
+          "text": "Cửa thu hồi SVCT1",
+          "region": "detail",
+          "x": 300,
+          "y": 55,
+          "width": 230,
+          "height": 36,
+          "anchor": [
+            142,
+            310
+          ]
+        },
+        "blood": {
+          "text": "Mạch máu",
+          "region": "detail",
+          "x": 160,
+          "y": 490,
+          "width": 230,
+          "height": 36,
+          "anchor": [
+            420,
+            310
+          ]
+        }
+      }
+    },
+    "vitamin_c_oxalate_pathway": {
+      "file": "VitaminCOxalatePathway.tsx",
+      "layers": [
+        "pathway"
+      ],
+      "focus_regions": {
+        "overview": {
+          "left": 0,
+          "top": 0,
+          "width": 560,
+          "height": 560
+        },
+        "detail": {
+          "left": 65,
+          "top": 125,
+          "width": 430,
+          "height": 310
+        }
+      },
+      "labels": {
+        "vitamin": {
+          "text": "Vitamin C",
+          "region": "detail",
+          "x": 30,
+          "y": 55,
+          "width": 230,
+          "height": 36,
+          "anchor": [
+            95,
+            220
+          ]
+        },
+        "oxidized": {
+          "text": "Dạng oxy hóa",
+          "region": "detail",
+          "x": 300,
+          "y": 55,
+          "width": 230,
+          "height": 36,
+          "anchor": [
+            265,
+            220
+          ]
+        },
+        "oxalate": {
+          "text": "Oxalat",
+          "region": "detail",
+          "x": 160,
+          "y": 490,
+          "width": 230,
+          "height": 36,
+          "anchor": [
+            435,
+            350
+          ]
+        }
+      }
+    },
+    "calcium_oxalate_crystal": {
+      "file": "CalciumOxalateCrystal.tsx",
+      "layers": [
+        "crystal"
+      ],
+      "focus_regions": {
+        "overview": {
+          "left": 0,
+          "top": 0,
+          "width": 560,
+          "height": 560
+        },
+        "detail": {
+          "left": 65,
+          "top": 125,
+          "width": 430,
+          "height": 310
+        }
+      },
+      "labels": {
+        "fluid": {
+          "text": "Nước tiểu",
+          "region": "detail",
+          "x": 30,
+          "y": 55,
+          "width": 230,
+          "height": 36,
+          "anchor": [
+            115,
+            230
+          ]
+        },
+        "crystal": {
+          "text": "Tinh thể canxi oxalat",
+          "region": "detail",
+          "x": 300,
+          "y": 55,
+          "width": 230,
+          "height": 36,
+          "anchor": [
+            280,
+            300
+          ]
+        },
+        "ions": {
+          "text": "Canxi và oxalat",
+          "region": "detail",
+          "x": 160,
+          "y": 490,
+          "width": 230,
+          "height": 36,
+          "anchor": [
+            430,
+            250
+          ]
+        }
+      }
+    },
+    "intestinal_vitamin_c_absorption": {
+      "file": "IntestinalVitaminCAbsorption.tsx",
+      "layers": [
+        "intestinal-absorption"
+      ],
+      "focus_regions": {
+        "overview": {
+          "left": 0,
+          "top": 0,
+          "width": 560,
+          "height": 560
+        },
+        "detail": {
+          "left": 65,
+          "top": 125,
+          "width": 430,
+          "height": 310
+        }
+      },
+      "labels": {
+        "lumen": {
+          "text": "Lòng ruột",
+          "region": "detail",
+          "x": 30,
+          "y": 55,
+          "width": 230,
+          "height": 36,
+          "anchor": [
+            140,
+            230
+          ]
+        },
+        "cells": {
+          "text": "Tế bào hấp thu",
+          "region": "detail",
+          "x": 300,
+          "y": 55,
+          "width": 230,
+          "height": 36,
+          "anchor": [
+            300,
+            290
+          ]
+        },
+        "blood": {
+          "text": "Mạch máu",
+          "region": "detail",
+          "x": 160,
+          "y": 490,
+          "width": 230,
+          "height": 36,
+          "anchor": [
+            430,
+            420
+          ]
+        }
+      }
+    },
+    "hepatocyte_sinusoid_unit": {
+      "file": "HepatocyteSinusoidUnit.tsx",
+      "layers": [
+        "sinusoid",
+        "hepatocyte-membrane",
+        "bile-canaliculus"
+      ],
+      "focus_regions": {
+        "overview": {
+          "left": 0,
+          "top": 0,
+          "width": 560,
+          "height": 560
+        },
+        "cell": {
+          "left": 28,
+          "top": 28,
+          "width": 504,
+          "height": 484
+        },
+        "blood": {
+          "left": 28,
+          "top": 28,
+          "width": 504,
+          "height": 484
+        },
+        "bile": {
+          "left": 28,
+          "top": 28,
+          "width": 504,
+          "height": 484
+        }
+      },
+      "labels": {
+        "cell": {
+          "text": "Tế bào gan",
+          "region": "cell",
+          "x": 28,
+          "y": 350,
+          "width": 160,
+          "height": 34,
+          "anchor": [
+            60,
+            335
+          ]
+        },
+        "enzyme": {
+          "text": "ALT / AST",
+          "region": "cell",
+          "x": 320,
+          "y": 350,
+          "width": 190,
+          "height": 34,
+          "anchor": [
+            440,
+            315
+          ]
+        },
+        "blood": {
+          "text": "Dòng máu",
+          "region": "blood",
+          "x": 350,
+          "y": 516,
+          "width": 182,
+          "height": 34,
+          "anchor": [
+            490,
+            470
+          ]
+        },
+        "bile": {
+          "text": "Đường mật",
+          "region": "bile",
+          "x": 342,
+          "y": 8,
+          "width": 190,
+          "height": 34,
+          "anchor": [
+            430,
+            55
+          ]
+        }
+      }
+    },
+    "hepatic_synthesis_and_bile": {
+      "file": "HepaticSynthesisAndBile.tsx",
+      "layers": [
+        "sinusoid",
+        "hepatocyte-membrane",
+        "bile-canaliculus",
+        "protein-export",
+        "mitochondria"
+      ],
+      "focus_regions": {
+        "overview": {
+          "left": 0,
+          "top": 0,
+          "width": 560,
+          "height": 560
+        },
+        "cell": {
+          "left": 28,
+          "top": 28,
+          "width": 504,
+          "height": 484
+        },
+        "blood": {
+          "left": 28,
+          "top": 28,
+          "width": 504,
+          "height": 484
+        },
+        "bile": {
+          "left": 28,
+          "top": 28,
+          "width": 504,
+          "height": 484
+        }
+      },
+      "labels": {
+        "cell": {
+          "text": "Tế bào gan",
+          "region": "cell",
+          "x": 28,
+          "y": 350,
+          "width": 160,
+          "height": 34,
+          "anchor": [
+            60,
+            335
+          ]
+        },
+        "blood": {
+          "text": "Dòng máu",
+          "region": "blood",
+          "x": 350,
+          "y": 516,
+          "width": 182,
+          "height": 34,
+          "anchor": [
+            490,
+            470
+          ]
+        },
+        "bile": {
+          "text": "Đường mật",
+          "region": "bile",
+          "x": 342,
+          "y": 8,
+          "width": 190,
+          "height": 34,
+          "anchor": [
+            430,
+            55
+          ]
+        },
+        "mitochondria": {
+          "text": "Ty thể",
+          "region": "cell",
+          "x": 28,
+          "y": 208,
+          "width": 90,
+          "height": 34,
+          "anchor": [
+            98,
+            225
+          ]
+        }
+      }
+    },
+    "hepatic_toxic_injury": {
+      "file": "HepaticToxicInjury.tsx",
+      "layers": [
+        "sinusoid",
+        "hepatocyte-membrane",
+        "bile-canaliculus",
+        "mitochondria",
+        "membrane-breach"
+      ],
+      "focus_regions": {
+        "overview": {
+          "left": 0,
+          "top": 0,
+          "width": 560,
+          "height": 560
+        },
+        "cell": {
+          "left": 28,
+          "top": 28,
+          "width": 504,
+          "height": 484
+        },
+        "blood": {
+          "left": 28,
+          "top": 28,
+          "width": 504,
+          "height": 484
+        },
+        "bile": {
+          "left": 28,
+          "top": 28,
+          "width": 504,
+          "height": 484
+        }
+      },
+      "labels": {
+        "cell": {
+          "text": "Tế bào gan",
+          "region": "cell",
+          "x": 28,
+          "y": 350,
+          "width": 160,
+          "height": 34,
+          "anchor": [
+            60,
+            335
+          ]
+        },
+        "blood": {
+          "text": "Dòng máu",
+          "region": "blood",
+          "x": 350,
+          "y": 516,
+          "width": 182,
+          "height": 34,
+          "anchor": [
+            490,
+            470
+          ]
+        },
+        "bile": {
+          "text": "Đường mật",
+          "region": "bile",
+          "x": 342,
+          "y": 8,
+          "width": 190,
+          "height": 34,
+          "anchor": [
+            430,
+            55
+          ]
+        },
+        "mitochondria": {
+          "text": "Ty thể",
+          "region": "cell",
+          "x": 28,
+          "y": 208,
+          "width": 90,
+          "height": 34,
+          "anchor": [
+            98,
+            225
+          ]
+        }
+      }
+    },
+    "hepatic_fibrosis_section": {
+      "file": "HepaticFibrosisSection.tsx",
+      "layers": [
+        "sinusoid",
+        "hepatocyte-membrane",
+        "bile-canaliculus",
+        "fibrous-septa"
+      ],
+      "focus_regions": {
+        "overview": {
+          "left": 0,
+          "top": 0,
+          "width": 560,
+          "height": 560
+        },
+        "cell": {
+          "left": 28,
+          "top": 28,
+          "width": 504,
+          "height": 484
+        },
+        "blood": {
+          "left": 28,
+          "top": 28,
+          "width": 504,
+          "height": 484
+        },
+        "bile": {
+          "left": 28,
+          "top": 28,
+          "width": 504,
+          "height": 484
+        }
+      },
+      "labels": {
+        "cell": {
+          "text": "Tế bào gan",
+          "region": "cell",
+          "x": 28,
+          "y": 350,
+          "width": 160,
+          "height": 34,
+          "anchor": [
+            60,
+            335
+          ]
+        },
+        "blood": {
+          "text": "Dòng máu",
+          "region": "blood",
+          "x": 350,
+          "y": 516,
+          "width": 182,
+          "height": 34,
+          "anchor": [
+            490,
+            470
+          ]
+        },
+        "scar": {
+          "text": "Dải xơ",
+          "region": "cell",
+          "x": 422,
+          "y": 338,
+          "width": 110,
+          "height": 34,
+          "anchor": [
+            453,
+            320
+          ]
+        }
+      }
+    },
+    "alt_ast_tissue_distribution": {
+      "file": "AltAstTissueDistribution.tsx",
+      "layers": [
+        "liver-tissue",
+        "skeletal-muscle",
+        "cardiac-muscle"
+      ],
+      "focus_regions": {
+        "overview": {
+          "left": 0,
+          "top": 0,
+          "width": 560,
+          "height": 560
+        }
+      },
+      "labels": {
+        "liver": {
+          "text": "Gan",
+          "region": "overview",
+          "x": 32,
+          "y": 12,
+          "width": 132,
+          "height": 34,
+          "anchor": [
+            142,
+            150
+          ]
+        },
+        "alt": {
+          "text": "ALT",
+          "region": "overview",
+          "x": 182,
+          "y": 12,
+          "width": 132,
+          "height": 34,
+          "anchor": [
+            185,
+            180
+          ]
+        },
+        "ast": {
+          "text": "AST",
+          "region": "overview",
+          "x": 364,
+          "y": 12,
+          "width": 164,
+          "height": 34,
+          "anchor": [
+            426,
+            215
+          ]
+        },
+        "muscle": {
+          "text": "Cơ vân",
+          "region": "overview",
+          "x": 32,
+          "y": 514,
+          "width": 210,
+          "height": 34,
+          "anchor": [
+            145,
+            430
+          ]
+        },
+        "heart": {
+          "text": "Cơ tim",
+          "region": "overview",
+          "x": 318,
+          "y": 514,
+          "width": 210,
+          "height": 34,
+          "anchor": [
+            426,
+            340
+          ]
+        }
+      }
     }
   }
 }
