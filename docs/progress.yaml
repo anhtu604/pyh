@@ -241,7 +241,7 @@ phases:
     owner: codex
     note: 'Đường mascot từ storyboard tới 16:9/9:16 đã có sẵn; bổ sung hướng dẫn pose theo cảnh cho Đạo diễn phân cảnh + cảnh báo mềm mascot_missing/mascot_dense_scene. Chưa nghiệm thu bằng khung hình thật; PYH-003 cần storyboard mới (trước duyệt y khoa thì không cần mở cổng).'
   - id: R2.5
-    title: OpenMontage làm renderer
-    status: doing
+    title: OpenMontage làm renderer (tùy chọn)
+    status: done
     owner: codex
-    note: Đề xuất hoãn tới khi có một video Remotion qua cổng video; mẫu 8 giây mới chứng minh runtime. Chờ bác sĩ quyết.
+    note: 'PYH_RENDERER=openmontage bật renderer HyperFrames; mặc định vẫn Remotion. Smoke thật 2 s có audio+phụ đề đạt. Giấy phép AGPL-3.0. Chưa có anatomy, mascot, clip 9:16, caption theo dòng nên chưa dùng cho video thật.'

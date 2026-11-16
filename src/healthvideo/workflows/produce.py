@@ -53,6 +53,7 @@ from healthvideo.domain.visual_budget import validate_visual_budget
 from healthvideo.render.beats import resolve_scene_beats
 from healthvideo.render.chapters import render_long_form
 from healthvideo.render.input import audio_timing_qa, build_render_input
+from healthvideo.render.openmontage import require_preview_renderer, selected_renderer
 from healthvideo.render.remotion import build_render_argv, renderer_identity
 from healthvideo.render.run import (
     OUTPUT_NAME,
@@ -246,6 +247,7 @@ def _produce_v2(
     music: bool,
     hold: bool = False,
 ) -> Path:
+    renderer = selected_renderer()
     project = layout.manifest
     assert isinstance(project, ProjectManifestV2)
     if project.state not in {
@@ -266,6 +268,8 @@ def _produce_v2(
         pending = read_yaml(visual_index)
         unprocessed = visual_report.is_file() and pending.get('review_sha256') != sha256_file(visual_report)
         if pending.get('contact_sheet') and not unprocessed and (layout.artifact_root / 'renders' / OUTPUT_NAME).is_file():
+            require_preview_renderer(layout.artifact_root / 'renders' / V2_RENDER_MANIFEST_NAME,
+                                     renderer.__name__.rsplit('.', 1)[-1])
             visual_identity(layout.artifact_root)
             return layout.artifact_root / 'renders' / OUTPUT_NAME
     script = Script.model_validate(
@@ -293,7 +297,10 @@ def _produce_v2(
     pronunciation_sha256 = pronunciation_hash(pronunciation)
     provider_name = _provider_name(tts)
     provider_identity_data = provider_identity(tts)
-    renderer_identity_data = renderer_identity()
+    renderer_identity_data = (
+        renderer.renderer_identity() if renderer.__name__.endswith('.openmontage')
+        else renderer_identity()
+    )
     # Validate pending declarations before any model invocation. All GPU subprocesses
     # finish synchronously: FLUX first, then VieNeu, then ACE-Step.
     referenced_storyboard_assets(layout.artifact_root, storyboard, asset_manifest)
@@ -577,7 +584,17 @@ def _produce_v2(
         staged_output = staging_dir / OUTPUT_NAME
         chapter_parts: tuple[str, ...] = ()
         clip_outputs: dict[str, str] = {}
-        if render_input.format_profile == "youtube_long":
+        if renderer.__name__.endswith('.openmontage'):
+            if render_input.format_profile == 'youtube_long' and load_clip_scenes(layout.artifact_root, storyboard):
+                raise ValueError('OpenMontage chưa hỗ trợ gói clip 9:16; dùng PYH_RENDERER=remotion.')
+            renderer.render(
+                staged_render_input, staged_output, staging_dir,
+                runner=runner,
+                assets=[{**asset.model_dump(mode='json'),
+                         'sha256': asset_hashes.get(asset.path, asset.sha256)}
+                        for asset in asset_manifest.assets],
+            )
+        elif render_input.format_profile == "youtube_long":
             clip_outputs = render_clips(
                 load_clip_scenes(layout.artifact_root, storyboard),
                 storyboard,

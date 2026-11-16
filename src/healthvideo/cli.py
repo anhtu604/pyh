@@ -255,6 +255,13 @@ def notify_setup() -> None:
 def doctor() -> None:
     """Kiểm tra dependency của toolchain local."""
     results = check_environment(run_command)
+    from healthvideo.render.openmontage import renderer_identity as openmontage_identity
+
+    try:
+        identity = openmontage_identity()
+        typer.echo(f"INFO OpenMontage (optional): {identity['commit']} / {identity['hyperframes_version']}")
+    except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as error:
+        typer.echo(f"WARN OpenMontage (optional): {error}")
     for result in results:
         status = (
             "OK" if result.ok else "WARN" if result.required == "optional" else "FAIL"
@@ -268,8 +275,24 @@ def doctor() -> None:
         raise typer.Exit(code=1)
 
 
+@app.command(hidden=True)
+def openmontage_install() -> None:
+    """Cài checkout OpenMontage ghim commit và HyperFrames tùy chọn."""
+    from healthvideo.render.openmontage import install
+
+    try:
+        typer.echo(f"OpenMontage installed: {install()}")
+    except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as error:
+        typer.echo(str(error))
+        raise typer.Exit(code=1) from error
+
+
 def run_render_argv(argv: list[str]) -> int:
     """Run a render/concat argv without a shell; pnpm goes through its resolver."""
+    if argv[1:3] == ['-m', 'healthvideo.render.openmontage']:
+        from healthvideo.render.openmontage import run_render_argv as run_openmontage
+
+        return run_openmontage(argv)
     resolved = (
         resolve_pnpm_argv(argv[1:]) if argv[0] == "pnpm" else prepare_subprocess_argv(argv)
     )
@@ -374,6 +397,14 @@ def produce(
         typer.echo(str(error))
         raise typer.Exit(code=1) from error
     if dry_run:
+        from healthvideo.render.openmontage import selected_renderer
+
+        renderer = selected_renderer()
+        if renderer.__name__.endswith('.openmontage'):
+            typer.echo(subprocess.list2cmdline(renderer.build_render_argv(
+                output.parent / "render-input.json", output, output.parent,
+            )))
+            return
         logical = build_render_argv(
             output.parent / "render-input.json", output, output.parent, stage_fonts=False
         )
