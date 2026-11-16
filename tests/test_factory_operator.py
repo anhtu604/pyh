@@ -339,6 +339,37 @@ def test_duyet_starts_factory_on_yes(operator, monkeypatch):
     assert '456' in result.output
 
 
+def _factory_processes(root):
+    import re
+    import subprocess
+    import sys
+
+    if sys.platform == 'win32':
+        result = subprocess.run(
+            ['powershell', '-NoProfile', '-Command',
+             ("Get-CimInstance Win32_Process -Filter \"Name = 'pythonw.exe' OR Name = 'python.exe'\" | "
+             "Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress")],
+            capture_output=True, text=True, check=True,
+        )
+        entries = json.loads(result.stdout or '[]')
+        if isinstance(entries, dict):
+            entries = [entries]
+        root_arg = re.compile(r'--root (?:"' + re.escape(str(root.resolve()))
+                              + r'"|' + re.escape(str(root.resolve())) + r')(?=\s|$)')
+        return [entry for entry in entries if root_arg.search(entry['CommandLine'] or '')]
+    from pathlib import Path
+
+    entries = []
+    for path in Path('/proc').glob('[0-9]*/cmdline'):
+        try:
+            argv = path.read_bytes().split(b'\0')
+        except (FileNotFoundError, ProcessLookupError):
+            continue
+        if b'--root' in argv and argv[argv.index(b'--root') + 1] == str(root.resolve()).encode():
+            entries.append({'ProcessId': int(path.parent.name), 'CommandLine': str(argv)})
+    return entries
+
+
 def test_xuong_background_start_and_stop(tmp_path):
     import time
 
@@ -349,10 +380,56 @@ def test_xuong_background_start_and_stop(tmp_path):
     finally:
         factory.stop_background(tmp_path)
     for _ in range(100):
-        if factory.running_pid(tmp_path) is None:
+        remaining = _factory_processes(tmp_path)
+        if factory.running_pid(tmp_path) is None and not remaining:
             break
         time.sleep(0.05)
     assert factory.running_pid(tmp_path) is None
+    remaining = _factory_processes(tmp_path)
+    assert not [entry for entry in remaining if 'healthvideo.workflows.repair_service' in entry['CommandLine']]
+    assert remaining == [], 'Worker, launcher or another factory child survived stop'
+
+
+def test_stop_background_preserves_running_agent_child(tmp_path):
+    import subprocess
+    import sys
+    import time
+
+    from healthvideo.process import process_token
+
+    child_pid_file = tmp_path / 'agent.pid'
+    worker = subprocess.Popen(
+        [sys._base_executable, '-c',
+         ('import subprocess, sys, time; from pathlib import Path; '
+         'child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"]); '
+          'Path(sys.argv[1]).write_text(str(child.pid)); time.sleep(60)'),
+         str(child_pid_file)],
+        **factory.background_popen_kwargs(),
+    )
+    child_pid = None
+    try:
+        for _ in range(100):
+            if child_pid_file.exists():
+                child_pid = int(child_pid_file.read_text())
+                break
+            time.sleep(0.05)
+        assert child_pid is not None
+        child_token = process_token(child_pid)
+        assert child_token
+        lock = factory.lock_path(tmp_path)
+        lock.parent.mkdir(parents=True)
+        lock.write_text(json.dumps({'pid': worker.pid, 'process_token': factory._process_token(worker.pid)}))
+        assert factory.stop_background(tmp_path) == worker.pid
+        worker.wait(timeout=5)
+        assert process_token(child_pid) == child_token, 'Stopping worker killed its running agent'
+    finally:
+        if worker.poll() is None:
+            worker.terminate()
+        worker.wait(timeout=5)
+        if child_pid and process_token(child_pid):
+            import signal
+
+            os.kill(child_pid, signal.SIGTERM)
 
 
 def test_stop_ignores_recycled_pid(tmp_path):

@@ -903,9 +903,14 @@ def ensure_background(root: Path) -> int:
     import_paths.extend(str(Path(p).resolve()) for p in env.get('PYTHONPATH', '').split(os.pathsep) if p)
     env['PYTHONPATH'] = os.pathsep.join(dict.fromkeys(import_paths))
     service_root.mkdir(parents=True, exist_ok=True)
+    parent_pid = factory.running_pid(root) or os.getpid()
+    parent_token = process_token(parent_pid)
+    argv = [background_python(), '-m', __name__, '--root', str(root.resolve())]
+    if parent_token:
+        argv.extend(['--parent-pid', str(parent_pid), '--parent-token', parent_token])
     with (service_root / 'service.log').open('a', encoding='utf-8') as log:
         process = subprocess.Popen(
-            [background_python(), '-m', __name__, '--root', str(root.resolve())],
+            argv,
             cwd=root, env=env, stdin=subprocess.DEVNULL, stdout=log,
             stderr=subprocess.STDOUT, **background_popen_kwargs(),
         )
@@ -913,7 +918,7 @@ def ensure_background(root: Path) -> int:
 
 
 def stop_background(root: Path, *, wait_seconds: float = 5.0) -> int | None:
-    """Stop the background repair worker, waiting briefly if it is mid-maintenance."""
+    """Wait for maintenance; let the parent watchdog stop Repair after its round."""
     state_path = root / MAINTENANCE_STATE
     deadline = time.monotonic() + max(0.0, wait_seconds)
     while state_path.is_file():
@@ -927,17 +932,25 @@ def stop_background(root: Path, *, wait_seconds: float = 5.0) -> int | None:
         if time.monotonic() >= deadline:
             raise RuntimeError('Tiến trình sửa lỗi đang giữ maintenance; không dừng cưỡng bức.')
         time.sleep(0.1)
-    return factory.stop_background(root / 'cache/repair-worker')
+    # An agent can be diagnosing before maintenance exists. Never force-stop it.
+    return None
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, required=True)
-    root = parser.parse_args().root.resolve()
+    parser.add_argument('--parent-pid', type=int)
+    parser.add_argument('--parent-token')
+    args = parser.parse_args()
+    root = args.root.resolve()
+    parent_pid, parent_token = args.parent_pid, args.parent_token
     seen_factory = False
     try:
         with factory.FactoryLock(root / 'cache/repair-worker'):
             while True:
+                if (parent_pid is not None and parent_token and not is_same_process(parent_pid, parent_token)
+                        and not (root / MAINTENANCE_STATE).is_file()):
+                    return
                 try:
                     recover_interrupted_repairs(root)
                 except (OSError, ValueError, RuntimeError) as error:
@@ -945,12 +958,19 @@ def main() -> None:
                 if factory.running_pid(root):
                     seen_factory = True
                     for project, _ in factory.projects(root):
+                        if factory.running_pid(root) is None:
+                            return
                         try:
                             repair_once(root, project.name, respect_cooldown=True)
                         except (OSError, ValueError, RuntimeError) as error:
                             print(_sanitize_reason(error), flush=True)
                 for _ in range(30):
                     if seen_factory and factory.running_pid(root) is None and not (root / MAINTENANCE_STATE).is_file():
+                        return
+                    if seen_factory and (pid := factory.running_pid(root)) is not None:
+                        parent_pid, parent_token = pid, process_token(pid)
+                    if (parent_pid is not None and parent_token and not is_same_process(parent_pid, parent_token)
+                            and not (root / MAINTENANCE_STATE).is_file()):
                         return
                     time.sleep(0.5)
     except factory.FactoryAlreadyRunning:

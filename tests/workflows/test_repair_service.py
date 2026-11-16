@@ -568,11 +568,13 @@ def test_restore_and_crash_recovery_never_touch_projects_topics_docs_or_runtime_
     assert queue_yaml.exists() and feedback.exists() and pin_file.exists() and secret_file.exists()
 
 
-def test_stop_background_respects_live_maintenance_and_stops_when_idle(tmp_path, monkeypatch):
-    stopped = []
-    monkeypatch.setattr(factory, 'stop_background', lambda root: stopped.append(root) or 1234)
-    assert repair.stop_background(tmp_path, wait_seconds=0.0) == 1234
-    assert stopped == [tmp_path / 'cache/repair-worker']
+def test_stop_background_leaves_repair_to_finish_current_round(tmp_path, monkeypatch):
+    monkeypatch.setattr(factory, 'running_pid', lambda root: 1234)
+    def forbidden_stop(pid):
+        pytest.fail('Repair or its agent was forcibly stopped')
+    monkeypatch.setattr(factory, 'stop_background', forbidden_stop)
+    monkeypatch.setattr(repair, 'terminate_process_tree', forbidden_stop, raising=False)
+    assert repair.stop_background(tmp_path, wait_seconds=0.0) is None
 
     # Live maintenance in current process must block forced stop
     state_path = tmp_path / repair.MAINTENANCE_STATE
@@ -585,8 +587,10 @@ def test_stop_background_respects_live_maintenance_and_stops_when_idle(tmp_path,
         repair.stop_background(tmp_path, wait_seconds=0.0)
 
 
-def test_ensure_background_prepends_source_root_to_pythonpath_and_returns_immediately(tmp_path, monkeypatch):
+@pytest.mark.parametrize('token', ['parent-identity', None])
+def test_ensure_background_prepends_source_root_to_pythonpath_and_returns_immediately(tmp_path, monkeypatch, token):
     monkeypatch.setattr(factory, 'running_pid', lambda root: None)
+    monkeypatch.setattr(repair, 'process_token', lambda pid: token)
     captured = {}
 
     class DummyProc:
@@ -602,6 +606,11 @@ def test_ensure_background_prepends_source_root_to_pythonpath_and_returns_immedi
     expected_src = str(repair.Path(repair.__file__).resolve().parents[2])
     pythonpath_parts = captured['env']['PYTHONPATH'].split(os.pathsep)
     assert pythonpath_parts[0] == expected_src
+    if token:
+        assert captured['argv'][-4:] == ['--parent-pid', str(os.getpid()), '--parent-token', token]
+    else:
+        assert '--parent-pid' not in captured['argv']
+        assert '--parent-token' not in captured['argv']
 
 
 def test_main_exits_cleanly_when_factory_stops_after_being_seen(tmp_path, monkeypatch):
@@ -668,3 +677,41 @@ def test_repair_once_skips_paused_project(job):
     assert repair.repair_once(root, project.name) == 'paused'
     assert stages == []
 
+def test_main_exits_if_starting_worker_died_before_first_observation(tmp_path, monkeypatch):
+    import sys
+
+    monkeypatch.setattr(factory, 'running_pid', lambda root: None)
+    def unexpected_sleep(seconds):
+        pytest.fail('Repair waited forever for a worker that already died')
+    monkeypatch.setattr(repair.time, 'sleep', unexpected_sleep)
+    monkeypatch.setattr(sys, 'argv', ['repair_service', '--root', str(tmp_path),
+                                    '--parent-pid', str(os.getpid()),
+                                    '--parent-token', 'expired-identity'])
+    repair.main()
+
+
+@pytest.mark.parametrize('token', [None, 'parent-identity'])
+def test_main_finishes_current_repair_then_exits_when_worker_stops(tmp_path, monkeypatch, token):
+    import sys
+
+    alive = True
+    completed = []
+    monkeypatch.setattr(factory, 'running_pid', lambda root: 1111 if alive else None)
+    monkeypatch.setattr(repair, 'is_same_process', lambda pid, token: alive)
+    monkeypatch.setattr(repair, 'recover_interrupted_repairs', lambda root: None)
+    monkeypatch.setattr(factory, 'projects', lambda root: [(tmp_path / 'first', None), (tmp_path / 'second', None)])
+    def repair_round(root, slug, **kwargs):
+        nonlocal alive
+        alive = False  # Worker stops while this repair's agent is running.
+        assert repair.stop_background(root, wait_seconds=0) is None
+        completed.append(slug)
+    monkeypatch.setattr(repair, 'repair_once', repair_round)
+    def unexpected_sleep(seconds):
+        pytest.fail('Repair did not exit after finishing the current round')
+    monkeypatch.setattr(repair.time, 'sleep', unexpected_sleep)
+    argv = ['repair_service', '--root', str(tmp_path), '--parent-pid', '1111']
+    if token:
+        argv.extend(['--parent-token', token])
+    monkeypatch.setattr(sys, 'argv', argv)
+    repair.main()
+    assert completed == ['first']
