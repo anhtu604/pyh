@@ -748,6 +748,9 @@ def repair_once(
             return 'waiting_retry'
         return 'idle'
     detail = blocked.read_text(encoding='utf-8', errors='replace')
+    if script_review.CYCLE_LIMIT_REASON in detail:
+        # This is an editorial stop awaiting doctor guidance, not a repair incident.
+        return 'needs_attention'
     # Each retry gets a new log path. It is evidence, not a new failure.
     reason = '\n'.join(line for line in detail.splitlines()
                        if not line.startswith('log_path:')).strip()

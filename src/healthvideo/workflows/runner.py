@@ -55,8 +55,11 @@ from healthvideo.workflows.production_retry import (
     retry_status,
 )
 from healthvideo.workflows.script_review import (
+    in_rewrite_loop,
     next_script_action,
+    previous_review_notes,
     record_review,
+    reset_for_doctor_guidance,
     revision_notes,
     script_hash,
 )
@@ -473,6 +476,8 @@ def _build_step_prompt(
     if rewriting:
         notes = expert.answer_notes(project_dir) if answering else revision_notes(project_dir)
         prompt_fields["reject_note"] = f"{notes}\n{prompt_fields.get('reject_note', '')}".strip()
+    if step == 'script_review':
+        prompt_fields['reject_note'] += '\n' + previous_review_notes(project_dir)
     if step in {"draft", "storyboard_design", "revise_product", "revise_production"}:
         blocked = root / 'topics/logs' / entry.slug / 'blocked.txt'
         if blocked.is_file():
@@ -743,6 +748,12 @@ def _run_topic(
                     break
                 state = deps.read_state(project_dir)
                 pending_change = change_request.pending_note(project_dir)
+                if pending_change and state in {
+                    WorkflowState.DRAFT_READY, WorkflowState.NEEDS_MEDICAL_REVISION,
+                }:
+                    requests = change_request.pending(project_dir)
+                    if requests and requests[-1][1].get('kind') == 'edit_script':
+                        reset_for_doctor_guidance(project_dir, str(requests[-1][0]))
                 with _topic_lock(entry.slug):
                     quota_step = model_resume_step(root, project_dir, brief_context)
                     outstanding = outstanding_agent_retry(root, project_dir, brief_context)
@@ -849,6 +860,7 @@ def _run_topic(
                         break
                 if (step in {"script_review", "submit_medical"}
                         and state == WorkflowState.DRAFT_READY
+                        and (step == 'submit_medical' or not in_rewrite_loop(project_dir))
                         and not pending_change and not forced_step):
                     need_sb = not deps.storyboard_ready(project_dir)
                     need_vp = not deps.voice_prep_ready(project_dir)

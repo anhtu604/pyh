@@ -148,11 +148,20 @@ def test_decision_ids_options_and_recommendation_are_validated(tmp_path, change)
 def test_excess_decisions_require_bounded_rewrite(tmp_path, gate):
     project = create_v2_project_fixture(tmp_path / 'projects')
     (project / 'revisions/001' / (sr.LOG if gate == 'medical' else pr.LOG)).unlink(missing_ok=True)
-    for _ in range(3):
-        entry = report(project, gate=gate, decisions=[decision(id=f'D{i}') for i in range(7)])
+    total = sr.MAX_REVIEWS * sr.MAX_CYCLES if gate == 'medical' else 3
+    for attempt in range(total):
+        if gate == 'medical':
+            write_yaml_atomic(project / 'revisions/001/script/script.yaml', {
+                'lines': [{'id': 'N14', 'text': f'Writer sửa lần {attempt}'}],
+            })
+            assert sr.next_script_action(project) == 'script_review'
+            entry = report(project, decisions=[decision(id=f'D{i}') for i in range(7)],
+                           preserve_script=True)
+        else:
+            entry = report(project, gate=gate, decisions=[decision(id=f'D{i}') for i in range(7)])
         assert not entry['passed']
         if gate == 'medical':
-            if entry['round'] >= sr.MAX_REVIEWS:
+            if attempt == total - 1:
                 with pytest.raises(ValueError, match='Trạm 07'):
                     sr.next_script_action(project)
             else:

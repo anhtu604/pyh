@@ -222,9 +222,9 @@ phases:
     note: 'HANDOFF.md 2026-11-16: nhiều thay đổi chưa commit trên master (agents, Repair, dashboard, prompt); chạy pytest + Ruff rồi commit theo nhóm.'
   - id: R2.1
     title: Trạm 07 hội tụ — Writer sửa theo danh sách lỗi cộng dồn, có trần rồi hỏi bác sĩ
-    status: doing
+    status: done
     owner: codex
-    note: 'PYH-003 chấm tới vòng 16 vẫn chưa đạt (giọng/nhịp/lặp ý kẹt 6/10 từ vòng 9). Sửa tại chỗ thay vì viết lại, hết trần thì đưa thẻ quyết định; không chạy storyboard/voice_prep khi kịch bản chưa đạt. Giữ ngưỡng 7/10.'
+    note: 'Tự mở chu kỳ, trần 3 chu kỳ (6 vòng) rồi dừng chờ bác sĩ hướng dẫn qua chat; mỗi yêu cầu sửa của bác sĩ cấp lại 3 chu kỳ. Writer nhận lỗi gộp 3 vòng + xu hướng điểm, sửa tại chỗ; critic đối chiếu vòng trước. Hoãn storyboard/voice_prep khi đang sửa. Ngưỡng 7 giữ nguyên. pytest 2112 đạt.'
   - id: R2.2
     title: Thư viện anatomy đọc lúc kiểm, không giữ bản chụp lúc khởi động
     status: todo

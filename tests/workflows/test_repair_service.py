@@ -126,6 +126,22 @@ def test_busy_project_gets_no_repair_job(job, monkeypatch):
     assert not stages and not released
 
 
+def test_script_cycle_limit_is_left_for_doctor_without_spending_repairs(job):
+    from healthvideo.workflows.script_review import CYCLE_LIMIT_REASON
+
+    root, project, logs, _, released, stages = job
+    path = logs / repair.REPORT
+    original = {'revision': '001', 'attempts': 1, 'phase': 'repair_failed'}
+    write_yaml_atomic(path, original)
+    detail = f'chấm kịch bản lỗi: {CYCLE_LIMIT_REASON} (6 vòng); Bác sĩ gửi hướng dẫn qua chat.'
+    (logs / 'blocked.txt').write_text(detail, encoding='utf-8')
+    for _ in range(2):
+        assert repair.repair_once(root, project.name) == 'needs_attention'
+    assert read_yaml(path) == original
+    assert (logs / 'blocked.txt').read_text(encoding='utf-8') == detail
+    assert not stages and not released
+
+
 @pytest.mark.parametrize('path', ['../outside.py', 'projects/topic/script.yaml', 'profiles/company.yaml'])
 def test_repair_scope_rejects_escape_and_project_or_account_configuration(tmp_path, path):
     with pytest.raises(ValueError):
