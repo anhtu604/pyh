@@ -237,7 +237,7 @@ phases:
     note: 'agy Sonnet 5.5: Tổng quan còn Việc của bác sĩ + mỗi dự án một dòng có cột Ai đang xử lý; tab Tiến độ; Hoạt động sang Sơ đồ xưởng. 103 test dashboard/UI đạt, kiểm 1440px và 375px.'
   - id: R2.4
     title: Đưa mascot thương hiệu vào storyboard theo nội dung cảnh
-    status: todo
+    status: doing
     owner: codex
     note: Dùng bộ hình assets/brand/mascot qua manifest; làm sau khi PYH-003 qua Trạm 07, qua luồng mở lại cổng.
   - id: R2.5
