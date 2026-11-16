@@ -1080,7 +1080,7 @@ def test_html_includes_workshop_3d_and_preserves_section_order():
     html = dashboard.HTML_PATH.read_text(encoding='utf-8')
     positions = [
         html.index(f'id="{sec}"')
-        for sec in ('tiles', 'decisions', 'workshop', 'projects', 'activity', 'channel')
+        for sec in ('tiles', 'decisions', 'projects', 'workshop', 'activity', 'channel')
     ]
     assert positions == sorted(positions)
     assert 'prefers-reduced-motion: reduce' in html
@@ -1659,3 +1659,71 @@ def test_dashboard_html_contains_lifecycle_and_seven_tabs(server):
         'Nhật ký',
     ):
         assert marker in body
+
+def _handler_of(tmp_path, monkeypatch, state, *, jobs=(), repair=None, blocked=None, paused=False):
+    from healthvideo.storage.files import write_yaml_atomic
+
+    project = create_v2_project_fixture(tmp_path / 'projects', state=state)
+    logs = tmp_path / 'topics/logs' / project.name
+    logs.mkdir(parents=True, exist_ok=True)
+    if repair is not None:
+        write_yaml_atomic(logs / 'leader-repair.yaml', repair)
+    if blocked is not None:
+        (logs / 'blocked.txt').write_text(blocked, encoding='utf-8')
+    if paused:
+        write_yaml_atomic(logs / 'paused.yaml', {'reason': 'Bác sĩ muốn xem lại'})
+    live = [dict(job, slug=project.name) for job in jobs]
+    monkeypatch.setattr(dashboard, '_active_running_jobs', lambda root: live)
+    snap = next(p for p in dashboard.snapshot(tmp_path)['projects'] if p['slug'] == project.name)
+    card = next(p for p in dashboard.overview(tmp_path)['projects'] if p['slug'] == project.name)
+    assert snap['handler'] == card['handler']
+    assert set(card['handler']) == {'label', 'kind', 'reason'}
+    return card['handler']
+
+
+def test_handler_running_job_is_agent(tmp_path, monkeypatch):
+    handler = _handler_of(tmp_path, monkeypatch, 'draft_ready', jobs=[
+        {'role': 'writer', 'step': 'revise_medical', 'step_label': 'Đang sửa theo góp ý y khoa'},
+    ])
+    assert handler['kind'] == 'agent'
+    assert handler['label'].endswith('đang sửa theo góp ý y khoa')
+    assert handler['label'].split(' đang')[0] == dashboard._role_names()['writer']
+
+
+def test_handler_leader_repair_needs_attention_is_repair_with_reason(tmp_path, monkeypatch):
+    handler = _handler_of(
+        tmp_path, monkeypatch, 'draft_ready',
+        blocked='Bước draft lỗi: schema sai\nlog_path: x.log',
+        repair={'phase': 'needs_attention', 'attempts': 2,
+                'incident': {'state': 'draft_ready', 'reason': 'Thiếu claim E06 trong ledger\nchi tiết khác'}},
+    )
+    assert handler['kind'] == 'repair'
+    assert handler['reason'] == 'Thiếu claim E06 trong ledger'
+    assert 'Leader' in handler['label']
+
+
+def test_handler_leader_repair_diagnosing_names_leader(tmp_path, monkeypatch):
+    handler = _handler_of(
+        tmp_path, monkeypatch, 'draft_ready', blocked='Bước draft lỗi',
+        repair={'phase': 'diagnosing', 'incident': {'state': 'draft_ready', 'reason': 'Lỗi tạm thời'}},
+    )
+    assert handler == {'label': 'Leader đang điều phối sửa lỗi', 'kind': 'repair', 'reason': 'Lỗi tạm thời'}
+
+
+def test_handler_awaiting_medical_review_is_doctor(tmp_path, monkeypatch):
+    handler = _handler_of(tmp_path, monkeypatch, 'awaiting_medical_review')
+    assert handler['kind'] == 'doctor'
+    assert handler['label'] == 'Chờ bác sĩ'
+
+
+def test_handler_paused_is_paused(tmp_path, monkeypatch):
+    handler = _handler_of(tmp_path, monkeypatch, 'draft_ready', paused=True)
+    assert handler == {'label': 'Tạm dừng', 'kind': 'paused', 'reason': 'Bác sĩ muốn xem lại'}
+
+
+def test_handler_blocked_without_repair_and_idle(tmp_path, monkeypatch):
+    blocked = _handler_of(tmp_path, monkeypatch, 'draft_ready', blocked='Bước posts lỗi: thiếu file')
+    assert blocked['kind'] == 'blocked'
+    assert blocked['reason'] == 'Bước posts lỗi: thiếu file'
+    idle = _handler_of(tmp_path / 'idle', monkeypatch, 'draft_ready')
+    assert idle['kind'] == 'idle'

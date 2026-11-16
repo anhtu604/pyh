@@ -560,6 +560,87 @@ def _blocked_note(root: Path, path: Path, project: ProjectManifestV2) -> str:
     return ''
 
 
+_HANDLER_ACTIVE_REPAIR_PHASES = frozenset({
+    'diagnosing', 'repairing', 'waiting_idle', 'retry_requested', 'cooldown', 'repair_failed',
+})
+
+
+def _first_line(text: object, limit: int = 220) -> str:
+    for line in str(text or '').splitlines():
+        line = line.strip()
+        if line and not line.startswith('log_path:'):
+            return line[:limit]
+    return ''
+
+
+def project_handler(
+    root: Path,
+    slug: str,
+    *,
+    gate: str | None,
+    paused: bool,
+    blocked_note: str,
+    running_jobs: list[dict],
+    producing: bool = False,
+    roles: dict[str, str] | None = None,
+) -> dict:
+    """Who is handling a project right now: ``{label, kind, reason}``.
+
+    kind is one of agent, repair, doctor, paused, blocked, idle. Reads only the
+    verified job list plus the project's own log directory.
+    """
+    roles = roles if roles is not None else _role_names()
+    logs_dir = root / 'topics' / 'logs' / slug
+
+    def role_name(role_id: str) -> str:
+        return roles.get(role_id) or role_id or 'Agent'
+
+    job = next((j for j in running_jobs if j.get('slug') == slug), None)
+    if job is not None:
+        step_label = str(job.get('step_label') or '')
+        action = step_label[5:].lower() if step_label.startswith('Đang ') else step_label.lower()
+        who = role_name(str(job.get('role') or ''))
+        return {'label': f'{who} đang {action}' if action else f'{who} đang xử lý',
+                'kind': 'agent', 'reason': ''}
+    if gate:
+        return {'label': 'Chờ bác sĩ', 'kind': 'doctor', 'reason': ''}
+    if paused:
+        reason = _first_line(_safe_yaml(logs_dir / 'paused.yaml').get('reason'))
+        return {'label': 'Tạm dừng', 'kind': 'paused', 'reason': reason}
+    record = _safe_yaml(logs_dir / 'leader-repair.yaml')
+    phase = str(record.get('phase') or '')
+    incident = record.get('incident')
+    repair_reason = _first_line(incident.get('reason') if isinstance(incident, dict) else '')
+    repair_active = phase in {'diagnosing', 'repairing', 'retry_requested'} or (
+        bool(blocked_note) and phase in (_HANDLER_ACTIVE_REPAIR_PHASES | {'needs_attention'})
+    )
+    if repair_active:
+        reason = repair_reason or _first_line(blocked_note)
+        if phase == 'needs_attention':
+            attention = _first_line(record.get('attention_reason'))
+            delegation = record.get('delegation')
+            if isinstance(delegation, dict) and delegation.get('requires_doctor_reopen'):
+                attention = 'Cần bác sĩ mở lại cổng để sửa nội dung.'
+            return {'label': 'Leader đã chẩn đoán, chờ xử lý', 'kind': 'repair',
+                    'reason': reason or attention}
+        if phase == 'repairing':
+            return {'label': f'{role_name("repair_engineer")} đang sửa lỗi', 'kind': 'repair',
+                    'reason': reason}
+        delegation = record.get('delegation')
+        if phase == 'retry_requested' and isinstance(delegation, dict) and delegation.get('role'):
+            return {'label': f'{role_name(str(delegation["role"]))} đang sửa theo Leader',
+                    'kind': 'repair', 'reason': reason}
+        return {'label': 'Leader đang điều phối sửa lỗi', 'kind': 'repair', 'reason': reason}
+    if blocked_note:
+        return {'label': 'Bị chặn', 'kind': 'blocked', 'reason': _first_line(blocked_note)}
+    if producing:
+        return {'label': f'{role_name("render_machine")} đang dựng', 'kind': 'agent', 'reason': ''}
+    waiting = logs_dir / 'waiting-model.txt'
+    if waiting.is_file():
+        return {'label': 'Chờ model trở lại', 'kind': 'idle', 'reason': ''}
+    return {'label': 'Chờ xưởng nhận việc', 'kind': 'idle', 'reason': ''}
+
+
 def _blocked_step(note: str) -> str | None:
     match = _BLOCKED_STEP_RE.search(note or '')
     if not match:
@@ -1196,6 +1277,8 @@ def overview(
         for item in production_running(root, now=lambda: current_now)
         if item.get('slug')
     }
+    verified_jobs = _active_running_jobs(root)
+    role_names = _role_names()
     decisions: list[dict] = []
     project_cards: list[dict] = []
     done_states = {WorkflowState.VIDEO_APPROVED, WorkflowState.PACKAGED, WorkflowState.PUBLISHED_MANUAL}
@@ -1295,6 +1378,15 @@ def overview(
                 recent_by_slug.get(path.name),
                 note,
             ),
+            'handler': project_handler(
+                root, path.name,
+                gate=factory.gate_for_project(path, project),
+                paused=is_paused and current_card is None,
+                blocked_note=note,
+                running_jobs=verified_jobs,
+                producing=path.name in prod_by_slug,
+                roles=role_names,
+            ),
             'updated_at': mtime_dt.isoformat(timespec='seconds'),
         })
 
@@ -1313,7 +1405,7 @@ def overview(
         'resting': resting,
         'channel': channel_analytics.channel_overview_payload(root),
         'inbox': researcher.inbox_summary(root),
-        'running_jobs': _active_running_jobs(root),
+        'running_jobs': verified_jobs,
     }
 
 
@@ -1380,6 +1472,8 @@ def snapshot(root: Path, *, agents: Callable[[], list[str]] | None = None) -> di
     now_dt = _safe_astimezone(datetime.now(UTC))
     logs = root / 'topics' / 'logs'
     items = []
+    verified_jobs = _active_running_jobs(root)
+    role_names = _role_names()
     for path, project in factory.projects(root):
         blocked = logs / path.name / 'blocked.txt'
         reason = path / 'blocked-reason.md'
@@ -1408,6 +1502,10 @@ def snapshot(root: Path, *, agents: Callable[[], list[str]] | None = None) -> di
             'gate': gate,
             'blocked': note,
             'paused': is_paused,
+            'handler': project_handler(
+                root, path.name, gate=gate, paused=is_paused and not gate, blocked_note=note,
+                running_jobs=verified_jobs, roles=role_names,
+            ),
             'revision': project.active_revision,
             'comments': len(load_draft(root, path.name)),
             'updated_at': _safe_mtime(manifest, now_dt).isoformat(timespec='seconds'),

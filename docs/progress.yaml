@@ -232,9 +232,9 @@ phases:
     note: validate_anatomy_subjects trong domain/storyboard.py dùng snapshot lúc import nên worker sống lâu từ chối storyboard mà CLI chấp nhận.
   - id: R2.3
     title: Trang chủ gọn, thêm tab Tiến độ, hiện ai đang xử lý và bác sĩ cần làm gì
-    status: doing
+    status: done
     owner: agy
-    note: Trang chủ hiện dồn thẻ dự án lớn, nhãn lặp, không thấy ai phụ trách; tiến độ hoàn thiện xưởng chưa có chỗ xem.
+    note: 'agy Sonnet 5.5: Tổng quan còn Việc của bác sĩ + mỗi dự án một dòng có cột Ai đang xử lý; tab Tiến độ; Hoạt động sang Sơ đồ xưởng. 103 test dashboard/UI đạt, kiểm 1440px và 375px.'
   - id: R2.4
     title: Đưa mascot thương hiệu vào storyboard theo nội dung cảnh
     status: todo

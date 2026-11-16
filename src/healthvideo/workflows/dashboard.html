@@ -92,6 +92,72 @@ html[data-theme="light"] .btn.primary{color:#fff}
 .decision-banner h3{font-size:16px;font-weight:700}
 .decision-banner p{font-size:13.5px;color:var(--muted);margin-top:2px}
 .decision-calm{padding:11px 16px;font-size:14px;color:var(--muted);display:flex;align-items:center;justify-content:space-between}
+/* Home v2: doctor tasks + one-line project rows */
+.home-head{display:flex;align-items:baseline;gap:6px 16px;flex-wrap:wrap;margin:0 0 14px}
+.home-head .home-title{margin:0}
+.home-summary{font-size:13.5px;color:var(--muted)}
+.todo-list{padding:2px 16px}
+.todo-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;min-height:52px;padding:8px 0;border-top:1px solid var(--line)}
+.todo-row:first-child{border-top:0}
+.todo-main{min-width:0}
+.todo-t{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.todo-s{font-size:13px;color:var(--muted)}
+.todo-calm{display:flex;align-items:center;min-height:48px;font-size:14px;color:var(--muted)}
+.plist{display:grid;gap:8px}
+.prow{display:grid;grid-template-columns:62px minmax(0,1fr) 104px 132px 172px 164px;gap:12px;align-items:center;min-height:62px;padding:8px 14px;cursor:pointer}
+.prow:hover{border-color:var(--line-strong)}
+.prow.gate{border-color:hsl(38 96% 60% / .45)}
+.prow.blocked{border-color:hsl(350 88% 64% / .45)}
+.prow-code{font-family:'JetBrains Mono',monospace;font-size:12.5px;font-weight:600;color:var(--muted)}
+.prow-main{min-width:0}
+.prow-title{display:block;max-width:100%;padding:2px 0;background:none;text-align:left;font-weight:700;font-size:15px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prow-reason{font-size:12.5px;line-height:1.4;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prow-reason.bad{color:var(--rose)}
+.prow .chip{max-width:132px;overflow:hidden;text-overflow:ellipsis;text-align:center}
+.prow-who{font-size:13px;line-height:1.35;font-weight:600;min-width:0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow-wrap:anywhere}
+.prow-who.none{color:var(--faint);font-weight:500}
+.prow-act{display:flex;gap:6px;align-items:center;justify-content:flex-end}
+.prow-title:focus-visible,.pmenu summary:focus-visible{outline:2px solid var(--teal);outline-offset:2px;border-radius:6px}
+.msteps{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
+.pmenu{position:relative}
+.pmenu summary{list-style:none;cursor:pointer;min-width:38px;min-height:38px;display:grid;place-items:center;border-radius:11px;border:1px solid var(--line-strong);font-weight:800;font-size:16px;line-height:1}
+.pmenu summary::-webkit-details-marker{display:none}
+.pmenu-pop{position:absolute;right:0;top:44px;z-index:20;min-width:220px;display:grid;gap:6px;padding:10px;border-radius:12px;background:var(--panel-solid);border:1px solid var(--line-strong);box-shadow:0 18px 40px -12px rgba(0,0,0,.5)}
+.pmenu-pop .btn{justify-content:flex-start;width:100%}
+@media (max-width:1240px){
+  .prow{grid-template-columns:54px minmax(0,1fr) auto;grid-template-areas:"code main act" "code steps chip" "code who who";row-gap:6px}
+  .prow-code{grid-area:code;align-self:start;padding-top:4px}
+  .prow-main{grid-area:main}
+  .prow-act{grid-area:act}
+  .prow .msteps{grid-area:steps;max-width:140px}
+  .prow .chip{grid-area:chip;justify-self:start}
+  .prow-who{grid-area:who}
+}
+@media (max-width:480px){.todo-row{grid-template-columns:minmax(0,1fr) auto}.todo-row>.chip{display:none}.prow{padding:8px 10px}}
+/* Progress tab */
+.prog-top{padding:16px 18px;margin-bottom:14px}
+.prog-count{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
+.prog-bar{height:8px;border-radius:99px;background:rgba(148,173,255,.18);overflow:hidden;margin-top:10px}
+.prog-bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--teal-d),var(--teal));border-radius:99px}
+.prog-doing{margin-top:12px;display:grid;gap:2px}
+.prog-phase{margin-bottom:10px;padding:4px 16px}
+.prog-phase>summary{cursor:pointer;display:flex;gap:10px;align-items:center;min-height:44px;font-weight:700;list-style:none}
+.prog-phase>summary::-webkit-details-marker{display:none}
+.prog-phase>summary .meta{margin:0 0 0 auto;white-space:nowrap}
+.prog-phase>summary:focus-visible{outline:2px solid var(--teal);outline-offset:2px;border-radius:6px}
+.prog-tasks{list-style:none;margin:0 0 8px;padding:0}
+.prog-task{display:flex;gap:10px;align-items:baseline;padding:5px 0 5px 14px;font-size:14px;min-width:0}
+.prog-task > div,.prog-body{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
+.prog-task .prog-note,.prog-task > div .meta{white-space:normal;overflow-wrap:anywhere;line-height:1.45}
+.prog-task > .meta,.prog-task .prog-owner{margin-left:auto;white-space:nowrap;flex-shrink:0}
+.prog-note{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}
+.prog-owner{color:var(--muted);font-size:12.5px}
+.prog-mark{flex:0 0 18px;font-weight:800;text-align:center}
+.prog-task.done .prog-mark{color:var(--teal)}
+.prog-task.doing .prog-mark{color:var(--violet)}
+.prog-task.blocked .prog-mark{color:var(--rose)}
+.prog-task.todo .prog-mark{color:var(--faint)}
+.prog-id{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--faint);margin-right:6px}
 
 /* 3. Project cards */
 .card{padding:18px 20px;margin-bottom:14px;transition:border-color .25s}
@@ -565,20 +631,62 @@ html[data-theme="light"]{
 
   <nav class="home-nav" aria-label="Điều hướng xưởng">
     <a href="#home" data-home-tab="home" aria-current="page">Tổng quan</a>
+    <a href="#progress" data-home-tab="progress">Tiến độ</a>
     <a href="#workshop" data-home-tab="workshop">Sơ đồ xưởng</a>
     <a href="#research-panel" data-home-tab="research-panel">Kho đề tài</a>
     <a href="#channel" data-home-tab="channel">Kênh</a>
   </nav>
 
-  <h2 class="home-title" data-home-view="home">Tổng quan xưởng</h2>
-  <section class="tiles-grid" id="tiles" data-home-view="home" aria-label="Chỉ số tổng quan">
-    <div class="glass tile"><div class="k">Đang làm</div><div class="v" id="kpi-running">0</div></div>
-    <div class="glass tile"><div class="k">Chờ bác sĩ</div><div class="v" id="kpi-waiting">0</div></div>
-    <div class="glass tile"><div class="k">Cần chú ý</div><div class="v" id="kpi-blocked">0</div></div>
+  <div class="home-head" data-home-view="home">
+    <h2 class="home-title">Tổng quan xưởng</h2>
+    <p class="home-summary" id="tiles" role="status" aria-label="Tóm tắt xưởng"></p>
+  </div>
+
+  <!-- 2. Việc của bác sĩ -->
+  <h2 class="section-title" data-home-view="home">Việc của bác sĩ</h2>
+  <section class="glass todo-list" id="decisions" data-home-view="home" aria-live="polite"></section>
+
+  <!-- 3. Project cards -->
+  <h2 class="section-title" data-home-view="home">Dự án video</h2>
+  <section id="projects" class="plist" data-home-view="home"><div class="glass empty">Đang tải…</div></section>
+
+  <!-- 3c. Tiến độ hoàn thiện xưởng -->
+  <section id="progress" data-home-view="progress" hidden aria-labelledby="prog-title">
+    <h2 class="home-title" id="prog-title" style="margin-bottom:12px">Tiến độ hoàn thiện xưởng</h2>
+    <div class="glass prog-top">
+      <div class="prog-count" id="prog-total" aria-live="polite">Đang tải tiến độ…</div>
+      <div class="prog-bar" id="prog-bar" role="progressbar" aria-label="Tiến độ hoàn thiện xưởng" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"><i style="width:0%"></i></div>
+    </div>
+    <h2 class="section-title">Đang làm</h2>
+    <div class="glass prog-phase" id="prog-doing"></div>
+    <h2 class="section-title">Các giai đoạn</h2>
+    <div id="prog-phases"></div>
   </section>
 
-  <!-- 2. "Cần bạn quyết" strip -->
-  <section class="decisions-strip" id="decisions" data-home-view="home" aria-live="polite"></section>
+  <!-- 3b. Kho đề tài & Researcher (Google Sheet 100đ + AI) -->
+  <section class="glass card" id="research-panel" data-home-view="research-panel" hidden>
+    <div class="res-bar">
+      <div>
+        <h3 style="margin:0;font-size:15.5px">Kho đề tài &amp; Researcher (Google Sheet 100đ)</h3>
+        <div class="meta" id="res-summary">Chưa đồng bộ kho đề tài.</div>
+      </div>
+      <div class="res-head">
+        <button type="button" class="btn" id="btn-sync-sheet">Đồng bộ Google Sheet</button>
+        <input type="text" id="res-discover-q" placeholder="Từ khóa để AI tìm đề tài…" style="min-width:190px;max-width:260px" />
+        <button type="button" class="btn primary" id="btn-discover-ai">AI Tìm đề</button>
+      </div>
+    </div>
+    <details id="res-details" style="margin-top:10px">
+      <summary id="res-details-summary" style="cursor:pointer;font-weight:600;font-size:13.5px">Mở kho đề tài đã chấm điểm (Tier A/B/C)</summary>
+      <div class="res-filters" style="margin-top:10px">
+        <button type="button" class="btn primary" data-res-tier="all">Tất cả</button>
+        <button type="button" class="btn ghost" data-res-tier="A">Tier A (80–100)</button>
+        <button type="button" class="btn ghost" data-res-tier="B">Tier B (65–79)</button>
+        <button type="button" class="btn ghost" data-res-tier="C">Tier C (&lt;65)</button>
+      </div>
+      <div class="res-list" id="res-list"><div class="sub">Đang tải kho đề tài…</div></div>
+    </details>
+  </section>
 
   <!-- 2b. Xưởng 3D -->
   <section class="ws-shell" id="workshop" data-home-view="workshop" hidden aria-labelledby="ws-title" data-motion="on" data-paused="false" data-live-flow="false">
@@ -642,38 +750,9 @@ html[data-theme="light"]{
     </div>
   </section>
 
-  <!-- 3. Project cards -->
-  <h2 class="section-title" data-home-view="home">Dự án video</h2>
-  <section id="projects" data-home-view="home"><div class="glass empty">Đang tải…</div></section>
-
-  <!-- 3b. Kho đề tài & Researcher (Google Sheet 100đ + AI) -->
-  <section class="glass card" id="research-panel" data-home-view="research-panel" hidden>
-    <div class="res-bar">
-      <div>
-        <h3 style="margin:0;font-size:15.5px">Kho đề tài &amp; Researcher (Google Sheet 100đ)</h3>
-        <div class="meta" id="res-summary">Chưa đồng bộ kho đề tài.</div>
-      </div>
-      <div class="res-head">
-        <button type="button" class="btn" id="btn-sync-sheet">Đồng bộ Google Sheet</button>
-        <input type="text" id="res-discover-q" placeholder="Từ khóa để AI tìm đề tài…" style="min-width:190px;max-width:260px" />
-        <button type="button" class="btn primary" id="btn-discover-ai">AI Tìm đề</button>
-      </div>
-    </div>
-    <details id="res-details" style="margin-top:10px">
-      <summary id="res-details-summary" style="cursor:pointer;font-weight:600;font-size:13.5px">Mở kho đề tài đã chấm điểm (Tier A/B/C)</summary>
-      <div class="res-filters" style="margin-top:10px">
-        <button type="button" class="btn primary" data-res-tier="all">Tất cả</button>
-        <button type="button" class="btn ghost" data-res-tier="A">Tier A (80–100)</button>
-        <button type="button" class="btn ghost" data-res-tier="B">Tier B (65–79)</button>
-        <button type="button" class="btn ghost" data-res-tier="C">Tier C (&lt;65)</button>
-      </div>
-      <div class="res-list" id="res-list"><div class="sub">Đang tải kho đề tài…</div></div>
-    </details>
-  </section>
-
-  <!-- 4. "Công ty đang làm gì" -->
-  <h2 class="section-title" data-home-view="home">Hoạt động xưởng</h2>
-  <section class="glass card" id="activity" data-home-view="home">
+  <!-- 4. "Công ty đang làm gì" (tab Sơ đồ xưởng) -->
+  <section class="glass card" id="activity" data-home-view="workshop" hidden aria-labelledby="activity-title">
+    <h3 id="activity-title" style="font-size:15px;margin:0 0 10px">Hoạt động xưởng</h3>
     <div class="agent" id="agent">
       <div class="orb" id="agent-orb"></div>
       <div><b id="agent-title">—</b><p id="agent-sub" class="sub"></p></div>
@@ -1052,26 +1131,37 @@ function ago(iso){
   if(s<86400) return Math.floor(s/3600)+' giờ trước'; return Math.floor(s/86400)+' ngày trước';
 }
 
+const GATE_LABEL = {video:'Duyệt video', medical:'Duyệt y khoa'};
 function renderOverview(ov){
   if(!ov) return;
   overviewData = ov;
   const t = ov.tiles || {};
-  $('kpi-running').textContent = t.running ?? 0;
-  $('kpi-waiting').innerHTML = t.waiting_doctor ? `<span style="color:var(--amber)">${t.waiting_doctor}</span>` : '0';
+  const projs = ov.projects || [];
+  const attention = projs.filter(p => p.blocked && !p.gate).length;
+  const total = projs.length;
+  $('tiles').textContent = total
+    ? `${total} dự án · ${t.running ?? 0} đang chạy · ${t.waiting_doctor ?? 0} chờ bác sĩ · ${attention} cần chú ý`
+    : 'Chưa có dự án nào.';
   const decBox = $('decisions');
   const decs = ov.decisions || [];
-  if(!decs.length){
-    decBox.innerHTML = `<div class="glass decision-calm"><span>✓ Không có cổng duyệt nào đang chờ bác sĩ quyết định.</span></div>`;
+  const seen = new Set(decs.map(d => d.slug));
+  const gateOnly = projs.filter(p => p.gate && !seen.has(p.slug));
+  const rows = [
+    ...decs.map(d => ({slug:d.slug, code:d.code, title:d.title, gate:d.gate, sub:`${d.count} điểm cần quyết`, btn:`Mở thẻ quyết định (${d.count})`})),
+    ...gateOnly.map(p => ({slug:p.slug, code:p.code, title:p.title, gate:p.gate, sub:'Gói đã sẵn sàng để duyệt', btn:'Mở gói duyệt'})),
+  ];
+  if(!rows.length){
+    decBox.innerHTML = '<div class="todo-calm">Không có việc nào cần bác sĩ lúc này</div>';
   } else {
-    decBox.innerHTML = decs.map(d => `
-      <div class="decision-banner">
-        <div>
-          <h3>Cần bạn quyết · ${esc(d.code || '')} · ${esc(d.title)}</h3>
-          <p>${d.gate==='video'?'Cổng duyệt video':'Cổng duyệt y khoa'} · <b>${d.count}</b> điểm cần quyết</p>
+    decBox.innerHTML = rows.map(r => `
+      <div class="todo-row">
+        <span class="chip gate">${esc(GATE_LABEL[r.gate] || 'Cần duyệt')}</span>
+        <div class="todo-main">
+          <div class="todo-t" title="${esc(r.title)}">${r.code ? esc(r.code) + ' · ' : ''}${esc(r.title)}</div>
+          <div class="todo-s">${esc(r.sub)}</div>
         </div>
-        <button class="btn warn" type="button" data-decide-slug="${esc(d.slug)}">Mở thẻ quyết định (${d.count})</button>
-      </div>
-    `).join('');
+        <button class="btn warn" type="button" data-decide-slug="${esc(r.slug)}">${esc(r.btn)}</button>
+      </div>`).join('');
     decBox.querySelectorAll('[data-decide-slug]').forEach(b => b.onclick = () => openProduct(b.dataset.decideSlug));
   }
 
@@ -1539,61 +1629,150 @@ function renderActivityFeed(actData){
 
 const STAGE_TABS = ['overview', 'sources', 'script', 'script', 'storyboard', 'video', 'posts'];
 
+const CALM_REASON = 'Bước xử lý gặp lỗi.';
+function handlerView(p, ovp){
+  const h = p.handler || ovp.handler || {label:'—', kind:'idle', reason:''};
+  const kind = h.kind || 'idle';
+  let reason = '';
+  if(['repair','blocked','paused'].includes(kind)){
+    reason = String(h.reason || '').trim();
+    const fe = friendlyError(reason);
+    if(fe && fe !== CALM_REASON) reason = fe;
+    if(!reason && p.blocked) reason = friendlyError(p.blocked);
+  }
+  let who = h.label || '—', none = false;
+  if(kind === 'blocked'){ who = 'Chưa có ai nhận'; none = true; }
+  else if(kind === 'paused'){ who = '—'; none = true; }
+  return {kind, reason, who, none};
+}
+
 function renderProjects(d){
   const box=$('projects');
-  $('kpi-blocked').textContent = d.projects.filter(p => p.blocked && !p.gate).length;
-  const expanded = new Set([...box.querySelectorAll('.project-more[open]')].map(el => el.dataset.projectMore));
+  const expanded = new Set([...box.querySelectorAll('.pmenu[open]')].map(el => el.dataset.projectMore));
   if(!d.projects.length){box.innerHTML='<div class="glass empty">Chưa có chủ đề nào.</div>';return}
   const ovMap = {};
   (overviewData?.projects || []).forEach(p => ovMap[p.slug] = p);
+  const stages = d.stages || [];
   const order=p=>p.gate?0:(p.blocked?1:(p.paused?3:2));
   box.innerHTML=[...d.projects].sort((a,b)=>order(a)-order(b)).map(p=>{
     const ovp = ovMap[p.slug] || {};
     const isPaused = Boolean(ovp.paused ?? p.paused);
     const cls=chipClass({...p, paused: isPaused});
     const done=['packaged','published_manual'].includes(p.state);
-    const acts=[], more=[];
+    const hv = handlerView(p, ovp);
     const q=encodeURIComponent(p.slug);
+    const detailBtn = `<button type="button" class="btn" data-product="${esc(p.slug)}">Xem chi tiết</button>`;
+    let primary = detailBtn, detailInMenu = false;
     if(p.gate){
-      acts.push(`<button type="button" class="btn warn" data-product="${esc(p.slug)}">Nghiệm thu · quyết định</button>`);
-    } else {
-      acts.push(`<button type="button" class="btn" data-product="${esc(p.slug)}">Xem chi tiết</button>`);
+      primary = `<button type="button" class="btn warn" data-product="${esc(p.slug)}">Duyệt</button>`; detailInMenu = true;
+    } else if(isPaused && !done){
+      primary = `<button type="button" class="btn primary" data-resume-project="${esc(p.slug)}">▶ Tiếp tục</button>`; detailInMenu = true;
+    } else if(p.blocked && !done){
+      primary = `<button type="button" class="btn warn" data-retry-project="${esc(p.slug)}" data-revision="${esc(p.revision)}">Làm lại</button>`; detailInMenu = true;
     }
-    if(p.comments) more.push(`<span class="tag" style="align-self:center;color:var(--amber)">${p.comments} góp ý nháp</span>`);
-    if(p.blocked && !p.gate && !done) acts.push(`<button type="button" class="btn warn" data-retry-project="${esc(p.slug)}" data-revision="${esc(p.revision)}">Làm lại bước lỗi</button>`);
-    if(p.blocked && REOPENABLE.includes(p.state)) acts.push(`<button type="button" class="btn warn" data-reopen="${esc(p.slug)}">Mở lại cổng y khoa để sửa</button>`);
-    if(!done){
-      if(isPaused){
-        acts.push(`<button type="button" class="btn primary" data-resume-project="${esc(p.slug)}">▶ Tiếp tục</button>`);
-      } else {
-        more.push(`<button type="button" class="btn" data-pause-project="${esc(p.slug)}">${ovp.is_running ? '⏸ Dừng bước / Tạm hoãn' : '⏸ Tạm dừng'}</button>`);
-      }
-    }
+    const more = [];
+    if(detailInMenu) more.push(detailBtn);
+    if(p.comments) more.push(`<span class="tag" style="color:var(--amber)">${p.comments} góp ý nháp</span>`);
+    if(p.blocked && !p.gate && !done && !primary.includes('data-retry-project')) more.push(`<button type="button" class="btn warn" data-retry-project="${esc(p.slug)}" data-revision="${esc(p.revision)}">Làm lại bước lỗi</button>`);
+    if(p.blocked && REOPENABLE.includes(p.state)) more.push(`<button type="button" class="btn warn" data-reopen="${esc(p.slug)}">Mở lại cổng y khoa để sửa</button>`);
+    if(!done && !isPaused) more.push(`<button type="button" class="btn" data-pause-project="${esc(p.slug)}">${ovp.is_running ? '⏸ Dừng bước / Tạm hoãn' : '⏸ Tạm dừng'}</button>`);
     more.push(`<button type="button" class="btn ghost" data-chat-project="${esc(p.slug)}" data-revision="${esc(p.revision)}">💬 Nhắn điều phối</button>`);
     more.push(`<button type="button" class="btn ghost" data-act="/api/project/${q}/folder">Mở thư mục</button>`);
     more.push(`<button type="button" class="btn danger" data-delete-project="${esc(p.slug)}">Xoá dự án</button>`);
-    const noteHtml=p.blocked?`<div class="note"><div class="note-msg">${esc(friendlyError(p.blocked))}</div><details class="note-raw"><summary>Chi tiết lỗi</summary><code>${esc(p.blocked)}</code></details></div>`:'';
-    const statusLine = ovp.status_line || p.state_label;
-    return `<article class="glass card ${p.gate?'gate':''} ${cls==='bad'?'blocked':''}">
-          <div class="card-top"><div><h3>${p.code ? `<span class="tag">${esc(p.code)}</span> ` : ''}${esc(p.title)}</h3>
-            </div>
-            <span class="chip ${cls}">${esc(p.state_label)}</span></div>
-          <div class="status-line">${esc(statusLine)}</div>
-          ${noteHtml}
-          <div class="actions">${acts.join('')}</div>
-          <details class="project-more" data-project-more="${esc(p.slug)}" ${expanded.has(p.slug)?'open':''}>
-            <summary>Thao tác khác</summary>
-            <div class="actions">${more.join('')}</div>
+    const stage = Math.min(Math.max(p.stage ?? 0, 0), 6);
+    const stageName = stages[stage] || '';
+    const bars = [0,1,2,3,4,5,6].map(k => {
+      let c='step';
+      if(k<stage || done) c+=' done';
+      else if(k===stage){ c+=' cur'; if(p.gate || isPaused) c+=' wait'; if(cls==='bad') c+=' bad'; }
+      return `<div class="${c}"><div class="bar"></div></div>`;
+    }).join('');
+    const stepsTip = done ? 'Đã hoàn tất 7/7 bước' : `Bước ${stage+1}/7: ${stageName}`;
+    const chipText = cls==='bad' ? 'Bị chặn' : (cls==='paused' ? 'Tạm dừng' : p.state_label);
+    const reasonHtml = hv.reason ? `<div class="prow-reason ${hv.kind==='paused'?'':'bad'}" title="${esc(hv.reason)}">${esc(hv.reason)}</div>` : '';
+    return `<article class="glass prow ${p.gate?'gate':''} ${cls==='bad'?'blocked':''}" data-row-slug="${esc(p.slug)}">
+        <span class="prow-code">${esc(p.code || '')}</span>
+        <div class="prow-main">
+          <button type="button" class="prow-title" data-product="${esc(p.slug)}" title="${esc(p.title)}">${esc(p.title)}</button>
+          ${reasonHtml}
+        </div>
+        <div class="msteps" role="img" aria-label="${esc(stepsTip)}" title="${esc(stepsTip)}">${bars}</div>
+        <span class="chip ${cls}" title="${esc(p.state_label)}">${esc(chipText)}</span>
+        <span class="prow-who ${hv.none?'none':''}" title="${esc(hv.who)}">${esc(hv.who)}</span>
+        <div class="prow-act">
+          ${primary}
+          <details class="pmenu" data-project-more="${esc(p.slug)}" ${expanded.has(p.slug)?'open':''}>
+            <summary aria-label="Thao tác khác cho ${esc(p.code || p.title)}" title="Thao tác khác">⋯</summary>
+            <div class="pmenu-pop">${more.join('')}</div>
           </details>
+        </div>
       </article>`}).join('');
   box.querySelectorAll('[data-act]').forEach(b=>b.onclick=()=>act(b.dataset.act));
-  box.querySelectorAll('[data-product]').forEach(b=>b.onclick=()=>openProduct(b.dataset.product));
+  box.querySelectorAll('[data-product]').forEach(b=>b.onclick=ev=>{ev.stopPropagation();openProduct(b.dataset.product)});
   box.querySelectorAll('[data-retry-project]').forEach(b=>b.onclick=()=>retryBlockedProject(b));
   box.querySelectorAll('[data-reopen]').forEach(b=>b.onclick=()=>openReopen(d.projects.find(p=>p.slug===b.dataset.reopen)).catch(e=>toast(e.message,true)));
   box.querySelectorAll('[data-pause-project]').forEach(b=>b.onclick=()=>pauseProject(b.dataset.pauseProject, b));
   box.querySelectorAll('[data-resume-project]').forEach(b=>b.onclick=()=>resumeProject(b.dataset.resumeProject, b));
   box.querySelectorAll('[data-chat-project]').forEach(b=>b.onclick=()=>openChatForProject(b.dataset.chatProject, b.dataset.revision, 'overview'));
   box.querySelectorAll('[data-delete-project]').forEach(b=>b.onclick=()=>openDeleteModal(b.dataset.deleteProject));
+  box.querySelectorAll('.prow').forEach(row=>row.onclick=ev=>{
+    if(ev.target.closest('button,summary,details,a,input')) return;
+    openProduct(row.dataset.rowSlug);
+  });
+}
+document.addEventListener('click', ev => {
+  document.querySelectorAll('.pmenu[open]').forEach(m => { if(!m.contains(ev.target)) m.removeAttribute('open'); });
+});
+document.addEventListener('keydown', ev => {
+  if(ev.key !== 'Escape') return;
+  document.querySelectorAll('.pmenu[open]').forEach(m => { m.removeAttribute('open'); m.querySelector('summary')?.focus(); });
+});
+
+/* ---------- Tab Tiến độ: /api/progress ---------- */
+const PROG_STATUS = {done:['✓','Đã xong'], doing:['●','Đang làm'], blocked:['!','Bị chặn'], todo:['○','Chưa làm']};
+const progToggle = {};
+function progTask(task){
+  const st = PROG_STATUS[task.status] ? task.status : 'todo';
+  const [mark, label] = PROG_STATUS[st];
+  return `<li class="prog-task ${st}">
+    <span class="prog-mark" role="img" aria-label="${esc(label)}">${mark}</span>
+    <div class="prog-body"><span class="prog-id">${esc(task.id)}</span>${esc(task.title)}${task.note ? `<span class="prog-note">${esc(task.note)}</span>` : ''}</div>
+    ${task.owner ? `<span class="prog-owner">${esc(task.owner)}</span>` : ''}
+  </li>`;
+}
+function renderProgress(d){
+  if(!$('prog-total')) return;
+  const total = d.total || 0, done = d.done || 0;
+  const pct = total ? Math.round(done * 100 / total) : 0;
+  $('prog-total').textContent = `${done}/${total} việc` + (d.updated ? ` · cập nhật ${d.updated}` : '');
+  const bar = $('prog-bar');
+  bar.setAttribute('aria-valuemax', total); bar.setAttribute('aria-valuenow', done);
+  const fill = bar.querySelector('i'); if(fill) fill.style.width = pct + '%';
+  const doing = d.doing || [];
+  $('prog-doing').innerHTML = doing.length ? `<ul class="prog-tasks">${doing.map(progTask).join('')}</ul>` : '<div class="todo-calm">Không có việc nào đang làm.</div>';
+  const phases = [...(d.phases || [])].reverse();
+  $('prog-phases').innerHTML = phases.length ? phases.map(ph => {
+    const key = ph.id || ph.title;
+    const open = key in progToggle ? progToggle[key] : ph.done < ph.total;
+    return `<details class="glass prog-phase" data-prog-phase="${esc(key)}" ${open ? 'open' : ''}>
+      <summary><span>${esc(ph.id ? ph.id + ' · ' : '')}${esc(ph.title)}</span><span class="meta">${ph.done}/${ph.total}</span></summary>
+      <ul class="prog-tasks">${(ph.tasks || []).map(progTask).join('')}</ul>
+    </details>`;
+  }).join('') : '<div class="glass empty">Chưa có file tiến độ.</div>';
+  $('prog-phases').querySelectorAll('[data-prog-phase]').forEach(el => el.addEventListener('toggle', () => { progToggle[el.dataset.progPhase] = el.open; }));
+}
+async function loadProgress(){
+  try{
+    const r = await fetch('/api/progress', {cache:'no-store'});
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    renderProgress(await r.json());
+  }catch(e){
+    if($('prog-total') && /^Đang tải/.test($('prog-total').textContent)) $('prog-total').textContent = 'Không tải được tiến độ. Thử tải lại trang.';
+  }
+}
+function currentHomeTab(){
+  const link = [...document.querySelectorAll('[data-home-tab]')].find(l => l.hash === window.location.hash);
+  return link?.dataset.homeTab || 'home';
 }
 
 async function pauseProject(slug, button){
@@ -1806,6 +1985,7 @@ async function refresh(){
     syncStartGate();
     syncChannelAnalysis();
     renderChannelPublish();
+    await loadProgress();
   }catch(e){
     wsOffline = true;
     $('offline').classList.add('show');
@@ -3786,6 +3966,7 @@ function showHomeView(){
     else link.removeAttribute('aria-current');
   }
   document.querySelectorAll('[data-home-view]').forEach(el => { el.hidden = el.dataset.homeView !== active; });
+  if(active === 'progress') loadProgress();
 }
 window.addEventListener('hashchange', showHomeView);
 showHomeView();
