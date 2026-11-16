@@ -26,7 +26,15 @@ def _component_file(repo: Path, filename: str) -> Path:
 
 
 def load_library(repo: Path) -> dict[str, dict[str, Any]]:
-    raw = json.loads((repo / LIBRARY_PATH).read_text(encoding="utf-8"))
+    path = repo / LIBRARY_PATH
+    try:
+        source = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise RuntimeError(f"Cannot read anatomy library {path}: {exc}") from exc
+    try:
+        raw = json.loads(source)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid anatomy library JSON in {path}: {exc}") from exc
     if not isinstance(raw, Mapping) or not isinstance(raw.get("components"), Mapping):
         raise TypeError(f"Invalid anatomy library schema in {repo / LIBRARY_PATH}")
     components: dict[str, dict[str, Any]] = {}

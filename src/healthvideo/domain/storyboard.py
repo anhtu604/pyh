@@ -501,7 +501,7 @@ class Storyboard(BaseModel):
         required = 4 if self.format_profile == "youtube_long" else 2
         if len(mechanisms) >= required and len({scene.anatomy.subject for scene in mechanisms}) < required:
             raise ValueError(f"{self.format_profile} requires at least {required} anatomy.subject values; "
-                             "choose from library.json: " + ", ".join(SUPPORTED_ANATOMY_SUBJECTS))
+                             "choose from library.json: " + ", ".join(supported_anatomy_subjects()))
         return self
 
     @model_validator(mode="after")
@@ -531,14 +531,23 @@ class Storyboard(BaseModel):
         return self
 
 
-SUPPORTED_ANATOMY_SUBJECTS = tuple(load_library(Path(__file__).resolve().parents[3]))
+def supported_anatomy_subjects(repo: Path | None = None) -> tuple[str, ...]:
+    """Read current renderer subjects, including additions made by a running worker."""
+    if repo is None:
+        repo = Path(__file__).resolve().parents[3]
+    return tuple(load_library(repo))
+
+
+# Import-time snapshot for compatibility only; validation must read the live library.
+SUPPORTED_ANATOMY_SUBJECTS = supported_anatomy_subjects()
 
 
 def validate_anatomy_subjects(storyboard: Storyboard) -> None:
     """Require anatomy subjects supported by the renderer."""
+    subjects = supported_anatomy_subjects()
     for scene in storyboard.scenes:
-        if scene.anatomy is not None and scene.anatomy.subject not in SUPPORTED_ANATOMY_SUBJECTS:
+        if scene.anatomy is not None and scene.anatomy.subject not in subjects:
             raise ValueError(
                 f"Scene {scene.id}: unsupported anatomy subject {scene.anatomy.subject!r}; "
-                f"supported subjects: {', '.join(SUPPORTED_ANATOMY_SUBJECTS)}"
+                f"supported subjects: {', '.join(subjects)}"
             )

@@ -4,11 +4,17 @@ from pathlib import Path
 
 import pytest
 
-from healthvideo.domain.storyboard import SUPPORTED_ANATOMY_SUBJECTS
+from healthvideo.domain.storyboard import (
+    SUPPORTED_ANATOMY_SUBJECTS,
+    Scene,
+    Storyboard,
+    validate_anatomy_subjects,
+)
 from healthvideo.storage.files import sha256_file
 from healthvideo.visuals.anatomy_library import (
     APPROVED_PATH,
     LIBRARY_PATH,
+    cue_actions,
     library_status,
     load_library,
     record_approval,
@@ -156,3 +162,88 @@ def test_supported_subjects_unreadable_library_fails(monkeypatch) -> None:
     monkeypatch.setattr("healthvideo.visuals.anatomy_library.load_library", unreadable)
     with pytest.raises((FileNotFoundError, RuntimeError), match="library.json"):
         runpy.run_path(str(REPOSITORY_ROOT / "src/healthvideo/domain/storyboard.py"))
+
+
+def _anatomy_board(subject: str) -> Storyboard:
+    return Storyboard(
+        title="Live anatomy library",
+        scenes=(Scene(
+            id="S01", start_frame=0, duration_frames=90,
+            narration="Anatomy", visual="anatomy_animation",
+            anatomy={"subject": subject, "state": "normal", "motion": "pulse"},
+        ),),
+    )
+
+
+def _use_fake_repo(tmp_path: Path, monkeypatch) -> Path:
+    repo = _setup_fake_repo(tmp_path)
+    monkeypatch.setattr(
+        "healthvideo.domain.storyboard.__file__",
+        str(repo / "src/healthvideo/domain/storyboard.py"),
+    )
+    return repo
+
+
+def test_validation_reads_library_changes_without_reload(tmp_path: Path, monkeypatch) -> None:
+    repo = _use_fake_repo(tmp_path, monkeypatch)
+    board = _anatomy_board("new_subject")
+    with pytest.raises(ValueError, match="unsupported anatomy subject 'new_subject'"):
+        validate_anatomy_subjects(board)
+
+    path = repo / LIBRARY_PATH
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["components"]["new_subject"] = {"file": "New.tsx"}
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    validate_anatomy_subjects(board)
+
+    del payload["components"]["new_subject"]
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="unsupported anatomy subject 'new_subject'"):
+        validate_anatomy_subjects(board)
+
+
+def test_variety_error_lists_current_subjects(tmp_path: Path, monkeypatch) -> None:
+    repo = _use_fake_repo(tmp_path, monkeypatch)
+    board = _anatomy_board("heart")
+    path = repo / LIBRARY_PATH
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["components"]["new_subject"] = {"file": "New.tsx"}
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="choose from library.json: .*new_subject"):
+        Storyboard(title=board.title, scenes=board.scenes * 2)
+
+
+def test_validation_reports_corrupt_library_after_success(tmp_path: Path, monkeypatch) -> None:
+    repo = _use_fake_repo(tmp_path, monkeypatch)
+    board = _anatomy_board("heart")
+    validate_anatomy_subjects(board)
+    (repo / LIBRARY_PATH).write_text('{"components":', encoding="utf-8")
+    with pytest.raises(ValueError, match=r"Invalid anatomy library JSON.*library\.json"):
+        validate_anatomy_subjects(board)
+
+
+def test_validation_reports_missing_library(tmp_path: Path, monkeypatch) -> None:
+    repo = _use_fake_repo(tmp_path, monkeypatch)
+    (repo / LIBRARY_PATH).unlink()
+    with pytest.raises((OSError, RuntimeError), match=r"library\.json"):
+        validate_anatomy_subjects(_anatomy_board("heart"))
+
+
+def test_cue_actions_reads_library_and_component_changes(tmp_path: Path) -> None:
+    repo = _setup_fake_repo(tmp_path)
+    component = repo / LIBRARY_PATH.parent / "Heart.tsx"
+    component.write_text("export const CUE_ACTIONS = ['pulse'];", encoding="utf-8")
+    assert cue_actions(repo, "heart") == ("pulse",)
+    component.write_text("export const CUE_ACTIONS = ['relax'];", encoding="utf-8")
+    assert cue_actions(repo, "heart") == ("relax",)
+
+    other = component.with_name("New.tsx")
+    other.write_text("export const CUE_ACTIONS = ['highlight'];", encoding="utf-8")
+    path = repo / LIBRARY_PATH
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["components"]["heart"]["file"] = "New.tsx"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    assert cue_actions(repo, "heart") == ("highlight",)
+    path.write_text('{"components":', encoding="utf-8")
+    with pytest.raises(ValueError, match=r"Invalid anatomy library JSON.*library\.json"):
+        cue_actions(repo, "heart")
