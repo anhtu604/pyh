@@ -227,7 +227,7 @@ phases:
     note: 'Tự mở chu kỳ, trần 3 chu kỳ (6 vòng) rồi dừng chờ bác sĩ hướng dẫn qua chat; mỗi yêu cầu sửa của bác sĩ cấp lại 3 chu kỳ. Writer nhận lỗi gộp 3 vòng + xu hướng điểm, sửa tại chỗ; critic đối chiếu vòng trước. Hoãn storyboard/voice_prep khi đang sửa. Ngưỡng 7 giữ nguyên. pytest 2112 đạt.'
   - id: R2.2
     title: Thư viện anatomy đọc lúc kiểm, không giữ bản chụp lúc khởi động
-    status: todo
+    status: doing
     owner: codex
     note: validate_anatomy_subjects trong domain/storyboard.py dùng snapshot lúc import nên worker sống lâu từ chối storyboard mà CLI chấp nhận.
   - id: R2.3
