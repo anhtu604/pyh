@@ -1,5 +1,5 @@
 version: 1
-updated: '2026-11-15'
+updated: '2026-11-16'
 phases:
 - id: R1
   title: Hoàn thiện xưởng trước khi làm video mới
@@ -201,7 +201,7 @@ phases:
     title: Xưởng chạy A–Z, chỉ quan sát và ghi chỗ phải can thiệp
     status: doing
     owner: xưởng
-    note: 'Xưởng nền (PID 40508) đang tự động chạy các chủ đề thật tới cổng duyệt y khoa; an-gao-lut gặp 1 lần agy thoát rỗng 0 byte lúc chuyển daemon (sẽ tự thử lại ở vòng kế tiếp do fingerprint mới) và hoc-xuong-ca đang chạy research.'
+    note: '2026-11-16 21:45: PYH-002 chờ bác sĩ duyệt y khoa; PYH-003 bị chặn ở Trạm 07 sau vòng 16 (xử lý ở R2.1); PYH-001, PYH-004 tạm dừng ở bước kịch bản.'
   - id: '4.3'
     title: Sửa các chỗ đã ghi
     status: doing
@@ -212,3 +212,36 @@ phases:
     status: done
     owner: claude
     note: 'Đã clone sạch vào TEMP chạy install/install.ps1 -SkipTts đạt exit 0 ("HealthVideo installation complete."); pyh_skill và pyh_claude_command đều OK.'
+- id: R2
+  title: Tiếp nhận từ Codex — xưởng tự chạy tới sản phẩm hoặc quyết định của bác sĩ
+  tasks:
+  - id: R2.0
+    title: Kiểm toàn bộ thay đổi Codex để lại và commit thành mốc an toàn
+    status: todo
+    owner: claude
+    note: 'HANDOFF.md 2026-11-16: nhiều thay đổi chưa commit trên master (agents, Repair, dashboard, prompt); chạy pytest + Ruff rồi commit theo nhóm.'
+  - id: R2.1
+    title: Trạm 07 hội tụ — Writer sửa theo danh sách lỗi cộng dồn, có trần rồi hỏi bác sĩ
+    status: todo
+    owner: codex
+    note: 'PYH-003 chấm tới vòng 16 vẫn chưa đạt (giọng/nhịp/lặp ý kẹt 6/10 từ vòng 9). Sửa tại chỗ thay vì viết lại, hết trần thì đưa thẻ quyết định; không chạy storyboard/voice_prep khi kịch bản chưa đạt. Giữ ngưỡng 7/10.'
+  - id: R2.2
+    title: Thư viện anatomy đọc lúc kiểm, không giữ bản chụp lúc khởi động
+    status: todo
+    owner: codex
+    note: validate_anatomy_subjects trong domain/storyboard.py dùng snapshot lúc import nên worker sống lâu từ chối storyboard mà CLI chấp nhận.
+  - id: R2.3
+    title: Trang chủ gọn, thêm tab Tiến độ, hiện ai đang xử lý và bác sĩ cần làm gì
+    status: doing
+    owner: agy
+    note: Trang chủ hiện dồn thẻ dự án lớn, nhãn lặp, không thấy ai phụ trách; tiến độ hoàn thiện xưởng chưa có chỗ xem.
+  - id: R2.4
+    title: Đưa mascot thương hiệu vào storyboard theo nội dung cảnh
+    status: todo
+    owner: codex
+    note: Dùng bộ hình assets/brand/mascot qua manifest; làm sau khi PYH-003 qua Trạm 07, qua luồng mở lại cổng.
+  - id: R2.5
+    title: OpenMontage làm renderer
+    status: todo
+    owner: claude
+    note: Đề xuất hoãn tới khi có một video Remotion qua cổng video; mẫu 8 giây mới chứng minh runtime. Chờ bác sĩ quyết.
