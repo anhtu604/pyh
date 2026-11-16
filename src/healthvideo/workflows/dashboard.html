@@ -102,6 +102,8 @@ html[data-theme="light"] .btn.primary{color:#fff}
 .todo-main{min-width:0}
 .todo-t{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .todo-s{font-size:13px;color:var(--muted)}
+.todo-acts{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+@media (max-width:480px){.todo-guidance{grid-template-columns:minmax(0,1fr)}.todo-row.todo-guidance>.chip{display:inline-block;justify-self:start}.todo-guidance .todo-t,.todo-guidance .todo-s{white-space:normal;overflow-wrap:anywhere}.todo-acts{justify-content:flex-start}}
 .todo-calm{display:flex;align-items:center;min-height:48px;font-size:14px;color:var(--muted)}
 .plist{display:grid;gap:8px}
 .prow{display:grid;grid-template-columns:62px minmax(0,1fr) 104px 132px 172px 164px;gap:12px;align-items:center;min-height:62px;padding:8px 14px;cursor:pointer}
@@ -1149,13 +1151,27 @@ function renderOverview(ov){
   const seen = new Set(decs.map(d => d.slug));
   const gateOnly = projs.filter(p => p.gate && !seen.has(p.slug));
   const rows = [
-    ...decs.map(d => ({slug:d.slug, code:d.code, title:d.title, gate:d.gate, sub:`${d.count} điểm cần quyết`, btn:`Mở thẻ quyết định (${d.count})`})),
+    ...decs.map(d => d.kind === 'script_guidance'
+      ? {slug:d.slug, code:d.code, title:d.title, guidance:true, stuck:d.stuck || '', rounds:d.rounds || 0,
+         sub:`${d.message || 'Trạm 07 chưa đạt sau 3 chu kỳ'}${d.rounds ? ` (${d.rounds} vòng)` : ''} · tiêu chí kẹt: ${d.stuck || 'chưa rõ'}`}
+      : {slug:d.slug, code:d.code, title:d.title, gate:d.gate, sub:`${d.count} điểm cần quyết`, btn:`Mở thẻ quyết định (${d.count})`}),
     ...gateOnly.map(p => ({slug:p.slug, code:p.code, title:p.title, gate:p.gate, sub:'Gói đã sẵn sàng để duyệt', btn:'Mở gói duyệt'})),
   ];
   if(!rows.length){
     decBox.innerHTML = '<div class="todo-calm">Không có việc nào cần bác sĩ lúc này</div>';
   } else {
-    decBox.innerHTML = rows.map(r => `
+    decBox.innerHTML = rows.map(r => r.guidance ? `
+      <div class="todo-row todo-guidance">
+        <span class="chip gate">Biên kịch</span>
+        <div class="todo-main">
+          <div class="todo-t" title="${esc(r.title)}">${r.code ? esc(r.code) + ' · ' : ''}${esc(r.title)}</div>
+          <div class="todo-s">${esc(r.sub)}</div>
+        </div>
+        <div class="todo-acts">
+          <button class="btn warn" type="button" data-guide-slug="${esc(r.slug)}" data-guide-stuck="${esc(r.stuck)}" aria-label="Gửi hướng dẫn cho Biên kịch: ${esc(r.title)}">Gửi hướng dẫn</button>
+          <button class="btn" type="button" data-guide-review="${esc(r.slug)}" aria-label="Xem nhận xét của critic: ${esc(r.title)}">Xem nhận xét</button>
+        </div>
+      </div>` : `
       <div class="todo-row">
         <span class="chip gate">${esc(GATE_LABEL[r.gate] || 'Cần duyệt')}</span>
         <div class="todo-main">
@@ -1165,6 +1181,8 @@ function renderOverview(ov){
         <button class="btn warn" type="button" data-decide-slug="${esc(r.slug)}">${esc(r.btn)}</button>
       </div>`).join('');
     decBox.querySelectorAll('[data-decide-slug]').forEach(b => b.onclick = () => openProduct(b.dataset.decideSlug));
+    decBox.querySelectorAll('[data-guide-review]').forEach(b => b.onclick = () => openProduct(b.dataset.guideReview, 'script'));
+    decBox.querySelectorAll('[data-guide-slug]').forEach(b => b.onclick = () => startScriptGuidance(b.dataset.guideSlug, b.dataset.guideStuck));
   }
 
   renderResearchSummary(ov.inbox || null);
@@ -2012,6 +2030,18 @@ function updateChatContext(patch={}){
   $('chat-ctx').textContent = parts.length ? parts.join(' · ') : 'Toàn xưởng';
 }
 
+function startScriptGuidance(slug, stuck){
+  const panel = $('chat-panel'); if(panel) panel.classList.add('open');
+  updateChatContext({slug, revision: null, view: 'script', scene: null, time_s: null});
+  loadChat();
+  const inp = $('chat-input');
+  if(inp){
+    inp.value = `Hướng dẫn cho Biên kịch về ${stuck || 'tiêu chí kẹt'}: `;
+    inp.placeholder = 'Sửa gợi ý rồi gửi cho Điều phối viên…';
+    inp.focus();
+    inp.setSelectionRange(inp.value.length, inp.value.length);
+  }
+}
 async function openProduct(slug, tab){
   try{
     const r=await fetch(`/api/project/${encodeURIComponent(slug)}/bundle`,{cache:'no-store'}); const b=await r.json();

@@ -1041,3 +1041,14 @@ def test_progress_tasks_and_cards_wrap_long_notes_without_horizontal_overflow():
         assert(doc.getElementById('prog-phases').querySelectorAll('.prog-owner').length === 2, 'phases render 2 .prog-owner spans');
         '''
     )
+
+
+def test_script_guidance_row_in_doctor_tasks():
+    html = Path(dashboard.HTML_PATH).read_text(encoding='utf-8')
+    assert "d.kind === 'script_guidance'" in html
+    assert 'Gửi hướng dẫn' in html and 'Xem nhận xét' in html
+    assert 'function startScriptGuidance' in html
+    assert "openProduct(b.dataset.guideReview, 'script')" in html
+    assert 'Hướng dẫn cho Biên kịch về ' in html
+    assert 'aria-label="Gửi hướng dẫn cho Biên kịch' in html
+    assert '.todo-row.todo-guidance>.chip' in html

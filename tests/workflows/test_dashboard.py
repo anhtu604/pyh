@@ -1727,3 +1727,29 @@ def test_handler_blocked_without_repair_and_idle(tmp_path, monkeypatch):
     assert blocked['reason'] == 'Bước posts lỗi: thiếu file'
     idle = _handler_of(tmp_path / 'idle', monkeypatch, 'draft_ready')
     assert idle['kind'] == 'idle'
+
+
+def _guidance_note(stuck='Độ chính xác y khoa 5, Hook 6'):
+    from healthvideo.workflows import script_review
+
+    return (f'{script_review.CYCLE_LIMIT_REASON} (9 vòng); tiêu chí kẹt: {stuck}. '
+            'Bác sĩ gửi hướng dẫn cho Biên kịch qua chat để mở chu kỳ mới.')
+
+
+def test_script_guidance_item_in_overview_and_doctor_handler(tmp_path, monkeypatch):
+    handler = _handler_of(tmp_path, monkeypatch, 'draft_ready', blocked=_guidance_note())
+    assert handler == {'label': 'Chờ bác sĩ hướng dẫn Biên kịch', 'kind': 'doctor',
+                       'reason': 'Độ chính xác y khoa 5, Hook 6'}
+    items = [d for d in dashboard.overview(tmp_path)['decisions'] if d.get('kind') == 'script_guidance']
+    assert len(items) == 1
+    item = items[0]
+    assert item['stuck'] == 'Độ chính xác y khoa 5, Hook 6'
+    assert item['rounds'] == 9
+    assert 'Trạm 07 chưa đạt sau 3 chu kỳ' in item['message']
+    assert {'slug', 'code', 'title'} <= set(item)
+
+
+def test_script_guidance_ignores_other_blocked_reasons(tmp_path, monkeypatch):
+    handler = _handler_of(tmp_path, monkeypatch, 'draft_ready', blocked='Bước posts lỗi: thiếu file')
+    assert handler['kind'] == 'blocked'
+    assert not any(d.get('kind') == 'script_guidance' for d in dashboard.overview(tmp_path)['decisions'])

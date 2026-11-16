@@ -51,7 +51,12 @@ from healthvideo.workflows import (
     standards,
 )
 from healthvideo.workflows.gate_review import approve_gate, reject_gate
-from healthvideo.workflows.script_review import review_view
+from healthvideo.workflows.script_review import (
+    CRITERIA,
+    CYCLE_LIMIT_REASON,
+    PASS_SCORE,
+    review_view,
+)
 
 APP_ID = 'healthvideo-dashboard'
 DEFAULT_PORT = 8765
@@ -560,6 +565,32 @@ def _blocked_note(root: Path, path: Path, project: ProjectManifestV2) -> str:
     return ''
 
 
+_STUCK_RE = re.compile(r'tiêu chí kẹt:\s*(.+?)\.\s*Bác sĩ gửi hướng dẫn', re.DOTALL)
+_ROUNDS_RE = re.compile(r'\((\d+)\s+vòng\)')
+
+
+def _script_guidance(path: Path, note: str) -> dict | None:
+    """Detect a script that hit the Station 07 cycle cap and now waits for the doctor."""
+    if CYCLE_LIMIT_REASON not in (note or ''):
+        return None
+    flat = ' '.join(note.split())
+    match = _STUCK_RE.search(flat)
+    stuck = match.group(1).strip() if match else ''
+    count = _ROUNDS_RE.search(flat)
+    rounds = int(count.group(1)) if count else 0
+    if not stuck or not rounds:
+        logs = sorted(path.glob('revisions/*/reviews/script-review-log.yaml'))
+        log = _safe_yaml(logs[-1]) if logs else {}
+        raw = log.get('rounds') if isinstance(log, dict) else None
+        rows = [r for r in raw if isinstance(r, dict)] if isinstance(raw, list) else []
+        rounds = rounds or len(rows)
+        scores = rows[-1].get('scores') if rows else None
+        if not stuck and isinstance(scores, dict):
+            stuck = ', '.join(f'{CRITERIA.get(k, k)} {v}' for k, v in scores.items()
+                              if isinstance(v, (int, float)) and v < PASS_SCORE)
+    return {'stuck': stuck or 'chưa rõ tiêu chí', 'rounds': rounds}
+
+
 _HANDLER_ACTIVE_REPAIR_PHASES = frozenset({
     'diagnosing', 'repairing', 'waiting_idle', 'retry_requested', 'cooldown', 'repair_failed',
 })
@@ -607,6 +638,10 @@ def project_handler(
     if paused:
         reason = _first_line(_safe_yaml(logs_dir / 'paused.yaml').get('reason'))
         return {'label': 'Tạm dừng', 'kind': 'paused', 'reason': reason}
+    guidance = _script_guidance(root / 'projects' / slug, blocked_note)
+    if guidance:
+        return {'label': 'Chờ bác sĩ hướng dẫn Biên kịch', 'kind': 'doctor',
+                'reason': guidance['stuck']}
     record = _safe_yaml(logs_dir / 'leader-repair.yaml')
     phase = str(record.get('phase') or '')
     incident = record.get('incident')
@@ -1299,6 +1334,20 @@ def overview(
                 'gate': current_card['gate'],
                 'count': len(current_card['decisions']),
                 'revision': project.active_revision,
+            })
+        guidance = _script_guidance(path, note)
+        if guidance and current_card is None and not factory.gate_for_project(path, project):
+            decisions.append({
+                'kind': 'script_guidance',
+                'slug': path.name,
+                'code': codes[path.name],
+                'title': title,
+                'gate': None,
+                'count': 0,
+                'revision': project.active_revision,
+                'message': CYCLE_LIMIT_REASON,
+                'stuck': guidance['stuck'],
+                'rounds': guidance['rounds'],
             })
         marker_info = _read_agent_marker(logs / path.name / RUNNING_MARKER)
         marker_live = factory_on and marker_info.get('state') == 'running'
