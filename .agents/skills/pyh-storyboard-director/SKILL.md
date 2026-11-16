@@ -21,6 +21,16 @@ description: Use when PYH storyboard_design designs storyboard.yaml, asset-manif
 - **Cấm giả nguồn**: không tạo SVG/PNG giả chụp tài liệu nghiên cứu; diễn giải ledger luôn dùng `source_card` lấy nguyên metadata từ `evidence/ledger.yaml`.
 - Giữ nguyên `script/script.yaml` (không đổi lời đọc hay claim của biên kịch).
 
+## Mascot thương hiệu theo nhịp cảnh
+- Hook dùng `welcome`, `surprised` hoặc `thinking` theo lời mở; đính chính niềm tin sai dùng `myth_bust`; cảnh báo dấu hiệu nguy hiểm dùng `caution`; tóm ý/chuyển chương dùng `point_up` hoặc `explain`; kết + CTA và `brand_outro` dùng `thumbs_up` hoặc `welcome`, giữ logo thương hiệu.
+- Gợi ý 4–8 lần cho video dài, ≤1 lần mỗi clip dọc; điều chỉnh theo nội dung, không ép đủ số. CTA clip tự thêm đã có mascot `welcome`, nên ưu tiên không thêm mascot trong các cảnh cắt khi CTA này đủ nhận diện.
+- Không che vùng giải phẫu, biểu đồ, phụ đề hay thẻ nguồn; kiểm cả 16:9 và 9:16. Bỏ mascot ở cảnh cơ chế chính nếu làm rối. Mascot chỉ phản ứng, không nói claim y khoa mới; không chữ/số trên ảnh, `blank_board` chỉ là khung trống. Chữ riêng bằng Remotion vẫn phải tuân thủ claim/nguồn hiện hành.
+- Đọc `profiles/brand.vi.yaml`: chọn `mascot.artwork[pose].path`, kiểm SHA-256 khớp `mascot.artwork[pose].sha256`, chép nguyên PNG vào revision, ví dụ `assets/brand/welcome.png`. Không sửa brand/ảnh hay tự sinh lại mascot. Chỉ khai báo tham chiếu không tự chép ảnh hoặc tạo manifest.
+- Scene ghi `visual_assets: [{path: assets/brand/welcome.png, role: mascot, pose: welcome}]`; không dùng `asset_id`. Path tương đối POSIX từ gốc revision, phải trùng path trong manifest.
+- Manifest: `path: assets/brand/welcome.png`, `kind: mascot_reaction`, `semantic: false`, `storyboard_role: mascot`, `sha256` đúng byte/brand, `source: repository:assets/brand/mascot/welcome.png`, `creator` và `license` chép nguyên `brand.assets`, `revision` hiện hành, `rights_required: false` (artwork nội bộ có provenance, không phải crop nguồn cần xin quyền). Không bịa giấy phép.
+- Khi dùng Python helper có sẵn `workflows.visual_assets.create_mascot_reaction_asset(project_dir, scene_id=..., asset_name=..., pose=MascotPose.WELCOME)`: helper dùng alias `assets/<asset_name>.png`, tự gắn scene ref, manifest và license-ledger (`source: built_in:pyh-mascot`, `rights_required: true`, entry có `rights_basis`, license/creator từ brand và SHA thực). Chỉ dùng ở draft trước duyệt; không sửa dữ liệu đã khóa. Hai cách đăng ký đều cần validate lại bằng CLI.
+- Kiểm `reviews/style-lint.json`: `mascot_missing` nhắc video dài chưa có mascot; `mascot_dense_scene` nhắc mascot cùng anatomy/chart/nguồn. Đây là cảnh báo `warn`, không xác nhận ảnh chồng nhau và không chặn bước; đạo diễn phải xem bố cục thực tế. Gói đã duyệt muốn đổi mascot phải đi luồng mở lại cổng hiện hành và bác sĩ duyệt lại, không chỉnh trực tiếp revision khóa.
+
 ## Đầu ra & Lệnh
 - Ghi `revisions/<rev>/storyboard/storyboard.yaml`, `revisions/<rev>/assets/asset-manifest.yaml`, và `revisions/<rev>/script/clip-plan.yaml` (nếu là `youtube_long`).
 - Chạy `healthvideo step storyboard {project} --storyboard <path> --assets <path> [--clip-plan <path>]` tới khi thoát mã `0`.

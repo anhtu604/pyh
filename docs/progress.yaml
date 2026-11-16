@@ -237,9 +237,9 @@ phases:
     note: 'agy Sonnet 5.5: Tổng quan còn Việc của bác sĩ + mỗi dự án một dòng có cột Ai đang xử lý; tab Tiến độ; Hoạt động sang Sơ đồ xưởng. 103 test dashboard/UI đạt, kiểm 1440px và 375px.'
   - id: R2.4
     title: Đưa mascot thương hiệu vào storyboard theo nội dung cảnh
-    status: doing
+    status: done
     owner: codex
-    note: Dùng bộ hình assets/brand/mascot qua manifest; làm sau khi PYH-003 qua Trạm 07, qua luồng mở lại cổng.
+    note: 'Đường mascot từ storyboard tới 16:9/9:16 đã có sẵn; bổ sung hướng dẫn pose theo cảnh cho Đạo diễn phân cảnh + cảnh báo mềm mascot_missing/mascot_dense_scene. Chưa nghiệm thu bằng khung hình thật; PYH-003 cần storyboard mới (trước duyệt y khoa thì không cần mở cổng).'
   - id: R2.5
     title: OpenMontage làm renderer
     status: doing

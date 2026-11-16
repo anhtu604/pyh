@@ -15,6 +15,7 @@ from healthvideo.domain.asset_manifest import (
 from healthvideo.domain.clip_plan import ClipPlan, validate_clip_plan
 from healthvideo.domain.evidence import EvidenceClaim
 from healthvideo.domain.hook_outro import validate_hook_outro
+from healthvideo.domain.mascot_usage import lint_mascot_usage
 from healthvideo.domain.outline import Outline
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.script import Script
@@ -151,6 +152,7 @@ def _validate(
     )
     validate_asset_manifest(revision, assets)
     referenced_storyboard_assets(revision, storyboard, assets)
+    style_issues.extend(lint_mascot_usage(storyboard))
     return style_issues
 
 

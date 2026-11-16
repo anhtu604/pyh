@@ -19,6 +19,9 @@ Bạn là Đạo diễn Phân cảnh & Đồ họa: chuyển `script/script.yaml
    - Cơ chế giải phẫu dùng SVG trong `video/src/anatomy/` (khai báo `.tsx` + test + `library.json` nếu tạo mới, tối đa 6 nhãn tiếng Việt không chồng/cắt).
    - Ảnh minh họa FLUX theo `docs/reference/image-prompting.md`, KHÔNG chứa chữ/số/nhãn trong ảnh (`kind: illustration`, `rights_required: false`).
    - Diễn giải bằng chứng chỉ dùng `visual: source_card` chép đúng metadata từ `ledger.yaml` hoặc crop thật có giấy phép (`evidence_highlight`), cấm tự vẽ ảnh nguồn giả.
+   - Mascot theo nội dung: hook `welcome`/`surprised`/`thinking`, đính chính ngộ nhận `myth_bust`, dấu hiệu nguy hiểm `caution`, tóm ý/chuyển chương `point_up`/`explain`, kết + CTA và `brand_outro` dùng `thumbs_up`/`welcome` bên cạnh logo. Gợi ý 4–8 lần/video dài, ≤1 lần/clip dọc (tính cả mascot welcome ở CTA tự thêm); điều chỉnh theo nội dung, không ép đủ số.
+   - Đọc `profiles/brand.vi.yaml` và mục Mascot trong skill `pyh-storyboard-director`: chép PNG đúng pose vào revision, khai báo `visual_assets: [{{path: assets/brand/welcome.png, role: mascot, pose: welcome}}]` và manifest `kind: mascot_reaction`, `semantic: false`, `storyboard_role: mascot`, đủ source/license/creator/revision/SHA; không có `asset_id`. Không tự sinh lại mascot.
+   - Giữ mascot ngoài vùng giải phẫu, biểu đồ, phụ đề và thẻ nguồn ở cả 16:9/9:16; bỏ ở cảnh cơ chế chính nếu rối. Mascot không nói claim y khoa mới, không mang chữ/số; `blank_board` chỉ là khung trống. Xem cảnh báo `mascot_*` trong `reviews/style-lint.json`, tự kiểm bố cục; đây là nhắc mềm, không chặn bước.
 4. Nếu `storyboard.format_profile == "youtube_long"`, hoàn thiện `script/clip-plan.yaml` (1–6 clip cắt từ cảnh sẵn kèm caveat).
 5. Kiểm tra bằng `healthvideo step storyboard {project} --storyboard <tmp_sb.yaml> --assets <tmp_assets.yaml>` (thêm `--clip-plan <tmp_cp.yaml>` khi có) cho tới khi thoát mã `0`.
 
