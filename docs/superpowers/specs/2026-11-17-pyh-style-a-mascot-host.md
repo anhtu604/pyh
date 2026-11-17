@@ -7,7 +7,6 @@ Nguồn tham khảo (chỉ lấy quy tắc, không chép tài sản):
 
 - Nhân vật dẫn chuyện: kaomei `directing-stickman-videos`, chế độ B5 Character Explainer.
 - Cảnh cơ chế: OpenMontage `minimalist-diagram` / `clean-professional` (AGPL-3.0, không vendoring code).
-- Phụ đề sáng theo từng chữ: MoneyPrinterTurbo (MIT).
 - Lõi dựng: Remotion; HyperFrames registry chỉ làm tham khảo chuyển cảnh và thẻ chữ.
 
 ## 1. Nhận diện
@@ -50,17 +49,28 @@ Nguồn tham khảo (chỉ lấy quy tắc, không chép tài sản):
   chiếu; agent y khoa đối chiếu, bác sĩ duyệt một lần rồi vào thư viện hoạt cảnh dùng lại.
 - FLUX chỉ cho cảnh đời sống, cùng nét/màu ở mục 1; không dùng FLUX cho hình y khoa.
 
+## 3b. Phóng to (zoom) y khoa
+
+Hai hình ở hai thang đo khác nhau (gan → tiểu thùy → tế bào) không liền mạch, nên **không giả vờ zoom
+liên tục bằng cross-fade chồng hai hình**. Dùng kính lúp: khung đánh dấu đúng vùng cần xem → đường
+dẫn → vòng tròn mở rộng từ vùng đó thành khung lớn chứa hình chi tiết; hình gốc lùi mờ nhẹ phía sau,
+không chồng nửa trong suốt. Vị trí khung phải khớp với nội dung hình chi tiết (khung vào khu tiểu
+thùy thì hình chi tiết là tiểu thùy). Giữ hình chi tiết ≥ 2 s trước khi nhãn xuất hiện.
+
 ## 4. Phụ đề
 
-- 16:9: tối đa 2 dòng, ≤ 42 ký tự/dòng, chia theo ý. 9:16: 1–2 dòng, ≤ 24 ký tự/dòng.
-- Chữ đang đọc sáng teal (word highlight theo timing TTS), chữ khác navy trên dải off_white 90%.
-- Thuật ngữ y khoa đã gắn nhãn trên sơ đồ được tô vàng trong phụ đề lần đầu xuất hiện.
-- Không đè thẻ nguồn, không đè mascot, không đè nhãn sơ đồ (`safeZones.test.tsx`).
+- Phụ đề **tĩnh theo trang**: cả trang hiện cùng lúc, đổi trang đúng nhịp lời đọc. **Không** tô sáng,
+  gạch chân hay "nhảy" theo từng chữ (bác sĩ 2026-11-17).
+- 16:9: tối đa 2 dòng, ≤ 42 ký tự/dòng, chia theo ý, mỗi trang ≥ 4 từ (không bao giờ một từ đứng
+  một mình). 9:16: 1–2 dòng, ≤ 24 ký tự/dòng.
+- Chữ navy trên dải off_white 90%. Nhấn vàng tối đa một cụm mỗi trang, chỉ thuật ngữ có nhãn trên
+  hình và chỉ ở lần đầu xuất hiện.
+- Không đè thẻ nguồn, mascot, nhãn sơ đồ (`safeZones.test.tsx`). Không ghi chú nội bộ trên khung hình.
 
 ## 5. Nhịp
 
 - Giữ cảnh 2.5–12 s; có thay đổi hình (beat) ít nhất mỗi 6 s.
-- Chuyển cảnh: fade/slide-left 0.4 s, ease-in-out, không bounce ở chuyển cảnh, ≥ 2 s giữa hai chuyển cảnh.
+- Zoom y khoa dùng **kính lúp** (mục 3b), không cross-fade giả zoom. Chuyển cảnh thường: fade/slide-left 0.4 s, ease-in-out, không bounce ở chuyển cảnh, ≥ 2 s giữa hai chuyển cảnh.
 - Hook 0–8 s: mascot `surprised` hoặc `thinking` + một câu hỏi lớn + một hình cụ thể. Không logo intro dài.
 - Bộ động tác nhận diện chỉ gồm: dựng sơ đồ dần, vòng nhấn teal, gạch chân vàng, thẻ thuật ngữ,
   thẻ nguồn. 14 mẫu trong `video/src/motion` chỉ dùng khi đúng nghĩa, tối đa 2 mẫu khác trong
