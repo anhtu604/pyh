@@ -69,6 +69,17 @@ Nguồn tham khảo (chỉ lấy quy tắc, không chép tài sản):
 | 14 Đóng gói & bài đăng | Thumbnail: mascot (tư thế khớp tiêu đề) + ≤ 4 chữ Be Vietnam Pro 800 + một hình cơ chế; nền off_white hoặc night. |
 | 15 Shorts & Reels | Cùng chuẩn ở 9:16: mascot nhỏ hơn (≤ 28% chiều rộng), phụ đề giữa dưới, hook 0–2 s. |
 
+## 6b. Bổ sung từ lemo-opuscar (chỉ lấy ý tưởng, không chép tài liệu: docs CC BY-NC)
+
+- **Hook trong 3 s đầu** (siết mục 5): câu hỏi/sự thật bất ngờ phải có trước giây thứ 3.
+- **Theo dòng chảy:** cảnh cơ chế tô teal dọc đường đi (máu, thuốc, men qua gan) theo đúng thứ tự lời đọc.
+- **Nhãn mọc từ bộ phận** bằng đường dẫn (leader line) navy; chỉ một nhãn chính sáng tại một thời điểm.
+- **Bỏ một lớp:** khi giải thích vì sao hỏng, cho tắt một phần tử để thấy hệ thống đổi ra sao (chỉ khi nguồn y khoa nói vậy).
+- **Khoảng lặng:** 0.5–1 s đứng hình/không nhạc trước câu chốt; tối đa 2 lần mỗi chương.
+- **Chủ thể ≥ 60% khung** ở cảnh cơ chế (mascot thu nhỏ về góc).
+- Cảnh cơ chế được phép chuyển cảnh "bên trong vật thể" (zoom vào tế bào → cảnh tiếp) thay cho fade.
+- Không mô phỏng "vật lý thật" cho cơ thể nếu không có nguồn; không dùng phong cách gây hoang mang (thriller, X-ray, game show).
+
 ## 7. Nghiệm thu chuẩn
 
 Trước khi xưởng làm video thật: một clip mẫu 10–15 s (16:9 và 9:16) từ một câu lời đọc của
