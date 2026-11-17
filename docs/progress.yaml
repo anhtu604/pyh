@@ -264,10 +264,10 @@ phases:
     owner: codex
     note: 'Báo cáo: mỗi vai nhận gì, trả gì, cho ai; chỗ trùng, chỗ hở, skill thừa.'
   - id: R3.3
-    title: Phong cách riêng cho video
-    status: todo
-    owner: claude
-    note: 'Video hiện quá đơn giản. Làm sau R3.2: bộ nhận diện chuyển động, nhịp hình, mascot, cách mở cảnh.'
+    title: Phong cách A "Mascot dẫn chuyện" áp triệt để cho trạm 09–15
+    status: doing
+    owner: agy
+    note: 'Bác sĩ chọn A. Chuẩn ở docs/superpowers/specs/2026-11-17-pyh-style-a-mascot-host.md. agy dựng component + clip mẫu; sau R3.1 codex nối skill/prompt/QA trạm 09–15.'
   - id: R3.4
     title: Giảm thời gian và token — model nhẹ qua Ollama khi máy rảnh
     status: todo
