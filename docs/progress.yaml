@@ -1,5 +1,5 @@
 version: 1
-updated: '2026-11-16'
+updated: '2026-11-17'
 phases:
 - id: R1
   title: Hoàn thiện xưởng trước khi làm video mới
@@ -217,7 +217,7 @@ phases:
   tasks:
   - id: R2.0
     title: Kiểm toàn bộ thay đổi Codex để lại và commit thành mốc an toàn
-    status: todo
+    status: done
     owner: claude
     note: 'HANDOFF.md 2026-11-16: nhiều thay đổi chưa commit trên master (agents, Repair, dashboard, prompt); chạy pytest + Ruff rồi commit theo nhóm.'
   - id: R2.1
@@ -245,3 +245,31 @@ phases:
     status: done
     owner: codex
     note: 'PYH_RENDERER=openmontage bật renderer HyperFrames; mặc định vẫn Remotion. Smoke thật 2 s có audio+phụ đề đạt. Giấy phép AGPL-3.0. Chưa có anatomy, mascot, clip 9:16, caption theo dòng nên chưa dùng cho video thật.'
+- id: R3
+  title: Dây chuyền gọn, nhanh, có phong cách — dừng làm video tới khi xong
+  tasks:
+  - id: R3.0
+    title: Dừng xưởng, chỉ test nhẹ cho tới khi dây chuyền hoàn thiện
+    status: done
+    owner: claude
+    note: 'Bác sĩ 2026-11-17: dừng tạo video. Xưởng đã dừng; PYH-003 kẹt Trạm 07 sau 3 chu kỳ (claim 6).'
+  - id: R3.1
+    title: Sửa và duyệt từng phần — người viết chỉ sửa điểm bị nêu, người duyệt chỉ kiểm lại điểm đó rồi xem tổng thể
+    status: doing
+    owner: codex
+    note: 'Áp cho Trạm 07 và mọi cặp viết–duyệt khác (y khoa, hình, sản phẩm) nếu đang làm lại từ đầu.'
+  - id: R3.2
+    title: Đánh giá skill từng agent theo luồng một công ty
+    status: doing
+    owner: codex
+    note: 'Báo cáo: mỗi vai nhận gì, trả gì, cho ai; chỗ trùng, chỗ hở, skill thừa.'
+  - id: R3.3
+    title: Phong cách riêng cho video
+    status: todo
+    owner: claude
+    note: 'Video hiện quá đơn giản. Làm sau R3.2: bộ nhận diện chuyển động, nhịp hình, mascot, cách mở cảnh.'
+  - id: R3.4
+    title: Giảm thời gian và token — model nhẹ qua Ollama khi máy rảnh
+    status: todo
+    owner: codex
+    note: 'Máy có Ollama (chưa có model), RTX 3060, RAM 32 GB. Chỉ dùng local cho việc nhẹ khi đủ VRAM/RAM; đo thời gian và token mỗi trạm trước.'
