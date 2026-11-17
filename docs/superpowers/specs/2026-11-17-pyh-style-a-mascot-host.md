@@ -39,7 +39,16 @@ Nguồn tham khảo (chỉ lấy quy tắc, không chép tài sản):
   cả sơ đồ rồi đọc.
 - Mũi tên teal vẽ dần (stroke draw 10–16 frame); nhãn navy fade-up 0.95→1.0 trong 12 frame.
 - Phần tử đang nói được nhấn bằng vòng teal hoặc gạch chân vàng; phần còn lại giảm 40% độ đậm.
-- Ưu tiên SVG giải phẫu trong `video/src/anatomy`; FLUX chỉ cho cảnh đời sống, cùng nét/màu ở mục 1.
+- **Bác sĩ 2026-11-17: hình y khoa phải chuẩn khoa học** (giải phẫu, sinh lý, mô phôi, sinh lý
+  bệnh, giải phẫu bệnh, vi sinh), đủ để một bác sĩ khác xem đánh giá cao. Agent **không tự vẽ cấu
+  trúc y khoa**. Hình y khoa ghép từ thư viện khoa học có giấy phép: Servier Medical Art (CC BY 4.0),
+  NIAID BioArt (kiểm giấy phép từng hình), Reactome icon (CC BY 4.0); ghi nguồn trong manifest và
+  credit cuối video. Không dùng hình sách có bản quyền.
+- Màu mô/tế bào/cơ quan theo thực tế giải phẫu và nguồn hình, **không** theo bảng màu thương hiệu;
+  giới hạn 3 màu ở mục 1 chỉ áp cho chữ, nhãn, mũi tên, khung.
+- Mỗi hoạt cảnh có kịch bản cơ chế từng bước, mỗi bước có nguồn y văn (Europe PMC) và hình tham
+  chiếu; agent y khoa đối chiếu, bác sĩ duyệt một lần rồi vào thư viện hoạt cảnh dùng lại.
+- FLUX chỉ cho cảnh đời sống, cùng nét/màu ở mục 1; không dùng FLUX cho hình y khoa.
 
 ## 4. Phụ đề
 
