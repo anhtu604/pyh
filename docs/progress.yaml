@@ -255,9 +255,9 @@ phases:
     note: 'Bác sĩ 2026-11-17: dừng tạo video. Xưởng đã dừng; PYH-003 kẹt Trạm 07 sau 3 chu kỳ (claim 6).'
   - id: R3.1
     title: Sửa và duyệt từng phần — người viết chỉ sửa điểm bị nêu, người duyệt chỉ kiểm lại điểm đó rồi xem tổng thể
-    status: doing
+    status: done
     owner: codex
-    note: 'Áp cho Trạm 07 và mọi cặp viết–duyệt khác (y khoa, hình, sản phẩm) nếu đang làm lại từ đầu.'
+    note: 'Merged 10400f0: issue_id cố định, người duyệt chỉ nhận issue mở + diff, issue ngoài phạm vi bị lọc vào dropped_issues, kẹt 2 vòng → bác sĩ. Áp cho kịch bản, sửa y khoa, dựng–kiểm sản phẩm, storyboard.'
   - id: R3.2
     title: Đánh giá skill từng agent theo luồng một công ty
     status: doing
