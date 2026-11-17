@@ -260,9 +260,9 @@ phases:
     note: 'Merged 10400f0: issue_id cố định, người duyệt chỉ nhận issue mở + diff, issue ngoài phạm vi bị lọc vào dropped_issues, kẹt 2 vòng → bác sĩ. Áp cho kịch bản, sửa y khoa, dựng–kiểm sản phẩm, storyboard.'
   - id: R3.2
     title: Đánh giá skill từng agent theo luồng một công ty
-    status: doing
+    status: done
     owner: codex
-    note: 'Báo cáo: mỗi vai nhận gì, trả gì, cho ai; chỗ trùng, chỗ hở, skill thừa.'
+    note: 'Báo cáo docs/reference/agent-skill-audit-2026-11-17.md. Tổng thời gian A–Z chưa đo; men gan tốn ~11h52 agent, 3,68M token ở bước viết. Top 5 việc nằm cuối báo cáo.'
   - id: R3.3
     title: Phong cách A "Mascot dẫn chuyện" áp triệt để cho trạm 09–15
     status: doing
