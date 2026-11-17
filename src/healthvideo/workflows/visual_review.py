@@ -93,15 +93,43 @@ def _consume_report(root: Path, data: dict, board: Storyboard) -> None:
             sha256_file(root / sheet['path']) != sheet['sha256']
         ):
             raise ValueError('Visual review requires current rendered contact sheet')
-    required = {c['path'] for a in data['assets'] for c in a['candidates']} | {s['path'] for s in sheets}
+    pending = [a for a in data['assets'] if not a.get('selected') and not a.get('fallback')]
+    required = {c['path'] for a in pending for c in a['candidates']} | {s['path'] for s in sheets}
     if not required.issubset(set(report.get('inspected_images', []))):
         raise ValueError('Agent must inspect all candidates and the rendered contact sheet')
-    decisions = report.get('scenes', [])
+    decisions = list(report.get('scenes', []))
     scene_ids = [scene for asset in data['assets'] for scene in asset['scenes']]
+    reported_ids = [row.get('scene', '') for row in decisions]
+    if len(reported_ids) != len(set(reported_ids)) or not set(reported_ids).issubset(scene_ids):
+        raise ValueError('Visual review has duplicate or nonexistent scene')
+    by_scene = {row['scene']: row for row in decisions}
+    previous_path = root / 'reviews/visual' / f"review-{data.get('review_count', 0) - 1:02d}.yaml"
+    previous_rows = ({row['scene']: row for row in read_yaml(previous_path).get('scenes', [])}
+                     if previous_path.is_file() else {})
+    for asset in data['assets']:
+        if not asset.get('selected') and not asset.get('fallback'):
+            continue
+        for scene in asset['scenes']:
+            row = by_scene.get(scene)
+            if row and row.get('blocking_safety'):
+                raise ValueError(f'blocking_safety: {scene}; cần bác sĩ kiểm tra hình đã chọn')
+            expected = 'select' if asset.get('selected') else 'reject'
+            accepted = previous_rows.get(scene) or {
+                'scene': scene, 'decision': expected, 'selected': asset.get('selected'),
+                'reason': 'Giữ nguyên quyết định đã duyệt.', 'layout_issues': []}
+            if row and row != accepted:
+                report.setdefault('dropped_issues', []).append({
+                    'issue': row, 'reason': 'Cannot reopen an accepted scene; kept previous selection'})
+                decisions.remove(row)
+                row = None
+            if not row:
+                decisions.append(accepted)
     if sorted(row.get('scene', '') for row in decisions) != sorted(scene_ids):
         raise ValueError('Visual review needs exactly one decision for each illustrated scene')
     by_scene = {row['scene']: row for row in decisions}
     for asset in data['assets']:
+        if asset.get('selected') or asset.get('fallback'):
+            continue
         rows = [by_scene[scene] for scene in asset['scenes']]
         if any(not str(row.get('reason', '')).strip() or
                not isinstance(row.get('layout_issues'), list) for row in rows):
@@ -125,6 +153,8 @@ def _consume_report(root: Path, data: dict, board: Storyboard) -> None:
                                             'labels or unsupported foot localization added.')
         else:
             raise ValueError('Scenes sharing one asset must agree on select/reject and candidate')
+    if decisions != report.get('scenes', []) or report.get('dropped_issues'):
+        write_yaml_atomic(report_path, {**report, 'scenes': decisions})
     data['review_sha256'] = sha256_file(report_path)
     # Keep every round and its reasons available to the physician.
     archive = root / 'reviews/visual' / f"review-{data.get('review_count', 0):02d}.yaml"

@@ -5,6 +5,16 @@ description: Use when PYH product_review independently evaluates the final video
 
 # Kiểm định sản phẩm xưởng PYH
 
+## Duyệt lại từng phần (ưu tiên hơn việc đọc toàn bộ bên dưới)
+- Vòng đầu kiểm toàn bộ, mỗi issue có `issue_id` ổn định, `at` thật.
+  Lỗi sửa được phải có `edits` gồm path tương đối repo, start_line/end_line chính xác.
+- Vòng sau chỉ nhận issue mở + diff nguồn; lấy contact sheet hiện hành, kiểm cảnh
+  có issue và ngữ cảnh kề, xem tổng thể ngắn. Không suy diễn hình từ source diff.
+- Giữ điểm tiêu chí không có issue, ID/vị trí/edits lỗi còn mở. Trả `issue_statuses`
+  (`resolved`/`still_open`) cho từng ID và `overall` ngắn. Không mở lại lỗi resolved.
+- Chỉ nêu lỗi mới ở phần không đổi khi có nguy cơ y khoa nghiêm trọng,
+  ghi `blocking_safety: true` cùng lý do. Không hạ ngưỡng hoặc vượt cổng.
+
 ## Đầu vào
 - Tự thực hiện lượt kiểm định, chờ các lệnh hoàn tất trước khi ghi báo cáo. Không mở tác vụ nền hay giao agent con cho bước này.
 - Đọc prompt `product_review.md`, lấy `active_revision` từ `{project}/project.yaml`.

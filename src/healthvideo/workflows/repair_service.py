@@ -22,13 +22,19 @@ from healthvideo.company import load_company, role_skill_block
 from healthvideo.domain.project_v2 import WorkflowState
 from healthvideo.env import background_popen_kwargs, background_python, child_env
 from healthvideo.process import is_same_process, process_token
-from healthvideo.storage.files import read_yaml, write_text_atomic, write_yaml_atomic
+from healthvideo.storage.files import (
+    canonical_json_hash,
+    read_yaml,
+    write_text_atomic,
+    write_yaml_atomic,
+)
 from healthvideo.storage.project_layout import resolve_project_layout
 from healthvideo.workflows import (
     change_request,
     chat,
     factory,
     product_review,
+    scoped_review,
     script_review,
 )
 from healthvideo.workflows.production_retry import _sanitize_reason
@@ -748,7 +754,9 @@ def repair_once(
             return 'waiting_retry'
         return 'idle'
     detail = blocked.read_text(encoding='utf-8', errors='replace')
-    if script_review.CYCLE_LIMIT_REASON in detail:
+    if (script_review.CYCLE_LIMIT_REASON in detail
+            or 'Trạm 07 cần hướng dẫn:' in detail or 'Trạm 12 cần hướng dẫn:' in detail
+            or 'Storyboard cần hướng dẫn:' in detail or 'Góp ý y khoa chưa có vị trí:' in detail):
         # This is an editorial stop awaiting doctor guidance, not a repair incident.
         return 'needs_attention'
     # Each retry gets a new log path. It is evidence, not a new failure.
@@ -801,6 +809,8 @@ def repair_once(
                'Nếu cần tài khoản, PIN hoặc thiếu dữ kiện để kết luận thì action=hold. '
                'action=retry chỉ khi đã có bằng chứng lỗi tạm thời được khắc phục. '
                'Trong vòng này chỉ đọc và ghi báo cáo.')
+    issue_id = 'repair-' + canonical_json_hash(incident)[:16]
+    context += f'\nIssue ổn định: {issue_id}. Chỉ chẩn đoán lỗi đang mở trên phiếu này.'
     maintenance = contextlib.ExitStack()
     before_bytes: dict[str, bytes] = {}
     before_paths: set[str] = set()
@@ -861,12 +871,24 @@ def repair_once(
                         raise ValueError('Lint chưa đạt; xem lint.log.')
                 _check_scope(root, files, before_bytes, before_paths)
                 record['changed_files'] = changed
+            repair_after = {relative: (root / relative).read_bytes()
+                            for relative in record.get('changed_files', []) if relative in before_bytes}
+            diff = scoped_review.packet(
+                [{'issue_id': issue_id, 'problem': reason}],
+                {relative: before_bytes[relative].decode('utf-8', errors='replace') for relative in repair_after},
+                {relative: raw.decode('utf-8', errors='replace') for relative, raw in repair_after.items()},
+            )
             accepted = _ask(root, slug, 'coordinator_senior', 'repair_accept',
                             f'Nghiệm thu độc lập phiếu lỗi trong {work}. Đọc diagnosis.yaml, '
                             'repair.yaml và tests.log nếu có. Đối chiếu code/log thực tế. '
+                            'Chỉ kiểm lỗi trên phiếu và ảnh hưởng quanh diff, rồi xem tổng thể ngắn. '
+                            'Giữ phần không đổi đã đạt; không nêu lỗi mới ngoài phiếu trừ an toàn '
+                            'y khoa nghiêm trọng (ghi rõ blocking_safety cùng lý do). '
                             'Chỉ passed=true khi nguyên nhân đã được xử lý và có bằng chứng kiểm tra. '
-                            'Trong vòng này chỉ đọc và ghi báo cáo.',
+                            'Trong vòng này chỉ đọc và ghi báo cáo.\n' + diff,
                             work / 'acceptance.yaml', Acceptance, invoke)
+            if any((root / relative).read_bytes() != raw for relative, raw in repair_after.items()):
+                raise ValueError('Leader nghiệm thu không được sửa code.')
             record['acceptance'] = accepted.model_dump(mode='json')
             if not accepted.passed:
                 raise ValueError(accepted.reason)

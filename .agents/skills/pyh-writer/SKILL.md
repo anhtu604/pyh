@@ -5,6 +5,17 @@ description: Use when writing or revising a PYH script at draft or revise_medica
 
 # Biên kịch xưởng PYH
 
+## Sửa từng phần (ưu tiên khi có gói issue mở)
+- Vòng sửa chỉ dùng issue mở và đoạn liên quan trong prompt; không viết lại cả bài.
+- Chỉ sửa `line` và `related_lines` đã được giao; giữ nguyên từng chữ, ID, thứ tự,
+  metadata và các file ngoài phạm vi. Ngữ cảnh kề chỉ để đọc, không mặc định được sửa.
+- Giữ `issue_id`; không chuyển lỗi sang dòng khác. Không tự đánh dấu resolved thay critic.
+- Python kiểm phạm vi, khôi phục checkpoint và trả lại một lần nếu lệch. Đọc lý do
+  trả lại để sửa đúng chỗ, không lặp lượt viết rộng hơn. Cùng issue kẹt hai vòng thì
+  chờ hướng dẫn bác sĩ, không tự mở thêm chu kỳ.
+- `revise_medical`: phạm vi là ID bác sĩ chỉ rõ; thiếu vị trí thì báo thiếu,
+  không tự chọn toàn bài. Giữ đường hỏi chuyên gia và hai cổng duyệt hiện hành.
+
 ## Đầu vào
 - Đọc prompt bước, doctor_note/reject_note và `active_revision` trong
   `{project}/project.yaml`; mọi đường dẫn sản phẩm dưới đây ở `revisions/<rev>/`.

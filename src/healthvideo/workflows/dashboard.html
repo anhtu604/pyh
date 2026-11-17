@@ -1151,8 +1151,8 @@ function renderOverview(ov){
   const seen = new Set(decs.map(d => d.slug));
   const gateOnly = projs.filter(p => p.gate && !seen.has(p.slug));
   const rows = [
-    ...decs.map(d => d.kind === 'script_guidance'
-      ? {slug:d.slug, code:d.code, title:d.title, guidance:true, stuck:d.stuck || '', rounds:d.rounds || 0,
+    ...decs.map(d => d.kind === 'script_guidance' || d.kind === 'product_guidance'
+      ? {slug:d.slug, code:d.code, title:d.title, guidance:true, productGuidance:d.kind === 'product_guidance', guidanceRole:d.role || '', guidanceView:d.view || '', stuck:d.stuck || '', rounds:d.rounds || 0,
          sub:`${d.message || 'Trạm 07 chưa đạt sau 3 chu kỳ'}${d.rounds ? ` (${d.rounds} vòng)` : ''} · tiêu chí kẹt: ${d.stuck || 'chưa rõ'}`}
       : {slug:d.slug, code:d.code, title:d.title, gate:d.gate, sub:`${d.count} điểm cần quyết`, btn:`Mở thẻ quyết định (${d.count})`}),
     ...gateOnly.map(p => ({slug:p.slug, code:p.code, title:p.title, gate:p.gate, sub:'Gói đã sẵn sàng để duyệt', btn:'Mở gói duyệt'})),
@@ -1162,14 +1162,14 @@ function renderOverview(ov){
   } else {
     decBox.innerHTML = rows.map(r => r.guidance ? `
       <div class="todo-row todo-guidance">
-        <span class="chip gate">Biên kịch</span>
+        <span class="chip gate">${esc(r.guidanceRole || (r.productGuidance ? 'Thợ dựng' : 'Biên kịch'))}</span>
         <div class="todo-main">
           <div class="todo-t" title="${esc(r.title)}">${r.code ? esc(r.code) + ' · ' : ''}${esc(r.title)}</div>
           <div class="todo-s">${esc(r.sub)}</div>
         </div>
         <div class="todo-acts">
-          <button class="btn warn" type="button" data-guide-slug="${esc(r.slug)}" data-guide-stuck="${esc(r.stuck)}" aria-label="Gửi hướng dẫn cho Biên kịch: ${esc(r.title)}">Gửi hướng dẫn</button>
-          <button class="btn" type="button" data-guide-review="${esc(r.slug)}" aria-label="Xem nhận xét của critic: ${esc(r.title)}">Xem nhận xét</button>
+          <button class="btn warn" type="button" data-guide-slug="${esc(r.slug)}" data-guide-role="${esc(r.guidanceRole)}" data-guide-view="${esc(r.guidanceView)}" data-guide-product="${r.productGuidance ? 'true' : ''}" data-guide-stuck="${esc(r.stuck)}" aria-label="Gửi hướng dẫn: ${esc(r.title)}">Gửi hướng dẫn</button>
+          <button class="btn" type="button" data-guide-review="${esc(r.slug)}" data-guide-view="${esc(r.guidanceView)}" data-guide-product="${r.productGuidance ? 'true' : ''}" aria-label="Xem nhận xét của critic: ${esc(r.title)}">Xem nhận xét</button>
         </div>
       </div>` : `
       <div class="todo-row">
@@ -1181,8 +1181,8 @@ function renderOverview(ov){
         <button class="btn warn" type="button" data-decide-slug="${esc(r.slug)}">${esc(r.btn)}</button>
       </div>`).join('');
     decBox.querySelectorAll('[data-decide-slug]').forEach(b => b.onclick = () => openProduct(b.dataset.decideSlug));
-    decBox.querySelectorAll('[data-guide-review]').forEach(b => b.onclick = () => openProduct(b.dataset.guideReview, 'script'));
-    decBox.querySelectorAll('[data-guide-slug]').forEach(b => b.onclick = () => startScriptGuidance(b.dataset.guideSlug, b.dataset.guideStuck));
+    decBox.querySelectorAll('[data-guide-review]').forEach(b => b.onclick = () => openProduct(b.dataset.guideReview, b.dataset.guideView || (b.dataset.guideProduct ? 'video' : 'script')));
+    decBox.querySelectorAll('[data-guide-slug]').forEach(b => b.onclick = () => startScriptGuidance(b.dataset.guideSlug, b.dataset.guideStuck, !!b.dataset.guideProduct, b.dataset.guideRole, b.dataset.guideView));
   }
 
   renderResearchSummary(ov.inbox || null);
@@ -2030,13 +2030,13 @@ function updateChatContext(patch={}){
   $('chat-ctx').textContent = parts.length ? parts.join(' · ') : 'Toàn xưởng';
 }
 
-function startScriptGuidance(slug, stuck){
+function startScriptGuidance(slug, stuck, product = false, role = '', view = ''){
   const panel = $('chat-panel'); if(panel) panel.classList.add('open');
-  updateChatContext({slug, revision: null, view: 'script', scene: null, time_s: null});
+  updateChatContext({slug, revision: null, view: view || (product ? 'video' : 'script'), scene: null, time_s: null});
   loadChat();
   const inp = $('chat-input');
   if(inp){
-    inp.value = `Hướng dẫn cho Biên kịch về ${stuck || 'tiêu chí kẹt'}: `;
+    inp.value = `Hướng dẫn cho ${role || (product ? 'Thợ dựng' : 'Biên kịch')} về ${stuck || 'tiêu chí kẹt'}: `;
     inp.placeholder = 'Sửa gợi ý rồi gửi cho Điều phối viên…';
     inp.focus();
     inp.setSelectionRange(inp.value.length, inp.value.length);

@@ -1218,7 +1218,7 @@ def test_agent_prompt_uses_pinned_v1_standards_and_filters_other_slug_feedback(
     deps = RunDeps(
         create_project=lambda root, item: root / "projects" / item.slug,
         read_state=lambda p: states[p.name],
-        reject_note=lambda _p: None,
+        reject_note=lambda _p: 'L01: sửa câu này theo góp ý bác sĩ.',
         python_steps={},
         changed_code_paths=lambda _root: [],
         invoke=fake_invoke,

@@ -136,6 +136,41 @@ def test_visual_review_selection_cannot_change_after_consumption(tmp_path):
         review_complete(tmp_path)
 
 
+@pytest.mark.parametrize('change', ['omit', 'reopen', 'safety'])
+def test_followup_visual_review_preserves_accepted_scene(tmp_path, change):
+    from healthvideo.workflows.visual_review import (
+        CANDIDATES,
+        REPORT,
+        ensure_candidates,
+    )
+
+    manifest = AssetManifest.model_validate({'assets': [illustration_record()]})
+    ensure_candidates(tmp_path, _board(), manifest, generate=_generate)
+    submit(tmp_path)
+    ensure_candidates(tmp_path, _board(), manifest, generate=_generate)
+    selected = read_yaml(tmp_path / CANDIDATES)['assets'][0]['selected']
+    submit(tmp_path)
+    report = read_yaml(tmp_path / REPORT)
+    if change == 'omit':
+        report['scenes'] = []
+    elif change == 'reopen':
+        report['scenes'][0].update(decision='reject', selected=None, new_prompt='different')
+    else:
+        report['scenes'][0]['blocking_safety'] = True
+    write_yaml_atomic(tmp_path / REPORT, report)
+    if change == 'safety':
+        with pytest.raises(ValueError, match='blocking_safety'):
+            ensure_candidates(tmp_path, _board(), manifest, generate=_generate)
+    else:
+        ensure_candidates(tmp_path, _board(), manifest, generate=_generate)
+        assert read_yaml(tmp_path / CANDIDATES)['assets'][0]['selected'] == selected
+        if change == 'reopen':
+            saved = read_yaml(tmp_path / REPORT)
+            assert saved['scenes'][0]['selected'] == selected
+            assert saved['dropped_issues'][0]['issue']['decision'] == 'reject'
+            assert saved['dropped_issues'][0]['reason']
+
+
 def test_reapproved_narration_invalidates_visual_review(tmp_path):
     from healthvideo.workflows.visual_review import (
         REPORT,

@@ -79,10 +79,24 @@ def submit_storyboard_design(
     # The sibling lock survives whole-revision promotion and coordinates voice
     # saves from other CLI processes. Agent reasoning happens before this call.
     with revision_lock(revision):
-        return _submit_storyboard_design(
-            project_dir, storyboard_file, assets_file,
-            clip_plan_file=clip_plan_file, outline_file=outline_file,
-        )
+        from healthvideo.workflows import rework
+
+        files = {'storyboard/storyboard.yaml': storyboard_file, 'assets/asset-manifest.yaml': assets_file}
+        if clip_plan_file is not None:
+            files['script/clip-plan.yaml'] = clip_plan_file
+        if outline_file is not None:
+            files['script/outline.yaml'] = outline_file
+        rework.check_storyboard(project_dir, files)
+        try:
+            result = _submit_storyboard_design(
+                project_dir, storyboard_file, assets_file,
+                clip_plan_file=clip_plan_file, outline_file=outline_file,
+            )
+        except ValueError as error:
+            rework.storyboard_failure(project_dir, files, error)
+            raise
+        (revision / rework.STORYBOARD_PLAN).unlink(missing_ok=True)
+        return result
 
 
 def _submit_storyboard_design(
@@ -162,6 +176,17 @@ def _submit_storyboard_design(
                 validated_artifacts=frozenset({"script/script.yaml"}),
             )
             changed = transition_v2(project, WorkflowState.DRAFT_READY, context)
+        from healthvideo.workflows.rework import STORYBOARD_PLAN
+
+        if (revision / STORYBOARD_PLAN).is_file():
+            # Inputs have passed the same validators above. Preserve their exact source
+            # so model defaults/serialization cannot rewrite accepted sibling scenes.
+            originals = {'storyboard/storyboard.yaml': storyboard_file,
+                         'assets/asset-manifest.yaml': assets_file,
+                         'script/clip-plan.yaml': clip_plan_file, 'script/outline.yaml': outline_file}
+            for relative, original in originals.items():
+                if original is not None:
+                    (staging / relative).write_bytes(original.read_bytes())
         replace_directory_atomic(staging, revision)
         promoted = True
         if changed != project:

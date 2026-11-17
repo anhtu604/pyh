@@ -473,7 +473,19 @@ def _build_step_prompt(
         prompt_fields["reject_note"] = deps.reject_note(project_dir) or ""
     if step == "revise_product":
         prompt_fields["reject_note"] = product_review.revision_notes(project_dir)
+    if step == 'revise_medical' and (project_dir / 'project.yaml').is_file():
+        from healthvideo.workflows import rework
+
+        prompt_fields['reject_note'] = rework.context(project_dir, prompt_fields['reject_note'])
+    if step == 'storyboard_design' and (project_dir / 'project.yaml').is_file():
+        from healthvideo.workflows import rework
+
+        prompt_fields['reject_note'] += '\n' + rework.storyboard_context(project_dir)
     if rewriting:
+        if not answering:
+            from healthvideo.workflows.script_review import ensure_repair_baseline
+
+            ensure_repair_baseline(project_dir)
         notes = expert.answer_notes(project_dir) if answering else revision_notes(project_dir)
         prompt_fields["reject_note"] = f"{notes}\n{prompt_fields.get('reject_note', '')}".strip()
     if step == 'script_review':
@@ -486,11 +498,49 @@ def _build_step_prompt(
                                            + '\nLỗi kiểm tra cần sửa trong phạm vi bước này: '
                                            + diagnostic[-6000:])
     prompt = render_prompt(step, company=deps.company, **prompt_fields)
+    from healthvideo.workflows import script_review
+
+    protocol = script_review if step in {'script_review', 'draft'} else product_review
+    incremental = (protocol.incremental_context(project_dir, writer=step in {'draft', 'revise_product'})
+                   if (project_dir / 'project.yaml').is_file()
+                   and (step in {'script_review', 'product_review', 'revise_product'}
+                        or (step == 'draft' and rewriting and not answering)) else '')
+    if incremental:
+        reviewing = step in {'script_review', 'product_review'}
+        schema = (script_review.ScriptReviewReport if step == 'script_review'
+                  else product_review.ProductReviewReport)
+        output = (f'Chỉ ghi {_artifact_report_path(project_dir, step)}. Schema báo cáo:\n'
+                  + json.dumps(schema.model_json_schema(), ensure_ascii=False)
+                  if reviewing else
+                  'Chỉ sửa các dòng/phạm vi issue mở. Giữ nguyên từng byte ngoài phạm vi; '
+                  'không tự sửa dòng kề. Giữ id, thứ tự và metadata. '
+                  'Dùng lệnh nộp của bước hiện hành sau khi sửa; không tự duyệt cổng.')
+        prompt = (f'Project: {project_dir}\nBước: (`{step}`)\n'
+                  f'Ghi chú bác sĩ: {entry.doctor_note or ""}\n'
+                  f'Yêu cầu bác sĩ: {deps.reject_note(project_dir) or ""}\n'
+                  'Đây là vòng sửa/duyệt từng phần. Gói bên dưới là đầu vào chính; '
+                  'không đọc lại toàn bộ bài để chấm lại từ đầu. Ngữ cảnh diff chỉ để đọc. '
+                  'Chỉ kiểm issue mở và ảnh hưởng ngữ cảnh quanh chỗ sửa; xem tổng thể ngắn. '
+                  'Không nêu lỗi mới ở phần không đổi trừ an toàn y khoa nghiêm trọng '
+                  '(blocking_safety: true, ghi lý do cụ thể). Giữ issue_id và vị trí. '
+                  'Trả issue_statuses cho từng issue: resolved/still_open, overall ngắn. '
+                  'Giữ điểm tiêu chí không có issue và các decisions chưa có chỉ dẫn xử lý.\n'
+                  + incremental + '\n' + output
+                  + '\n## Quy tắc cứng\n' + '\n'.join(f'- {rule}' for rule in HARD_RULES))
+        if step == 'product_review':
+            prompt += (f'\nLấy bằng chứng hình hiện hành: healthvideo step review-frames {project_dir} --every 4. '
+                       'Chờ lệnh xong, mở contact sheet của các cảnh có issue và cảnh kề; '
+                       'xem tổng thể ngắn. Không nhận đã nghe âm thanh. '
+                       'Đối chiếu QA/phát âm hiện hành khi issue liên quan âm thanh.')
     standards_block = prompt_block(root, slug=entry.slug)
     if standards_block:
         body, heading, rules = prompt.rpartition("## Quy tắc cứng")
         prompt = f"{body.rstrip()}\n\n{standards_block.rstrip()}\n\n{heading}{rules}"
     return prompt
+
+
+def _artifact_report_path(project_dir: Path, step: str) -> Path:
+    return resolve_project_layout(project_dir).artifact_root / f"reviews/{step.replace('_', '-')}.yaml"
 
 
 def _run_agent_invocation(
@@ -540,7 +590,49 @@ def _run_agent_invocation(
         excluded = _maker_slots_for_critic(root, entry.slug, role.id, company=deps.company)
         if excluded:
             invoke_kwargs["exclude_slots"] = excluded
+    checkpoint: dict[Path, bytes] = {}
+    restore_repair: Callable[[], None] | None = None
     try:
+        from healthvideo.workflows import script_review
+
+        scoped_storyboard = (step == 'storyboard_design' and (project_dir / 'project.yaml').is_file()
+                             and (resolve_project_layout(project_dir).artifact_root
+                                  / 'reviews/storyboard-rework.yaml').is_file())
+        scoped_script = step == 'draft' and rewriting and not answering
+        scoped_product = step == 'revise_product' and (project_dir / 'project.yaml').is_file()
+        scoped_medical = step == 'revise_medical' and (project_dir / 'project.yaml').is_file()
+        repair_root = (resolve_project_layout(project_dir).artifact_root
+                       if scoped_script or scoped_product or scoped_medical or scoped_storyboard else project_dir)
+        # Keep a full textual checkpoint so an invalid agent save/state transition is reversible.
+        checkpoint = ({p: p.read_bytes() for p in repair_root.rglob('*.yaml')}
+                      | {project_dir / 'project.yaml': (project_dir / 'project.yaml').read_bytes()}
+                      if scoped_script or scoped_product or scoped_medical or scoped_storyboard else {})
+        storyboard_before = (read_yaml(repair_root / 'reviews/storyboard-rework.yaml')
+                             if scoped_storyboard else None)
+        product_before = product_review.repair_files(project_dir) if scoped_product else {}
+        protected_dirs = (('script', 'storyboard', 'assets', 'evidence', 'explainer', 'posts', 'reviews')
+                          if scoped_script or scoped_product or scoped_medical or scoped_storyboard else ())
+        protected_before = {p for name in protected_dirs for p in (repair_root / name).rglob('*.yaml')}
+        # Voice preparation owns this sibling artifact and may save it concurrently.
+        sibling_files = {repair_root / 'script/voice-prep.yaml'} if scoped_storyboard else set()
+        protected_before -= sibling_files
+        for sibling in sibling_files:
+            checkpoint.pop(sibling, None)
+
+        def restore_repair() -> None:
+            current_paths = {p for name in protected_dirs for p in (repair_root / name).rglob('*.yaml')}
+            for path in current_paths - protected_before - sibling_files:
+                path.unlink(missing_ok=True)
+            for path, raw in checkpoint.items():
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(raw)
+            if scoped_product:
+                repo = project_dir.parent.parent
+                for relative in product_review.repair_files(project_dir).keys() - product_before.keys():
+                    (repo / relative).unlink(missing_ok=True)
+                for relative, raw in product_before.items():
+                    (repo / relative).parent.mkdir(parents=True, exist_ok=True)
+                    (repo / relative).write_bytes(raw)
         result = deps.invoke(
             deps.company.chain(role.id),
             prompt,
@@ -551,7 +643,71 @@ def _run_agent_invocation(
             step=step,
             **invoke_kwargs,
         )
+        for correction in range(2):
+            if not (scoped_script or scoped_product or scoped_medical or scoped_storyboard):
+                break
+            try:
+                protected_after = {p for name in protected_dirs
+                                   for p in (repair_root / name).rglob('*.yaml')} - sibling_files
+                extra_allowed = ({repair_root / 'script/questions.yaml'} if scoped_medical
+                                 and deps.read_state(project_dir) == WorkflowState.RESEARCH_IN_PROGRESS
+                                 else set())
+                if scoped_storyboard:
+                    extra_allowed.add(repair_root / 'reviews/storyboard-rework.yaml')
+                if (protected_after - extra_allowed) != (protected_before - extra_allowed):
+                    raise ValueError('Repair scope violation: file creation/deletion')
+                for original, raw in checkpoint.items():
+                    if (original.is_relative_to(repair_root / 'reviews') and original not in extra_allowed
+                            and original.read_bytes() != raw):
+                        raise ValueError(f'Repair scope violation: review record is read-only: {original}')
+                if scoped_script:
+                    path = script_review.script_path(project_dir)
+                    script_review.check_rewrite(project_dir, checkpoint[path], path.read_bytes())
+                    for original, raw in checkpoint.items():
+                        if original != path and original.is_relative_to(repair_root) and (
+                            original.parts[len(repair_root.parts)] in
+                            {'script', 'storyboard', 'assets', 'evidence', 'explainer'}
+                        ) and original.read_bytes() != raw:
+                            raise ValueError(f'Repair scope violation: {original}')
+                elif scoped_product:
+                    product_review.check_repair(project_dir, product_before)
+                elif scoped_storyboard:
+                    from healthvideo.workflows import rework
+
+                    rework.check_storyboard(project_dir,
+                                           {name: repair_root / name for name in storyboard_before['snapshot']},
+                                           plan=storyboard_before)
+                    for original, raw in checkpoint.items():
+                        if original.is_relative_to(repair_root) and (
+                            original.parts[len(repair_root.parts)] in {'script', 'evidence', 'explainer'}
+                        ) and (original.relative_to(repair_root).as_posix() not in storyboard_before['snapshot']
+                               and original.read_bytes() != raw):
+                            raise ValueError(f'Repair scope violation: {original}')
+                else:
+                    from healthvideo.workflows import rework
+
+                    rework.check(project_dir)
+                    for original, raw in checkpoint.items():
+                        if original.is_relative_to(repair_root) and (
+                            original.parts[len(repair_root.parts)] in {'evidence', 'explainer'}
+                        ) and original.read_bytes() != raw:
+                            raise ValueError(f'Repair scope violation: {original}')
+                break
+            except (ValueError, OSError) as scope_error:
+                restore_repair()
+                write_text_atomic(log_dir / 'repair-scope-rejection.txt', str(scope_error))
+                if correction or not result.ok:
+                    raise
+                result = deps.invoke(
+                    deps.company.chain(role.id),
+                    prompt + '\nĐầu ra bị trả lại: ' + str(scope_error)
+                    + '\nĐã khôi phục checkpoint. Sửa lại đúng phạm vi một lần duy nhất.',
+                    cwd=root, log_dir=log_dir, role=role.id, slug=entry.slug, step=step,
+                    **invoke_kwargs,
+                )
     except AllAgentsExhausted as exc:
+        if checkpoint and restore_repair is not None:
+            restore_repair()
         with _topic_lock(entry.slug):
             record_model_resume(root, project_dir, step, brief_context)
         _record_code_changes(root, entry.slug, deps, report, before)
@@ -565,6 +721,8 @@ def _run_agent_invocation(
                 report.waiting_model.append(entry.slug)
         return "waiting_model", None, None, None
     except Exception as exc:  # noqa: BLE001 — a failed tool holds only this topic
+        if checkpoint and restore_repair is not None:
+            restore_repair()
         if is_project_paused(root, entry.slug):
             return "paused", None, None, None
         kind = (

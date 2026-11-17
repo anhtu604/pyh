@@ -1048,7 +1048,7 @@ def test_script_guidance_row_in_doctor_tasks():
     assert "d.kind === 'script_guidance'" in html
     assert 'Gửi hướng dẫn' in html and 'Xem nhận xét' in html
     assert 'function startScriptGuidance' in html
-    assert "openProduct(b.dataset.guideReview, 'script')" in html
-    assert 'Hướng dẫn cho Biên kịch về ' in html
-    assert 'aria-label="Gửi hướng dẫn cho Biên kịch' in html
+    assert "b.dataset.guideProduct ? 'video' : 'script'" in html
+    assert "product ? 'Thợ dựng' : 'Biên kịch'" in html
+    assert 'aria-label="Gửi hướng dẫn:' in html
     assert '.todo-row.todo-guidance>.chip' in html

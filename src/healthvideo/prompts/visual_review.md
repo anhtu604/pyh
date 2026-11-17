@@ -24,7 +24,7 @@ scenes:
     layout_issues: [] # mô tả vấn đề thật nhìn thấy, nếu có
     new_prompt: null # reject: prompt mới cụ thể bằng tiếng Anh, no text
 ```
-Mỗi cảnh trong index cần đúng một quyết định; cảnh dùng chung ảnh phải chọn giống nhau.
+Chỉ quyết định các asset chưa có `selected` hoặc `fallback`; vòng sau chỉ mở ảnh mới của asset còn chờ và contact sheet làm ngữ cảnh. Cảnh đã chọn giữ nguyên, không chấm lại. Báo cáo có thể chỉ gồm cảnh còn chờ; Python giữ quyết định cũ. Không nêu lỗi mới ở cảnh không đổi, trừ an toàn y khoa nghiêm trọng ghi `blocking_safety: true` và lý do, dừng chờ bác sĩ. Cảnh dùng chung ảnh phải chọn giống nhau.
 Nếu cả ba ảnh sai chủ đề: reject và prompt mới; không chọn ảnh sai cho xong.
 Python sẽ sinh lại tối đa hai vòng; chỉ fallback SVG khi có mapping/component đúng chủ đề (hiện gout/urat); ngoài mapping báo rõ cần SVG chủ đề, không chọn ảnh sai hoặc hứa fallback luôn có.
 Không tự chạy lại GPU, không đổi trạng thái workflow; Python sẽ áp dụng báo cáo và dựng lại.

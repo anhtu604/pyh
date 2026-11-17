@@ -571,7 +571,8 @@ _ROUNDS_RE = re.compile(r'\((\d+)\s+vòng\)')
 
 def _script_guidance(path: Path, note: str) -> dict | None:
     """Detect a script that hit the Station 07 cycle cap and now waits for the doctor."""
-    if CYCLE_LIMIT_REASON not in (note or ''):
+    if (CYCLE_LIMIT_REASON not in (note or '')
+            and 'Trạm 07 cần hướng dẫn:' not in (note or '')):
         return None
     flat = ' '.join(note.split())
     match = _STUCK_RE.search(flat)
@@ -642,6 +643,13 @@ def project_handler(
     if guidance:
         return {'label': 'Chờ bác sĩ hướng dẫn Biên kịch', 'kind': 'doctor',
                 'reason': guidance['stuck']}
+    if 'Trạm 12 cần hướng dẫn:' in (blocked_note or ''):
+        return {'label': 'Chờ bác sĩ hướng dẫn Thợ dựng', 'kind': 'doctor',
+                'reason': _first_line(blocked_note)}
+    if ('Storyboard cần hướng dẫn:' in (blocked_note or '')
+            or 'Góp ý y khoa chưa có vị trí:' in (blocked_note or '')):
+        return {'label': 'Chờ bác sĩ xác định phạm vi sửa', 'kind': 'doctor',
+                'reason': _first_line(blocked_note)}
     record = _safe_yaml(logs_dir / 'leader-repair.yaml')
     phase = str(record.get('phase') or '')
     incident = record.get('incident')
@@ -1336,6 +1344,23 @@ def overview(
                 'revision': project.active_revision,
             })
         guidance = _script_guidance(path, note)
+        if (('Storyboard cần hướng dẫn:' in (note or '')
+             or 'Góp ý y khoa chưa có vị trí:' in (note or '')) and current_card is None):
+            storyboard = 'Storyboard cần hướng dẫn:' in note
+            decisions.append({
+                'kind': 'product_guidance', 'slug': path.name, 'code': codes[path.name],
+                'title': title, 'gate': None, 'count': 0, 'revision': project.active_revision,
+                'message': 'Cần bác sĩ xác định phạm vi sửa', 'stuck': note, 'rounds': 0,
+                'role': 'Đạo diễn phân cảnh' if storyboard else 'Biên kịch',
+                'view': 'storyboard' if storyboard else 'script',
+            })
+        if 'Trạm 12 cần hướng dẫn:' in (note or '') and current_card is None:
+            decisions.append({
+                'kind': 'product_guidance', 'slug': path.name, 'code': codes[path.name],
+                'title': title, 'gate': None, 'count': 0, 'revision': project.active_revision,
+                'message': 'Trạm 12 cần hướng dẫn: cùng issue kẹt hai vòng',
+                'stuck': note, 'rounds': 2,
+            })
         if guidance and current_card is None and not factory.gate_for_project(path, project):
             decisions.append({
                 'kind': 'script_guidance',
@@ -1345,7 +1370,8 @@ def overview(
                 'gate': None,
                 'count': 0,
                 'revision': project.active_revision,
-                'message': CYCLE_LIMIT_REASON,
+                'message': ('Trạm 07 cần hướng dẫn: cùng issue kẹt hai vòng'
+                            if 'Trạm 07 cần hướng dẫn:' in note else CYCLE_LIMIT_REASON),
                 'stuck': guidance['stuck'],
                 'rounds': guidance['rounds'],
             })

@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -54,6 +54,16 @@ def test_script_change_after_medical_approval_reopens_without_pin(tmp_path):
     assert manifest.side_state.resume_state == WorkflowState.DRAFT_READY
     assert not approval.exists()
     assert read_yaml(next((rev / 'reviews/medical').glob('*-superseded-approval*.yaml'))) == {'history': 'unchanged'}
+
+
+def test_doctor_can_clarify_scope_while_medical_repair_is_waiting(tmp_path):
+    project = create_v2_project_fixture(tmp_path, state=WorkflowState.MEDICALLY_APPROVED)
+    request_change(project, 'edit_script', 'Sửa câu cần làm rõ', CONTEXT, now=NOW)
+    before = (project / 'project.yaml').read_bytes()
+    request_change(project, 'edit_script', 'Chỉ sửa L01', CONTEXT, now=NOW + timedelta(seconds=1))
+    assert (project / 'project.yaml').read_bytes() == before
+    assert 'L01' in pending_note(project)
+    assert not (project / 'revisions/001/reviews/medical-approval.yaml').exists()
 
 
 def test_script_change_at_draft_ready_restarts_review(tmp_path):

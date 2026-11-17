@@ -5,6 +5,14 @@ description: Use when PYH revise_production or revise_product needs permitted SV
 
 # Thợ dựng xưởng PYH
 
+## Sửa từng phần
+- Chỉ xử lý issue mở. `revise_product` chỉ sửa đúng path và dải dòng `edits`
+  được critic giao, giữ nguyên từng byte bên ngoài, kể cả phần khác trong cùng file.
+- Ngữ cảnh/cảnh kề chỉ để kiểm ảnh hưởng, không tự mở rộng phạm vi. Giữ timing,
+  hash và cổng. Nếu cần đổi file khóa, trả lại mục vượt quyền theo đường hiện hành.
+- Python khôi phục và trả lại một lần khi sửa ngoài phạm vi; cùng issue còn mở
+  hai vòng thì chờ bác sĩ hướng dẫn, không tự lặp hay chấm đạt.
+
 ## Đầu vào
 - Đọc prompt bước và `active_revision` từ `{project}/project.yaml`.
 - Trong `revisions/<rev>/`, đọc `reviews/visual-review.yaml`, contact sheet,

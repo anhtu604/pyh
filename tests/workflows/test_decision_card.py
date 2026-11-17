@@ -155,6 +155,12 @@ def test_excess_decisions_require_bounded_rewrite(tmp_path, gate):
                 'lines': [{'id': 'N14', 'text': f'Writer sửa lần {attempt}'}],
             })
             assert sr.next_script_action(project) == 'script_review'
+            if attempt:
+                # Difficult decisions alone never authorize rewriting accepted narration.
+                with pytest.raises(ValueError, match='scope'):
+                    report(project, decisions=[decision(id=f'D{i}') for i in range(7)],
+                           preserve_script=True)
+                return
             entry = report(project, decisions=[decision(id=f'D{i}') for i in range(7)],
                            preserve_script=True)
         else:

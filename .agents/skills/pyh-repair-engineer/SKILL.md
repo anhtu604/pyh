@@ -5,6 +5,13 @@ description: Diagnose and repair a bounded technical failure assigned by the PYH
 
 # Kỹ sư sửa lỗi PYH
 
+## Phạm vi nghiệm thu
+- Giữ cách sửa theo phiếu lỗi và danh sách file Leader hiện có; không khởi động
+  lại việc rà toàn repo sau mỗi lượt. Chỉ sửa lỗi còn mở; phần đã đạt giữ nguyên.
+- Leader kiểm lỗi giao và ảnh hưởng quanh diff, rồi xem tổng thể ngắn. Không
+  đưa lỗi mới ở phần không đổi vào cùng phiếu, trừ `blocking_safety` có lý do
+  an toàn y khoa nghiêm trọng. Bộ kiểm gate/hash/timing vẫn chạy đầy đủ.
+
 ## Đầu vào
 - Đọc phiếu giao việc của Leader, lỗi hiện hành, log và revision được chỉ định.
 - Tái hiện nguyên nhân bằng phép kiểm hữu hạn. Đọc hàm liên quan trước khi sửa.

@@ -26,7 +26,7 @@ TOFU/MOFU/BOFU không phải ba phần bắt buộc. Không trừ điểm vì th
 Với mỗi tiêu chí dưới 7, phải có ít nhất một mục trong `issues`. `fix` nói rõ hướng sửa, không viết thêm số liệu, nguồn hay trải nghiệm của bác sĩ.
 
 ## Đối chiếu vòng trước
-Nếu bối cảnh có issues của vòng trước, kiểm lại từng `(line, criterion)` trên bản hiện hành. Ghi rõ dòng nào đã sửa xong trong `checked`, kèm mô tả ngắn điều đã thay đổi, và thêm vào trường tùy chọn `resolved_issues: [{line: N02, criterion: giong_nguoi_that}]`. Lỗi còn mở tiếp tục ghi trong `issues`; không ghi cùng một lỗi vào cả hai danh sách. Không coi lỗi đã hết chỉ vì chuyển câu sang dòng khác. Đọc lại toàn bài để bắt lỗi mới.
+Vòng đầu kiểm toàn bộ bài. Mỗi issue có `issue_id` ổn định, `line`, `criterion`, `problem`, `fix`; `related_lines` liệt kê chính xác những dòng khác bắt buộc sửa cùng (không mặc định cho sửa dòng kề). Vòng sau chỉ nhận issue mở và diff kèm ngữ cảnh: kiểm từng issue và ảnh hưởng quanh chỗ sửa, xem tổng thể ngắn. Không nêu lỗi mới ở phần không đổi trừ nguy cơ an toàn y khoa nghiêm trọng, ghi `blocking_safety: true` và lý do. Không mở lại issue đã resolved. Giữ điểm tiêu chí không có issue, giữ ID/vị trí/phạm vi của issue còn mở. Trả `issue_statuses: {<issue_id>: resolved|still_open}` và `overall` ngắn. Không đổi hay hạ ngưỡng 7.
 
 Mỗi lỗi `khong_lap_y` phải chỉ ra cặp id dòng lặp (ví dụ N17 và N32) trong `problem`, nêu ý trùng và chọn dòng cần sửa ở `line`; `fix` nói rõ ý nào giữ ở dòng nào. Không chỉ nhận xét chung “lặp ý”. Giữ đủ sáu tiêu chí và ngưỡng 7, không hạ điểm chuẩn vì đã sửa nhiều vòng.
 

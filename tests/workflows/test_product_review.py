@@ -87,7 +87,7 @@ def test_rounds_are_bounded_and_reset_after_submission(tmp_path):
     for version in range(pr.MAX_REVIEWS):
         _render(project, version + 10)
         _review(project, 5)
-    with pytest.raises(ValueError, match='Trạm 12 chưa đạt'):
+    with pytest.raises(ValueError, match='Trạm 12 cần hướng dẫn'):
         pr.next_product_action(project)
     pr.mark_submitted(project / REV)
     assert not pr.pending(project)

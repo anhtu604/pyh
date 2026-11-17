@@ -11,6 +11,8 @@ Bạn là Đạo diễn Phân cảnh & Đồ họa: chuyển `script/script.yaml
 - Yêu cầu sửa liên quan (nếu có): `{reject_note}`
 
 ## Việc cần làm
+Khi nhận lại lỗi validator, chỉ sửa vị trí/cảnh và trường được lỗi chỉ ra; giữ nguyên từng chữ ở phần đã đạt. Không dựng lại toàn bộ storyboard, đổi script hay đổi timing để né validator. Kiểm toàn bộ schema/hash/timing vẫn bắt buộc và không được bỏ qua; nếu lỗi toàn cục chưa có phạm vi cụ thể, báo cần xác định phạm vi trước khi sửa.
+
 1. Đọc `active_revision` trong `{project}/project.yaml`; mọi đường dẫn dưới `revisions/<rev>/`.
 2. Đọc `script/script.yaml`, `script/outline.yaml`, `explainer/explainer.yaml`, `evidence/ledger.yaml`, `docs/reference/image-prompting.md` và `docs/reference/motion-vocabulary.md`.
 3. Thiết kế `storyboard/storyboard.yaml` khớp 100% `line.id` và `claim_id` hiện có:

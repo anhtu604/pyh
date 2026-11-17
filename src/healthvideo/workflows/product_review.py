@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from healthvideo.storage.files import read_yaml, sha256_file, write_yaml_atomic
 from healthvideo.storage.project_layout import resolve_project_layout
+from healthvideo.workflows import scoped_review
 from healthvideo.workflows.decision_card import (
     MAX_DECISIONS,
     Decision,
@@ -44,6 +45,9 @@ class ProductIssue(BaseModel):
     problem: str = Field(min_length=1)
     fix: str = Field(min_length=1)
     fixable: bool  # the production agent may fix it without reopening the medical gate
+    issue_id: str = ''
+    blocking_safety: bool = False
+    edits: list[scoped_review.EditScope] = Field(default_factory=list)
 
 
 class ProductReviewReport(BaseModel):
@@ -52,8 +56,11 @@ class ProductReviewReport(BaseModel):
     scores: dict[str, int]
     summary: str = Field(min_length=1)
     issues: list[ProductIssue] = Field(default_factory=list)
+    dropped_issues: list[dict] = Field(default_factory=list)
     checked: list[str] = Field(default_factory=list)
     decisions: list[Decision] = Field(default_factory=list)
+    issue_statuses: dict[str, Literal['resolved', 'still_open']] = Field(default_factory=dict)
+    overall: str = ''
 
 
 def _root(project: Path) -> Path:
@@ -90,6 +97,8 @@ def hold(artifact_root: Path, input_hash: str) -> None:
 
 def next_product_action(project: Path) -> ProductAction:
     rounds = _cycle(_root(project))
+    if scoped_review.stuck(rounds) and not rounds[-1]['passed']:
+        raise ValueError('Trạm 12 cần hướng dẫn: cùng issue kẹt 2 vòng; cần bác sĩ quyết định.')
     if not rounds or rounds[-1]['render_sha256'] != render_hash(project):
         return 'product_review'
     latest = rounds[-1]
@@ -152,19 +161,76 @@ def record_review(project: Path, reviewed_hash: str) -> dict:
         report = ProductReviewReport.model_validate(read_yaml(report_file))
     except yaml.YAMLError as exc:
         raise ValueError(f'Báo cáo duyệt sản phẩm sai YAML: {exc}') from exc
-    _validated(report)
     log = _log(root)
+    previous = log['rounds'][-1] if len(log['rounds']) > log['submitted'] else None
+    report = ProductReviewReport.model_validate(scoped_review.reconcile(
+        previous if previous and not previous['passed'] and previous.get('snapshot') is not None else None,
+        report.model_dump(mode='json'), 'at'))
+    _validated(report)
     entry = {
         'round': len(log['rounds']) + 1,
         'render_sha256': reviewed_hash,
         'passed': (all(score >= PASS_SCORE for score in report.scores.values())
                    and len(report.decisions) <= MAX_DECISIONS),
         **report.model_dump(mode='json'),
+        'snapshot': snapshot(project),
     }
     log['rounds'].append(entry)
     write_yaml_atomic(root / LOG, {'version': 1, **log})
     report_file.unlink()
     return entry
+
+
+def repair_files(project: Path) -> dict[str, bytes]:
+    """Capture permitted product sources, plus locked YAML to detect collateral edits."""
+    root = _root(project)
+    repo = project.parent.parent
+    files = {p.relative_to(repo).as_posix(): p.read_bytes()
+             for p in (repo / 'video/src/anatomy').rglob('*') if p.is_file()}
+    files.update({p.relative_to(repo).as_posix(): p.read_bytes()
+                  for directory in ('script', 'storyboard', 'assets', 'evidence', 'explainer', 'posts')
+                  for p in (root / directory).rglob('*.yaml')})
+    return files
+
+
+def snapshot(project: Path) -> dict[str, str]:
+    files = repair_files(project)
+    return {path: raw.decode('utf-8') for path, raw in files.items()}
+
+
+def incremental_context(project: Path, *, writer: bool = False) -> str:
+    rounds = _cycle(_root(project))
+    if not rounds or rounds[-1]['passed'] or 'snapshot' not in rounds[-1]:
+        return ''
+    latest = rounds[-1]
+    if writer:
+        current = snapshot(project)
+        fragments = {}
+        for item in latest['issues']:
+            for scope in item.get('edits', []):
+                path = scope['path']
+                fragments[f"{path}:{scope['start_line']}-{scope['end_line']}"] = ''.join(
+                    current.get(path, '').splitlines(keepends=True)[scope['start_line']-1:scope['end_line']])
+        return ('Open issues:\n' + yaml.safe_dump(latest['issues'], allow_unicode=True)
+                + '\nEditable fragments:\n' + yaml.safe_dump(fragments, allow_unicode=True))
+    return (scoped_review.packet(latest['issues'], latest['snapshot'], snapshot(project))
+            + '\nĐiểm và điểm khó đã ghi (chỉ đọc):\n' + yaml.safe_dump(
+                {'scores': latest['scores'], 'decisions': latest.get('decisions', [])}, allow_unicode=True))
+
+
+def check_repair(project: Path, before: dict[str, bytes]) -> None:
+    rounds = _cycle(_root(project))
+    if not rounds:
+        return
+    scopes = [scope for item in rounds[-1]['issues'] if item['fixable']
+              for scope in item.get('edits', [])]
+    repo = project.parent.parent
+    for scope in scopes:
+        path = (repo / scope['path']).resolve()
+        if not (path.is_relative_to((repo / 'video/src/anatomy').resolve())
+                or path == (_root(project) / 'posts/posts.yaml').resolve()):
+            raise ValueError('Repair scope violation: product target is locked')
+    scoped_review.check_edits(before, repair_files(project), scopes)
 
 
 def mark_fix_attempted(project: Path) -> None:
@@ -206,7 +272,7 @@ def review_view(root: Path) -> dict | None:
         'title': 'Người duyệt sản phẩm',
         'round': latest['round'],
         'passed': latest['passed'],
-        'summary': latest['summary'],
+        'summary': latest.get('overall') or latest['summary'],
         'scores': [{'label': label, 'score': latest['scores'][key]}
                    for key, label in CRITERIA.items()],
         'issues': [{**item, 'line': item['at'], 'criterion': CRITERIA[item['criterion']],

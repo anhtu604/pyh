@@ -32,13 +32,16 @@ def request_change(project_dir: Path, kind: Literal['edit_production', 'edit_scr
     if now.tzinfo is None:
         raise ValueError('Thời điểm yêu cầu phải có múi giờ.')
     early = kind == 'edit_script' and project.state in EARLY
-    if not early and not ((kind == 'edit_production' and project.state in PRODUCTION)
+    already_revising = ((kind == 'edit_script' and project.state == WorkflowState.NEEDS_MEDICAL_REVISION)
+                        or (kind == 'edit_production'
+                            and project.state == WorkflowState.NEEDS_PRODUCTION_REVISION))
+    if not early and not already_revising and not ((kind == 'edit_production' and project.state in PRODUCTION)
                           or (kind == 'edit_script' and project.state in MEDICAL)):
         raise ValueError(f'Không thể yêu cầu sửa ở trạng thái {project.state.value}.')
     record = {'at': now.isoformat(), 'by': 'doctor-chat', 'kind': kind,
               'brief': brief.strip(), 'context': context, 'applied': False}
     updated = project
-    if not early:
+    if not early and not already_revising:
         target, resume = (
             (WorkflowState.NEEDS_MEDICAL_REVISION, WorkflowState.DRAFT_READY)
             if kind == 'edit_script' else
@@ -57,8 +60,13 @@ def request_change(project_dir: Path, kind: Literal['edit_production', 'edit_scr
             destination = revision / 'reviews' / gate / f'{stamp}-superseded-approval.yaml'
             destination.parent.mkdir(parents=True, exist_ok=True)
             os.replace(approval, destination)
-    if kind == 'edit_script' and project.state == WorkflowState.DRAFT_READY:
+    if kind == 'edit_script' and project.state in {
+        WorkflowState.DRAFT_READY, WorkflowState.NEEDS_MEDICAL_REVISION,
+    }:
         mark_submitted(revision)
+        from healthvideo.workflows.rework import STORYBOARD_PLAN
+
+        (revision / STORYBOARD_PLAN).unlink(missing_ok=True)
     if not early:
         product_review.mark_submitted(revision)
     write_yaml_atomic(revision / 'reviews/changes' / f'{stamp}-requested.yaml', record)

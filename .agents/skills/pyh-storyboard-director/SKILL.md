@@ -5,6 +5,12 @@ description: Use when PYH storyboard_design designs storyboard.yaml, asset-manif
 
 # Đạo diễn Phân cảnh & Đồ họa PYH (`storyboard_director`)
 
+## Sửa sau validator
+- Chỉ sửa ID cảnh/trường được lỗi chỉ ra, giữ nguyên từng chữ ở phần đã đạt.
+  Không thiết kế lại toàn bộ storyboard hay thay script/timing để tránh lỗi.
+- Kiểm toàn bộ bất biến schema/hash/timing vẫn bắt buộc. Nếu lỗi toàn cục
+  chưa xác định phạm vi, báo cần xác định vị trí trước, không tự nhận toàn bài.
+
 ## Đầu vào
 - Đọc `project.yaml` lấy `active_revision`; làm việc trong `revisions/<rev>/`.
 - Đọc `script/script.yaml`, `script/outline.yaml`, `explainer/explainer.yaml`, `evidence/ledger.yaml`, và `docs/reference/image-prompting.md`, `docs/reference/motion-vocabulary.md`.

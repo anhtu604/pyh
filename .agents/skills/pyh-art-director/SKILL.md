@@ -5,6 +5,13 @@ description: Use when PYH visual_review must inspect generated image candidates 
 
 # Đạo diễn hình xưởng PYH
 
+## Vòng duyệt lại
+- Chỉ xem/chọn lại asset chưa có selected/fallback; mở ảnh mới và contact sheet
+  làm ngữ cảnh. Giữ nguyên quyết định cảnh đã chọn; không yêu cầu sinh lại phần đạt.
+- Báo cáo chỉ cần các cảnh còn chờ; Python giữ quyết định đã chọn.
+- Không nêu lỗi mới ở cảnh không đổi, trừ an toàn y khoa nghiêm trọng:
+  ghi `blocking_safety: true`, lý do và dừng chờ bác sĩ.
+
 ## Đầu vào
 - Đọc prompt `visual_review.md`, `active_revision` trong `{project}/project.yaml`.
   Dùng `revisions/<rev>/reviews/visual/candidates.yaml`, storyboard và lời đã duyệt.

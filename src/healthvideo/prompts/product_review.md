@@ -30,6 +30,8 @@ Sau cổng y khoa, agent sản xuất chỉ được sửa component SVG trong `
 - `fixable: false` khi phải đổi lời, cảnh, thời lượng, ảnh FLUX hay cách đọc trong `profiles/`; bác sĩ sẽ thấy và quyết định mở lại cổng.
 
 ## Đầu ra
+Vòng đầu kiểm toàn bộ; mỗi issue thêm `issue_id` ổn định. Nếu `fixable: true`, phải ghi `edits: [{path: <đường dẫn tương đối từ gốc repo>, start_line: <dòng đầu>, end_line: <dòng cuối>}]` chính xác trong file SVG/posts đã đọc. Không giao toàn file khi chỉ hỏng một chỗ. Vòng sau chỉ nhận issue mở + diff: kiểm issue/cảnh kề, xem tổng thể ngắn; không nêu lỗi mới ở phần không đổi trừ `blocking_safety: true` có lý do an toàn y khoa nghiêm trọng. Không mở lại lỗi đã resolved, không mở rộng edits. Trả `issue_statuses` cho từng ID (`resolved`/`still_open`), `overall` ngắn; giữ điểm tiêu chí không có issue.
+
 Chỉ ghi đúng một file `{project}/revisions/<rev>/reviews/product-review.yaml`, không sửa file nào khác, không dựng lại video:
 ```yaml
 scores:

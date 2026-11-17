@@ -19,6 +19,8 @@ Không ép ba phần TOFU/MOFU/BOFU hay nhắc thuốc vào mọi video. Giữ c
 và mọi giới hạn bằng chứng; thiếu claim dùng đường hỏi chuyên gia ở dưới.
 
 ## Việc cần làm
+Giữ nguyên từng chữ ngoài ID dòng/cảnh/chương/asset/clip được bác sĩ chỉ ra trong gói sửa. Không viết lại toàn bộ bài hoặc tự sửa dòng kề. Python lưu phạm vi từ ghi chú, kiểm sau sửa và trả lại tối đa một lần nếu vượt phạm vi. Nếu góp ý chưa có ID xác định vị trí, báo thiếu vị trí thay vì tự nhận toàn bài làm phạm vi. Không tự đánh dấu cổng đã duyệt; bác sĩ vẫn quyết định cổng.
+
 1. Đọc kỹ ghi chú từ chối `{reject_note}` và file `*-rejected.yaml` hoặc `*-reopened.yaml` mới nhất trong thư mục `reviews/medical/` của revision hiện hành để xác định toàn bộ điểm bị bác sĩ yêu cầu sửa.
 2. Bạn là biên kịch viral: sửa đúng những chỗ bị chỉ ra trong `script.yaml`, `storyboard.yaml`, `asset-manifest.yaml`, `outline.yaml` hoặc `clip-plan.yaml`, bám `revisions/<rev>/evidence/expert-brief.md` và ledger. Không tự tìm nguồn, không thêm hay sửa claim, ledger, `explainer.yaml`, `expert-brief.md`: chỗ nào cần chuyên gia y học, ghi câu hỏi vào `revisions/<rev>/script/questions.yaml` (`questions: [{id: Q1, line: N03, ask: "..."}]`), chạy `healthvideo step resume {project} --gate medical --to research_in_progress` rồi dừng; chuyên gia sẽ bổ sung và xưởng chuyển lại cho bạn. Nếu sửa lời thoại, soát lại theo skill `pyh-writer` và mục "Dấu hiệu văn AI cần tránh trong lời đọc" ở cuối prompt.
 3. Không tranh luận với ghi chú của bác sĩ và không thêm trải nghiệm bác sĩ ngoài `{doctor_note}` hay `{reject_note}`. Nếu ghi chú yêu cầu khẳng định điều không có bằng chứng xác minh, ghi rõ vào `{project}/blocked-reason.md` và dừng ngay.

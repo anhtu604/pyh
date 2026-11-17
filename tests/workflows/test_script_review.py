@@ -79,12 +79,23 @@ def test_one_criterion_below_pass_score_fails_even_with_high_average(tmp_path):
     assert record_review(project, script_hash(project))['passed'] is False
 
 
+def _legacy_review(project: Path, score: int) -> dict:
+    entry = _review(project, score)
+    path = project / 'revisions/001' / LOG
+    log = read_yaml(path)
+    for row in log['rounds']:
+        row.pop('snapshot', None)
+        row.pop('issue_statuses', None)
+    write_yaml_atomic(path, log)
+    return entry
+
+
 def test_reviews_are_bounded_and_failed_script_stays_before_doctor_gate(tmp_path):
     project = _project(tmp_path)
     for cycle in range(MAX_CYCLES):
         for attempt in range(MAX_REVIEWS):
             _script(project, f'Bản {cycle}-{attempt}')
-            _review(project, 6)
+            _legacy_review(project, 6)
         if cycle < MAX_CYCLES - 1:
             assert next_script_action(project) == 'draft'
             log = read_yaml(project / 'revisions/001' / LOG)
@@ -103,7 +114,7 @@ def test_reviews_are_bounded_and_failed_script_stays_before_doctor_gate(tmp_path
 def test_rewritten_script_after_exhausted_cycle_is_reviewed_unless_at_limit(tmp_path, cycles):
     project = _project(tmp_path)
     for _ in range(MAX_REVIEWS):
-        _review(project, 6)
+        _legacy_review(project, 6)
     path = project / 'revisions/001' / LOG
     log = read_yaml(path)
     # Legacy logs have no cycle metadata and start at cycle one.
@@ -135,7 +146,7 @@ def test_rewritten_script_after_exhausted_cycle_is_reviewed_unless_at_limit(tmp_
 def test_legacy_submitted_log_starts_at_cycle_one(tmp_path):
     project = _project(tmp_path)
     for _ in range(5):
-        _review(project, 6)
+        _legacy_review(project, 6)
     path = project / 'revisions/001' / LOG
     log = read_yaml(path)
     write_yaml_atomic(path, {'version': 1, 'submitted': 3, 'rounds': log['rounds']})
@@ -156,6 +167,11 @@ def test_revision_notes_merge_three_rounds_latest_wins_and_resolved_is_removed(t
                  'problem': f'issue-{number}', 'fix': f'fix-{number}'}
         _report(project, scores=dict.fromkeys(CRITERIA, 7 + number % 2), issues=[issue])
         record_review(project, script_hash(project))
+        path = project / 'revisions/001' / LOG
+        log = read_yaml(path)
+        for row in log['rounds']:
+            row.pop('snapshot', None)
+        write_yaml_atomic(path, log)
     notes = revision_notes(project)
     assert 'issue-0' not in notes
     assert all(f'issue-{n}' in notes for n in (1, 2, 3))
@@ -163,6 +179,11 @@ def test_revision_notes_merge_three_rounds_latest_wins_and_resolved_is_removed(t
         'line': 'N01', 'criterion': 'khong_lap_y', 'problem': 'newest', 'fix': 'newest-fix',
     }], resolved_issues=[{'line': 'N01', 'criterion': 'hinh_anh'}])
     record_review(project, script_hash(project))
+    path = project / 'revisions/001' / LOG
+    log = read_yaml(path)
+    for row in log['rounds']:
+        row.pop('snapshot', None)
+    write_yaml_atomic(path, log)
     notes = revision_notes(project)
     assert 'newest' in notes and 'issue-2' not in notes and 'issue-3' not in notes
     assert '7 → 8 → 8' in notes
@@ -170,7 +191,7 @@ def test_revision_notes_merge_three_rounds_latest_wins_and_resolved_is_removed(t
     assert 'không viết lại toàn bài' in notes
     entry = QueueEntry(slug=SLUG, title='Muối', question='Vì sao?', added=date(2026, 11, 6))
     prompt = _build_step_prompt(tmp_path, _deps({}, None), entry, project, 'draft', rewriting=True)
-    assert notes in prompt
+    assert 'newest' in prompt and 'issue-1' not in prompt
 
 
 def test_medical_submission_marks_review_cycle_without_losing_history(tmp_path):
@@ -284,9 +305,9 @@ def test_run_reviews_rewrites_with_notes_then_submits_without_approving(tmp_path
         else:
             assert 'Nói tự nhiên.' in prompt
             assert 'Bác sĩ muốn nói rõ hơn.' in prompt
-            assert 'giữ nguyên id dòng' in prompt
-            assert 'không viết lại toàn bài' in prompt
-            assert 'Xu hướng điểm' in prompt
+            assert 'Giữ id, thứ tự' in prompt
+            assert 'Giữ nguyên từng byte ngoài phạm vi' in prompt
+            assert 'Editable lines only' in prompt
             _script(project, 'Bản đã sửa.')
         return AgentResult(agents[0].cli, True, False, log_dir / 'fake.log')
 
@@ -377,11 +398,11 @@ def test_runner_defers_storyboard_voice_until_current_script_passes(tmp_path, pa
         if step == 'script_review':
             review_count += 1
             if not initial_draft or review_count > 1:
-                assert 'Issues của vòng trước' in prompt
+                assert 'Open issues' in prompt
                 assert 'Lộ ngôn ngữ nguồn.' in prompt
-            _report(project, 8 if review_count == 3 else 6)
+            _report(project, 8 if review_count == (2 if initial_draft else 1) else 6)
         elif step == 'draft':
-            assert 'Lỗi còn mở' in prompt
+            assert 'Open issues' in prompt
             _script(project, f'Bản sửa {len(calls)}')
         else:
             assert step in {'storyboard_design', 'voice_prep'}
@@ -403,7 +424,7 @@ def test_runner_defers_storyboard_voice_until_current_script_passes(tmp_path, pa
     assert state['submitted']
     expected = 2 if initial_draft else 1
     assert calls.count('storyboard_design') == calls.count('voice_prep') == expected
-    assert read_yaml(project / 'revisions/001' / LOG)['cycles'] == 2
+    assert read_yaml(project / 'revisions/001' / LOG)['cycles'] == 1
 
 
 def test_doctor_pending_request_restarts_exhausted_budget_once_and_runs_writer(tmp_path):
@@ -413,7 +434,7 @@ def test_doctor_pending_request_restarts_exhausted_budget_once_and_runs_writer(t
     for cycle in range(MAX_CYCLES):
         for number in range(MAX_REVIEWS):
             _script(project, f'Bản {cycle}-{number}')
-            _review(project, 6)
+            _legacy_review(project, 6)
         if cycle < MAX_CYCLES - 1:
             next_script_action(project)
     with pytest.raises(ValueError):
@@ -439,7 +460,7 @@ def test_doctor_pending_request_restarts_exhausted_budget_once_and_runs_writer(t
     assert log['cycles'] == 1 and log['cycle_start'] == 6
     assert len(log['rounds']) == 6
     assert next_script_action(project) == 'script_review'
-    _review(project, 6)
+    _legacy_review(project, 6)
     reset_for_doctor_guidance(project, str(path))
     assert read_yaml(log_path)['cycle_start'] == 6
     assert next_script_action(project) == 'draft'

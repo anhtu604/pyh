@@ -5,6 +5,17 @@ description: Use when independently evaluating a PYH script at script_review bef
 
 # Kiểm duyệt kịch bản xưởng PYH
 
+## Duyệt lại từng phần (ưu tiên hơn hướng dẫn đọc toàn bài bên dưới)
+- Vòng đầu đọc/chấm toàn bộ. Mỗi issue có `issue_id` ổn định và ID dòng thật;
+  `related_lines` chỉ những dòng thực sự phải sửa cùng, ghi ngay vòng đầu.
+- Vòng sau dùng issue mở + diff có ngữ cảnh; không đọc lại để chấm từ đầu.
+  Kiểm việc sửa và ảnh hưởng quanh chỗ sửa, xem tổng thể một lượt ngắn.
+- Không nêu lỗi mới ở phần không đổi hoặc mở lại lỗi đã resolved, trừ nguy cơ
+  an toàn y khoa nghiêm trọng: `blocking_safety: true`, nêu rõ nguy cơ và vị trí.
+- Giữ ID, vị trí, phạm vi issue còn mở. Trả `issue_statuses` cho từng issue
+  (`resolved`/`still_open`) và `overall` ngắn; giữ điểm tiêu chí không có issue.
+- Không hạ ngưỡng hay tự mở budget; Python dừng khi cùng issue còn mở hai vòng.
+
 ## Đầu vào
 - Đọc prompt `script_review.md`, doctor_note/reject_note và `active_revision`
   từ `{project}/project.yaml`; đọc toàn bộ `revisions/<rev>/script/script.yaml`.

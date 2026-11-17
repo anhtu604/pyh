@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from healthvideo.storage.files import canonical_json_hash, read_yaml, write_yaml_atomic
 from healthvideo.storage.project_layout import resolve_project_layout
+from healthvideo.workflows import scoped_review
 from healthvideo.workflows.decision_card import (
     MAX_DECISIONS,
     Decision,
@@ -38,6 +39,9 @@ class ScriptIssue(BaseModel):
     criterion: str
     problem: str = Field(min_length=1)
     fix: str = Field(min_length=1)
+    issue_id: str = ''
+    blocking_safety: bool = False
+    related_lines: list[str] = Field(default_factory=list)
 
 
 class ResolvedScriptIssue(BaseModel):
@@ -53,9 +57,12 @@ class ScriptReviewReport(BaseModel):
     scores: dict[str, int]
     summary: str = Field(min_length=1)
     issues: list[ScriptIssue] = Field(default_factory=list)
+    dropped_issues: list[dict] = Field(default_factory=list)
     resolved_issues: list[ResolvedScriptIssue] = Field(default_factory=list)
     checked: list[str] = Field(default_factory=list)
     decisions: list[Decision] = Field(default_factory=list)
+    issue_statuses: dict[str, Literal['resolved', 'still_open']] = Field(default_factory=dict)
+    overall: str = ''
 
 
 def _root(project: Path) -> Path:
@@ -93,10 +100,15 @@ def reset_for_doctor_guidance(project: Path, request_id: str) -> None:
     if log.get('doctor_guidance_id') == request_id:
         return
     count = len(log.get('rounds', []))
+    baseline = (dict(log['rounds'][-1]) if count else None)
+    if baseline:
+        baseline['issues'] = [scoped_review.identify(item, 'line') for item in baseline['issues']]
+        baseline['snapshot'] = {'script/script.yaml': script_path(project).read_bytes().decode('utf-8')}
     write_yaml_atomic(root / LOG, {
         **log, 'version': 1, 'cycles': 1, 'cycle_start': count,
         'guidance_start': count, 'doctor_guidance_id': request_id,
         'rewrite_pending_hash': script_hash(project),
+        'guidance_baseline': baseline,
     })
 
 
@@ -112,6 +124,9 @@ def mark_submitted(artifact_root: Path) -> None:
     rounds = _rounds(artifact_root)
     write_yaml_atomic(artifact_root / LOG,
                       {'version': 1, 'rounds': rounds, 'submitted': len(rounds)})
+    from healthvideo.workflows.rework import PLAN
+
+    (artifact_root / PLAN).unlink(missing_ok=True)
 
 
 def next_script_action(project: Path) -> ScriptAction:
@@ -119,6 +134,15 @@ def next_script_action(project: Path) -> ScriptAction:
     root = _root(project)
     log = _log(root)
     current = script_hash(project)
+    active = _rounds(root)[max(int(log.get('submitted', 0)),
+                               int(log.get('guidance_start', 0))):]
+    stuck = scoped_review.stuck(active)
+    if stuck and not active[-1]['passed']:
+        labels = ', '.join(f"{CRITERIA[item['criterion']]} tại {item['line']} ({item['issue_id']})"
+                           for item in active[-1]['issues'] if item['issue_id'] in stuck)
+        raise ValueError(f'Trạm 07 cần hướng dẫn: cùng issue kẹt 2 vòng ({len(active)} vòng); '
+                         f'tiêu chí kẹt: {labels}. '
+                         'Bác sĩ gửi hướng dẫn cho Biên kịch qua chat.')
     if log.get('rewrite_pending_hash') == current:
         return 'draft'
     rounds = _cycle(root)
@@ -180,6 +204,8 @@ def _validated(report: ScriptReviewReport, line_ids: set[str]) -> None:
             raise ValueError(f'Tiêu chí không tồn tại: {issue.criterion}')
         if issue.line not in line_ids:
             raise ValueError(f'Dòng không có trong kịch bản: {issue.line}')
+        if not set(issue.related_lines).issubset(line_ids):
+            raise ValueError('Related lines must identify real script lines')
     open_keys = {(issue.line, issue.criterion) for issue in report.issues}
     for issue in report.resolved_issues:
         if issue.line not in line_ids or issue.criterion not in CRITERIA:
@@ -207,14 +233,32 @@ def record_review(project: Path, reviewed_hash: str) -> dict:
     except yaml.YAMLError as exc:
         raise ValueError(f'Báo cáo chấm kịch bản sai YAML: {exc}') from exc
     script = read_yaml(script_path(project))
-    _validated(report, {str(line.get('id')) for line in script.get('lines', [])})
+    line_ids = {str(line.get('id')) for line in script.get('lines', [])}
+    for issue in report.issues:
+        if issue.line not in line_ids or not set(issue.related_lines).issubset(line_ids):
+            raise ValueError(f'Dòng không có trong kịch bản: {issue.line}; related_lines={issue.related_lines}')
     rounds = _rounds(root)
+    log = _log(root)
+    start = max(int(log.get('submitted', 0)), int(log.get('guidance_start', 0)))
+    previous = (rounds[-1] if len(rounds) > start and rounds[-1].get('snapshot')
+                and not rounds[-1]['passed'] else None)
+    if previous is None:
+        previous = medical_baseline(project) or log.get('guidance_baseline')
+    if previous:
+        allowed = {line for item in previous['issues']
+                   for line in [item['line'], *item.get('related_lines', [])]}
+        scoped_review.check_script(previous['snapshot']['script/script.yaml'].encode('utf-8'),
+                                   script_path(project).read_bytes(), allowed)
+    report = ScriptReviewReport.model_validate(scoped_review.reconcile(
+        previous, report.model_dump(mode='json'), 'line'))
+    _validated(report, {str(line.get('id')) for line in script.get('lines', [])})
     entry = {
         'round': len(rounds) + 1,
         'script_sha256': current,
         'passed': (all(score >= PASS_SCORE for score in report.scores.values())
                    and len(report.decisions) <= MAX_DECISIONS),
         **report.model_dump(mode='json'),
+        'snapshot': {'script/script.yaml': script_path(project).read_bytes().decode('utf-8')},
     }
     log = read_yaml(root / LOG) if (root / LOG).is_file() else {}
     log.pop('rewrite_pending_hash', None)
@@ -231,6 +275,8 @@ def revision_notes(project: Path) -> str:
     if not rounds:
         return ''
     latest = rounds[-1]
+    if latest.get('snapshot'):
+        return incremental_context(project, writer=True)
     recent = rounds[-3:]
     issues = {}
     for row in recent:
@@ -263,6 +309,73 @@ def previous_review_notes(project: Path) -> str:
         latest.get('issues', []), allow_unicode=True, sort_keys=False)
 
 
+def incremental_context(project: Path, *, writer: bool = False) -> str:
+    root = _root(project)
+    log = _log(root)
+    rounds = log.get('rounds', [])
+    start = max(int(log.get('submitted', 0)), int(log.get('guidance_start', 0)))
+    latest = (rounds[-1] if len(rounds) > start and not rounds[-1]['passed']
+              else medical_baseline(project) or log.get('guidance_baseline'))
+    if latest is None:
+        return ''
+    if not latest.get('snapshot'):
+        return ''  # Old logs have no trustworthy baseline; take one full review first.
+    before = latest['snapshot']
+    current = {'script/script.yaml': script_path(project).read_bytes().decode('utf-8')}
+    issues = latest['issues']
+    if writer:
+        script = read_yaml(script_path(project))
+        allowed = {line for item in issues for line in [item['line'], *item.get('related_lines', [])]}
+        fragments = [line for line in script['lines'] if line['id'] in allowed]
+        return ('Open issues:\n' + yaml.safe_dump(issues, allow_unicode=True)
+                + '\nEditable lines only:\n' + yaml.safe_dump(fragments, allow_unicode=True))
+    return (scoped_review.packet(issues, before, current)
+            + '\nĐiểm và điểm khó đã ghi (chỉ đọc):\n' + yaml.safe_dump(
+                {'scores': latest['scores'], 'decisions': latest.get('decisions', [])}, allow_unicode=True))
+
+
+def ensure_repair_baseline(project: Path) -> None:
+    """Upgrade a legacy rejected report only while its reviewed script is still present."""
+    root = _root(project)
+    log = _log(root)
+    rounds = log.get('rounds', [])
+    start = max(int(log.get('submitted', 0)), int(log.get('guidance_start', 0)))
+    if len(rounds) <= start:
+        return
+    latest = rounds[-1]
+    if (latest['passed'] or latest.get('snapshot')
+            or latest['script_sha256'] != script_hash(project)):
+        return
+    latest['issues'] = [scoped_review.identify(item, 'line') for item in latest['issues']]
+    latest['issue_statuses'] = dict.fromkeys((item['issue_id'] for item in latest['issues']), 'still_open')
+    latest['snapshot'] = {'script/script.yaml': script_path(project).read_bytes().decode('utf-8')}
+    write_yaml_atomic(root / LOG, log)
+
+
+def medical_baseline(project: Path) -> dict | None:
+    from healthvideo.workflows.rework import PLAN
+
+    path = _root(project) / PLAN
+    rounds = _rounds(_root(project))
+    if not path.is_file() or not rounds:
+        return None
+    plan = read_yaml(path)
+    return {**rounds[-1], 'snapshot': {'script/script.yaml': plan['snapshot']['script/script.yaml']},
+            'issues': plan['issues'], 'issue_statuses': {}}
+
+
+def check_rewrite(project: Path, before: bytes, after: bytes) -> None:
+    log = _log(_root(project))
+    rounds = log.get('rounds', [])
+    start = max(int(log.get('submitted', 0)), int(log.get('guidance_start', 0)))
+    latest = rounds[-1] if len(rounds) > start else log.get('guidance_baseline')
+    if not latest or latest['passed']:
+        return
+    allowed = {line for item in latest['issues']
+               for line in [item['line'], *item.get('related_lines', [])]}
+    scoped_review.check_script(before, after, allowed)
+
+
 def review_view(root: Path) -> dict | None:
     """Latest score in display form for the app and the medical packet."""
     rounds = _rounds(root)
@@ -272,7 +385,7 @@ def review_view(root: Path) -> dict | None:
     return {
         'round': latest['round'],
         'passed': latest['passed'],
-        'summary': latest['summary'],
+        'summary': latest.get('overall') or latest['summary'],
         'scores': [{'label': label, 'score': latest['scores'][key]}
                    for key, label in CRITERIA.items()],
         'issues': [{**item, 'criterion': CRITERIA[item['criterion']]}
