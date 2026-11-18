@@ -1,5 +1,5 @@
 version: 1
-updated: '2026-11-17'
+updated: '2026-11-18'
 phases:
 - id: R1
   title: Hoàn thiện xưởng trước khi làm video mới
@@ -264,10 +264,10 @@ phases:
     owner: codex
     note: 'Báo cáo docs/reference/agent-skill-audit-2026-11-17.md. Tổng thời gian A–Z chưa đo; men gan tốn ~11h52 agent, 3,68M token ở bước viết. Top 5 việc nằm cuối báo cáo.'
   - id: R3.3
-    title: Phong cách A "Mascot dẫn chuyện" áp triệt để cho trạm 09–15
+    title: Phong cách A Mascot dẫn chuyện + hoạt cảnh y khoa chuẩn khoa học, áp cho trạm 09–15
     status: doing
-    owner: agy
-    note: 'Bác sĩ chọn A. Chuẩn ở docs/superpowers/specs/2026-11-17-pyh-style-a-mascot-host.md. agy dựng component + clip mẫu; sau R3.1 codex nối skill/prompt/QA trạm 09–15.'
+    owner: codex
+    note: 'Chuẩn ở docs/superpowers/specs/2026-11-17-pyh-style-a-mascot-host.md. Hoạt cảnh mẫu tế bào gan→ALT/AST ở nhánh feat/r3-3-style-a (chưa commit): bản r1 53 s, vòng sửa 2 dở dang (phụ đề tĩnh, zoom kính lúp, bỏ ghi chú nội bộ, nội mô thật). Bác sĩ chưa duyệt.'
   - id: R3.4
     title: Giảm thời gian và token — model nhẹ qua Ollama khi máy rảnh
     status: todo
