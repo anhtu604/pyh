@@ -266,9 +266,79 @@ def test_visual_review_accepts_valid_style_codes_and_mascot_pose(tmp_path):
         'style_palette', 'style_stroke', 'style_caption',
     ]
     assert {'style_palette', 'style_typography', 'style_mascot_pose', 'style_stroke',
-            'style_medical_art', 'style_caption', 'style_zoom'} <= set(STYLE_ERROR_CODES)
+            'style_medical_art', 'style_caption', 'style_zoom', 'style_hands'} <= set(STYLE_ERROR_CODES)
     ensure_candidates(tmp_path, _board(), manifest, generate=_generate)
     assert review_complete(tmp_path)
+
+
+def test_visual_review_accepts_style_hands_on_reject(tmp_path):
+    from healthvideo.workflows.visual_review import (
+        REPORT,
+        STYLE_ERROR_CODES,
+        ensure_candidates,
+        review_complete,
+        validate_style_issues,
+    )
+
+    assert 'style_hands' in STYLE_ERROR_CODES
+    assert STYLE_ERROR_CODES['style_hands']
+    assert validate_style_issues({
+        'decision': 'reject',
+        'style_issues': [
+            'style_hands: bàn tay 6 ngón',
+            {'code': 'style_hands', 'detail': 'ngón dính vào tờ giấy'},
+        ],
+    }) == ['style_hands']
+
+    manifest = AssetManifest.model_validate({'assets': [illustration_record()]})
+    board = _board()
+    ensure_candidates(tmp_path, board, manifest, generate=_generate)
+    submit(tmp_path, reject=True)
+    report = read_yaml(tmp_path / REPORT)
+    report['scenes'][0].update(
+        style_issues=['style_hands: cả ba ứng viên đều có 6 ngón dính tờ giấy'],
+        new_prompt='Lab report resting flat on wooden desk, no hands in frame, no text',
+    )
+    write_yaml_atomic(tmp_path / REPORT, report)
+    index = ensure_candidates(tmp_path, board, manifest, generate=_generate)
+    assert index['assets'][0]['round'] == 1
+    assert index['assets'][0]['prompt'] == (
+        'Lab report resting flat on wooden desk, no hands in frame, no text'
+    )
+    assert not review_complete(tmp_path)
+
+
+@pytest.mark.parametrize('patch', [
+    {'style_issues': ['style_hands: bàn tay 4 ngón']},
+    {'style_issues': [{'code': 'style_hands', 'detail': 'ngón quá dài, dính nhau'}]},
+    {'layout_issues': ['style_hands: cổ tay không liền mạch']},
+])
+def test_visual_review_rejects_select_with_style_hands(tmp_path, patch):
+    from healthvideo.workflows.visual_review import (
+        REPORT,
+        ensure_candidates,
+        review_complete,
+    )
+
+    manifest = AssetManifest.model_validate({'assets': [illustration_record()]})
+    board = _board()
+    ensure_candidates(tmp_path, board, manifest, generate=_generate)
+    submit(tmp_path)
+    report = read_yaml(tmp_path / REPORT)
+    report['scenes'][0].update(patch)
+    write_yaml_atomic(tmp_path / REPORT, report)
+    with pytest.raises(ValueError, match='style_hands'):
+        ensure_candidates(tmp_path, board, manifest, generate=_generate)
+    assert not review_complete(tmp_path)
+
+
+def test_visual_review_prompt_requires_hand_anatomy_check():
+    repo_root = Path(__file__).resolve().parents[2]
+    vr_prompt = (repo_root / 'src/healthvideo/prompts/visual_review.md').read_text(encoding='utf-8')
+    sb_prompt = (repo_root / 'src/healthvideo/prompts/storyboard_design.md').read_text(encoding='utf-8')
+    for token in ('style_hands', '5 ngón', 'ngón cái', 'cổ tay', 'reject', 'new_prompt'):
+        assert token in vr_prompt
+    assert 'hands partially out of frame / hidden' in sb_prompt
 
 
 @pytest.mark.parametrize(('patch', 'match'), [

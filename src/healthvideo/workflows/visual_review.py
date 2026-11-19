@@ -40,6 +40,7 @@ STYLE_ERROR_CODES: dict[str, str] = {
     'style_medical_art': 'Dùng FLUX/tự vẽ thay hình y khoa chuẩn khoa học hoặc sai màu giải phẫu thực tế',
     'style_caption': 'Phụ đề đè hình/nhãn/mascot, vượt dòng/ký tự hoặc có tô sáng từng chữ',
     'style_zoom': 'Phóng to y khoa dùng cross-fade chồng mờ thay vì kính lúp hoặc lệch vùng nguồn',
+    'style_hands': 'Bàn tay sai giải phẫu (sai số ngón, ngón cái lệch chỗ, ngón quá dài/dính/chồng, cổ tay đứt khúc)',
 }
 MASCOT_POSES: frozenset[str] = frozenset({
     'welcome', 'explain', 'point_up', 'thinking', 'surprised',
@@ -84,6 +85,10 @@ def validate_style_issues(row: dict) -> list[str]:
                 raise ValueError(f'Unknown style error code: {code!r}')
             if code not in codes:
                 codes.append(code)
+    if 'style_hands' in codes and row.get('decision') == 'select':
+        raise ValueError(
+            'Visual review cannot select a candidate with style_hands; reject and provide new_prompt'
+        )
     return codes
 
 
