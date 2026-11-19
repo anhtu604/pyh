@@ -1,5 +1,5 @@
 version: 1
-updated: '2026-11-18'
+updated: '2026-11-19'
 phases:
 - id: R1
   title: Hoàn thiện xưởng trước khi làm video mới
@@ -267,7 +267,7 @@ phases:
     title: Phong cách A Mascot dẫn chuyện + hoạt cảnh y khoa chuẩn khoa học, áp cho trạm 09–15
     status: done
     owner: codex
-    note: 'Chuẩn ở docs/superpowers/specs/2026-11-17-pyh-style-a-mascot-host.md. Đã commit Style A (d8a20a3), trạm 09–15 (75a0d98), 9:16 (199de79) + thư viện 4 hoạt cảnh y khoa (men gan, trao đổi khí phế nang, đại thực bào, vỡ mảng xơ vữa) tại library/medanim, frame_slop_lint, Bioicons CLI, tab Thư viện hoạt cảnh. Mọi hoạt cảnh để trạng thái pending: bác sĩ chưa duyệt, chưa có doctor-approval.yaml. Báo cáo docs/reports/2026-11-19-r3-acceptance-report.md.'
+    note: 'Chuẩn ở docs/superpowers/specs/2026-11-17-pyh-style-a-mascot-host.md. Đã commit Style A (d8a20a3), trạm 09–15 (75a0d98), 9:16 (199de79) + thư viện 4 hoạt cảnh y khoa (men gan, trao đổi khí phế nang, đại thực bào, vỡ mảng xơ vữa) tại library/medanim, frame_slop_lint, Bioicons CLI, tab Thư viện hoạt cảnh. Mọi hoạt cảnh để trạng thái pending: bác sĩ chưa duyệt, chưa có doctor-approval.yaml. Báo cáo docs/reports/2026-11-19-r3-acceptance-report.md. Nghiệm thu 2026-11-19: ĐẠT CÓ ĐIỀU KIỆN. Còn treo: đối chiếu 20 PMID + trích dẫn 3 hoạt cảnh mới khi có mạng; men gan còn open_issue nội mô xoang có cửa sổ; chưa chạy xưởng thật với luật R3.5; chưa bật Ollama (qwen3:4b chưa đo).'
   - id: R3.4
     title: Giảm thời gian và token — model nhẹ qua Ollama khi máy rảnh
     status: done
