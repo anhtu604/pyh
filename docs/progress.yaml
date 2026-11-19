@@ -265,11 +265,16 @@ phases:
     note: 'Báo cáo docs/reference/agent-skill-audit-2026-11-17.md. Tổng thời gian A–Z chưa đo; men gan tốn ~11h52 agent, 3,68M token ở bước viết. Top 5 việc nằm cuối báo cáo.'
   - id: R3.3
     title: Phong cách A Mascot dẫn chuyện + hoạt cảnh y khoa chuẩn khoa học, áp cho trạm 09–15
-    status: doing
+    status: done
     owner: codex
-    note: 'Chuẩn ở docs/superpowers/specs/2026-11-17-pyh-style-a-mascot-host.md. Hoạt cảnh mẫu tế bào gan→ALT/AST ở nhánh feat/r3-3-style-a (chưa commit): bản r1 53 s, vòng sửa 2 dở dang (phụ đề tĩnh, zoom kính lúp, bỏ ghi chú nội bộ, nội mô thật). Bác sĩ chưa duyệt.'
+    note: 'Chuẩn ở docs/superpowers/specs/2026-11-17-pyh-style-a-mascot-host.md. Đã commit Style A (d8a20a3), trạm 09–15 (75a0d98), 9:16 (199de79) + thư viện 4 hoạt cảnh y khoa (men gan, trao đổi khí phế nang, đại thực bào, vỡ mảng xơ vữa) tại library/medanim, frame_slop_lint, Bioicons CLI, tab Thư viện hoạt cảnh. Mọi hoạt cảnh để trạng thái pending: bác sĩ chưa duyệt, chưa có doctor-approval.yaml. Báo cáo docs/reports/2026-11-19-r3-acceptance-report.md.'
   - id: R3.4
     title: Giảm thời gian và token — model nhẹ qua Ollama khi máy rảnh
-    status: todo
+    status: done
     owner: codex
-    note: 'Máy có Ollama (chưa có model), RTX 3060, RAM 32 GB. Chỉ dùng local cho việc nhẹ khi đủ VRAM/RAM; đo thời gian và token mỗi trạm trước.'
+    note: 'Telemetry token/thời gian theo trạm, local_llm (mặc định TẮT, chưa có profiles/local-llm.yaml), cache voice_prep. Benchmark thật qwen2.5:3b 6/6 schema pass 123,8 tok/s; qwen3:4b không kéo được, chưa đo; chưa đánh giá chất lượng ngữ nghĩa. Xem docs/reference/ollama-r34-benchmark.md.'
+  - id: R3.5
+    title: Thống nhất vai trò, skill và nối shorts-plan vào xuất clip
+    status: done
+    owner: codex
+    note: 'writer sở hữu script/outline, storyboard_director sở hữu hình; shorts-plan nối clip-plan qua cổng y khoa; bỏ systematic-literature-review khỏi researcher; 12 skill pyh cập nhật. Chưa chạy xưởng thật với quy trình mới.'
