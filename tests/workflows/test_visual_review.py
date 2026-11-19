@@ -341,6 +341,16 @@ def test_visual_review_prompt_requires_hand_anatomy_check():
     assert 'hands partially out of frame / hidden' in sb_prompt
 
 
+def test_image_prompting_guide_follows_style_a_and_affirmative_flux_rules():
+    repo_root = Path(__file__).resolve().parents[2]
+    guide = (repo_root / 'docs/reference/image-prompting.md').read_text(encoding='utf-8')
+    lowered = guide.lower()
+    for forbidden in ('directional shading', 'cel-shading', 'warm cream', 'two-tone shading'):
+        assert forbidden not in lowered
+    assert '#F7F4EC' in guide
+    assert '#12304A' in guide
+
+
 @pytest.mark.parametrize(('patch', 'match'), [
     ({'style_issues': ['style_unknown_code']}, 'Unknown style error code'),
     ({'style_issues': [{'code': 'not_a_style_code'}]}, 'Unknown style error code'),

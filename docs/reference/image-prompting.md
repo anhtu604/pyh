@@ -1,74 +1,113 @@
 # Quy tắc viết prompt ảnh FLUX.2 klein & Hook chuyển động
 
-Tài liệu này đúc kết quy tắc viết prompt cho ảnh minh họa y khoa phẳng (`FLUX.2-klein-4B`, chạy qua `tools/flux/generate.py`) và quy tắc dựng cảnh mở đầu (hook), tổng hợp và viết lại cho bối cảnh giải thích y khoa từ kinh nghiệm thực nghiệm của bộ `shuohao-skills` (Apache-2.0, eternityspring).
+Tài liệu này quy định cách viết prompt cho ảnh minh họa đời sống phẳng (`FLUX.2-klein-4B`, chạy qua `tools/flux/generate.py`) theo **Chuẩn phong cách PYH — Hướng A** (`docs/superpowers/specs/2026-11-17-pyh-style-a-mascot-host.md`) và hướng dẫn viết prompt khẳng định của Black Forest Labs, kèm quy tắc dựng cảnh mở đầu (hook).
+
+> **Phạm vi dùng FLUX:** FLUX **chỉ dùng cho cảnh đời sống** minh họa bối cảnh thường ngày, đồng bộ nét và bảng màu Style A. **Không dùng FLUX cho hình y khoa / giải phẫu / mô phôi** — hình y khoa dùng SVG trong `video/src/anatomy/` hoặc nguồn khoa học có giấy phép theo mục 3 của chuẩn Style A.
 
 ---
 
-## 1. Câu đầu tiên quyết định khung hình (Framing First)
+## 1. Công thức prompt khẳng định theo FLUX & Style A
 
-Mô hình sinh ảnh và sửa ảnh theo tham chiếu ưu tiên tuyệt đối câu đầu tiên cho bố cục. Nếu chỉ viết chung chung (`close-up`, `front view`), mô hình dễ lùi máy ra góc trung cảnh hoặc xoay nghiêng 20–30°.
+Theo hướng dẫn chính thức của Black Forest Labs, FLUX **không hỗ trợ negative prompt** (câu lệnh phủ định). Khi viết từ khóa phủ định, mô hình vẫn có xu hướng vẽ chính vật thể được nhắc đến. Vì vậy, mọi prompt cần viết bằng **văn xuôi tiếng Anh khẳng định**, mô tả cụ thể điều muốn thấy, dùng **tên màu kèm mã hex `#RRGGBB`** và nêu rõ ánh sáng phẳng.
 
-- **Đặt khung hình có thể đo được ngay câu mở đầu**: nêu rõ cỡ cảnh, góc máy, tỉ lệ chủ thể chiếm khung và vị trí mép cắt (vd: *"Extreme close-up top-down view of a right foot: the big toe joint fills two-thirds of the frame, cropped just above the ankle"*).
-- **Lượng hóa góc nhìn hình học**: thay vì chỉ viết *"nhìn thẳng"*, hãy chỉ rõ dấu hiệu hình học (*"camera level with the joint, both sides of the foot contour equally visible"*).
-- **Nhắc lại mép cắt ở câu cuối nếu prompt dài**: khi phần tả chi tiết ở giữa dài hơn 2–3 câu, mô hình dễ quên lệnh phóng gần ở đầu. Chốt lại bằng một câu ngắn (*"Framing reminder: cropped at the ankle, no lower leg or background room in frame"*).
+### Công thức chuẩn
+
+```text
+[Chủ thể + tư thế/hành động] + [Phong cách] + [Bối cảnh] + [Ánh sáng] + [Bảng màu hex Style A]
+```
+
+### Cụm phong cách, ánh sáng và bảng màu bắt buộc (Style A)
+
+- **Phong cách phẳng 2D chuẩn Style A:**
+  `"flat 2D vector editorial illustration, solid flat color fills, uniform navy #12304A outlines, plain flat #F7F4EC background"`
+- **Ánh sáng khẳng định:**
+  `"flat even lighting with solid color fills"` — mô tả ánh sáng đều, không khối nổi, không chuyển sắc gradient, không đổ bóng, không hiệu ứng hạt/nhiễu.
+- **Bảng màu hex Style A (tối đa 3 màu nổi không tính nền, không dùng đỏ báo động):**
+  - Nền: `off_white #F7F4EC` (cảnh tối kịch tính duy nhất khi cần: `night #0A1C2E`)
+  - Nét và chi tiết tối: `navy #12304A`
+  - Màu nhấn chính: `teal #18A6A6`
+  - Màu điểm chốt / lưu ý: `yellow #F4B942`
 
 ---
 
-## 2. Tả hiệu ứng ánh sáng, không gọi tên nguồn sáng
+## 2. Câu đầu tiên quyết định khung hình (Framing First)
+
+Mô hình sinh ảnh ưu tiên tuyệt đối câu đầu tiên cho bố cục. Nếu chỉ viết chung chung (`close-up`, `front view`), mô hình dễ lùi máy ra góc trung cảnh hoặc xoay nghiêng 20–30°.
+
+- **Đặt khung hình có thể đo được ngay câu mở đầu:** nêu rõ cỡ cảnh, góc máy, tỉ lệ chủ thể chiếm khung và vị trí mép cắt (vd: *"Top-down close-up of a wooden desk surface filling the lower two-thirds of the frame, cropped cleanly along the desk edges, with a blank folded paper sheet centered in view"*).
+- **Lượng hóa góc nhìn hình học:** thay vì chỉ viết *"nhìn thẳng"*, hãy chỉ rõ dấu hiệu hình học (*"straight-on eye-level view aligned with the tabletop, both sides of the mug symmetrical in the frame"*).
+- **Nhắc lại mép cắt ở câu cuối nếu prompt dài:** khi phần tả chi tiết ở giữa dài hơn 2–3 câu, chốt lại bằng một câu khẳng định ngắn (*"Framing reminder: tight tabletop crop showing only the glass and saucer against the plain flat #F7F4EC background"*).
+
+---
+
+## 3. Ánh sáng đều, không gọi tên nguồn sáng
 
 Mọi danh từ chỉ vật thể xuất hiện trong prompt đều có nguy cơ bị vẽ vào khung hình.
 
-- **Không gọi tên nguồn sáng hay đạo cụ ánh sáng**: tránh viết *"ánh sáng từ cửa sổ"*, *"đèn phòng khám"*, *"đèn bàn"* — mô hình sẽ vẽ thêm khung cửa sổ hoặc bóng đèn làm rối nền.
-- **Chỉ tả hiệu ứng ánh sáng trên bề mặt chủ thể**: viết hướng sáng, độ mềm và vùng chuyển tông (vd: *"soft directional key light from the upper left with gentle fill, clean flat cel-shading and crisp contour lines on a plain warm cream background"*).
+- **Không gọi tên nguồn sáng hay đạo cụ ánh sáng:** tránh viết *"ánh sáng từ cửa sổ"*, *"đèn phòng khám"*, *"đèn bàn"* — mô hình sẽ vẽ thêm khung cửa sổ hoặc bóng đèn làm rối nền.
+- **Chỉ tả ánh sáng phẳng đều chuẩn Style A:** dùng cụm khẳng định `"flat even lighting with solid color fills"` thay cho mọi mô tả đổ bóng theo hướng, đổ bóng nhiều mảng tông hay ánh sáng tạo khối 3D.
 
 ---
 
-## 3. Một chủ thể mỗi ảnh & danh sách đồng nhất ngắn
+## 4. Một chủ thể mỗi ảnh, hạn chế bàn tay & đồng nhất tham chiếu
 
-- **Một chủ thể / một ý mỗi ảnh**: ảnh minh họa `whiteboard` chỉ phục vụ đúng 1 trạng thái lâm sàng hoặc 1 hành động đời thường. Không ghép nhiều cảnh hay nhiều bước cơ chế vào một ảnh (tránh các từ `turnaround`, `character sheet`, `multiple views`, `split screen`).
-- **Danh sách đồng nhất ngắn khi dùng ảnh tham chiếu (`--ref`)**: chỉ viết câu lệnh thay đổi ở đầu + một câu giữ nhận diện cốt lõi (*"Keep the exact same character as the reference: round glasses, parted black hair, teal jacket with yellow badge"*).
-- **Không liệt kê bộ phận nằm ngoài khung cắt**: nếu vẽ cận cảnh bàn tay hoặc cổ áo mà liệt kê cả quần và giày trong câu đồng nhất, mô hình sẽ tự kéo lùi camera để vẽ đủ giày.
-
----
-
-## 4. Từ khóa phong cách phẳng & chống "mùi AI"
-
-- **Hậu tố cấm chữ đã tự động gắn**: `tools/flux/generate.py` luôn tự nối câu `"Unlabeled illustration only. No text, letters, numbers, anatomical labels or captions."` vào cuối mọi prompt. Khi viết prompt trong `asset-manifest.yaml`, vẫn nên giữ cụm ngắn `no text` và tuyệt đối không yêu cầu vẽ nhãn, con số hay mũi tên chữ.
-- **Định hướng phong cách phẳng 2D sạch**: dùng cụm *"clean 2D flat medical vector illustration, bold uniform dark-navy outline, 4-tone cel shading, warm cream background"*.
-- **Từ khóa tránh cảm giác CG / "mùi AI"**: tránh các từ kéo ảnh về 3D bóng nhựa hoặc ảnh chụp gắt (`photorealistic`, `3D render`, `plastic skin`, `waxy skin`, `hyper-symmetry`, `HDR`, `oversaturated neon glow`, `shallow depth of field`, `skin pores`). Trong prompt FLUX, diễn đạt trực tiếp bằng cụm khẳng định cuối câu: *"flat matte colors, no 3D render, no plastic sheen, no HDR or oversaturation"*.
+- **Một chủ thể / một ý mỗi ảnh:** ảnh minh họa `whiteboard` chỉ phục vụ đúng 1 tình huống đời sống. Không ghép nhiều cảnh hay nhiều bước vào một ảnh (tránh các từ như `turnaround`, `character sheet`, `multiple views`, `split screen`).
+- **Ưu tiên bố cục không có bàn tay (tránh lỗi `style_hands`):** FLUX thường vẽ sai số ngón hoặc làm ngón tay dính vào giấy/vật nhỏ.
+  - Ưu tiên đặt vật dụng lên mặt bàn, cắt khung trước tay, hoặc dùng góc nhìn từ xa.
+  - Nếu cảnh bắt buộc có người và tay, đặt tay ở xa hoặc che một phần / khuất ngoài mép khung (vd: `"distant full-body view"`, `"arms resting behind the desk edge"`, `"hands tucked out of frame"`), tránh cận cảnh bàn tay cầm vật nhỏ.
+- **Danh sách đồng nhất ngắn khi dùng ảnh tham chiếu (`--ref`):** chỉ viết câu lệnh thay đổi ở đầu + một câu giữ nhận diện cốt lõi (*"Keep the exact same character as the reference: round glasses, parted black hair, teal #18A6A6 jacket with yellow #F4B942 badge"*).
+- **Không liệt kê bộ phận nằm ngoài khung cắt:** nếu vẽ bán thân từ thắt lưng trở lên mà liệt kê cả quần và giày, mô hình sẽ tự kéo lùi camera để vẽ đủ giày.
 
 ---
 
-## 5. Ngoại hóa triệu chứng và cảm xúc bằng hành vi cơ thể
+## 5. Diễn đạt khẳng định & hạn chế đã biết
 
-Mô hình không vẽ được tính từ trừu tượng hay mức độ nội tâm; phải đổi thành tư thế tay, vai, mặt có thể nhìn thấy:
+Thay vì liệt kê điều cấm bằng câu phủ định, hãy diễn đạt bằng trạng thái bề mặt và bố cục muốn thấy:
 
-- **Không viết trừu tượng**: *"bệnh nhân rất đau"*, *"cảm giác mệt mỏi nặng nề"*, *"lo lắng về xét nghiệm"*.
-- **Đổi thành hành động cơ thể**:
-  - Đau khớp cấp → *"both hands gently cradling the swollen red big toe without touching it directly, shoulders hunched forward, eyebrows drawn together"*.
-  - Mệt mỏi / mất ngủ → *"sitting on the edge of the bed with slumped shoulders, one hand rubbing the bridge of the nose, head tilted down"*.
-  - Khó thở / tức ngực → *"one open palm pressed flat against the center of the chest, torso leaning slightly forward"*.
+| Ý định | Cách viết khẳng định nên dùng |
+| --- | --- |
+| Không bóng nhựa / không dựng 3D | `"matte solid fills, crisp uniform navy #12304A vector outlines, completely flat 2D surface"` |
+| Không nền rườm rà | `"plain flat #F7F4EC background with a single clean desk surface"` |
+| Không chữ / số trên giấy, nhãn, màn hình | `"empty blank paper surfaces, plain unmarked bottle labels, blank solid-color screen"` |
+| Không quá nhiều màu chói | `"limited matte palette using off-white #F7F4EC, navy #12304A, teal #18A6A6, and yellow #F4B942"` |
+
+- **Hạn chế đã biết về chữ/số trong ảnh:** Yêu cầu "tuyệt đối không có chữ, số hay nhãn" không thể đảm bảo 100% chỉ bằng câu khẳng định. Để giảm tối đa nguy cơ mô hình tự vẽ chữ giả:
+  1. Luôn mô tả khẳng định các bề mặt trống (`empty blank paper surfaces`, `unmarked plain label`, `blank display screen`).
+  2. Tránh nhắc các danh từ dễ gợi ký tự (như chữ viết, bảng số liệu, tiêu đề, logo, tem chữ).
+  3. Lưu ý tầng sinh ảnh `tools/flux/generate.py` vẫn có bước xử lý riêng cho ảnh không nhãn; trong prompt ở `asset-manifest.yaml`, tập trung mô tả khẳng định bề mặt trống thay vì nhồi cụm phủ định.
 
 ---
 
-## 6. Năm cặp ví dụ "Prompt cũ → Prompt mới" (chủ đề y khoa, không chữ/số)
+## 6. Ngoại hóa cảm xúc và thói quen bằng tư thế & vật dụng (không cận cảnh tay)
 
-| Chủ đề | Prompt cũ (mơ hồ, dễ lỗi) | Prompt mới (đo được khung hình, 1 chủ thể, phẳng sạch) |
+Mô hình không vẽ được tính từ trừu tượng; hãy đổi thành tư thế vai, đầu, dáng người hoặc bố cục vật dụng dễ nhìn mà không cần cận cảnh bàn tay:
+
+- **Không viết trừu tượng:** *"người bệnh rất mệt mỏi"*, *"lo lắng về kết quả xét nghiệm"*, *"thói quen uống nhiều đường"*.
+- **Đổi thành hình ảnh cụ thể, an toàn bố cục:**
+  - Mệt mỏi / thiếu ngủ → *"distant side-angle view of an adult sitting on the edge of a tidy bed with slumped shoulders and head tilted gently downward, arms resting loosely out of frame behind the blanket fold"*.
+  - Lo lắng trước giấy khám sức khỏe → *"top-down tabletop view of an empty blank folded paper sheet resting beside a pair of navy #12304A eyeglasses and a ceramic cup on a clean flat desk, completely empty space around the desk"*.
+  - Thói quen đồ uống ngọt → *"eye-level tabletop close-up of a tall clear glass filled with amber-yellow #F4B942 iced tea and a teal #18A6A6 straw resting on a coaster beside a plain glass of water"*.
+
+---
+
+## 7. Năm cặp ví dụ "Prompt cũ → Prompt mới" (cảnh đời sống, chuẩn Style A)
+
+| Tình huống đời sống | Prompt cũ (mơ hồ, lệch phong cách) | Prompt mới (khẳng định, đo được khung hình, đúng Style A, không cận cảnh tay) |
 | --- | --- | --- |
-| **1. Cơn gout cấp ở ngón chân cái** | `"A very painful gout attack on a big toe with red inflammation and uric acid crystals, medical illustration"` | `"Close-up three-quarter view of a bare foot resting on a white sheet, the big toe joint filling the center of the frame and cropped above the ankle. The first metatarsophalangeal joint is visibly swollen, rounded, and warm coral-red compared to the normal toes. Clean 2D flat medical illustration, bold dark-navy outline, soft directional shading on a plain cream background, flat matte colors, no 3D plastic sheen, no text."` |
-| **2. Người bệnh thức giấc vì đau khớp đêm** | `"An adult man in bedroom at night feeling extreme pain in his foot from gout by window moonlight"` | `"Medium shot from the waist to the feet: an adult man sits on the edge of a bed, leaning forward with both hands hovering protectively around his reddened right big toe, brows furrowed and jaw clenched. Cool dim ambient light with a warm highlight on the swollen joint, plain muted background without furniture clutter. Clean 2D flat vector illustration, matte cel-shading, no text."` |
-| **3. Gan nhiễm mỡ (bối cảnh đời sống)** | `"Fatty liver disease caused by metabolic syndrome and sugary drinks, photorealistic medical art, 8k HDR"` | `"Medium close-up at table level: a torso-up view of an adult holding a tall glass of iced sweet tea, looking down thoughtfully, cropped at the waist. Soft directional light from the left creating gentle volume on the clothing, plain warm off-white background. Clean 2D flat editorial illustration, uniform line art, matte palette, no 3D render, no oversaturation, no text."` |
-| **4. Đo huyết áp đúng tư thế tại nhà** | `"Patient checking blood pressure at home with a monitor on table, doctor advice style"` | `"Side-angle medium shot framed from head to waist: an adult sits upright with back supported against a chair, left forearm resting flat on a table at heart level with a fabric cuff wrapped around the bare upper arm. Calm relaxed posture, shoulders level. Clean 2D flat medical illustration, warm cream background, matte colors, no numbers or screen readouts, no text."` |
-| **5. Cận cảnh vùng gót chân / cổ chân sưng** | `"Swollen ankle joint and Achilles tendonitis, close up view"` | `"Extreme close-up profile view of a human ankle and heel filling the frame, cropped at the mid-calf and midfoot so no face or torso is in frame. The posterior heel contour is visibly puffed and shaded in warm coral-red. Clean 2D flat medical illustration, crisp outline, soft two-tone shading on a plain cream background, no text. Framing reminder: only the ankle and heel in frame."` |
+| **1. Tờ kết quả khám trên bàn** | `"Patient holding a lab test report with high numbers, worried, medical art"` | `"Top-down close-up of a clean desk filling the lower frame: an empty blank folded medical slip with simple geometric teal #18A6A6 header bars rests flat beside a pair of navy #12304A eyeglasses and a yellow #F4B942 sticky tab, empty blank paper surfaces. Flat 2D vector editorial illustration, solid flat color fills, uniform navy #12304A outlines, plain flat #F7F4EC background. Flat even lighting with solid color fills. Palette limited to off-white #F7F4EC, navy #12304A, teal #18A6A6, and yellow #F4B942."` |
+| **2. Thói quen đồ uống nhiều đường** | `"Person drinking sugary iced tea causing fatty liver, photorealistic, 8k"` | `"Eye-level tabletop close-up aligned straight with the table surface: a tall glass of iced tea in soft yellow #F4B942 with a teal #18A6A6 straw sits centered beside a smaller plain glass of water on a clean matte table edge, cropped cleanly below the table rim. Flat 2D vector editorial illustration, solid flat color fills, uniform navy #12304A outlines, plain flat #F7F4EC background. Flat even lighting with solid color fills. Matte solid fills using #F7F4EC, #12304A, #18A6A6, and #F4B942."` |
+| **3. Ngồi chờ khám buổi sáng** | `"Worried adult sitting in clinic holding medicine bag, detailed shading"` | `"Wide medium shot from head to knees: an adult in a teal #18A6A6 shirt sits upright on a simple bench with shoulders slightly tense, arms tucked calmly behind a plain tote bag resting on the lap so hands stay hidden from view. Flat 2D vector editorial illustration, solid flat color fills, uniform navy #12304A outlines, plain flat #F7F4EC background. Flat even lighting with solid color fills. Limited palette of #F7F4EC, #12304A, #18A6A6, and yellow #F4B942 accents."` |
+| **4. Góc đo huyết áp đúng tư thế tại nhà** | `"Patient checking blood pressure at home with digital screen numbers, doctor advice"` | `"Side-angle medium shot framed from head to waist: an adult sits upright with back supported against a simple navy #12304A chair, upper arm wrapped in a teal #18A6A6 fabric cuff while the forearm rests flat on a clean desk edge with the hand extending outside the right frame border; a compact cuff monitor with a blank solid-color screen sits on the desk. Flat 2D vector editorial illustration, solid flat color fills, uniform navy #12304A outlines, plain flat #F7F4EC background. Flat even lighting with solid color fills. Palette of #F7F4EC, #12304A, #18A6A6, and #F4B942."` |
+| **5. Thức khuya / giấc ngủ kém** | `"Tired man awake at night by window moonlight, dramatic shadows"` | `"Distant three-quarter wide view of a minimalist bedroom corner: an adult in a plain teal #18A6A6 pajama top sits on the edge of a tidy bed with slumped shoulders and bowed head, arms resting out of sight behind a folded #F7F4EC blanket, with a simple yellow #F4B942 clock silhouette with a blank face on a small nightstand. Flat 2D vector editorial illustration, solid flat color fills, uniform navy #12304A outlines, plain flat #0A1C2E night background. Flat even lighting with solid color fills."` |
 
 ---
 
-## 7. Quy tắc Hook: 3 giây đầu phải có chuyển động
+## 8. Quy tắc Hook: 3 giây đầu phải có chuyển động
 
 Khung hình mở đầu (cảnh đầu tiên của video dài hoặc clip dọc, 3 giây đầu) **không bao giờ được đứng yên như ảnh tĩnh**:
 
-- **Không mở bằng ảnh tĩnh trơ**: tránh để cảnh 1 chỉ chiếu một tấm ảnh `whiteboard` hoặc một sơ đồ giải phẫu đứng im chờ lời đọc.
-- **Bắt buộc có chuyển động chủ đạo ngay nhịp mở**:
+- **Không mở bằng ảnh tĩnh trơ:** tránh để cảnh 1 chỉ chiếu một tấm ảnh `whiteboard` hoặc một sơ đồ giải phẫu đứng im chờ lời đọc.
+- **Bắt buộc có chuyển động chủ đạo ngay nhịp mở:**
   1. Cảnh `whiteboard` có minh họa FLUX phải đi kèm thẻ chuyển động trong `Scene.motion` (vd: `emphasis: marker-underline-title` hoặc `lead-word-zoom-assemble`, hoặc `transition_in: crash-zoom-punch` — xem `docs/reference/motion-vocabulary.md`), kết hợp chữ `on_screen_text` vào sớm trong ≤ 10 frame đầu.
   2. Hoặc mở bằng cảnh cơ chế (`process_animation` / `comparison`) có `beats` và `CUE_ACTIONS` kích hoạt ngay từ câu đầu tiên.
   3. Hoặc mở bằng `visual: kinetic_term` / `visual: stat_gauge` (khi có `claim_id` hợp lệ) với chuyển động lắp chữ hoặc kim đo trực tiếp.
