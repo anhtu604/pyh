@@ -283,6 +283,11 @@ phases:
     status: done
     owner: agy (swarm fix-daemon / fix-media / fix-pipeline / verifier)
     note: 'Bác sĩ 2026-11-19. Ngoài 2 lỗi cổng shorts-plan (bb4cbef, e008cff), đã vá: repair_service _maintenance finally luôn khởi động lại xuong + backoff 5s khóa Windows; retry WinError 5/32 ở write_text_atomic/agents; PYTHONUTF8=1; restore_locked_illustrations không tái sinh/ghi đè ảnh khóa; shorts_plan lock + validate 1800..2700f + fallback pre-Style-A; gpu_mutex reentrant + batch FFmpeg <=50f; Trạm 12 legacy 6 tiêu chí khi style_a_active=False; xóa mù blocked.txt/agent-retry; dọn cờ kẹt thay-men-gan & .xuong.lock PID 13064. Kiểm sau cùng: ruff exit 0, 5x test_files.py đạt, pytest 2304 passed / 2 skipped / 0 failed. Báo cáo docs/reports/2026-11-19-factory-log-audit-and-fixes.md.'
+  - id: R3.8
+    title: Chặn bàn tay sai giải phẫu (sai số ngón, ngón dài, dính) trong ảnh FLUX
+    status: doing
+    owner: agy
+    note: 'Bác sĩ 2026-11-19: FLUX hay vẽ tay 4/6 ngón. Thêm tiêu chí tay ở bước chấm hình + prompt tránh tay + kiểm tự động mã style_hands.'
   - id: R3.6
     title: Mở rộng nguồn y văn — Elsevier làm provider tìm kiếm, PubMed connector để kiểm chéo khi nghiệm thu
     status: done
