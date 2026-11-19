@@ -288,6 +288,11 @@ phases:
     status: done
     owner: agy
     note: 'Bác sĩ 2026-11-19: FLUX hay vẽ tay 4/6 ngón. Đã merge 80e7e8d: mục kiểm tay trong visual_review.md, mã style_hands (select kèm mã này bị từ chối), storyboard_design.md ưu tiên prompt không có tay. Chưa chặn lỗi khác (giấy, vỉ thuốc, tỷ lệ): đang thử Z-Image GGUF và cân nhắc giảm dùng FLUX. Test workflows 929 đạt, ruff sạch.'
+  - id: R3.9
+    title: Viết lại hướng dẫn prompt FLUX theo Style A và quy tắc FLUX (hex, khẳng định, không bóng đổ, không tay)
+    status: doing
+    owner: agy
+    note: 'Bác sĩ 2026-11-19: docs/reference/image-prompting.md còn dạy shading/warm cream/negative trái Style A và FLUX (không hỗ trợ negative prompt). Chỉ sửa tài liệu và mẫu prompt mới; không đổi hash ảnh đã khóa.'
   - id: R3.6
     title: Mở rộng nguồn y văn — Elsevier làm provider tìm kiếm, PubMed connector để kiểm chéo khi nghiệm thu
     status: done
