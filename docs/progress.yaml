@@ -279,10 +279,10 @@ phases:
     owner: codex
     note: 'writer sở hữu script/outline, storyboard_director sở hữu hình; shorts-plan nối clip-plan qua cổng y khoa; bỏ systematic-literature-review khỏi researcher; 12 skill pyh cập nhật. Chưa chạy xưởng thật với quy trình mới.'
   - id: R3.7
-    title: Sửa lỗi produce 'Generated illustration sha256 mismatch' (ensure_candidates ghi đè ảnh đã khóa hash)
-    status: doing
-    owner: agy
-    note: 'Bác sĩ 2026-11-19. Leader repair chẩn đoán lỗi code ở visual_review.ensure_candidates; PYH-003 kẹt produce. Đã sửa riêng 2 lỗi cổng shorts-plan (bb4cbef, e008cff).'
+    title: Sửa lỗi produce 'Generated illustration sha256 mismatch' và pháp y/vá lỗi dừng xưởng
+    status: done
+    owner: agy (swarm fix-daemon / fix-media / fix-pipeline / verifier)
+    note: 'Bác sĩ 2026-11-19. Ngoài 2 lỗi cổng shorts-plan (bb4cbef, e008cff), đã vá: repair_service _maintenance finally luôn khởi động lại xuong + backoff 5s khóa Windows; retry WinError 5/32 ở write_text_atomic/agents; PYTHONUTF8=1; restore_locked_illustrations không tái sinh/ghi đè ảnh khóa; shorts_plan lock + validate 1800..2700f + fallback pre-Style-A; gpu_mutex reentrant + batch FFmpeg <=50f; Trạm 12 legacy 6 tiêu chí khi style_a_active=False; xóa mù blocked.txt/agent-retry; dọn cờ kẹt thay-men-gan & .xuong.lock PID 13064. Kiểm sau cùng: ruff exit 0, 5x test_files.py đạt, pytest 2304 passed / 2 skipped / 0 failed. Báo cáo docs/reports/2026-11-19-factory-log-audit-and-fixes.md.'
   - id: R3.6
     title: Mở rộng nguồn y văn — Elsevier làm provider tìm kiếm, PubMed connector để kiểm chéo khi nghiệm thu
     status: done
