@@ -47,6 +47,17 @@ OUTLINE_ARTIFACT = "script/outline.yaml"
 CLIP_PLAN_ARTIFACT = "script/clip-plan.yaml"
 
 
+def _shorts_plan_applies(revision: Path) -> bool:
+    """Shorts plan only counts after the medical gate approved the script it was built from.
+
+    Before approval the doctor reviews ``script/clip-plan.yaml``; a leftover plan from an earlier
+    script version must not block the gate (the factory rebuilds it after approval).
+    """
+    from healthvideo.workflows.gate_review import MEDICAL_APPROVAL_ARTIFACT
+
+    return (revision / SHORTS_PLAN_ARTIFACT).is_file() and (revision / MEDICAL_APPROVAL_ARTIFACT).is_file()
+
+
 def load_effective_clip_specs(
     revision_root: Path,
     *,
@@ -54,7 +65,7 @@ def load_effective_clip_specs(
 ) -> ClipPlan:
     """Return effective vertical ClipPlan: synced ``posts/shorts-plan.yaml`` if present, else ``script/clip-plan.yaml``."""
     revision = resolve_revision_root(revision_root)
-    if (revision / SHORTS_PLAN_ARTIFACT).is_file():
+    if _shorts_plan_applies(revision):
         return sync_shorts_plan_to_clip_plan(
             revision, require_medical_approval=require_medical_approval
         )
@@ -74,7 +85,7 @@ def load_clip_scenes(
     revision = resolve_revision_root(revision_root)
     if not (revision / OUTLINE_ARTIFACT).is_file():
         raise FileNotFoundError(f"youtube_long needs {OUTLINE_ARTIFACT}")
-    has_shorts_plan = (revision / SHORTS_PLAN_ARTIFACT).is_file()
+    has_shorts_plan = _shorts_plan_applies(revision)
     if not has_shorts_plan and not (revision / CLIP_PLAN_ARTIFACT).is_file():
         raise FileNotFoundError(f"youtube_long needs {CLIP_PLAN_ARTIFACT}")
     ledger = read_yaml(revision / "evidence" / "ledger.yaml")

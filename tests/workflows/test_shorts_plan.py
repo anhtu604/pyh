@@ -157,6 +157,39 @@ def test_medical_gate_can_be_approved_when_shorts_plan_already_exists(tmp_path: 
     assert sync_shorts_plan_to_clip_plan(project / "revisions/001").clips
 
 
+def test_stale_shorts_plan_does_not_block_medical_gate_or_packet(tmp_path: Path) -> None:
+    from healthvideo.workflows.review_html import render_medical_packet
+
+    project = create_long_form_project_fixture(tmp_path)
+    revision = project / "revisions/001"
+    shorts = _write_shorts(
+        project,
+        tmp_path,
+        [
+            {
+                "id": "CL01",
+                "title": "Bản cũ",
+                "hook_text": "Hook ngắn",
+                "start_scene_id": "S01",
+                "end_scene_id": "S02",
+                "target_seconds": 70,
+                "caption": "Caption [claim:C01].",
+                "safety_caveat": "Caveat [claim:C02].",
+                "safe_zone_checked": True,
+            }
+        ],
+    )
+    data = read_yaml(shorts)
+    data["revision_hash"] = "stale-from-older-script"
+    write_yaml_atomic(shorts, data)
+    assert "CL01" in render_medical_packet(revision)
+    approve_gate(project, GateKind.MEDICAL, reviewer=REVIEWER, now=NOW)
+    assert read_yaml(project / "project.yaml")["state"] == "medically_approved"
+    assert shorts_plan_ready(project) is False
+    with pytest.raises(ValueError, match="revision_hash does not match"):
+        sync_shorts_plan_to_clip_plan(revision)
+
+
 def test_sync_shorts_plan_blocks_missing_caveat_and_bad_duration(tmp_path: Path) -> None:
     project = _approved_long_form(tmp_path, claim_on_s03=True)
     revision = project / "revisions/001"
