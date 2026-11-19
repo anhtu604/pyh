@@ -295,14 +295,19 @@ phases:
     note: 'Bác sĩ 2026-11-19. Đã merge 1ca3ba2: image-prompting.md viết lại theo Style A (hex, khẳng định, ánh sáng phẳng, không ví dụ có tay), storyboard_design.md trỏ theo, thêm test. CÒN MỞ (chưa sửa vì dính hash/cache): tools/flux/generate.py nối hậu tố phủ định; render/thumbnail.py BACKGROUND_PROMPT_SUFFIX nằm trong hash thumbnail; tools/flux/mascot_poses.py BACKGROUND_CLAUSE. Chưa đo xem prompt mới có giảm lỗi ảnh thật (chờ thí nghiệm Z-Image/FLUX). Test workflows 930 đạt, ruff sạch.'
   - id: R3.10
     title: Kiểm bản quyền/thương hiệu trong ảnh (style_rights) và câu thoại có số/liều thiếu claim
-    status: doing
+    status: done
     owner: agy (Neon)
-    note: 'Rà soát 2026-11-19 (so với X-Studio): visual_review chưa soi logo/nhãn thuốc/mặt người thật; ScriptLine.text chưa bị kiểm khi có số/liều mà không có claim_id. Prompt: cache/model-test/prompts/prompt-r3-10-rights-and-numbers.md; worktree E:/pyh-r3-10. Đang chạy agy.'
+    note: 'Đã merge 174436d: mã style_rights ở visual_review, lint dose_without_claim (block) / number_without_claim (warn) ở qa/script.py; hiệu chỉnh trên 4 script thật: 0 báo oan. Rà soát 2026-11-19 (so với X-Studio).'
   - id: R3.11
     title: Lỗi tạm thời không thành lỗi vĩnh viễn (khóa Windows) và QA không lọt khi thiếu trạng thái
+    status: done
+    owner: codex (gpt-6.1-sol)
+    note: 'Đã merge 56fda2a: classify_failure dùng chung (khóa Windows tạm thời, trần 5), repair không tiêu hao lượt cho lỗi tạm thời, QA video fail-closed khi thiếu/lạ status, ffmpeg vibi timeout 120s. Còn đề xuất D3: ffprobe kiểm bản dựng trong produce.py.'
+  - id: R3.13
+    title: Báo cáo chấm hình lệch chỉ mục thì coi là cũ và chấm lại (không chặn vĩnh viễn)
     status: doing
     owner: codex (gpt-6.1-sol)
-    note: 'Rà soát 2026-11-19: PermissionError (WinError 5/32/33) bị gán configuration (runner.py, agents.py); gate_review chỉ chặn khi passed is False; vibi.py gọi ffmpeg không timeout. Prompt: cache/model-test/prompts/prompt-r3-11-retry-and-qa.md; worktree E:/pyh-r3-11. Đang chạy codex.'
+    note: 'PYH-003: visual-review.yaml dòng S32 trỏ asset-03/round-0 trong khi chỉ mục khóa asset-02/round-0 (đánh số asset đổi). Worktree E:/pyh-r3-13, brief scratchpad brief-r3-13.md.'
   - id: R3.12
     title: Kế hoạch short sai luật clip dọc (2 chủ thể giải phẫu) phải bị bắt sớm và được agent viết lại; mở khóa PYH-003
     status: done
