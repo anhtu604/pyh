@@ -1,9 +1,10 @@
+import gc
 import json
 import os
 import re
 import shutil
 from collections.abc import Callable, Mapping
-from contextlib import ExitStack, nullcontext
+from contextlib import ExitStack, contextmanager
 from pathlib import Path, PurePosixPath
 from tempfile import mkdtemp
 from typing import Any
@@ -101,9 +102,11 @@ from healthvideo.workflows.gate_review import (
 )
 from healthvideo.workflows.long_form import (
     CLIP_PLAN_ARTIFACT,
+    _resolve_effective_clip_plan,
     load_clip_scenes,
     render_clips,
 )
+from healthvideo.workflows.shorts_plan import revision_tx_lock
 from healthvideo.workflows.visual_assets import (
     BRAND_PROFILE_PATH,
     recover_chart_asset_binding,
@@ -113,6 +116,7 @@ from healthvideo.workflows.visual_review import (
     apply_visual_fallbacks,
     ensure_candidates,
     prepare_contact_sheet,
+    restore_locked_illustrations,
     review_complete,
     visual_identity,
 )
@@ -131,6 +135,71 @@ CHAPTER_CACHE_DIRECTORY = "renders-cache"
 
 def _telemetry_root(project_dir: Path) -> Path:
     return project_dir.parent.parent if project_dir.parent.name == "projects" else project_dir.parent
+
+
+@contextmanager
+def _gpu_mutex(telemetry_root: Path):
+    from healthvideo.workflows.runner import gpu_mutex
+
+    with gpu_mutex(telemetry_root):
+        yield
+
+
+def _effective_clip_plan_payload(revision: Path) -> tuple[dict[str, Any], bool]:
+    """Return canonical clip-plan payload for ``input_hash`` under ``revision_tx_lock``."""
+    with revision_tx_lock(revision):
+        plan, from_shorts = _resolve_effective_clip_plan(revision)
+        if from_shorts:
+            return {"source": "shorts_plan", "plan": plan.model_dump(mode="json")}, True
+        return read_yaml(revision / CLIP_PLAN_ARTIFACT), False
+
+
+def _build_v2_input_hash(
+    *,
+    script: Script,
+    approved_storyboard: Storyboard,
+    author_profile: dict[str, Any],
+    provider_name: str,
+    asset_hashes: dict[str, str],
+    renderer_identity_data: dict[str, Any],
+    pronunciation_sha256: str,
+    provider_identity_data: dict[str, Any],
+    music_settings: dict[str, Any] | None,
+    sfx_identity_data: Any,
+    visual_identity_data: dict[str, Any],
+    style_spec: dict[str, Any] | None,
+    clip_payload: dict[str, Any] | None,
+    clip_brand: Any,
+) -> str:
+    return canonical_json_hash(
+        {
+            "production": _input_hash(
+                script,
+                approved_storyboard,
+                author_profile,
+                provider_name,
+                asset_hashes,
+                renderer_identity_data,
+            ),
+            "timing_policy": TIMING_POLICY_VERSION,
+            "pronunciation_sha256": pronunciation_sha256,
+            "provider_identity": provider_identity_data,
+            "renderer_identity": renderer_identity_data,
+            "music": music_settings,
+            "alignment": alignment_identity(),
+            "sfx": sfx_identity_data,
+            "visual_review": visual_identity_data,
+            **({"style_spec": style_spec} if style_spec is not None else {}),
+            **(
+                {
+                    "clip_plan": clip_payload,
+                    "clip_brand": clip_brand.model_dump(mode="json"),
+                }
+                if clip_payload is not None and clip_brand is not None
+                else {}
+            ),
+        }
+    )
 
 
 def _synthesize_cached_line(
@@ -187,6 +256,8 @@ def _prepare_illustrations(
     spec = FORMAT_SPECS[storyboard.format_profile]
     references = {PurePosixPath(ref.path).as_posix() for scene in storyboard.scenes for ref in scene.visual_assets}
     rights = []
+    if generate:
+        restore_locked_illustrations(root, storyboard, manifest)
     candidates = ensure_candidates(root, storyboard, manifest, generate=generate_illustration) if generate else {}
     for asset in manifest.assets:
         if asset.kind is not AssetKind.ILLUSTRATION or asset.path not in references:
@@ -195,30 +266,39 @@ def _prepare_illustrations(
         assert asset.prompt is not None and asset.seed is not None
         recipe_hash = illustration_recipe_hash(asset.prompt, spec.width, spec.height, asset.seed)
         receipt = path.with_suffix(".flux.json")
-        needs_generation = not path.is_file()
-        if asset.sha256 is None and path.is_file():
-            try:
-                needs_generation = json.loads(receipt.read_text(encoding="utf-8")) != {
-                    "recipe_sha256": recipe_hash, "sha256": sha256_file(path),
-                }
-            except (OSError, ValueError):
-                needs_generation = True
-        if candidates:
-            # Selection is a derived production choice, never a change to the reviewed recipe.
-            needs_generation = False
-        # The shared resolver has already checked path/symlink safety and label policy.
-        if needs_generation:
-            if not generate:
-                if not path.is_file():
+        if asset.sha256 is not None:
+            # Locked illustrations must never be regenerated or overwritten by another candidate.
+            if not path.is_file():
+                if not generate:
                     continue
-                raise ValueError(f"Production requires current illustration recipe provenance: {asset.path}")
-            generate_illustration(asset.prompt, out=path, width=spec.width, height=spec.height, seed=asset.seed)
-        validate_illustration_png(path, spec.width, spec.height)
-        digest = sha256_file(path)
-        if asset.sha256 is not None and asset.sha256 != digest:
-            raise ValueError(f"Generated illustration sha256 mismatch: {asset.path}")
-        if (needs_generation or candidates) and asset.sha256 is None:
-            _write_json_atomic(receipt, {"recipe_sha256": recipe_hash, "sha256": digest})
+                raise ValueError(f"Generated illustration sha256 mismatch: {asset.path}")
+            validate_illustration_png(path, spec.width, spec.height)
+            digest = sha256_file(path)
+            if asset.sha256 != digest:
+                raise ValueError(f"Generated illustration sha256 mismatch: {asset.path}")
+        else:
+            needs_generation = not path.is_file()
+            if path.is_file():
+                try:
+                    needs_generation = json.loads(receipt.read_text(encoding="utf-8")) != {
+                        "recipe_sha256": recipe_hash, "sha256": sha256_file(path),
+                    }
+                except (OSError, ValueError):
+                    needs_generation = True
+            if candidates:
+                # Selection is a derived production choice, never a change to the reviewed recipe.
+                needs_generation = False
+            # The shared resolver has already checked path/symlink safety and label policy.
+            if needs_generation:
+                if not generate:
+                    if not path.is_file():
+                        continue
+                    raise ValueError(f"Production requires current illustration recipe provenance: {asset.path}")
+                generate_illustration(asset.prompt, out=path, width=spec.width, height=spec.height, seed=asset.seed)
+            validate_illustration_png(path, spec.width, spec.height)
+            digest = sha256_file(path)
+            if needs_generation or candidates:
+                _write_json_atomic(receipt, {"recipe_sha256": recipe_hash, "sha256": digest})
         rights.append(LicenseEntry(
             path=asset.path, source="generated:flux2-klein-4b", creator=asset.creator,
             license="Apache-2.0", rights_basis="Generated unlabeled illustration using Apache-2.0 FLUX.2 klein 4B weights",
@@ -349,8 +429,11 @@ def _produce_v2_inner(
         renderer.renderer_identity() if renderer.__name__.endswith('.openmontage')
         else renderer_identity()
     )
-    # Validate pending declarations before any model invocation. All GPU subprocesses
-    # finish synchronously: FLUX first, then VieNeu, then ACE-Step.
+    # Restore/verify locked illustrations before referenced_storyboard_assets so a stale working copy
+    # never triggers an unrecoverable hash error or wastes FLUX GPU time.
+    should_generate_flux = not dry_run and project.state is not WorkflowState.AWAITING_VIDEO_REVIEW
+    if should_generate_flux:
+        restore_locked_illustrations(layout.artifact_root, storyboard, asset_manifest)
     referenced_storyboard_assets(layout.artifact_root, storyboard, asset_manifest)
     flux_references = {
         PurePosixPath(ref.path).as_posix()
@@ -361,22 +444,24 @@ def _produce_v2_inner(
         asset.kind is AssetKind.ILLUSTRATION and asset.path in flux_references
         for asset in asset_manifest.assets
     )
-    should_generate_flux = not dry_run and project.state is not WorkflowState.AWAITING_VIDEO_REVIEW
-    with (
-        station_span(
-            telemetry_root,
-            project.slug,
-            "flux",
-            revision=project.active_revision,
-            gpu=True,
-        )
-        if (has_illustrations and should_generate_flux)
-        else nullcontext()
-    ):
+    with ExitStack() as flux_stack:
+        if has_illustrations and should_generate_flux:
+            flux_stack.enter_context(_gpu_mutex(telemetry_root))
+            flux_stack.enter_context(
+                station_span(
+                    telemetry_root,
+                    project.slug,
+                    "flux",
+                    revision=project.active_revision,
+                    gpu=True,
+                )
+            )
         illustration_rights = _prepare_illustrations(
             layout.artifact_root, storyboard, asset_manifest,
             generate=should_generate_flux,
         )
+    if has_illustrations and should_generate_flux:
+        gc.collect()
     asset_hashes = evidence_asset_hashes(layout.artifact_root, storyboard)
     visual_paths = referenced_storyboard_assets(
         layout.artifact_root,
@@ -390,37 +475,31 @@ def _produce_v2_inner(
         load_brand_profile(BRAND_PROFILE_PATH)
         if storyboard.format_profile == "youtube_long" else None
     )
+    effective_clip_payload: dict[str, Any] | None = None
+    if storyboard.format_profile == "youtube_long":
+        effective_clip_payload, _ = _effective_clip_plan_payload(layout.artifact_root)
     music_settings = {
         "model_id": MODEL_ID, "mood": _music_mood(layout.artifact_root),
         "seconds": MUSIC_SECONDS, "seed": MUSIC_SEED,
         "music_db": MUSIC_DB, "duck_db": DUCK_DB, "mix_version": MIX_VERSION,
     } if music else None
-    input_hash = canonical_json_hash(
-        {
-            "production": _input_hash(
-                script,
-                storyboard,
-                author_profile,
-                provider_name,
-                asset_hashes,
-                renderer_identity_data,
-            ),
-            "timing_policy": TIMING_POLICY_VERSION,
-            "pronunciation_sha256": pronunciation_sha256,
-            "provider_identity": provider_identity_data,
-            "renderer_identity": renderer_identity_data,
-            "music": music_settings,
-            "alignment": alignment_identity(),
-            "sfx": sfx_identity(storyboard, layout.artifact_root),
-            "visual_review": visual_identity(layout.artifact_root),
-            **({"style_spec": style_spec} if style_spec is not None else {}),
-            **(
-                {"clip_plan": read_yaml(layout.artifact_root / CLIP_PLAN_ARTIFACT),
-                 "clip_brand": clip_brand.model_dump(mode="json")}
-                if storyboard.format_profile == "youtube_long"
-                else {}
-            ),
-        }
+    sfx_identity_data = sfx_identity(storyboard, layout.artifact_root)
+    visual_identity_data = visual_identity(layout.artifact_root)
+    input_hash = _build_v2_input_hash(
+        script=script,
+        approved_storyboard=storyboard,
+        author_profile=author_profile,
+        provider_name=provider_name,
+        asset_hashes=asset_hashes,
+        renderer_identity_data=renderer_identity_data,
+        pronunciation_sha256=pronunciation_sha256,
+        provider_identity_data=provider_identity_data,
+        music_settings=music_settings,
+        sfx_identity_data=sfx_identity_data,
+        visual_identity_data=visual_identity_data,
+        style_spec=style_spec,
+        clip_payload=effective_clip_payload,
+        clip_brand=clip_brand,
     )
     approved_storyboard = storyboard
     final_scene = storyboard.scenes[-1]
@@ -563,12 +642,16 @@ def _produce_v2_inner(
             usage_path = layout.artifact_root / "audio/tts-usage.json"
             if provider_name in {"vibi_minimax"} and usage_path.is_file():
                 shutil.copyfile(usage_path, staging_dir / "audio/tts-usage.json")
-        with station_span(
-            telemetry_root,
-            project.slug,
-            "qa",
-            revision=project.active_revision,
-            gpu=True,
+        gc.collect()
+        with (
+            _gpu_mutex(telemetry_root),
+            station_span(
+                telemetry_root,
+                project.slug,
+                "qa",
+                revision=project.active_revision,
+                gpu=True,
+            ),
         ):
             alignment = align_lines(
                 line_wavs, {line.id: line.text for line in script.lines},
@@ -588,6 +671,7 @@ def _produce_v2_inner(
             )
             pronunciation_report["input_hash"] = input_hash
             _write_json_atomic(staging_dir / "pronunciation-qa.json", pronunciation_report)
+        gc.collect()
         storyboard, timing_record = retime_storyboard(approved_storyboard, line_ms)
         storyboard = apply_alignment(storyboard, alignment)
         storyboard = storyboard.model_copy(update={"scenes": tuple(
@@ -605,9 +689,12 @@ def _produce_v2_inner(
             voice_audio = staged_audio.with_name("narration-voice.wav")
             shutil.copyfile(staged_audio, voice_audio)
             music_audio = staged_audio.with_name("music.wav")
-            generate_music(
-                music_settings["mood"], seconds=MUSIC_SECONDS, seed=MUSIC_SEED, out=music_audio,
-            )
+            gc.collect()
+            with _gpu_mutex(telemetry_root):
+                generate_music(
+                    music_settings["mood"], seconds=MUSIC_SECONDS, seed=MUSIC_SEED, out=music_audio,
+                )
+            gc.collect()
             if sfx_events:
                 mix_sfx(voice_audio, sfx_events, out=staged_audio, music=music_audio)
             else:
@@ -668,12 +755,38 @@ def _produce_v2_inner(
         staged_output = staging_dir / OUTPUT_NAME
         chapter_parts: tuple[str, ...] = ()
         clip_outputs: dict[str, str] = {}
-        with station_span(
-            telemetry_root,
-            project.slug,
-            "render",
-            revision=project.active_revision,
-            gpu=True,
+        if render_input.format_profile == "youtube_long":
+            latest_clip_payload, _ = _effective_clip_plan_payload(layout.artifact_root)
+            if latest_clip_payload != effective_clip_payload:
+                effective_clip_payload = latest_clip_payload
+                input_hash = _build_v2_input_hash(
+                    script=script,
+                    approved_storyboard=approved_storyboard,
+                    author_profile=author_profile,
+                    provider_name=provider_name,
+                    asset_hashes=asset_hashes,
+                    renderer_identity_data=renderer_identity_data,
+                    pronunciation_sha256=pronunciation_sha256,
+                    provider_identity_data=provider_identity_data,
+                    music_settings=music_settings,
+                    sfx_identity_data=sfx_identity_data,
+                    visual_identity_data=visual_identity_data,
+                    style_spec=style_spec,
+                    clip_payload=effective_clip_payload,
+                    clip_brand=clip_brand,
+                )
+                pronunciation_report["input_hash"] = input_hash
+                _write_json_atomic(staging_dir / "pronunciation-qa.json", pronunciation_report)
+        gc.collect()
+        with (
+            _gpu_mutex(telemetry_root),
+            station_span(
+                telemetry_root,
+                project.slug,
+                "render",
+                revision=project.active_revision,
+                gpu=True,
+            ),
         ):
             if renderer.__name__.endswith('.openmontage'):
                 if render_input.format_profile == 'youtube_long' and load_clip_scenes(layout.artifact_root, storyboard):
@@ -716,6 +829,7 @@ def _produce_v2_inner(
                     raise FileNotFoundError(
                         f"Remotion render did not create output: {staged_output}"
                     )
+        gc.collect()
         _write_json_atomic(
             staging_dir / V2_RENDER_MANIFEST_NAME,
             {

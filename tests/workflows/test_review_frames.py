@@ -148,7 +148,8 @@ def test_batch_extraction_matches_individual_video_frames(tmp_path, monkeypatch,
     frames.review_frames(project, runner=run, every=1 / 30 if dense else None)
     assert ([observed[9], observed[99]] if dense else observed) == expected
     assert len(observed) == (180 if dense else 2)
-    assert len(calls) == 1
+    assert len(calls) == (4 if dense else 1)
+    assert all("-filter_script:v" in argv for argv in calls)
 
 
 def test_scene_samples_clamp_offset_and_dense_range():
@@ -463,3 +464,37 @@ def test_review_frames_writes_hook_and_transition_sheets_alongside_periodic(tmp_
     assert 0 in focus_frames and "hook" in focus_frames[0]
     assert 90 in focus_frames and "transition" in focus_frames[90]
     assert (output / "hook-transitions/sheet-01.png").is_file()
+
+
+def test_review_frames_batches_select_filters_to_at_most_50_frames(tmp_path):
+    """Ensure >100 sampled frames (including hook+transitions) split into <=50-frame FFmpeg batches."""
+    import re
+
+    project, renders, data = setup_project(tmp_path, video=True)
+    many_scenes = tuple(scene(i + 1, i * 30, 30) for i in range(60))
+    long_data = RenderInput(
+        title=data.title,
+        audio_file=data.audio_file,
+        scenes=many_scenes,
+    )
+    (renders / "render-input.json").write_text(
+        long_data.model_dump_json(),
+        encoding="utf-8",
+    )
+    captured_terms: list[int] = []
+
+    def inspecting_runner(argv):
+        if argv[0] == "ffmpeg":
+            filter_path = Path(argv[argv.index("-filter_script:v") + 1])
+            script_text = filter_path.read_text(encoding="utf-8")
+            term_count = len(re.findall(r"eq\(n\\,\d+\)", script_text))
+            captured_terms.append(term_count)
+            for idx in range(term_count):
+                Image.new("RGB", (54, 96), "blue").save(argv[-1] % idx)
+            return 0
+        return 0
+
+    frames.review_frames(project, runner=inspecting_runner, every=0.5)
+    assert captured_terms, "expected FFmpeg batch calls"
+    assert all(1 <= count <= frames.FFMPEG_SELECT_BATCH_SIZE <= 50 for count in captured_terms)
+    assert max(len(captured_terms), 1) >= 2

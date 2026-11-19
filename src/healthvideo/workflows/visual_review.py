@@ -2,11 +2,14 @@
 
 import json
 import math
+import os
 import shutil
 import subprocess
-from pathlib import Path
+import time
+from pathlib import Path, PurePosixPath
+from tempfile import TemporaryDirectory
 
-from healthvideo.domain.asset_manifest import AssetKind, AssetManifest
+from healthvideo.domain.asset_manifest import AssetKind, AssetManifest, AssetRecord
 from healthvideo.domain.format_profile import FORMAT_SPECS
 from healthvideo.domain.storyboard import SceneAnatomy, SceneBeat, Storyboard
 from healthvideo.process import run_with_deadline, timeout_diagnostic
@@ -17,12 +20,18 @@ from healthvideo.storage.files import (
     write_yaml_atomic,
 )
 from healthvideo.storage.project_layout import resolve_project_layout
-from healthvideo.visuals.flux import generate_candidates, illustration_recipe_hash
+from healthvideo.visuals.flux import (
+    generate_candidates,
+    illustration_recipe_hash,
+    validate_illustration_png,
+)
 
 CANDIDATES = 'reviews/visual/candidates.yaml'
 REPORT = 'reviews/visual-review.yaml'
 MAX_REGENERATIONS = 2
 CONTACT_SHEET_TIMEOUT = 15 * 60  # Decode the full video and sample every scene/beat.
+_FFMPEG_SELECT_BATCH_SIZE = 50
+_WINDOWS_RETRY_ERRORS = frozenset({5, 32})
 STYLE_ERROR_CODES: dict[str, str] = {
     'style_palette': 'Sai bảng màu PYH (off_white/navy/teal/yellow/night, >3 màu nổi hoặc đỏ báo động)',
     'style_typography': 'Sai font Be Vietnam Pro, cỡ chữ nhỏ dưới ngưỡng hoặc tương phản < 4.5:1',
@@ -90,13 +99,30 @@ def review_complete(root: Path) -> bool:
         return True
     data = read_yaml(root / CANDIDATES)
     _check_candidates(root, data)
-    complete = bool(data.get('assets')) and all(
-        asset.get('selected') or asset.get('fallback') for asset in data['assets']
+    assets = data.get('assets') or []
+    if bool(assets) and all(asset.get('locked') for asset in assets):
+        for asset in assets:
+            if not asset.get('selected') or asset['selected'] not in {
+                c['path'] for c in asset.get('candidates', [])
+            }:
+                raise ValueError('Visual review selection is not a reviewed candidate')
+        if (root / REPORT).is_file() and data.get('review_sha256') == sha256_file(root / REPORT):
+            report = read_yaml(root / REPORT)
+            rows = {row['scene']: row for row in report.get('scenes', [])}
+            for asset in assets:
+                for scene in asset['scenes']:
+                    row = rows.get(scene, {})
+                    validate_style_issues(row)
+                    if row and (row.get('decision') != 'select' or row.get('selected') != asset['selected']):
+                        raise ValueError('Visual review selection changed after agent decision')
+        return True
+    complete = bool(assets) and all(
+        asset.get('selected') or asset.get('fallback') for asset in assets
     ) and (root / REPORT).is_file() and data.get('review_sha256') == sha256_file(root / REPORT)
     if complete:
         report = read_yaml(root / REPORT)
         rows = {row['scene']: row for row in report.get('scenes', [])}
-        for asset in data['assets']:
+        for asset in assets:
             for scene in asset['scenes']:
                 row = rows.get(scene, {})
                 validate_style_issues(row)
@@ -111,8 +137,18 @@ def review_complete(root: Path) -> bool:
 
 
 def _safe_path(root: Path, relative: str) -> Path:
-    path = root / relative
-    if not isinstance(relative, str) or not path.resolve().is_relative_to(root.resolve()):
+    if not isinstance(relative, str) or not relative.strip():
+        raise ValueError('Visual review path must remain within the active revision')
+    rel = PurePosixPath(relative)
+    if (
+        rel.is_absolute()
+        or '\\' in relative
+        or '..' in rel.parts
+        or (rel.parts and ':' in rel.parts[0])
+    ):
+        raise ValueError('Visual review path must remain within the active revision')
+    path = root.joinpath(*rel.parts)
+    if not path.resolve().is_relative_to(root.resolve()):
         raise ValueError('Visual review path must remain within the active revision')
     return path
 
@@ -218,47 +254,394 @@ def _consume_report(root: Path, data: dict, board: Storyboard) -> None:
     data['review_count'] = data.get('review_count', 0) + 1
 
 
+def _replace_atomic_with_retry(source: Path, destination: Path) -> None:
+    """Replace destination atomically with short backoff for transient Windows file locks."""
+    for attempt in range(6):
+        try:
+            os.replace(source, destination)
+            return
+        except PermissionError as error:
+            if os.name != 'nt' or getattr(error, 'winerror', None) not in _WINDOWS_RETRY_ERRORS or attempt == 5:
+                raise
+            time.sleep(min(0.005 * (2 ** attempt), 0.15))
+
+
+def _copy_file_atomic(source: Path, destination: Path) -> None:
+    """Copy a file to destination atomically via a sibling temporary file."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with TemporaryDirectory(prefix=f'.{destination.name}.', dir=destination.parent) as temp_dir:
+        staged = Path(temp_dir) / destination.name
+        with source.open('rb') as src, staged.open('wb') as dst:
+            shutil.copyfileobj(src, dst)
+            dst.flush()
+            os.fsync(dst.fileno())
+        _replace_atomic_with_retry(staged, destination)
+
+
+def _valid_illustration_png(path: Path, width: int, height: int) -> bool:
+    if not path.is_file():
+        return False
+    try:
+        validate_illustration_png(path, width, height)
+    except (OSError, ValueError):
+        return False
+    return True
+
+
+def _internal_png_candidates(root: Path) -> list[Path]:
+    """Return sorted revision-internal candidate/imported PNG paths safely inside ``root``."""
+    resolved_root = root.resolve()
+    candidates: list[Path] = []
+    for base, pattern in (
+        (root / 'reviews/visual', 'candidate-*.png'),
+        (root / 'assets/imported', '*.png'),
+    ):
+        if not base.is_dir():
+            continue
+        iterator = base.rglob(pattern) if base.name == 'visual' else base.glob(pattern)
+        for path in sorted(iterator):
+            if path.is_file() and path.resolve().is_relative_to(resolved_root):
+                candidates.append(path)
+    return candidates
+
+
+def _find_locked_illustration_match(
+    root: Path,
+    locked_sha256: str,
+    width: int,
+    height: int,
+) -> Path | None:
+    for candidate in _internal_png_candidates(root):
+        if sha256_file(candidate) == locked_sha256 and _valid_illustration_png(candidate, width, height):
+            return candidate
+    return None
+
+
+def restore_locked_illustrations(
+    root: Path,
+    board: Storyboard,
+    manifest: AssetManifest,
+) -> dict[str, Path]:
+    """Verify or atomically restore every sha256-locked illustration; fail closed if unmatched."""
+    spec = FORMAT_SPECS[board.format_profile]
+    referenced = {PurePosixPath(ref.path).as_posix() for scene in board.scenes for ref in scene.visual_assets}
+    resolved: dict[str, Path] = {}
+    for record in manifest.assets:
+        if record.kind is not AssetKind.ILLUSTRATION or record.path not in referenced or record.sha256 is None:
+            continue
+        destination = _safe_path(root, record.path)
+        if (
+            destination.is_file()
+            and _valid_illustration_png(destination, spec.width, spec.height)
+            and sha256_file(destination) == record.sha256
+        ):
+            matched = _find_locked_illustration_match(root, record.sha256, spec.width, spec.height)
+            resolved[record.path] = matched or destination
+            continue
+        matched = _find_locked_illustration_match(root, record.sha256, spec.width, spec.height)
+        if matched is None:
+            raise ValueError(f'Generated illustration sha256 mismatch: {record.path}')
+        _copy_file_atomic(matched, destination)
+        if not _valid_illustration_png(destination, spec.width, spec.height) or sha256_file(destination) != record.sha256:
+            raise ValueError(f'Generated illustration sha256 mismatch: {record.path}')
+        resolved[record.path] = matched
+    return resolved
+
+
+def _illustrated_recipes_hash(
+    board: Storyboard,
+    assets: list[AssetRecord],
+    width: int,
+    height: int,
+) -> str:
+    """Hash only illustration configs and the scenes that reference illustrations."""
+    illustrated_paths = {a.path for a in assets}
+    illustrated_scenes = [
+        scene.model_dump(mode='json', exclude={'start_frame'})
+        for scene in board.scenes
+        if any(PurePosixPath(ref.path).as_posix() in illustrated_paths for ref in scene.visual_assets)
+    ]
+    return canonical_json_hash({
+        'format_profile': board.format_profile,
+        'scenes': illustrated_scenes,
+        'assets': [
+            [a.path, a.sha256, illustration_recipe_hash(a.prompt, width, height, a.seed)]
+            for a in assets
+        ],
+    })
+
+
+def _asset_scene_signature(board: Storyboard, asset_path: str) -> str:
+    scenes = [
+        scene.model_dump(mode='json', exclude={'start_frame'})
+        for scene in board.scenes
+        if any(PurePosixPath(ref.path).as_posix() == asset_path for ref in scene.visual_assets)
+    ]
+    return canonical_json_hash(scenes)
+
+
+def _locked_candidate_entries(
+    root: Path,
+    *,
+    matched: Path,
+    locked_sha256: str,
+    seed: int,
+    width: int,
+    height: int,
+    prior_assets: list[dict],
+) -> tuple[list[dict], str]:
+    prior_seeds = {
+        c['path']: c['seed']
+        for prev in prior_assets
+        for c in prev.get('candidates', [])
+        if isinstance(c, dict) and isinstance(c.get('path'), str) and isinstance(c.get('seed'), int)
+    }
+    matched_rel = matched.relative_to(root).as_posix()
+    visual_dir = (root / 'reviews/visual').resolve()
+    if matched.resolve().is_relative_to(visual_dir) and matched.name.startswith('candidate-'):
+        round_files = [
+            p for p in sorted(matched.parent.glob('candidate-*.png'))
+            if p.resolve().is_relative_to(root.resolve()) and _valid_illustration_png(p, width, height)
+        ]
+        if round_files and matched in round_files:
+            entries = [{
+                'path': p.relative_to(root).as_posix(),
+                'sha256': sha256_file(p),
+                'seed': prior_seeds.get(p.relative_to(root).as_posix(), seed),
+            } for p in round_files]
+            return entries, matched_rel
+    return [{'path': matched_rel, 'sha256': locked_sha256, 'seed': seed}], matched_rel
+
+
+def _reusable_unlocked_asset(
+    root: Path,
+    *,
+    record: AssetRecord,
+    scene_ids: list[str],
+    scene_sig: str,
+    width: int,
+    height: int,
+    prior_assets: list[dict],
+) -> dict | None:
+    for prev in prior_assets:
+        if prev.get('path') != record.path:
+            continue
+        prev_recipe_prompt = prev.get('recipe_prompt', prev.get('prompt'))
+        if (
+            prev_recipe_prompt != record.prompt
+            or prev.get('seed') != record.seed
+            or prev.get('width', width) != width
+            or prev.get('height', height) != height
+        ):
+            continue
+        prev_candidates = prev.get('candidates') or []
+        if not prev_candidates:
+            continue
+        valid = True
+        for cand in prev_candidates:
+            rel = cand.get('path') if isinstance(cand, dict) else None
+            if not isinstance(rel, str):
+                valid = False
+                break
+            try:
+                cand_path = _safe_path(root, rel)
+            except ValueError:
+                valid = False
+                break
+            if not _valid_illustration_png(cand_path, width, height) or sha256_file(cand_path) != cand.get('sha256'):
+                valid = False
+                break
+        if not valid:
+            continue
+        same_scenes = prev.get('scene_signature') == scene_sig
+        selected = prev.get('selected') if same_scenes else None
+        fallback = prev.get('fallback') if same_scenes else None
+        if selected is not None and selected not in {c['path'] for c in prev_candidates}:
+            selected = None
+        entry = {
+            'path': record.path,
+            'prompt': prev.get('prompt', record.prompt),
+            'recipe_prompt': record.prompt,
+            'seed': record.seed,
+            'width': width,
+            'height': height,
+            'round': prev.get('round', 0),
+            'scenes': scene_ids,
+            'scene_signature': scene_sig,
+            'candidates': [dict(c) for c in prev_candidates],
+            'selected': selected,
+            'fallback': fallback,
+        }
+        if same_scenes and prev.get('fallback_reason'):
+            entry['fallback_reason'] = prev['fallback_reason']
+        return entry
+    return None
+
+
+def _candidate_out_dir(
+    root: Path,
+    *,
+    number: int,
+    round_number: int,
+    claimed_paths: set[str],
+    locked_hashes: set[str],
+) -> Path:
+    slot = number
+    while True:
+        out_dir = root / 'reviews/visual' / f'asset-{slot:02d}' / f'round-{round_number}'
+        existing = list(out_dir.glob('candidate-*.png')) if out_dir.is_dir() else []
+        conflict = any(
+            p.relative_to(root).as_posix() in claimed_paths
+            or (locked_hashes and sha256_file(p) in locked_hashes)
+            for p in existing
+            if p.is_file()
+        )
+        if not conflict:
+            return out_dir
+        slot += 1
+
+
+def _next_review_count(root: Path, prior: dict) -> int:
+    prior_count = prior.get('review_count', 0) if isinstance(prior, dict) else 0
+    if not isinstance(prior_count, int):
+        prior_count = 0
+    visual_dir = root / 'reviews/visual'
+    highest_archived = 0
+    if visual_dir.is_dir():
+        for archive in visual_dir.glob('review-[0-9][0-9].yaml'):
+            try:
+                highest_archived = max(highest_archived, int(archive.stem.split('-', 1)[1]) + 1)
+            except ValueError:
+                continue
+    return max(prior_count, highest_archived)
+
+
 def ensure_candidates(root: Path, board: Storyboard, manifest: AssetManifest, *, generate) -> dict:
     spec = FORMAT_SPECS[board.format_profile]
-    referenced = {Path(ref.path).as_posix() for scene in board.scenes for ref in scene.visual_assets}
+    referenced = {PurePosixPath(ref.path).as_posix() for scene in board.scenes for ref in scene.visual_assets}
     assets = [a for a in manifest.assets if a.kind is AssetKind.ILLUSTRATION and a.path in referenced]
     if not assets:
         return {}
-    recipes = canonical_json_hash({
-        'storyboard': board.model_dump(mode='json'),
-        'assets': [[a.path, illustration_recipe_hash(a.prompt, spec.width, spec.height, a.seed)] for a in assets],
-    })
+    locked_sources = restore_locked_illustrations(root, board, manifest)
+    by_path = {a.path: a for a in assets}
+    locked_hashes = {a.sha256 for a in assets if a.sha256 is not None}
+    recipes = _illustrated_recipes_hash(board, assets, spec.width, spec.height)
     path = root / CANDIDATES
-    data = read_yaml(path) if path.is_file() else {}
-    if data.get('recipes_sha256') != recipes:
+    prior_exists = path.is_file()
+    prior = read_yaml(path) if prior_exists else {}
+    prior_assets = list(prior.get('assets', [])) if isinstance(prior, dict) else []
+    if prior.get('recipes_sha256') != recipes:
         if (root / REPORT).is_file():
             old = root / REPORT
-            old.rename(root / 'reviews/visual' / f'stale-review-{sha256_file(old)}.yaml')
-        data = {'recipes_sha256': recipes, 'assets': [{
-            'path': a.path, 'prompt': a.prompt, 'seed': a.seed, 'round': 0,
-            'scenes': [s.id for s in board.scenes if any(Path(r.path).as_posix() == a.path for r in s.visual_assets)],
-            'candidates': [], 'selected': None, 'fallback': None,
-        } for a in assets]}
+            (root / 'reviews/visual').mkdir(parents=True, exist_ok=True)
+            _replace_atomic_with_retry(old, root / 'reviews/visual' / f'stale-review-{sha256_file(old)}.yaml')
+        new_assets: list[dict] = []
+        for a in assets:
+            assert a.prompt is not None and a.seed is not None
+            scene_ids = [
+                s.id for s in board.scenes
+                if any(PurePosixPath(r.path).as_posix() == a.path for r in s.visual_assets)
+            ]
+            scene_sig = _asset_scene_signature(board, a.path)
+            if a.sha256 is not None:
+                cands, selected = _locked_candidate_entries(
+                    root,
+                    matched=locked_sources[a.path],
+                    locked_sha256=a.sha256,
+                    seed=a.seed,
+                    width=spec.width,
+                    height=spec.height,
+                    prior_assets=prior_assets,
+                )
+                new_assets.append({
+                    'path': a.path,
+                    'prompt': a.prompt,
+                    'recipe_prompt': a.prompt,
+                    'seed': a.seed,
+                    'width': spec.width,
+                    'height': spec.height,
+                    'round': 0,
+                    'scenes': scene_ids,
+                    'scene_signature': scene_sig,
+                    'candidates': cands,
+                    'selected': selected,
+                    'fallback': None,
+                    'locked': True,
+                })
+                continue
+            reused = _reusable_unlocked_asset(
+                root,
+                record=a,
+                scene_ids=scene_ids,
+                scene_sig=scene_sig,
+                width=spec.width,
+                height=spec.height,
+                prior_assets=prior_assets,
+            )
+            if reused is not None:
+                new_assets.append(reused)
+            else:
+                new_assets.append({
+                    'path': a.path,
+                    'prompt': a.prompt,
+                    'recipe_prompt': a.prompt,
+                    'seed': a.seed,
+                    'width': spec.width,
+                    'height': spec.height,
+                    'round': 0,
+                    'scenes': scene_ids,
+                    'scene_signature': scene_sig,
+                    'candidates': [],
+                    'selected': None,
+                    'fallback': None,
+                })
+        data = {
+            'recipes_sha256': recipes,
+            'review_count': _next_review_count(root, prior),
+            'assets': new_assets,
+        }
     else:
+        data = prior
         _check_candidates(root, data)
         review_complete(root)
         _consume_report(root, data, board)
+    if not prior_exists and all(a.sha256 is not None for a in assets):
+        return data
+    claimed_paths = {
+        c['path'] for item in data['assets'] for c in item.get('candidates', []) if isinstance(c, dict) and 'path' in c
+    }
     for number, asset in enumerate(data['assets']):
+        record = by_path[asset['path']]
+        if record.sha256 is not None:
+            # Locked illustrations are already verified/restored; never regenerate or overwrite them.
+            continue
         if not asset['candidates']:
+            out_dir = _candidate_out_dir(
+                root,
+                number=number,
+                round_number=asset['round'],
+                claimed_paths=claimed_paths,
+                locked_hashes=locked_hashes,
+            )
             paths = generate_candidates(
-                asset['prompt'], out_dir=root / 'reviews/visual' / f"asset-{number:02d}" / f"round-{asset['round']}",
-                width=spec.width, height=spec.height, seed=(asset['seed'] + asset['round'] * 3) % 2**63,
+                asset['prompt'],
+                out_dir=out_dir,
+                width=spec.width,
+                height=spec.height,
+                seed=(asset['seed'] + asset['round'] * 3) % 2**63,
                 generate=generate,
             )
             asset['candidates'] = [{
-                'path': p.relative_to(root).as_posix(), 'sha256': sha256_file(p),
+                'path': p.relative_to(root).as_posix(),
+                'sha256': sha256_file(p),
                 'seed': (asset['seed'] + asset['round'] * 3 + i) % 2**63,
             } for i, p in enumerate(paths)]
+            claimed_paths.update(c['path'] for c in asset['candidates'])
         if not asset.get('fallback'):
-            source = root / (asset.get('selected') or asset['candidates'][0]['path'])
-            destination = root / asset['path']
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(source, destination)
+            source = _safe_path(root, asset.get('selected') or asset['candidates'][0]['path'])
+            destination = _safe_path(root, asset['path'])
+            if not destination.is_file() or sha256_file(destination) != sha256_file(source):
+                _copy_file_atomic(source, destination)
     if not path.is_file() or read_yaml(path) != data:
         write_yaml_atomic(path, data)
     return data
@@ -290,6 +673,31 @@ def apply_visual_fallbacks(root: Path, board: Storyboard) -> Storyboard:
     )})
 
 
+def _run_contact_sheet_batch(
+    video: Path,
+    batch: list[int],
+    pattern: Path,
+    *,
+    runner,
+) -> list[Path]:
+    expression = '+'.join(f'eq(n\\,{frame})' for frame in batch)
+    expected_count = math.ceil(len(batch) / 25)
+    try:
+        result = run_with_deadline([
+            'ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-i', str(video),
+            '-vf', f'select={expression},scale=384:-1,tile=5x5', '-vsync', 'vfr',
+            '-frames:v', str(expected_count), str(pattern),
+        ], timeout=CONTACT_SHEET_TIMEOUT, runner=runner, capture_output=True, text=True, check=False)
+    except subprocess.TimeoutExpired as error:
+        for partial in pattern.parent.glob(pattern.name.replace('%03d', '*')):
+            partial.unlink(missing_ok=True)
+        raise RuntimeError(f'Visual review contact sheet {timeout_diagnostic(error)}') from error
+    paths = sorted(pattern.parent.glob(pattern.name.replace('%03d', '*')))
+    if result.returncode or len(paths) != expected_count:
+        raise RuntimeError(f'Visual review contact sheet failed: {result.stderr}')
+    return paths
+
+
 def prepare_contact_sheet(root: Path, *, runner=None, final: bool = False) -> None:
     """FFmpeg samples each scene and beat; final sheets bind to the selected render."""
     runner = runner or subprocess.run
@@ -305,28 +713,36 @@ def prepare_contact_sheet(root: Path, *, runner=None, final: bool = False) -> No
                       for b in scene.get('beats', []) if b.get('start_frame') is not None)
     # A short opening illustration always receives its own frame, independent of duration.
     ordered = sorted(frames)
-    # FFmpeg's expression parser rejects more than 100 chained terms (gout hit this on
-    # 2026-11-13); grouping 50 per parenthesis keeps every level short.
-    # ponytail: fine up to 5,000 sampled frames; nest one more level if a video ever needs more.
-    expression = '+'.join('(' + '+'.join(f'eq(n\\,{frame})' for frame in ordered[i:i + 50]) + ')'
-                          for i in range(0, len(ordered), 50))
     prefix = 'final-contact-sheet' if final else 'contact-sheet'
-    pattern = root / 'reviews/visual' / f'{prefix}-%03d.jpg'
-    for old in pattern.parent.glob(f'{prefix}-*.jpg'):
+    visual_dir = root / 'reviews/visual'
+    visual_dir.mkdir(parents=True, exist_ok=True)
+    for old in visual_dir.glob(f'{prefix}-*.jpg'):
         old.unlink()
-    try:
-        result = run_with_deadline([
-            'ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-i', str(root / 'renders/video.mp4'),
-            '-vf', f'select={expression},scale=384:-1,tile=5x5', '-vsync', 'vfr',
-            '-frames:v', str(math.ceil(len(frames) / 25)), str(pattern),
-        ], timeout=CONTACT_SHEET_TIMEOUT, runner=runner, capture_output=True, text=True, check=False)
-    except subprocess.TimeoutExpired as error:
-        for partial in pattern.parent.glob(f'{prefix}-*.jpg'):
-            partial.unlink(missing_ok=True)
-        raise RuntimeError(f'Visual review contact sheet {timeout_diagnostic(error)}') from error
-    paths = sorted(pattern.parent.glob(f'{prefix}-*.jpg'))
-    if result.returncode or len(paths) != math.ceil(len(frames) / 25):
-        raise RuntimeError(f'Visual review contact sheet failed: {result.stderr}')
+    video = root / 'renders/video.mp4'
+    # Keep every FFmpeg select expression <= 50 terms (exactly 2 5x5 sheets) to prevent
+    # av_expr_parse recursion/memory failures on long videos.
+    if len(ordered) <= _FFMPEG_SELECT_BATCH_SIZE:
+        paths = _run_contact_sheet_batch(
+            video, ordered, visual_dir / f'{prefix}-%03d.jpg', runner=runner,
+        )
+    else:
+        paths = []
+        sheet_index = 1
+        with TemporaryDirectory(prefix=f'.{prefix}-', dir=visual_dir) as temp_dir:
+            for batch_index, offset in enumerate(range(0, len(ordered), _FFMPEG_SELECT_BATCH_SIZE)):
+                batch_dir = Path(temp_dir) / f'batch-{batch_index:03d}'
+                batch_dir.mkdir(parents=True, exist_ok=True)
+                batch_paths = _run_contact_sheet_batch(
+                    video,
+                    ordered[offset:offset + _FFMPEG_SELECT_BATCH_SIZE],
+                    batch_dir / f'{prefix}-%03d.jpg',
+                    runner=runner,
+                )
+                for batch_path in batch_paths:
+                    destination = visual_dir / f'{prefix}-{sheet_index:03d}.jpg'
+                    _replace_atomic_with_retry(batch_path, destination)
+                    paths.append(destination)
+                    sheet_index += 1
     sheets = [{'path': p.relative_to(root).as_posix(), 'sha256': sha256_file(p)} for p in paths]
     if final:
         write_yaml_atomic(root / 'reviews/visual/final-contact-sheets.yaml', {

@@ -193,69 +193,115 @@ def test_stale_shorts_plan_does_not_block_medical_gate_or_packet(tmp_path: Path)
 def test_sync_shorts_plan_blocks_missing_caveat_and_bad_duration(tmp_path: Path) -> None:
     project = _approved_long_form(tmp_path, claim_on_s03=True)
     revision = project / "revisions/001"
+    rev_hash = _revision_hash(revision)
+    shorts_path = revision / SHORTS_PLAN_ARTIFACT
+    shorts_path.parent.mkdir(parents=True, exist_ok=True)
 
     # S03..S04 lasts 1890 frames (valid 60-90s duration), contains C01, but misses caveat C02 (S02).
-    _write_shorts(
-        project,
-        tmp_path,
-        [
-            {
-                "id": "CL01",
-                "title": "Thiếu caveat",
-                "hook_text": "Hook",
-                "start_scene_id": "S03",
-                "end_scene_id": "S04",
-                "target_seconds": 63,
-                "caption": "Giảm muối [claim:C01].",
-                "safety_caveat": "Mức giảm khác nhau.",
-                "safe_zone_checked": True,
-            }
-        ],
+    missing_caveat_clip = {
+        "id": "CL01",
+        "title": "Thiếu caveat",
+        "hook_text": "Hook",
+        "start_scene_id": "S03",
+        "end_scene_id": "S04",
+        "target_seconds": 63,
+        "caption": "Giảm muối [claim:C01].",
+        "safety_caveat": "Mức giảm khác nhau.",
+        "safe_zone_checked": True,
+    }
+    with pytest.raises(ValueError, match="CL01: claim C01 requires caveat C02"):
+        _write_shorts(project, tmp_path, [missing_caveat_clip])
+    write_yaml_atomic(
+        shorts_path,
+        {"schema_version": "1.0", "revision_hash": rev_hash, "clips": [missing_caveat_clip]},
     )
     with pytest.raises(ValueError, match="CL01: claim C01 requires caveat C02"):
         sync_shorts_plan_to_clip_plan(revision)
 
     # Duration exceeds 90s Shorts upper bound (2700 frames).
-    _write_shorts(
-        project,
-        tmp_path,
-        [
-            {
-                "id": "CL01",
-                "title": "Quá 90 giây",
-                "hook_text": "Hook",
-                "start_scene_id": "S01",
-                "end_scene_id": "S04",
-                "target_seconds": 90,
-                "caption": "Giảm muối [claim:C01].",
-                "safety_caveat": "Mức giảm khác nhau [claim:C02].",
-                "safe_zone_checked": True,
-            }
-        ],
+    too_long_clip = {
+        "id": "CL01",
+        "title": "Quá 90 giây",
+        "hook_text": "Hook",
+        "start_scene_id": "S01",
+        "end_scene_id": "S04",
+        "target_seconds": 90,
+        "caption": "Giảm muối [claim:C01].",
+        "safety_caveat": "Mức giảm khác nhau [claim:C02].",
+        "safe_zone_checked": True,
+    }
+    with pytest.raises(ValueError, match="CL01: duration 3790 frames must be between 1800 and 2700"):
+        _write_shorts(project, tmp_path, [too_long_clip])
+    write_yaml_atomic(
+        shorts_path,
+        {"schema_version": "1.0", "revision_hash": rev_hash, "clips": [too_long_clip]},
     )
     with pytest.raises(ValueError, match="CL01: duration 3790 frames must be between 1800 and 2700"):
         sync_shorts_plan_to_clip_plan(revision)
 
     # Duration under 60s RenderInput lower bound (1800 frames): S05 alone is 1500 + 90 = 1590 frames (53s).
-    _write_shorts(
-        project,
-        tmp_path,
-        [
-            {
-                "id": "CL01",
-                "title": "Dưới 60 giây",
-                "hook_text": "Hook",
-                "start_scene_id": "S05",
-                "end_scene_id": "S05",
-                "target_seconds": 53,
-                "caption": "Tóm tắt.",
-                "safety_caveat": "Hỏi bác sĩ.",
-                "safe_zone_checked": True,
-            }
-        ],
+    short_target_clip = {
+        "id": "CL01",
+        "title": "Dưới 60 giây",
+        "hook_text": "Hook",
+        "start_scene_id": "S05",
+        "end_scene_id": "S05",
+        "target_seconds": 53,
+        "caption": "Tóm tắt.",
+        "safety_caveat": "Hỏi bác sĩ.",
+        "safe_zone_checked": True,
+    }
+    with pytest.raises(ValueError, match="CL01: target_seconds 53s must be between 60 and 90"):
+        _write_shorts(project, tmp_path, [short_target_clip])
+    write_yaml_atomic(
+        shorts_path,
+        {"schema_version": "1.0", "revision_hash": rev_hash, "clips": [short_target_clip]},
     )
     with pytest.raises(ValueError, match="CL01: duration 1590 frames must be between 1800 and 2700"):
         sync_shorts_plan_to_clip_plan(revision)
+
+
+def test_save_shorts_plan_blocks_under_60s_and_short_scene_totals_upfront(tmp_path: Path) -> None:
+    project = _approved_long_form(tmp_path)
+    # Reject 45s target_seconds before saving posts/shorts-plan.yaml.
+    with pytest.raises(ValueError, match="CL01: target_seconds 45s must be between 60 and 90"):
+        _write_shorts(
+            project,
+            tmp_path,
+            [
+                {
+                    "id": "CL01",
+                    "title": "Quá ngắn",
+                    "hook_text": "Hook",
+                    "start_scene_id": "S01",
+                    "end_scene_id": "S02",
+                    "target_seconds": 45,
+                    "caption": "Giảm muối [claim:C01].",
+                    "safety_caveat": "Caveat [claim:C02].",
+                    "safe_zone_checked": True,
+                }
+            ],
+        )
+    # Even if target_seconds says 60, scenes S05..S05 (1590 frames incl CTA) are blocked at save time.
+    with pytest.raises(ValueError, match="CL01: duration 1590 frames must be between 1800 and 2700"):
+        _write_shorts(
+            project,
+            tmp_path,
+            [
+                {
+                    "id": "CL01",
+                    "title": "Cảnh dưới 1800f",
+                    "hook_text": "Hook",
+                    "start_scene_id": "S05",
+                    "end_scene_id": "S05",
+                    "target_seconds": 60,
+                    "caption": "Tóm tắt.",
+                    "safety_caveat": "Hỏi bác sĩ.",
+                    "safe_zone_checked": True,
+                }
+            ],
+        )
+    assert not (project / "revisions/001" / SHORTS_PLAN_ARTIFACT).exists()
 
 
 def test_sync_shorts_plan_blocks_narration_drift_and_tampered_style_a(tmp_path: Path) -> None:

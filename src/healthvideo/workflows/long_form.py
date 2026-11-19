@@ -6,6 +6,8 @@ from collections.abc import Callable, Mapping, Sequence
 from hashlib import sha256
 from pathlib import Path
 
+from pydantic import ValidationError
+
 from healthvideo.audio.sfx import mix_sfx
 from healthvideo.domain.asset_manifest import AssetKind, AssetManifest, AssetRecord
 from healthvideo.domain.brand import (
@@ -35,27 +37,120 @@ from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.tts.audio_checks import inspect_wav
 from healthvideo.visuals.brand import render_pyh_logo
 from healthvideo.visuals.mascot import mascot_asset
+from healthvideo.workflows.factory_standards import style_a_active
 from healthvideo.workflows.shorts_plan import (
     SHORTS_CLIP_MAX_FRAMES,
     SHORTS_PLAN_ARTIFACT,
+    ShortsPlan,
+    _revision_hash,
+    _verify_medical_gate,
     resolve_revision_root,
+    revision_tx_lock,
     sync_shorts_plan_to_clip_plan,
 )
 from healthvideo.workflows.visual_assets import BRAND_PROFILE_PATH
 
 OUTLINE_ARTIFACT = "script/outline.yaml"
 CLIP_PLAN_ARTIFACT = "script/clip-plan.yaml"
+_LEGACY_FALLBACK_FIELDS = frozenset({
+    "mascot_max_width_percent",
+    "subtitle_position",
+    "hook_window_seconds",
+    "safe_zone_checked",
+    "hook_text",
+    "safety_caveat",
+    "caption",
+    "target_seconds",
+    "loop_bridge",
+    "revision_hash",
+    "schema_version",
+})
 
 
 def _shorts_plan_applies(revision: Path) -> bool:
-    """Shorts plan only counts after the medical gate approved the script it was built from.
-
-    Before approval the doctor reviews ``script/clip-plan.yaml``; a leftover plan from an earlier
-    script version must not block the gate (the factory rebuilds it after approval).
-    """
+    """Shorts plan applies only after medical approval, with matching revision_hash and compatible schema."""
     from healthvideo.workflows.gate_review import MEDICAL_APPROVAL_ARTIFACT
 
-    return (revision / SHORTS_PLAN_ARTIFACT).is_file() and (revision / MEDICAL_APPROVAL_ARTIFACT).is_file()
+    shorts_path = revision / SHORTS_PLAN_ARTIFACT
+    if not shorts_path.is_file() or not (revision / MEDICAL_APPROVAL_ARTIFACT).is_file():
+        return False
+    has_clip_plan = (revision / CLIP_PLAN_ARTIFACT).is_file()
+    try:
+        raw = read_yaml(shorts_path)
+    except (OSError, ValueError):
+        return not (has_clip_plan and not style_a_active(revision))
+    if not isinstance(raw, dict):
+        return not (has_clip_plan and not style_a_active(revision))
+    script_path = revision / "script/script.yaml"
+    sb_path = revision / "storyboard/storyboard.yaml"
+    if has_clip_plan and script_path.is_file() and sb_path.is_file():
+        try:
+            expected_rev_hash = _revision_hash(revision)
+        except (OSError, ValueError):
+            expected_rev_hash = ""
+        plan_hash = raw.get("revision_hash")
+        if expected_rev_hash and (
+            not isinstance(plan_hash, str) or not plan_hash or plan_hash != expected_rev_hash
+        ):
+            return False
+    if has_clip_plan and not style_a_active(revision):
+        try:
+            ShortsPlan.model_validate(raw)
+        except (ValidationError, ValueError) as error:
+            if _is_legacy_style_a_shorts_incompatibility(revision, error):
+                return False
+    return True
+
+
+def _is_legacy_style_a_shorts_incompatibility(revision: Path, error: Exception) -> bool:
+    """Return True only when a pre-Style-A revision has an old/incompatible shorts-plan schema."""
+    if style_a_active(revision) or not (revision / CLIP_PLAN_ARTIFACT).is_file():
+        return False
+    if isinstance(error, ValidationError):
+        has_legacy_field_error = False
+        has_clips_too_short = False
+        for item in error.errors():
+            err_type = str(item.get("type", ""))
+            loc_parts = {str(part) for part in item.get("loc", ())}
+            if err_type in {"missing", "extra_forbidden"} or (loc_parts & _LEGACY_FALLBACK_FIELDS):
+                if loc_parts & _LEGACY_FALLBACK_FIELDS:
+                    has_legacy_field_error = True
+                continue
+            if err_type == "too_short" and item.get("loc") == ("clips",):
+                has_clips_too_short = True
+                continue
+            return False
+        if has_clips_too_short and not has_legacy_field_error:
+            return False
+        return bool(error.errors())
+    message = str(error)
+    return "9:16 safe zone must be verified" in message or "chuẩn A 9:16 yêu cầu" in message
+
+
+def _resolve_effective_clip_plan(
+    revision_root: Path,
+    *,
+    require_medical_approval: bool = True,
+) -> tuple[ClipPlan, bool]:
+    """Resolve ``(ClipPlan, used_shorts_plan)`` under ``revision_tx_lock``."""
+    revision = resolve_revision_root(revision_root)
+    with revision_tx_lock(revision):
+        if _shorts_plan_applies(revision):
+            try:
+                return (
+                    sync_shorts_plan_to_clip_plan(
+                        revision, require_medical_approval=require_medical_approval
+                    ),
+                    True,
+                )
+            except (ValidationError, ValueError) as error:
+                if not _is_legacy_style_a_shorts_incompatibility(revision, error):
+                    raise
+                _verify_medical_gate(revision, require_medical_approval=require_medical_approval)
+        clip_plan_path = revision / CLIP_PLAN_ARTIFACT
+        if not clip_plan_path.is_file():
+            raise FileNotFoundError(f"youtube_long needs {CLIP_PLAN_ARTIFACT}")
+        return ClipPlan.model_validate(read_yaml(clip_plan_path)), False
 
 
 def load_effective_clip_specs(
@@ -64,15 +159,10 @@ def load_effective_clip_specs(
     require_medical_approval: bool = True,
 ) -> ClipPlan:
     """Return effective vertical ClipPlan: synced ``posts/shorts-plan.yaml`` if present, else ``script/clip-plan.yaml``."""
-    revision = resolve_revision_root(revision_root)
-    if _shorts_plan_applies(revision):
-        return sync_shorts_plan_to_clip_plan(
-            revision, require_medical_approval=require_medical_approval
-        )
-    clip_plan_path = revision / CLIP_PLAN_ARTIFACT
-    if not clip_plan_path.is_file():
-        raise FileNotFoundError(f"youtube_long needs {CLIP_PLAN_ARTIFACT}")
-    return ClipPlan.model_validate(read_yaml(clip_plan_path))
+    plan, _ = _resolve_effective_clip_plan(
+        revision_root, require_medical_approval=require_medical_approval
+    )
+    return plan
 
 
 def load_clip_scenes(
@@ -83,33 +173,34 @@ def load_clip_scenes(
 ) -> dict[str, tuple[Scene, ...]]:
     """Validate outline + effective clip plan against storyboard and ledger; return each clip's scenes."""
     revision = resolve_revision_root(revision_root)
-    if not (revision / OUTLINE_ARTIFACT).is_file():
-        raise FileNotFoundError(f"youtube_long needs {OUTLINE_ARTIFACT}")
-    has_shorts_plan = _shorts_plan_applies(revision)
-    if not has_shorts_plan and not (revision / CLIP_PLAN_ARTIFACT).is_file():
-        raise FileNotFoundError(f"youtube_long needs {CLIP_PLAN_ARTIFACT}")
-    ledger = read_yaml(revision / "evidence" / "ledger.yaml")
-    claims = {
-        claim.id: claim
-        for claim in (
-            EvidenceClaim.model_validate(item) for item in ledger.get("claims", [])
+    with revision_tx_lock(revision):
+        if not (revision / OUTLINE_ARTIFACT).is_file():
+            raise FileNotFoundError(f"youtube_long needs {OUTLINE_ARTIFACT}")
+        has_shorts_plan = _shorts_plan_applies(revision)
+        if not has_shorts_plan and not (revision / CLIP_PLAN_ARTIFACT).is_file():
+            raise FileNotFoundError(f"youtube_long needs {CLIP_PLAN_ARTIFACT}")
+        ledger = read_yaml(revision / "evidence" / "ledger.yaml")
+        claims = {
+            claim.id: claim
+            for claim in (
+                EvidenceClaim.model_validate(item) for item in ledger.get("claims", [])
+            )
+        }
+        outline = Outline.model_validate(read_yaml(revision / OUTLINE_ARTIFACT))
+        validate_outline(outline, storyboard, claims.keys())
+        plan, from_shorts = _resolve_effective_clip_plan(
+            revision, require_medical_approval=require_medical_approval
         )
-    }
-    outline = Outline.model_validate(read_yaml(revision / OUTLINE_ARTIFACT))
-    validate_outline(outline, storyboard, claims.keys())
-    plan = load_effective_clip_specs(
-        revision, require_medical_approval=require_medical_approval
-    )
-    if has_shorts_plan:
-        return validate_clip_plan(
-            plan,
-            storyboard,
-            claims,
-            min_frames=CLIP_MIN_FRAMES,
-            max_frames=SHORTS_CLIP_MAX_FRAMES,
-            require_style_a=True,
-        )
-    return validate_clip_plan(plan, storyboard, claims)
+        if from_shorts:
+            return validate_clip_plan(
+                plan,
+                storyboard,
+                claims,
+                min_frames=CLIP_MIN_FRAMES,
+                max_frames=SHORTS_CLIP_MAX_FRAMES,
+                require_style_a=True,
+            )
+        return validate_clip_plan(plan, storyboard, claims)
 
 
 def clip_render_input(
@@ -157,6 +248,7 @@ def render_clips(
     brand: BrandProfile | None = None,
     revision: str = "001",
     sfx_events: list[dict] | None = None,
+    min_frames: int = CLIP_MIN_FRAMES,
 ) -> dict[str, str]:
     """Reuse measured line audio for each clip; return run-relative mp4 paths."""
     # ponytail: clips re-render with every long-form render; cache per clip if it gets slow.
@@ -165,9 +257,9 @@ def render_clips(
     outputs: dict[str, str] = {}
     for clip_id, scenes in clip_scenes.items():
         frames = sum(scene.duration_frames for scene in scenes) + 90
-        if not 1800 <= frames <= 5400:
+        if not min_frames <= frames <= 5400:
             raise ValueError(
-                f"Clip {clip_id}: {frames} frames including CTA; requires 1800–5400 frames"
+                f"Clip {clip_id}: {frames} frames including CTA; requires {min_frames}–5400 frames"
             )
         selected_lines = {scene.script_line_id for scene in scenes if scene.script_line_id}
         audio = f"audio/clips/{clip_id}.wav"

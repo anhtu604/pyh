@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import re
+import threading
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Literal
 
@@ -20,6 +23,7 @@ from healthvideo.domain.explainer import Nonblank
 from healthvideo.domain.script import Script
 from healthvideo.domain.storyboard import Storyboard
 from healthvideo.storage.files import canonical_json_hash, read_yaml, write_yaml_atomic
+from healthvideo.storage.revision_lock import revision_lock
 from healthvideo.workflows.draft import _project
 
 SHORTS_PLAN_ARTIFACT = "posts/shorts-plan.yaml"
@@ -28,6 +32,39 @@ STYLE_A_MASCOT_MAX_WIDTH_PERCENT = 28.0
 STYLE_A_SUBTITLE_POSITION = "bottom_center"
 STYLE_A_HOOK_MAX_SECONDS = 2.0
 SHORTS_CLIP_MAX_FRAMES = 90 * FPS
+
+_REVISION_LOCK_STATE = threading.local()
+_REVISION_THREAD_GUARDS_LOCK = threading.Lock()
+_REVISION_THREAD_GUARDS: dict[Path, threading.RLock] = {}
+
+
+def _revision_thread_guard(resolved: Path) -> threading.RLock:
+    with _REVISION_THREAD_GUARDS_LOCK:
+        guard = _REVISION_THREAD_GUARDS.get(resolved)
+        if guard is None:
+            guard = threading.RLock()
+            _REVISION_THREAD_GUARDS[resolved] = guard
+        return guard
+
+
+@contextmanager
+def revision_tx_lock(revision: Path, *, timeout: float = 60) -> Iterator[None]:
+    """Thread-reentrant wrapper around OS ``revision_lock`` for read/write sync."""
+    resolved = revision.resolve()
+    held: set[Path] | None = getattr(_REVISION_LOCK_STATE, "held", None)
+    if held is None:
+        held = set()
+        _REVISION_LOCK_STATE.held = held
+    if resolved in held:
+        yield
+        return
+    guard = _revision_thread_guard(resolved)
+    with guard, revision_lock(resolved, timeout=timeout):
+        held.add(resolved)
+        try:
+            yield
+        finally:
+            held.discard(resolved)
 
 
 class ShortClipSpec(BaseModel):
@@ -124,46 +161,27 @@ def _verify_medical_gate(revision: Path, *, require_medical_approval: bool) -> N
         raise ValueError("Mapping shorts_plan requires a current medical approval")
 
 
-def sync_shorts_plan_to_clip_plan(
-    revision_root: Path,
-    *,
-    require_medical_approval: bool = True,
-) -> ClipPlan:
-    """Validate ``posts/shorts-plan.yaml`` against medically approved artifacts and map to ``ClipPlan``."""
-    revision = resolve_revision_root(revision_root)
-    shorts_path = revision / SHORTS_PLAN_ARTIFACT
-    if not shorts_path.is_file():
-        raise FileNotFoundError(f"Missing shorts plan: {shorts_path}")
-
-    _verify_medical_gate(revision, require_medical_approval=require_medical_approval)
-
-    script_path = revision / "script/script.yaml"
-    sb_path = revision / "storyboard/storyboard.yaml"
+def _load_ledger_claims(revision: Path) -> dict[str, EvidenceClaim]:
     ledger_path = revision / "evidence/ledger.yaml"
-    for required in (script_path, sb_path, ledger_path):
-        if not required.is_file():
-            raise FileNotFoundError(f"shorts_plan sync requires {required}")
-
-    script = Script.model_validate(read_yaml(script_path))
-    storyboard = Storyboard.model_validate(read_yaml(sb_path))
-    if storyboard.format_profile != "youtube_long":
-        raise ValueError("sync_shorts_plan_to_clip_plan requires a youtube_long storyboard")
-
+    if not ledger_path.is_file():
+        raise FileNotFoundError(f"shorts_plan requires {ledger_path}")
     ledger = read_yaml(ledger_path)
-    claims = {
+    return {
         claim.id: claim
         for claim in (
             EvidenceClaim.model_validate(item) for item in ledger.get("claims", [])
         )
     }
 
-    plan = ShortsPlan.model_validate(read_yaml(shorts_path))
-    expected_rev_hash = _revision_hash(revision)
-    if not plan.revision_hash or plan.revision_hash != expected_rev_hash:
-        raise ValueError(
-            "posts/shorts-plan.yaml revision_hash does not match approved script/storyboard"
-        )
 
+def _validate_and_map_shorts_plan(
+    plan: ShortsPlan,
+    script: Script,
+    storyboard: Storyboard,
+    claims: Mapping[str, EvidenceClaim],
+    *,
+    require_long_form_bounds: bool,
+) -> ClipPlan:
     scene_index = {scene.id: idx for idx, scene in enumerate(storyboard.scenes)}
     line_by_id = {line.id: line for line in script.lines}
     mapped_clips: list[ClipSpec] = []
@@ -204,15 +222,55 @@ def sync_shorts_plan_to_clip_plan(
         )
 
     clip_plan = ClipPlan(clips=tuple(mapped_clips))
-    validate_clip_plan(
-        clip_plan,
-        storyboard,
-        claims,
-        min_frames=CLIP_MIN_FRAMES,
-        max_frames=SHORTS_CLIP_MAX_FRAMES,
-        require_style_a=True,
-    )
+    if require_long_form_bounds:
+        validate_clip_plan(
+            clip_plan,
+            storyboard,
+            claims,
+            min_frames=CLIP_MIN_FRAMES,
+            max_frames=SHORTS_CLIP_MAX_FRAMES,
+            require_style_a=True,
+        )
     return clip_plan
+
+
+def sync_shorts_plan_to_clip_plan(
+    revision_root: Path,
+    *,
+    require_medical_approval: bool = True,
+) -> ClipPlan:
+    """Validate ``posts/shorts-plan.yaml`` against medically approved artifacts and map to ``ClipPlan``."""
+    revision = resolve_revision_root(revision_root)
+    with revision_tx_lock(revision):
+        shorts_path = revision / SHORTS_PLAN_ARTIFACT
+        if not shorts_path.is_file():
+            raise FileNotFoundError(f"Missing shorts plan: {shorts_path}")
+
+        _verify_medical_gate(revision, require_medical_approval=require_medical_approval)
+
+        script_path = revision / "script/script.yaml"
+        sb_path = revision / "storyboard/storyboard.yaml"
+        ledger_path = revision / "evidence/ledger.yaml"
+        for required in (script_path, sb_path, ledger_path):
+            if not required.is_file():
+                raise FileNotFoundError(f"shorts_plan sync requires {required}")
+
+        script = Script.model_validate(read_yaml(script_path))
+        storyboard = Storyboard.model_validate(read_yaml(sb_path))
+        if storyboard.format_profile != "youtube_long":
+            raise ValueError("sync_shorts_plan_to_clip_plan requires a youtube_long storyboard")
+
+        claims = _load_ledger_claims(revision)
+        plan = ShortsPlan.model_validate(read_yaml(shorts_path))
+        expected_rev_hash = _revision_hash(revision)
+        if not plan.revision_hash or plan.revision_hash != expected_rev_hash:
+            raise ValueError(
+                "posts/shorts-plan.yaml revision_hash does not match approved script/storyboard"
+            )
+
+        return _validate_and_map_shorts_plan(
+            plan, script, storyboard, claims, require_long_form_bounds=True
+        )
 
 
 def load_effective_clip_specs(
@@ -227,36 +285,32 @@ def load_effective_clip_specs(
 
 
 def save_shorts_plan(project_dir: Path, file_path: Path) -> Path:
-    """Validate ``ShortsPlan`` against storyboard & ledger and save ``posts/shorts-plan.yaml``."""
+    """Validate ``ShortsPlan`` against storyboard, ledger & 60–90s bounds, then save atomically."""
     project = _project(project_dir)
     revision = project_dir / "revisions" / project.active_revision
-    rev_hash = _revision_hash(revision)
-    Script.model_validate(read_yaml(revision / "script/script.yaml"))
-    storyboard = Storyboard.model_validate(read_yaml(revision / "storyboard/storyboard.yaml"))
-    scene_index = {scene.id: idx for idx, scene in enumerate(storyboard.scenes)}
-    ledger = read_yaml(revision / "evidence/ledger.yaml")
-    claim_ids = {
-        str(item.get("id"))
-        for item in ledger.get("claims", [])
-        if isinstance(item, dict) and item.get("id")
-    }
-    plan = ShortsPlan.model_validate(read_yaml(file_path))
-    for clip in plan.clips:
-        if clip.start_scene_id not in scene_index:
-            raise ValueError(f"{clip.id}: unknown start_scene_id {clip.start_scene_id}")
-        if clip.end_scene_id not in scene_index:
-            raise ValueError(f"{clip.id}: unknown end_scene_id {clip.end_scene_id}")
-        if scene_index[clip.start_scene_id] > scene_index[clip.end_scene_id]:
-            raise ValueError(f"{clip.id}: start_scene_id must not come after end_scene_id")
-        for text_field in (clip.hook_text, clip.caption, clip.safety_caveat):
-            for cid in _CLAIM_REF_RE.findall(text_field):
-                if cid not in claim_ids:
-                    raise ValueError(f"{clip.id}: unknown ledger claim {cid}")
-    stamped = plan.model_copy(update={"revision_hash": rev_hash})
-    target = revision / SHORTS_PLAN_ARTIFACT
-    target.parent.mkdir(parents=True, exist_ok=True)
-    write_yaml_atomic(target, stamped.model_dump(mode="json"))
-    return target
+    with revision_tx_lock(revision):
+        rev_hash = _revision_hash(revision)
+        script = Script.model_validate(read_yaml(revision / "script/script.yaml"))
+        storyboard = Storyboard.model_validate(read_yaml(revision / "storyboard/storyboard.yaml"))
+        claims = _load_ledger_claims(revision)
+        plan = ShortsPlan.model_validate(read_yaml(file_path))
+        for clip in plan.clips:
+            if not 60 <= clip.target_seconds <= 90:
+                raise ValueError(
+                    f"{clip.id}: target_seconds {clip.target_seconds}s must be between 60 and 90"
+                )
+        _validate_and_map_shorts_plan(
+            plan,
+            script,
+            storyboard,
+            claims,
+            require_long_form_bounds=(storyboard.format_profile == "youtube_long"),
+        )
+        stamped = plan.model_copy(update={"revision_hash": rev_hash})
+        target = revision / SHORTS_PLAN_ARTIFACT
+        target.parent.mkdir(parents=True, exist_ok=True)
+        write_yaml_atomic(target, stamped.model_dump(mode="json"))
+        return target
 
 
 def shorts_plan_ready(project_dir: Path) -> bool:
@@ -266,11 +320,12 @@ def shorts_plan_ready(project_dir: Path) -> bool:
     try:
         project = _project(project_dir)
         revision = project_dir / "revisions" / project.active_revision
-        rev_hash = _revision_hash(revision)
-        target = revision / SHORTS_PLAN_ARTIFACT
-        if not target.is_file():
-            return False
-        plan = ShortsPlan.model_validate(read_yaml(target))
+        with revision_tx_lock(revision):
+            target = revision / SHORTS_PLAN_ARTIFACT
+            if not target.is_file():
+                return False
+            rev_hash = _revision_hash(revision)
+            plan = ShortsPlan.model_validate(read_yaml(target))
     except (OSError, TypeError, ValueError):
         return False
     return plan.revision_hash == rev_hash

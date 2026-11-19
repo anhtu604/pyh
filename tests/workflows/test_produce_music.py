@@ -128,3 +128,26 @@ def test_music_manifest_parameters_verified_on_reuse(approved_project, fake_musi
     manifest_path.write_text(json.dumps(manifest))
     with pytest.raises(ValueError, match="medically_approved"):
         produce.produce_project(approved_project, SilentTTS(), renderer)
+
+
+@pytest.mark.parametrize(
+    ("exc_factory", "match"),
+    [
+        (lambda: OSError("os error 1455: The paging file is too small for this operation to complete"), "os error 1455"),
+        (lambda: RuntimeError("ACE-Step failed with exit code 3221225477"), "3221225477"),
+    ],
+)
+def test_music_transient_errors_preserve_state_and_classify_transient(
+    approved_project, monkeypatch, exc_factory, match,
+):
+    from healthvideo.workflows.production_retry import _is_transient_production_error
+
+    def fail(*args, **kwargs):
+        raise exc_factory()
+
+    monkeypatch.setattr(produce, "generate_music", fail, raising=False)
+    with pytest.raises((OSError, RuntimeError), match=match) as exc_info:
+        produce.produce_project(approved_project, SilentTTS(), renderer)
+    assert not isinstance(exc_info.value, ValueError)
+    assert _is_transient_production_error(exc_info.value)
+    assert read_yaml(approved_project / "project.yaml")["state"] == "medically_approved"

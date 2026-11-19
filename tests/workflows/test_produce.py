@@ -934,3 +934,129 @@ def test_production_carries_alignment_and_reuses_it_on_retry(tmp_path, monkeypat
     path.write_text('[]', encoding='utf-8')
     with pytest.raises(ValueError, match='medically_approved'):
         produce_project(project, SilentTTS(), runner)
+
+
+def test_produce_gpu_steps_hold_gpu_mutex_and_collect_memory(tmp_path, monkeypatch):
+    """Every heavy GPU stage (FLUX, Whisper QA, ACE-Step, Remotion) holds gpu_mutex & triggers gc.collect."""
+    import gc
+    from contextlib import contextmanager
+
+    from PIL import Image
+
+    from healthvideo.workflows import produce
+    from healthvideo.workflows import runner as runner_mod
+    from tests.test_flux import illustration_record
+
+    project = create_v2_project_fixture(tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW)
+    revision = project / "revisions/001"
+    manifest = read_yaml(revision / "assets/asset-manifest.yaml")
+    manifest["assets"].append(illustration_record())
+    write_yaml_atomic(revision / "assets/asset-manifest.yaml", manifest)
+    board = read_yaml(revision / "storyboard/storyboard.yaml")
+    board["scenes"][0]["visual_assets"] = [{"path": "assets/illustrations/park.png", "role": "whiteboard"}]
+    write_yaml_atomic(revision / "storyboard/storyboard.yaml", board)
+    approve_gate(project, GateKind.MEDICAL, reviewer="doctor", now=V2_REVIEWED_AT)
+
+    mutex_depth = 0
+    mutex_entries = 0
+    step_depths: dict[str, int] = {}
+    gc_calls = 0
+
+    real_gpu_mutex = runner_mod.gpu_mutex
+
+    @contextmanager
+    def tracked_gpu_mutex(root):
+        nonlocal mutex_depth, mutex_entries
+        mutex_entries += 1
+        mutex_depth += 1
+        try:
+            with real_gpu_mutex(root):
+                yield
+        finally:
+            mutex_depth -= 1
+
+    monkeypatch.setattr(runner_mod, "gpu_mutex", tracked_gpu_mutex)
+
+    real_collect = gc.collect
+
+    def tracked_collect(*args, **kwargs):
+        nonlocal gc_calls
+        gc_calls += 1
+        return real_collect(*args, **kwargs)
+
+    monkeypatch.setattr(produce.gc, "collect", tracked_collect)
+
+    def fake_flux(prompt, *, out, width, height, seed):
+        step_depths["flux"] = mutex_depth
+        out.parent.mkdir(parents=True, exist_ok=True)
+        Image.new("RGB", (width, height), "green").save(out)
+        return out
+
+    def fake_align(line_wavs, scripts, *, out_dir):
+        step_depths["qa"] = mutex_depth
+        out_dir.mkdir(parents=True, exist_ok=True)
+        return {line: [] for line in scripts}
+
+    def fake_music(mood, *, seconds, seed, out):
+        step_depths["music"] = mutex_depth
+        import wave
+
+        out.parent.mkdir(parents=True, exist_ok=True)
+        with wave.open(str(out), "wb") as wav:
+            wav.setnchannels(1)
+            wav.setsampwidth(2)
+            wav.setframerate(24000)
+            wav.writeframes(b"\x00\x00" * 2400)
+
+    def fake_sheet(root, *, final=False):
+        return None
+
+    def fake_runner(argv):
+        step_depths["render"] = mutex_depth
+        _write_synthetic_output(argv)
+        return 0
+
+    monkeypatch.setattr(produce, "generate_illustration", fake_flux, raising=False)
+    monkeypatch.setattr(produce, "align_lines", fake_align)
+    monkeypatch.setattr(produce, "generate_music", fake_music)
+    monkeypatch.setattr(produce, "prepare_contact_sheet", fake_sheet)
+
+    # Entering from an outer gpu_mutex on the same thread must remain reentrant and deadlock-free.
+    with real_gpu_mutex(tmp_path):
+        produce_project(project, SilentTTS(), fake_runner, music=True)
+
+    assert mutex_entries == 4
+    assert mutex_depth == 0
+    assert step_depths == {"flux": 1, "qa": 1, "music": 1, "render": 1}
+    assert gc_calls >= 5
+
+
+def test_transient_failures_propagate_as_retryable_exceptions(tmp_path, monkeypatch):
+    """Vibi connection and FFmpeg memory errors stay non-ValueError and match transient retry rules."""
+    from healthvideo.workflows import produce
+    from healthvideo.workflows.production_retry import _is_transient_production_error
+
+    project = _v2_medically_approved_project(tmp_path)
+
+    class FailingVibiTTS(SilentTTS):
+        def synthesize(self, request, output):
+            raise RuntimeError("vibi connection failed: upstream 503")
+
+    with pytest.raises(RuntimeError, match="vibi connection failed") as exc_info:
+        produce_project(project, FailingVibiTTS(), lambda _: 0, music=False)
+    assert not isinstance(exc_info.value, ValueError)
+    assert _is_transient_production_error(exc_info.value)
+
+    # Ensure prepare_contact_sheet runs via candidates.yaml and propagates OSError("Cannot allocate memory").
+    cand_file = project / "revisions/001/reviews/visual/candidates.yaml"
+    cand_file.parent.mkdir(parents=True, exist_ok=True)
+    write_yaml_atomic(cand_file, {"assets": []})
+    monkeypatch.setattr(
+        produce,
+        "prepare_contact_sheet",
+        lambda *a, **k: (_ for _ in ()).throw(OSError("Cannot allocate memory")),
+    )
+    with pytest.raises(OSError, match="Cannot allocate memory") as oom_info:
+        produce_project(project, SilentTTS(), lambda argv: (_write_synthetic_output(argv), 0)[1], music=False)
+    assert not isinstance(oom_info.value, ValueError)
+    assert _is_transient_production_error(oom_info.value)

@@ -164,9 +164,191 @@ def test_load_effective_clip_specs_rejects_broken_shorts_plan_after_medical_gate
             ],
         },
     )
-    save_shorts_plan(project, sp_file)
+    with pytest.raises(ValueError, match="CL01: claim C01 requires caveat C02"):
+        save_shorts_plan(project, sp_file)
+
+    # Even if a broken plan is written directly on disk with matching revision_hash, downstream blocks it.
+    from healthvideo.workflows.shorts_plan import SHORTS_PLAN_ARTIFACT, _revision_hash
+
+    payload = read_yaml(sp_file)
+    payload["revision_hash"] = _revision_hash(revision)
+    shorts_path = revision / SHORTS_PLAN_ARTIFACT
+    shorts_path.parent.mkdir(parents=True, exist_ok=True)
+    write_yaml_atomic(shorts_path, payload)
 
     with pytest.raises(ValueError, match="CL01: claim C01 requires caveat C02"):
         load_effective_clip_specs(revision)
     with pytest.raises(ValueError, match="CL01: claim C01 requires caveat C02"):
         produce_project(project, SilentTTS(), _runner)
+
+
+def test_stale_revision_hash_and_legacy_shorts_plan_fallback_to_clip_plan(tmp_path: Path) -> None:
+    """Stale revision_hash (parallel reopen race) & legacy schema on non-Style-A fallback cleanly."""
+    from healthvideo.workflows.shorts_plan import SHORTS_PLAN_ARTIFACT, _revision_hash
+
+    project = create_long_form_project_fixture(tmp_path)
+    revision = project / "revisions/001"
+    approve_gate(project, GateKind.MEDICAL, reviewer=REVIEWER, now=NOW)
+    shorts_path = revision / SHORTS_PLAN_ARTIFACT
+    shorts_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # 1. Stale revision_hash (e.g. old shorts-plan left after reopen while shorts_plan runs in parallel).
+    write_yaml_atomic(
+        shorts_path,
+        {
+            "schema_version": "1.0",
+            "revision_hash": "stale-older-script-hash",
+            "clips": [
+                {
+                    "id": "CL01",
+                    "title": "Bản cũ",
+                    "hook_text": "Hook cũ",
+                    "start_scene_id": "S01",
+                    "end_scene_id": "S02",
+                    "target_seconds": 66,
+                    "caption": "Giảm muối [claim:C01].",
+                    "safety_caveat": "Caveat [claim:C02].",
+                    "safe_zone_checked": True,
+                }
+            ],
+        },
+    )
+    fallback = load_effective_clip_specs(revision)
+    assert [c.id for c in fallback.clips] == ["CL01", "CL02", "CL03"]
+    assert fallback.clips[0].mascot_max_width_percent is None
+
+    # 2. Legacy pre-Style-A shorts-plan missing new fields on style_a_active == False falls back cleanly.
+    write_yaml_atomic(
+        shorts_path,
+        {
+            "revision_hash": _revision_hash(revision),
+            "clips": [
+                {
+                    "id": "CL01",
+                    "title": "Bản legacy thiếu trường",
+                    "start_scene_id": "S01",
+                    "end_scene_id": "S02",
+                }
+            ],
+        },
+    )
+    legacy_fallback = load_effective_clip_specs(revision)
+    assert [c.id for c in legacy_fallback.clips] == ["CL01", "CL02", "CL03"]
+
+    # 3. Current Style-A-valid 60-90s plan on non-Style-A project (thay-men-gan pattern) is accepted & rendered.
+    sp_file = tmp_path / "thay-men-gan-shape.yaml"
+    write_yaml_atomic(
+        sp_file,
+        {
+            "schema_version": "1.0",
+            "clips": [
+                {
+                    "id": "CL01",
+                    "title": "Clip thay-men-gan shape 66s",
+                    "hook_text": "Hook gọn",
+                    "start_scene_id": "S01",
+                    "end_scene_id": "S02",
+                    "target_seconds": 66,
+                    "loop_bridge": "Xem phần cuối.",
+                    "caption": "Giảm muối [claim:C01].",
+                    "safety_caveat": "Caveat [claim:C02].",
+                    "safe_zone_checked": True,
+                    "mascot_max_width_percent": 26.0,
+                    "subtitle_position": "bottom_center",
+                    "hook_window_seconds": 1.8,
+                }
+            ],
+        },
+    )
+    save_shorts_plan(project, sp_file)
+    effective = load_effective_clip_specs(revision)
+    assert [c.id for c in effective.clips] == ["CL01"]
+    assert effective.clips[0].mascot_max_width_percent == 26.0
+    produce_project(project, SilentTTS(), _runner)
+    manifest = json.loads((revision / "renders/render-manifest.json").read_text(encoding="utf-8"))
+    assert manifest["clips"] == {"CL01": "clips/CL01.mp4"}
+
+
+def test_concurrent_save_shorts_plan_and_load_effective_clip_specs_lock_safe(tmp_path: Path) -> None:
+    import concurrent.futures
+
+    project = create_long_form_project_fixture(tmp_path)
+    revision = project / "revisions/001"
+    approve_gate(project, GateKind.MEDICAL, reviewer=REVIEWER, now=NOW)
+    sp_file = tmp_path / "concurrent-shorts.yaml"
+    write_yaml_atomic(
+        sp_file,
+        {
+            "schema_version": "1.0",
+            "clips": [
+                {
+                    "id": "CL01",
+                    "title": "Concurrent Clip",
+                    "hook_text": "Hook",
+                    "start_scene_id": "S01",
+                    "end_scene_id": "S02",
+                    "target_seconds": 66,
+                    "caption": "Giảm muối [claim:C01].",
+                    "safety_caveat": "Caveat [claim:C02].",
+                    "safe_zone_checked": True,
+                }
+            ],
+        },
+    )
+
+    def writer(_: int) -> None:
+        save_shorts_plan(project, sp_file)
+
+    def reader(_: int) -> list[str]:
+        return [c.id for c in load_effective_clip_specs(revision).clips]
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+        futures = [
+            *(pool.submit(writer, i) for i in range(6)),
+            *(pool.submit(reader, i) for i in range(6)),
+        ]
+        for fut in futures:
+            res = fut.result()
+            if res is not None:
+                assert res in (["CL01", "CL02", "CL03"], ["CL01"])
+
+
+def test_produce_recomputes_input_hash_when_shorts_plan_lands_mid_run(tmp_path: Path) -> None:
+    """When parallel shorts_plan saves during TTS/Whisper, render & QA manifests stay synchronized."""
+    project = create_long_form_project_fixture(tmp_path)
+    revision = project / "revisions/001"
+    approve_gate(project, GateKind.MEDICAL, reviewer=REVIEWER, now=NOW)
+
+    sp_file = tmp_path / "mid-run-shorts.yaml"
+    write_yaml_atomic(
+        sp_file,
+        {
+            "schema_version": "1.0",
+            "clips": [
+                {
+                    "id": "CL01",
+                    "title": "Mid-run Short",
+                    "hook_text": "Hook",
+                    "start_scene_id": "S01",
+                    "end_scene_id": "S02",
+                    "target_seconds": 66,
+                    "caption": "Giảm muối [claim:C01].",
+                    "safety_caveat": "Caveat [claim:C02].",
+                    "safe_zone_checked": True,
+                }
+            ],
+        },
+    )
+
+    class MidRunSavingTTS(SilentTTS):
+        def synthesize(self, request, output):
+            if not (revision / "posts/shorts-plan.yaml").is_file():
+                save_shorts_plan(project, sp_file)
+            return super().synthesize(request, output)
+
+    produce_project(project, MidRunSavingTTS(), _runner)
+    manifest = json.loads((revision / "renders/render-manifest.json").read_text(encoding="utf-8"))
+    video_qa = json.loads((revision / "reviews/video-qa.json").read_text(encoding="utf-8"))
+    pron_qa = json.loads((revision / "reviews/pronunciation-qa.json").read_text(encoding="utf-8"))
+    assert manifest["clips"] == {"CL01": "clips/CL01.mp4"}
+    assert manifest["input_hash"] == video_qa["input_hash"] == pron_qa["input_hash"]

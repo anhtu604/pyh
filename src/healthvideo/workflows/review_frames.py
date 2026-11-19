@@ -28,6 +28,7 @@ from healthvideo.visuals.anatomy_library import (
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 UNAPPROVED_COMPONENTS_HEADING = "Component giải phẫu mới hoặc vừa sửa cần soát kỹ"
+FFMPEG_SELECT_BATCH_SIZE = 50
 
 
 def imported_reviewed_paths(revision_root: Path) -> dict[str, Path]:
@@ -343,6 +344,48 @@ def _draft_source(data: RenderInput, input_path: Path, renders: Path) -> dict:
     }
 
 
+def _extract_selected_frames(
+    video: Path,
+    selected_frames: list[int],
+    temp_dir: Path,
+    *,
+    runner: RemotionRunner,
+) -> dict[int, Path]:
+    """Extract frames via FFmpeg select in bounded batches (<=50 terms) to avoid OOM."""
+    frame_images: dict[int, Path] = {}
+    for batch_index, offset in enumerate(range(0, len(selected_frames), FFMPEG_SELECT_BATCH_SIZE)):
+        batch = selected_frames[offset : offset + FFMPEG_SELECT_BATCH_SIZE]
+        selection = temp_dir / f"select-{batch_index:03d}.txt"
+        terms = [f"eq(n\\,{frame})" for frame in batch]
+        selection.write_text("select=" + "+".join(terms), encoding="ascii")
+        pattern = temp_dir / f"batch-{batch_index:03d}-%05d.png"
+        argv = [
+            "ffmpeg",
+            "-y",
+            "-v",
+            "error",
+            "-i",
+            str(video.resolve()),
+            "-filter_script:v",
+            str(selection.resolve()),
+            "-fps_mode",
+            "vfr",
+            "-frames:v",
+            str(len(batch)),
+            "-start_number",
+            "0",
+            str(pattern.resolve()),
+        ]
+        if runner(argv) != 0:
+            raise RuntimeError("FFmpeg batch frame extraction failed")
+        for index, frame in enumerate(batch):
+            image = temp_dir / f"batch-{batch_index:03d}-{index:05d}.png"
+            if not image.is_file():
+                raise RuntimeError(f"FFmpeg extraction failed at frame {frame}")
+            frame_images[frame] = image
+    return frame_images
+
+
 def review_frames(
     project_dir: Path,
     *,
@@ -392,29 +435,14 @@ def review_frames(
             source_path.write_text(json.dumps(source), encoding="utf-8")
     video_hash = sha256_file(video)
     with TemporaryDirectory(prefix=".frames-", dir=output) as temp:
-        # Decode once instead of replaying the video from the beginning for each sample.
+        # Decode in batches of <=50 select terms to prevent FFmpeg av_expr_parse OOM.
         selected_frames = sorted(
             {sample.frame for sample in samples}
             | {sample.frame for sample in focus_samples}
         )
-        selection = Path(temp) / 'select.txt'
-        # FFmpeg's expression parser has a recursion limit for long addition chains.
-        terms = [f'eq(n\\,{frame})' for frame in selected_frames]
-        while len(terms) > 1:
-            terms = ['(' + '+'.join(terms[i:i + 2]) + ')' for i in range(0, len(terms), 2)]
-        selection.write_text('select=' + terms[0], encoding='ascii')
-        pattern = Path(temp) / 'frame-%05d.png'
-        argv = ['ffmpeg', '-y', '-v', 'error', '-i', str(video.resolve()),
-                '-filter_script:v', str(selection.resolve()), '-fps_mode', 'vfr',
-                '-frames:v', str(len(selected_frames)), '-start_number', '0',
-                str(pattern.resolve())]
-        if runner(argv) != 0:
-            raise RuntimeError('FFmpeg batch frame extraction failed')
-        frame_images = {frame: Path(temp) / f'frame-{index:05}.png'
-                        for index, frame in enumerate(selected_frames)}
-        for frame, image in frame_images.items():
-            if not image.is_file():
-                raise RuntimeError(f'FFmpeg extraction failed at frame {frame}')
+        frame_images = _extract_selected_frames(
+            video, selected_frames, Path(temp), runner=runner
+        )
         images = [frame_images[sample.frame] for sample in samples]
         entries = tile_frames(samples, images, output, data)
         mechanism_ids = {s.id for s in data.scenes if s.visual in MECHANISM_VISUALS}

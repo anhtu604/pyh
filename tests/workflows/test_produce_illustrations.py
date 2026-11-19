@@ -157,3 +157,51 @@ def test_illustration_recipe_and_normalized_reference_control_reuse(tmp_path, mo
     produce._prepare_illustrations(tmp_path, board, changed, generate=True)
     assert calls == ['A park without lettering'] * 3 + ['A different park'] * 3
     assert Image.open(tmp_path / recipe['path']).getpixel((0, 0)) == (0, 0, 255)
+
+
+def test_produce_restores_locked_illustrations_and_fails_closed_before_flux(tmp_path, monkeypatch):
+    """Produce recovers locked candidate/imported PNG before FLUX, or aborts 0s GPU without touching approvals."""
+    project = create_v2_project_fixture(tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW)
+    root = project / 'revisions/001'
+    cand2 = root / 'reviews/visual/asset-00/round-0/candidate-2.png'
+    cand2.parent.mkdir(parents=True, exist_ok=True)
+    Image.new('RGB', (1080, 1920), 'green').save(cand2)
+    locked_sha = sha256_file(cand2)
+
+    # Start medically approved with valid green image on disk, then simulate buggy overwrite before produce.
+    wrong = root / 'assets/illustrations/park.png'
+    wrong.parent.mkdir(parents=True, exist_ok=True)
+    Image.new('RGB', (1080, 1920), 'green').save(wrong)
+
+    manifest_data = read_yaml(root / 'assets/asset-manifest.yaml')
+    manifest_data['assets'].append({**illustration_record(), 'sha256': locked_sha})
+    write_yaml_atomic(root / 'assets/asset-manifest.yaml', manifest_data)
+    board = read_yaml(root / 'storyboard/storyboard.yaml')
+    board['scenes'][0]['visual_assets'] = [{'path': 'assets/illustrations/park.png', 'role': 'whiteboard'}]
+    write_yaml_atomic(root / 'storyboard/storyboard.yaml', board)
+    approve_gate(project, GateKind.MEDICAL, reviewer='doctor', now=datetime(2026, 10, 23, tzinfo=UTC))
+    Image.new('RGB', (1080, 1920), 'red').save(wrong)
+
+    monkeypatch.setattr(
+        produce,
+        'generate_illustration',
+        lambda *a, **k: pytest.fail('FLUX must not run for locked assets'),
+        raising=False,
+    )
+    out = produce.produce_project(project, SilentTTS(), renderer, music=False)
+    assert out.is_file()
+    assert sha256_file(wrong) == locked_sha
+
+    # Corrupt working copy AND remove candidate-2 under valid medical approval -> fails BEFORE FLUX/TTS.
+    proj_meta = read_yaml(project / 'project.yaml')
+    proj_meta['state'] = WorkflowState.MEDICALLY_APPROVED.value
+    write_yaml_atomic(project / 'project.yaml', proj_meta)
+    Image.new('RGB', (1080, 1920), 'red').save(wrong)
+    cand2.unlink()
+    approval_before = (root / 'reviews/medical-approval.yaml').read_bytes()
+    manifest_before = (root / 'assets/asset-manifest.yaml').read_bytes()
+
+    with pytest.raises(ValueError, match='Generated illustration sha256 mismatch: assets/illustrations/park.png'):
+        produce.produce_project(project, SilentTTS(), renderer, music=False)
+    assert (root / 'reviews/medical-approval.yaml').read_bytes() == approval_before
+    assert (root / 'assets/asset-manifest.yaml').read_bytes() == manifest_before

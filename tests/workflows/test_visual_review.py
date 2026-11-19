@@ -288,3 +288,208 @@ def test_visual_review_rejects_invalid_style_code_or_pose(tmp_path, patch, match
     write_yaml_atomic(tmp_path / REPORT, report)
     with pytest.raises(ValueError, match=match):
         ensure_candidates(tmp_path, _board(), manifest, generate=_generate)
+
+
+def test_ensure_candidates_restores_locked_across_renumbering_and_narrow_hash(tmp_path):
+    """Reproduce thay-men-gan regression: slot shift preserves locked candidates & narrows recipes hash."""
+    import hashlib
+
+    from healthvideo.workflows.visual_review import (
+        CANDIDATES,
+        ensure_candidates,
+        prepare_contact_sheet,
+        review_complete,
+    )
+
+    def solid_png(path: Path, color: str) -> str:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        Image.new('RGB', (1080, 1920), color).save(path)
+        return sha256_file(path)
+
+    # Prior layout: asset-00 = lab-slip (selected candidate-2), asset-01 = product-choice (removed),
+    # asset-02 = prescription-review (round-1 candidate-3 locked!).
+    lab_cand2 = tmp_path / 'reviews/visual/asset-00/round-0/candidate-2.png'
+    lab_cand1 = tmp_path / 'reviews/visual/asset-00/round-0/candidate-1.png'
+    lab_sha = solid_png(lab_cand2, 'green')
+    solid_png(lab_cand1, 'red')
+
+    pr_cand3 = tmp_path / 'reviews/visual/asset-02/round-1/candidate-3.png'
+    pr_cand1 = tmp_path / 'reviews/visual/asset-02/round-1/candidate-1.png'
+    pr_sha = solid_png(pr_cand3, 'blue')
+    solid_png(pr_cand1, 'yellow')
+
+    # Corrupt working copies on disk (as observed on thay-men-gan 2026-11-19 15:50:58).
+    solid_png(tmp_path / 'assets/illustrations/lab-slip.png', 'red')
+    solid_png(tmp_path / 'assets/illustrations/prescription-review.png', 'yellow')
+
+    board = Storyboard.model_validate({
+        'title': 'Men gan',
+        'scenes': [
+            {
+                'id': 'S01', 'start_frame': 0, 'duration_frames': 90,
+                'narration': 'Xét nghiệm', 'visual': 'whiteboard', 'on_screen_text': 'Lab slip',
+                'visual_assets': [{'path': 'assets/illustrations/lab-slip.png', 'role': 'whiteboard'}],
+            },
+            {
+                'id': 'S02', 'start_frame': 90, 'duration_frames': 90,
+                'narration': 'Không dùng minh họa', 'visual': 'whiteboard', 'on_screen_text': 'Text only',
+            },
+            {
+                'id': 'S03', 'start_frame': 180, 'duration_frames': 90,
+                'narration': 'Đơn thuốc', 'visual': 'whiteboard', 'on_screen_text': 'Rx',
+                'visual_assets': [{'path': 'assets/illustrations/prescription-review.png', 'role': 'whiteboard'}],
+            },
+            {
+                'id': 'S04', 'start_frame': 270, 'duration_frames': 90,
+                'narration': 'Đi khám', 'visual': 'whiteboard', 'on_screen_text': 'Clinic',
+                'visual_assets': [{'path': 'assets/illustrations/clinic-preparation.png', 'role': 'whiteboard'}],
+            },
+        ],
+    })
+    manifest = AssetManifest.model_validate({
+        'assets': [
+            {**illustration_record(), 'path': 'assets/illustrations/lab-slip.png', 'sha256': lab_sha, 'seed': 10},
+            {
+                **illustration_record(),
+                'path': 'assets/illustrations/prescription-review.png',
+                'sha256': pr_sha,
+                'seed': 20,
+            },
+            {
+                **illustration_record(),
+                'path': 'assets/illustrations/clinic-preparation.png',
+                'prompt': 'Clinic desk',
+                'seed': 30,
+            },
+        ],
+    })
+    write_yaml_atomic(tmp_path / CANDIDATES, {
+        'recipes_sha256': 'older-revision-hash',
+        'review_count': 2,
+        'assets': [
+            {
+                'path': 'assets/illustrations/lab-slip.png',
+                'candidates': [
+                    {'path': 'reviews/visual/asset-00/round-0/candidate-1.png', 'sha256': sha256_file(lab_cand1), 'seed': 10},
+                    {'path': 'reviews/visual/asset-00/round-0/candidate-2.png', 'sha256': lab_sha, 'seed': 11},
+                ],
+                'selected': 'reviews/visual/asset-00/round-0/candidate-2.png',
+            },
+            {
+                'path': 'assets/illustrations/prescription-review.png',
+                'candidates': [
+                    {'path': 'reviews/visual/asset-02/round-1/candidate-1.png', 'sha256': sha256_file(pr_cand1), 'seed': 23},
+                    {'path': 'reviews/visual/asset-02/round-1/candidate-3.png', 'sha256': pr_sha, 'seed': 25},
+                ],
+                'selected': 'reviews/visual/asset-02/round-1/candidate-3.png',
+            },
+        ],
+    })
+
+    flux_calls = []
+
+    def gen(prompt, *, out, width, height, seed):
+        flux_calls.append((prompt, seed))
+        solid_png(out, 'purple')
+        return out
+
+    data = ensure_candidates(tmp_path, board, manifest, generate=gen)
+    # Only the new unlocked clinic-preparation triggers FLUX (3 candidates), never locked assets!
+    assert [p for p, _ in flux_calls] == ['Clinic desk'] * 3
+    assert sha256_file(tmp_path / 'assets/illustrations/lab-slip.png') == lab_sha
+    assert sha256_file(tmp_path / 'assets/illustrations/prescription-review.png') == pr_sha
+    assert sha256_file(pr_cand3) == pr_sha
+    assert hashlib.sha256(pr_cand3.read_bytes()).hexdigest() == pr_sha
+    assert data['assets'][0]['selected'] == 'reviews/visual/asset-00/round-0/candidate-2.png'
+    assert data['assets'][1]['selected'] == 'reviews/visual/asset-02/round-1/candidate-3.png'
+    assert data['assets'][2]['selected'] is None
+    assert not review_complete(tmp_path)
+
+    # Approve clinic-preparation once; later changing non-illustrated S02 keeps recipes_sha256 intact.
+    from healthvideo.workflows.visual_review import REPORT
+
+    contact = tmp_path / 'reviews/visual/contact-sheet.jpg'
+    contact.write_bytes(b'synthetic contact sheet')
+    data['contact_sheet'] = {'path': 'reviews/visual/contact-sheet.jpg', 'sha256': sha256_file(contact)}
+    write_yaml_atomic(tmp_path / CANDIDATES, data)
+    clinic_cands = data['assets'][2]['candidates']
+    write_yaml_atomic(tmp_path / REPORT, {
+        'candidate_index_sha256': sha256_file(tmp_path / CANDIDATES),
+        'inspected_images': [c['path'] for c in clinic_cands] + ['reviews/visual/contact-sheet.jpg'],
+        'scenes': [{
+            'scene': 'S04',
+            'decision': 'select',
+            'selected': clinic_cands[0]['path'],
+            'reason': 'clinic preparation scene clear',
+            'layout_issues': [],
+            'new_prompt': None,
+        }],
+    })
+    ensure_candidates(tmp_path, board, manifest, generate=lambda *a, **k: pytest.fail('unexpected regen'))
+    assert review_complete(tmp_path)
+
+    changed_s02 = board.model_copy(update={'scenes': (
+        board.scenes[0],
+        board.scenes[1].model_copy(update={'narration': 'Chỉnh lời cảnh không minh họa', 'duration_frames': 120}),
+        board.scenes[2],
+        board.scenes[3],
+    )})
+    ensure_candidates(tmp_path, changed_s02, manifest, generate=lambda *a, **k: pytest.fail('S02 drift regen'))
+    assert review_complete(tmp_path)
+
+    # Also verify prepare_contact_sheet filters stay batched <= 50 frames per FFmpeg invocation.
+    sheet_batches: list[int] = []
+
+    def fake_ffmpeg(argv, **kwargs):
+        del kwargs
+        import re
+
+        vf_expr = argv[argv.index('-vf') + 1]
+        sheet_batches.append(len(re.findall(r'eq\(n\\,\d+\)', vf_expr)))
+        expected_count = int(argv[argv.index('-frames:v') + 1])
+        for idx in range(expected_count):
+            Image.new('RGB', (160, 90), 'white').save(argv[-1] % (idx + 1))
+        return CompletedProcess(argv, 0, '', '')
+
+    (tmp_path / 'renders').mkdir(exist_ok=True)
+    (tmp_path / 'renders/video.mp4').write_bytes(b'fake-mp4')
+    (tmp_path / 'renders/render-input.json').write_text(json.dumps({
+        'fps': 30,
+        'scenes': [{'start_frame': 0, 'duration_frames': 600, 'beats': [{'start_frame': f} for f in range(0, 560, 4)]}],
+    }))
+    prepare_contact_sheet(tmp_path, runner=fake_ffmpeg)
+    assert sheet_batches == [50, 50, 42]
+    assert all(1 <= count <= 50 for count in sheet_batches)
+
+
+def test_restore_locked_illustrations_from_imported_and_fail_closed(tmp_path):
+    """Locked asset restores from assets/imported; fails closed on missing match without outside symlink."""
+    from healthvideo.workflows.visual_review import (
+        ensure_candidates,
+        restore_locked_illustrations,
+    )
+
+    imported = tmp_path / 'assets/imported/approved-diagram.png'
+    imported.parent.mkdir(parents=True, exist_ok=True)
+    Image.new('RGB', (1080, 1920), 'teal').save(imported)
+    imported_sha = sha256_file(imported)
+
+    board = _board()
+    manifest = AssetManifest.model_validate({
+        'assets': [{**illustration_record(), 'sha256': imported_sha}],
+    })
+    resolved = restore_locked_illustrations(tmp_path, board, manifest)
+    assert resolved['assets/illustrations/park.png'] == imported
+    assert sha256_file(tmp_path / 'assets/illustrations/park.png') == imported_sha
+
+    # Unmatched locked hash raises immediately without invoking FLUX.
+    missing_manifest = AssetManifest.model_validate({
+        'assets': [{**illustration_record(), 'sha256': 'f' * 64}],
+    })
+    with pytest.raises(ValueError, match='Generated illustration sha256 mismatch: assets/illustrations/park.png'):
+        ensure_candidates(
+            tmp_path,
+            board,
+            missing_manifest,
+            generate=lambda *a, **k: pytest.fail('FLUX must not run when locked hash is unrecoverable'),
+        )
