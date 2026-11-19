@@ -305,9 +305,9 @@ phases:
     note: 'Đã merge 56fda2a: classify_failure dùng chung (khóa Windows tạm thời, trần 5), repair không tiêu hao lượt cho lỗi tạm thời, QA video fail-closed khi thiếu/lạ status, ffmpeg vibi timeout 120s. Còn đề xuất D3: ffprobe kiểm bản dựng trong produce.py.'
   - id: R3.13
     title: Báo cáo chấm hình lệch chỉ mục thì coi là cũ và chấm lại (không chặn vĩnh viễn)
-    status: doing
+    status: done
     owner: codex (gpt-6.1-sol)
-    note: 'PYH-003: visual-review.yaml dòng S32 trỏ asset-03/round-0 trong khi chỉ mục khóa asset-02/round-0 (đánh số asset đổi). Worktree E:/pyh-r3-13, brief scratchpad brief-r3-13.md.'
+    note: 'Đã merge af605aa. Sau đó mở khóa PYH-003 qua R3.14 (3f57a8a: shorts_plan chạy trước visual_review khi kế hoạch hỏng), R3.15 (8f89ded: production-retry validation hold không chặn shorts_plan), R3.16 (368b62f: agent-retry hold không chặn shorts_plan); agent viết lại CL02 thành S17-S20 và xưởng chạy produce lúc 02:27. Gốc: PYH-003: visual-review.yaml dòng S32 trỏ asset-03/round-0 trong khi chỉ mục khóa asset-02/round-0 (đánh số asset đổi). Worktree E:/pyh-r3-13, brief scratchpad brief-r3-13.md.'
   - id: R3.12
     title: Kế hoạch short sai luật clip dọc (2 chủ thể giải phẫu) phải bị bắt sớm và được agent viết lại; mở khóa PYH-003
     status: done
