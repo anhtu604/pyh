@@ -84,7 +84,7 @@ from healthvideo.workflows.script_review import (
 from healthvideo.workflows.shorts_plan import SHORTS_PLAN_ARTIFACT, ShortsPlan
 from healthvideo.workflows.standards import prompt_block
 from healthvideo.workflows.storyboard_design import storyboard_validation_error
-from healthvideo.workflows.visual_review import review_pending
+from healthvideo.workflows.visual_review import prepare_stale_review, review_pending
 from healthvideo.workflows.voice_prep import VOICE_PREP_ARTIFACT, VoicePrepSheet
 
 StepKind = Literal[
@@ -600,7 +600,13 @@ def _build_step_prompt(
                 "đều đạt >= 7. Không yêu cầu dựng lại video cũ theo mascot Style A hay zoom kính lúp."
             )
     standards_block = prompt_block(root, slug=entry.slug)
-    extra_blocks = "\n\n".join(part for part in (style_note, standards_block.rstrip()) if part)
+    stale_visual_note = (
+        prepare_stale_review(resolve_project_layout(project_dir).artifact_root)
+        if step == 'visual_review' and (project_dir / 'project.yaml').is_file() else ''
+    )
+    extra_blocks = "\n\n".join(
+        part for part in (style_note, standards_block.rstrip(), stale_visual_note) if part
+    )
     if extra_blocks:
         body, heading, rules = prompt.rpartition("## Quy tắc cứng")
         if heading:

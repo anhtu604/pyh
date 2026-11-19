@@ -132,8 +132,7 @@ def test_visual_review_selection_cannot_change_after_consumption(tmp_path):
     index = read_yaml(tmp_path / CANDIDATES)
     index['assets'][0]['selected'] = index['assets'][0]['candidates'][0]['path']
     write_yaml_atomic(tmp_path / CANDIDATES, index)
-    with pytest.raises(ValueError, match='selection changed'):
-        review_complete(tmp_path)
+    assert not review_complete(tmp_path)
 
 
 @pytest.mark.parametrize('change', ['omit', 'reopen', 'safety'])
@@ -650,3 +649,153 @@ def test_restore_locked_illustrations_from_imported_and_fail_closed(tmp_path):
             missing_manifest,
             generate=lambda *a, **k: pytest.fail('FLUX must not run when locked hash is unrecoverable'),
         )
+
+
+@pytest.mark.parametrize('locked', [False, True])
+def test_stale_selection_requires_bounded_fresh_review(tmp_path, locked):
+    from healthvideo.workflows.visual_review import (
+        CANDIDATES,
+        REPORT,
+        ensure_candidates,
+        review_complete,
+    )
+
+    manifest = AssetManifest.model_validate({'assets': [illustration_record()]})
+    board = _board()
+    ensure_candidates(tmp_path, board, manifest, generate=_generate)
+    submit(tmp_path)
+    ensure_candidates(tmp_path, board, manifest, generate=_generate)
+    index = read_yaml(tmp_path / CANDIDATES)
+    selected = index['assets'][0]['selected']
+    image_hash = sha256_file(tmp_path / index['assets'][0]['path'])
+    if locked:
+        index['assets'][0]['locked'] = True
+        write_yaml_atomic(tmp_path / CANDIDATES, index)
+        manifest = AssetManifest.model_validate({'assets': [{**illustration_record(), 'sha256': image_hash}]})
+        # Keep the same recipes so this tests stale reports, rather than a recipe rebuild.
+        from healthvideo.workflows.visual_review import _illustrated_recipes_hash
+        index['recipes_sha256'] = _illustrated_recipes_hash(board, list(manifest.assets), 1080, 1920)
+        write_yaml_atomic(tmp_path / CANDIDATES, index)
+
+    for attempt in range(3):
+        report = read_yaml(tmp_path / REPORT) if (tmp_path / REPORT).exists() else {
+            'candidate_index_sha256': sha256_file(tmp_path / CANDIDATES),
+            'inspected_images': [c['path'] for c in index['assets'][0]['candidates']] +
+                                [index['contact_sheet']['path']],
+            'scenes': [{'scene': 'S01', 'decision': 'select', 'reason': 'reviewed', 'layout_issues': []}],
+        }
+        report['scenes'][0]['selected'] = 'reviews/visual/asset-99/round-0/candidate-1.png'
+        write_yaml_atomic(tmp_path / REPORT, report)
+        if attempt == 0:
+            index['review_sha256'] = sha256_file(tmp_path / REPORT)
+            write_yaml_atomic(tmp_path / CANDIDATES, index)
+            before = (tmp_path / CANDIDATES).read_bytes()
+            assert not review_complete(tmp_path)
+            assert not review_complete(tmp_path)  # Read-only polling must not spend retries.
+            assert (tmp_path / CANDIDATES).read_bytes() == before
+        if attempt == 2:
+            with pytest.raises(ValueError, match='S01.*asset-99.*' + selected):
+                ensure_candidates(tmp_path, board, manifest, generate=_generate)
+            break
+        index = ensure_candidates(tmp_path, board, manifest, generate=_generate)
+        assert not review_complete(tmp_path)
+        assert not (tmp_path / REPORT).exists()
+        assert index['assets'][0]['selected'] == selected
+        assert sha256_file(tmp_path / index['assets'][0]['path']) == image_hash
+
+
+@pytest.mark.parametrize('locked', [False, True])
+def test_stale_review_recovers_only_after_inspection(tmp_path, locked):
+    from healthvideo.workflows.visual_review import (
+        CANDIDATES,
+        REPORT,
+        ensure_candidates,
+        review_complete,
+    )
+
+    manifest = AssetManifest.model_validate({'assets': [illustration_record()]})
+    ensure_candidates(tmp_path, _board(), manifest, generate=_generate)
+    submit(tmp_path)
+    ensure_candidates(tmp_path, _board(), manifest, generate=_generate)
+    index = read_yaml(tmp_path / CANDIDATES)
+    index['assets'][0]['locked'] = locked
+    report = read_yaml(tmp_path / REPORT)
+    report['scenes'][0]['selected'] = 'old/path.png'
+    write_yaml_atomic(tmp_path / REPORT, report)
+    index['review_sha256'] = sha256_file(tmp_path / REPORT)
+    write_yaml_atomic(tmp_path / CANDIDATES, index)
+    ensure_candidates(tmp_path, _board(), manifest, generate=_generate)
+    submit(tmp_path)
+    report = read_yaml(tmp_path / REPORT)
+    report['inspected_images'] = []
+    write_yaml_atomic(tmp_path / REPORT, report)
+    with pytest.raises(ValueError, match='inspect'):
+        ensure_candidates(tmp_path, _board(), manifest, generate=_generate)
+    submit(tmp_path)
+    ensure_candidates(tmp_path, _board(), manifest, generate=_generate)
+    assert review_complete(tmp_path)
+    assert not read_yaml(tmp_path / CANDIDATES).get('stale_review_count')
+
+
+@pytest.mark.parametrize('problem', ['candidate', 'style'])
+def test_stale_review_does_not_hide_invalid_selection_or_style(tmp_path, problem):
+    from healthvideo.workflows.visual_review import (
+        CANDIDATES,
+        REPORT,
+        ensure_candidates,
+        review_complete,
+    )
+
+    manifest = AssetManifest.model_validate({'assets': [illustration_record()]})
+    ensure_candidates(tmp_path, _board(), manifest, generate=_generate)
+    submit(tmp_path)
+    ensure_candidates(tmp_path, _board(), manifest, generate=_generate)
+    index = read_yaml(tmp_path / CANDIDATES)
+    report = read_yaml(tmp_path / REPORT)
+    report['scenes'][0]['selected'] = 'old/path.png'
+    if problem == 'candidate':
+        index['assets'][0]['selected'] = 'not/a/candidate.png'
+    else:
+        report['scenes'][0]['style_issues'] = ['style_hands']
+    write_yaml_atomic(tmp_path / REPORT, report)
+    index['review_sha256'] = sha256_file(tmp_path / REPORT)
+    write_yaml_atomic(tmp_path / CANDIDATES, index)
+    with pytest.raises(ValueError, match='reviewed candidate|style_hands'):
+        review_complete(tmp_path)
+
+
+def test_runner_prepares_stale_report_before_agent_prompt(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from healthvideo.workflows import runner
+    from healthvideo.workflows.visual_review import (
+        CANDIDATES,
+        REPORT,
+        ensure_candidates,
+    )
+
+    manifest = AssetManifest.model_validate({'assets': [illustration_record()]})
+    ensure_candidates(tmp_path, _board(), manifest, generate=_generate)
+    submit(tmp_path)
+    ensure_candidates(tmp_path, _board(), manifest, generate=_generate)
+    index = read_yaml(tmp_path / CANDIDATES)
+    selected = index['assets'][0]['selected']
+    report = read_yaml(tmp_path / REPORT)
+    report['scenes'][0]['selected'] = 'old/path.png'
+    write_yaml_atomic(tmp_path / REPORT, report)
+    index['review_sha256'] = sha256_file(tmp_path / REPORT)
+    write_yaml_atomic(tmp_path / CANDIDATES, index)
+    (tmp_path / 'project.yaml').write_text('synthetic')
+    monkeypatch.setattr(runner, 'resolve_project_layout', lambda _: SimpleNamespace(artifact_root=tmp_path))
+    monkeypatch.setattr(runner, 'render_prompt', lambda *a, **k: 'normal prompt\n## Quy tắc cứng\nKEEP GATES')
+    monkeypatch.setattr(runner, 'prompt_block', lambda *a, **k: '')
+    prompt = runner._build_step_prompt(
+        tmp_path, SimpleNamespace(company=None),
+        SimpleNamespace(slug='test', title='test', question='test', doctor_note=''),
+        tmp_path, 'visual_review',
+    )
+    assert 'Báo cáo cũ lệch chỉ mục' in prompt
+    assert selected in prompt
+    assert not (tmp_path / REPORT).exists()
+    assert read_yaml(tmp_path / CANDIDATES)['stale_review_count'] == 1
+    assert 'KEEP GATES' in prompt

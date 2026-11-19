@@ -101,46 +101,97 @@ def review_pending(project: Path) -> bool:
     return (root / CANDIDATES).is_file() and not review_complete(root)
 
 
+def _report_selection_mismatches(data: dict, report: dict) -> list[str]:
+    """Check real validation errors before classifying report/index drift as stale."""
+    rows = {row['scene']: row for row in report.get('scenes', [])}
+    mismatches = []
+    for asset in data.get('assets', []):
+        selected = asset.get('selected')
+        if selected and selected not in {c['path'] for c in asset['candidates']}:
+            raise ValueError('Visual review selection is not a reviewed candidate')
+        if asset.get('locked') and not selected:
+            raise ValueError('Visual review selection is not a reviewed candidate')
+        if asset.get('fallback') and asset['round'] != MAX_REGENERATIONS:
+            raise ValueError('Visual fallback requires exhausted reviewed candidates')
+        for scene in asset['scenes']:
+            row = rows.get(scene, {})
+            validate_style_issues(row)
+            if row.get('blocking_safety'):
+                raise ValueError(f'blocking_safety: {scene}; cần bác sĩ kiểm tra hình đã chọn')
+            expected = 'select' if selected else 'reject'
+            if (selected or asset.get('fallback')) and (
+                row.get('decision') != expected or (selected and row.get('selected') != selected)
+            ):
+                mismatches.append(
+                    f"{scene}: report {row.get('decision')!r} {row.get('selected')!r}; "
+                    f"index {expected!r} {selected!r}"
+                )
+    return mismatches
+
+
+def _archive_stale_selection(root: Path, data: dict, mismatches: list[str]) -> None:
+    """Spend a retry only when retiring a report, never during read-only polling."""
+    count = data.get('stale_review_count', 0)
+    if count >= 2:
+        raise ValueError('Visual review selection changed after 2 re-reviews: ' + '; '.join(mismatches))
+    report = root / REPORT
+    archive = root / 'reviews/visual' / f'stale-visual-review-{count + 1}-{sha256_file(report)}.yaml'
+    _replace_atomic_with_retry(report, archive)
+    data['stale_review_count'] = count + 1
+    data.pop('review_sha256', None)
+
+
 def review_complete(root: Path) -> bool:
     if not (root / CANDIDATES).is_file():
         return True
     data = read_yaml(root / CANDIDATES)
     _check_candidates(root, data)
     assets = data.get('assets') or []
-    if bool(assets) and all(asset.get('locked') for asset in assets):
+    all_locked = bool(assets) and all(asset.get('locked') for asset in assets)
+    if all_locked:
         for asset in assets:
             if not asset.get('selected') or asset['selected'] not in {
                 c['path'] for c in asset.get('candidates', [])
             }:
                 raise ValueError('Visual review selection is not a reviewed candidate')
-        if (root / REPORT).is_file() and data.get('review_sha256') == sha256_file(root / REPORT):
-            report = read_yaml(root / REPORT)
-            rows = {row['scene']: row for row in report.get('scenes', [])}
-            for asset in assets:
-                for scene in asset['scenes']:
-                    row = rows.get(scene, {})
-                    validate_style_issues(row)
-                    if row and (row.get('decision') != 'select' or row.get('selected') != asset['selected']):
-                        raise ValueError('Visual review selection changed after agent decision')
-        return True
+    consumed = (root / REPORT).is_file() and data.get('review_sha256') == sha256_file(root / REPORT)
     complete = bool(assets) and all(
         asset.get('selected') or asset.get('fallback') for asset in assets
-    ) and (root / REPORT).is_file() and data.get('review_sha256') == sha256_file(root / REPORT)
-    if complete:
-        report = read_yaml(root / REPORT)
-        rows = {row['scene']: row for row in report.get('scenes', [])}
-        for asset in assets:
-            for scene in asset['scenes']:
-                row = rows.get(scene, {})
-                validate_style_issues(row)
-                if asset.get('selected'):
-                    if row.get('decision') != 'select' or row.get('selected') != asset['selected']:
-                        raise ValueError('Visual review selection changed after agent decision')
-                    if asset['selected'] not in {c['path'] for c in asset['candidates']}:
-                        raise ValueError('Visual review selection is not a reviewed candidate')
-                elif row.get('decision') != 'reject' or asset['round'] != MAX_REGENERATIONS:
-                    raise ValueError('Visual fallback requires exhausted reviewed candidates')
-    return complete
+    ) and consumed
+    if complete and _report_selection_mismatches(data, read_yaml(root / REPORT)):
+        return False
+    if data.get('stale_review_count'):
+        return False
+    return all_locked or complete
+
+
+def prepare_stale_review(root: Path) -> str:
+    """Retire a consumed stale report before the runner asks the agent to review again."""
+    if not (root / CANDIDATES).is_file():
+        return ''
+    data = read_yaml(root / CANDIDATES)
+    _check_candidates(root, data)
+    if (root / REPORT).is_file() and data.get('review_sha256') == sha256_file(root / REPORT):
+        mismatches = _report_selection_mismatches(data, read_yaml(root / REPORT))
+        if mismatches:
+            _archive_stale_selection(root, data, mismatches)
+            write_yaml_atomic(root / CANDIDATES, data)
+    if not data.get('stale_review_count'):
+        return ''
+    selections = [
+        {'scenes': asset['scenes'], 'decision': 'select' if asset.get('selected') else 'reject',
+         'selected': asset.get('selected'), 'locked': bool(asset.get('locked'))}
+        for asset in data['assets']
+    ]
+    return (
+        'Báo cáo cũ lệch chỉ mục: đây là ngoại lệ cho quy tắc bỏ qua cảnh đã chọn. '
+        'Phải mở lại mọi candidate và contact sheet hiện tại; báo cáo đủ mọi cảnh, '
+        'kể cả cảnh đã có selected/fallback. Đối chiếu đường dẫn trong chỉ mục hiện tại, '
+        'không sao chép báo cáo cũ. Giữ nguyên ảnh đã chọn, đặc biệt ảnh locked; '
+        'nếu phát hiện lỗi an toàn, ghi blocking_safety và dừng, không chọn cho xong. '
+        'Ghi reason, layout_issues và inspected_images trung thực. Quyết định cần đối chiếu:\n'
+        + json.dumps(selections, ensure_ascii=False)
+    )
 
 
 def _safe_path(root: Path, relative: str) -> Path:
@@ -190,7 +241,8 @@ def _consume_report(root: Path, data: dict, board: Storyboard) -> None:
             sha256_file(root / sheet['path']) != sheet['sha256']
         ):
             raise ValueError('Visual review requires current rendered contact sheet')
-    pending = [a for a in data['assets'] if not a.get('selected') and not a.get('fallback')]
+    pending = [a for a in data['assets']
+               if data.get('stale_review_count') or (not a.get('selected') and not a.get('fallback'))]
     required = {c['path'] for a in pending for c in a['candidates']} | {s['path'] for s in sheets}
     if not required.issubset(set(report.get('inspected_images', []))):
         raise ValueError('Agent must inspect all candidates and the rendered contact sheet')
@@ -199,6 +251,14 @@ def _consume_report(root: Path, data: dict, board: Storyboard) -> None:
     reported_ids = [row.get('scene', '') for row in decisions]
     if len(reported_ids) != len(set(reported_ids)) or not set(reported_ids).issubset(scene_ids):
         raise ValueError('Visual review has duplicate or nonexistent scene')
+    if data.get('stale_review_count'):
+        mismatches = _report_selection_mismatches(data, report)
+        if mismatches:
+            _archive_stale_selection(root, data, mismatches)
+            return
+        for row in decisions:
+            if not str(row.get('reason', '')).strip() or not isinstance(row.get('layout_issues'), list):
+                raise ValueError('Visual review requires a reason and layout_issues list')
     by_scene = {row['scene']: row for row in decisions}
     previous_path = root / 'reviews/visual' / f"review-{data.get('review_count', 0) - 1:02d}.yaml"
     previous_rows = ({row['scene']: row for row in read_yaml(previous_path).get('scenes', [])}
@@ -211,7 +271,7 @@ def _consume_report(root: Path, data: dict, board: Storyboard) -> None:
             if row and row.get('blocking_safety'):
                 raise ValueError(f'blocking_safety: {scene}; cần bác sĩ kiểm tra hình đã chọn')
             expected = 'select' if asset.get('selected') else 'reject'
-            accepted = previous_rows.get(scene) or {
+            accepted = (row if data.get('stale_review_count') else previous_rows.get(scene)) or {
                 'scene': scene, 'decision': expected, 'selected': asset.get('selected'),
                 'reason': 'Giữ nguyên quyết định đã duyệt.', 'layout_issues': []}
             if row and row != accepted:
@@ -254,6 +314,7 @@ def _consume_report(root: Path, data: dict, board: Storyboard) -> None:
             raise ValueError('Scenes sharing one asset must agree on select/reject and candidate')
     if decisions != report.get('scenes', []) or report.get('dropped_issues'):
         write_yaml_atomic(report_path, {**report, 'scenes': decisions})
+    data.pop('stale_review_count', None)
     data['review_sha256'] = sha256_file(report_path)
     # Keep every round and its reasons available to the physician.
     archive = root / 'reviews/visual' / f"review-{data.get('review_count', 0):02d}.yaml"
@@ -610,7 +671,10 @@ def ensure_candidates(root: Path, board: Storyboard, manifest: AssetManifest, *,
     else:
         data = prior
         _check_candidates(root, data)
-        review_complete(root)
+        if (root / REPORT).is_file() and data.get('review_sha256') == sha256_file(root / REPORT):
+            mismatches = _report_selection_mismatches(data, read_yaml(root / REPORT))
+            if mismatches:
+                _archive_stale_selection(root, data, mismatches)
         _consume_report(root, data, board)
     if not prior_exists and all(a.sha256 is not None for a in assets):
         return data
