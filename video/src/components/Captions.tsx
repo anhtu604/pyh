@@ -1,13 +1,17 @@
-import {FONT_FAMILY} from '../fonts';
+﻿import {FONT_FAMILY} from '../fonts';
 import React from 'react';
 import {useCurrentFrame} from 'remotion';
 import {useLayout} from '../layout';
 import type {Scene} from '../types';
+import {StyleCaptions} from './StyleCaptions';
 
 type CaptionsProps = {
   text: string;
   durationInFrames: number;
   words?: Scene['words'];
+  /** 'styleA' switches to the PYH style A static paged captions; omit for the legacy renderer. */
+  variant?: 'styleA';
+  glossary?: readonly string[];
 };
 
 export const MAX_CAPTION_WORDS = 6;
@@ -77,7 +81,11 @@ export const captionRows = (
   return {startIndex, rows};
 };
 
-export const Captions: React.FC<CaptionsProps> = ({text, durationInFrames, words: timedWords}) => {
+export const Captions: React.FC<CaptionsProps> = ({variant, glossary, ...rest}) => variant === 'styleA'
+  ? <StyleCaptions text={rest.text} durationInFrames={rest.durationInFrames} words={rest.words} glossary={glossary} />
+  : <LegacyCaptions {...rest} />;
+
+const LegacyCaptions: React.FC<Omit<CaptionsProps, 'variant' | 'glossary'>> = ({text, durationInFrames, words: timedWords}) => {
   const frame = useCurrentFrame();
   const c = useLayout().captions;
   const words = timedWords?.length ? timedWords.map(word => word.text) : text.trim().split(/\s+/).filter(Boolean);

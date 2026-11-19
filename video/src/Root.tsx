@@ -2,6 +2,8 @@ import React from 'react';
 import {Composition} from 'remotion';
 import {HealthVideo} from './HealthVideo';
 import {Thumbnail} from './Thumbnail';
+import {MedAnimLiverEnzymeLeak} from './medanim/MedAnimLiverEnzymeLeak';
+import {FPS as MEDANIM_FPS, TOTAL_FRAMES as MEDANIM_LIVER_FRAMES} from './medanim/liverEnzymeLeak';
 import {parseRenderInput} from './types';
 import type {RenderInput, Scene} from './types';
 
@@ -88,5 +90,7 @@ export const RemotionRoot: React.FC = () => (
       height={1920}
       calculateMetadata={({props}) => metadataFromProps(props)}
     />
+    <Composition id="MedAnimLiverEnzymeLeak" component={MedAnimLiverEnzymeLeak} durationInFrames={MEDANIM_LIVER_FRAMES}
+      fps={MEDANIM_FPS} width={1920} height={1080} />
   </>
 );
