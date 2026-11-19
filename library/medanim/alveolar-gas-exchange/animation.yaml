@@ -1,0 +1,232 @@
+schema_version: '1.0'
+id: alveolar-gas-exchange
+title: Trao đổi khí O₂ và CO₂ qua màng phế nang – mao mạch
+category: physiology
+summary: Minh họa dòng khí hít vào đi qua cây phế quản đến chùm phế nang, sự khuếch
+  tán thụ động O₂ vào máu gắn hemoglobin trên hồng cầu và thải CO₂ ra ngoài qua màng
+  phế nang – mao mạch mỏng, đồng thời mô tả phù kẽ làm dày rào khuếch tán và cản trở
+  trao đổi khí.
+target_duration_seconds: 35
+compositions:
+  landscape: MedAnimAlveolarGasExchange
+  portrait: null
+sources:
+- id: powers2023
+  pmid: '30969729'
+  pmcid: null
+  doi: null
+  citation: Powers KA, Dhamoon AS. Physiology, Pulmonary Ventilation and Perfusion.
+    StatPearls. 2023.
+  checked_in: abstract
+  url: https://europepmc.org/article/MED/30969729
+- id: makanya2013
+  pmid: '23484070'
+  pmcid: PMC3591247
+  doi: 10.1155/2013/101597
+  citation: 'Makanya A, Anagnostopoulou A, Djonov V. Development and remodeling of the
+    vertebrate blood-gas barrier. Biomed Res Int. 2013;2013:101597.'
+  checked_in: full_text
+  url: https://europepmc.org/article/PMC/PMC3591247
+- id: petersson2023
+  pmid: '37816345'
+  pmcid: null
+  doi: 10.1055/s-0043-1770060
+  citation: Petersson J, Glenny RW. Gas Exchange in the Lung. Semin Respir Crit Care
+    Med. 2023;44(5):555-568.
+  checked_in: abstract
+  url: https://europepmc.org/article/MED/37816345
+- id: patel2023
+  pmid: '30969637'
+  pmcid: null
+  doi: null
+  citation: Patel S, Jose A, Mohiuddin SS. Physiology, Oxygen Transport And Carbon Dioxide
+    Dissociation Curve. StatPearls. 2023.
+  checked_in: abstract
+  url: https://europepmc.org/article/MED/30969637
+- id: doyle2023
+  pmid: '30422582'
+  pmcid: null
+  doi: null
+  citation: Doyle J, Cooper JS. Physiology, Carbon Dioxide Transport. StatPearls. 2023.
+  checked_in: abstract
+  url: https://europepmc.org/article/MED/30422582
+- id: tetaj2026
+  pmid: '41590881'
+  pmcid: PMC12842350
+  doi: 10.3390/jcdd13010054
+  citation: 'Tetaj N, Capecchi G, Rubino D, et al. Respiratory Support in Cardiogenic
+    Pulmonary Edema: Clinical Insights from Cardiology and Intensive Care. J Cardiovasc
+    Dev Dis. 2026;13(1):54.'
+  checked_in: abstract
+  url: https://europepmc.org/article/PMC/PMC12842350
+- id: fermoyle2021
+  pmid: '34369164'
+  pmcid: PMC8475049
+  doi: 10.1161/jaha.120.019950
+  citation: 'Fermoyle CC, Stewart GM, Borlaug BA, Johnson BD. Simultaneous Measurement
+    of Lung Diffusing Capacity and Pulmonary Hemodynamics Reveals Exertional Alveolar-Capillary
+    Dysfunction in Heart Failure With Preserved Ejection Fraction. J Am Heart Assoc.
+    2021;10(16):e019950.'
+  checked_in: abstract
+  url: https://europepmc.org/article/PMC/PMC8475049
+steps:
+- id: B1
+  t_start: 0.0
+  t_end: 8.0
+  narration: Không khí hít vào đi qua cây phế quản tới hàng triệu phế nang bao quanh
+    bởi mạng lưới mao mạch phổi.
+  visual: Toàn cảnh phổi (bioicons-healthy-lung.svg) kết hợp ảnh thu nhỏ mạng mao mạch
+    phổi trên nền >= 60% khung; MagnifierZoom từ vùng nhu mô phổi ngoại vi mở sang chùm
+    phế nang (niaid-alveoli-14.svg) giữ sạch 60f trước nhãn "Chùm phế nang".
+  claim: Trao đổi khí diễn ra tại phổi giữa không khí trong phế nang và máu trong
+    mạng mao mạch phổi sát bên dưới biểu mô phế nang.
+  quotes:
+  - source_id: powers2023
+    quote: Gas exchange occurs in the lungs between alveolar air and the blood of
+      the pulmonary capillaries.
+    locator: Abstract
+  - source_id: makanya2013
+    quote: Subsequent diminution of interstitial tissue and apposition of capillaries
+      to the alveolar epithelium establish a thin BGB.
+    locator: Abstract
+- id: B2
+  t_start: 8.0
+  t_end: 16.0
+  narration: Qua màng phế nang mao mạch mỏng, khí oxy đi vào máu còn khí cacbonic thoát
+    ngược ra phế nang.
+  visual: MagnifierZoom thứ hai mở từ thành phế nang sang mặt cắt màng phế nang –
+    mao mạch gồm biểu mô phế nang (reactome-alveolus-R-ICO-014769.svg), khoảng kẽ mỏng
+    và nội mô mao mạch (reactome-endothelial-R-ICO-014492.svg), mũi tên khuếch tán
+    O₂ xuống máu và CO₂ ngược lên phế nang.
+  claim: Phần mỏng của hàng rào máu – khí dày khoảng 0.2–0.3 µm, tạo chênh lệch phân
+    áp giúp khuếch tán thụ động O₂ vào máu và loại bỏ CO₂ khỏi mao mạch phế nang.
+  quotes:
+  - source_id: makanya2013
+    quote: In humans, the thin side has a thickness of 0.2-0.3 μm and covers approximately
+      half of the alveolar wall [16].
+    locator: 2. Structure of the Blood-Gas Barrier in Vertebrates
+  - source_id: petersson2023
+    quote: This maintains alveolar partial pressures that promote passive diffusion
+      to add oxygen and remove carbon dioxide from blood in alveolar capillaries.
+    locator: Abstract
+- id: B3
+  t_start: 16.0
+  t_end: 24.0
+  narration: Trong mao mạch phổi, dòng hồng cầu nhận phân tử oxy để gắn lên hemoglobin
+    rồi thải cacbonic ra ngoài.
+  visual: Dòng hồng cầu (bioicons-erythrocyte.svg) di chuyển trong lòng mao mạch,
+    nhận hạt O₂ phát sáng viền teal (HbO₂) đồng thời giải phóng hạt CO₂ đi qua màng
+    lên phế nang theo nhịp thở ra.
+  claim: Oxy được vận chuyển chủ yếu nhờ gắn với phân tử hemoglobin trong hồng cầu,
+    trong khi khí cacbonic được vận chuyển về phổi để thở ra môi trường ngoài.
+  quotes:
+  - source_id: patel2023
+    quote: Oxygen is carried throughout the body primarily by a protein molecule,
+      hemoglobin, in red blood cells.
+    locator: Abstract
+  - source_id: doyle2023
+    quote: needs to be removed using transport to the lungs and subsequent expiration
+      out into the surrounding environment.
+    locator: Abstract
+- id: B4
+  t_start: 24.0
+  t_end: 32.0
+  narration: Khi phổi bị phù nề, dịch ứ ở khoảng kẽ làm rào trao đổi dày lên, khiến
+    oxy khó vào máu.
+  visual: Hình phù mao mạch (bioicons-edema-capillaries.svg) đặt cạnh mặt cắt rào khuếch
+    tán có lớp dịch kẽ dày lên rõ rệt đẩy nội mô xuống dưới, làm phân tử O₂ chậm lại
+    trong lớp dịch; mascot góc dưới nhắc lưu ý cơ chế.
+  claim: Tăng áp lực thủy tĩnh mao mạch phổi gây phù nề phá vỡ tính toàn vẹn hàng rào
+    phế nang – mao mạch và làm suy giảm độ dẫn khuếch tán khí.
+  quotes:
+  - source_id: tetaj2026
+    quote: elevated left-sided filling pressures that increase pulmonary capillary hydrostatic
+      pressure, disrupt alveolo-capillary barrier integrity, and impair gas exchange.
+    locator: Abstract
+  - source_id: fermoyle2021
+    quote: Lung diffusing capacity is lower at rest and during exercise in HFpEF due
+      to impaired gas conductance across the alveolar-capillary membrane.
+    locator: Abstract
+assets:
+- file: bioicons-healthy-lung.svg
+  source_page: https://github.com/duerrsimon/bioicons/blob/main/static/icons/cc-by-3.0/Human_physiology/Servier/healthy-lung.svg
+  original_url: https://raw.githubusercontent.com/duerrsimon/bioicons/main/static/icons/cc-by-3.0/Human_physiology/Servier/healthy-lung.svg
+  author: Servier
+  license: CC BY 3.0
+  sha256: 5eb617ecd58e6d2b545fe5ee1aa2de74209e0ec6d51dc31db1d4f7a93375b5a4
+  role: Phổi và cây phế quản cắt dọc (B1 tổng quan)
+  license_url: https://creativecommons.org/licenses/by/3.0/
+- file: bioicons-capillary.svg
+  source_page: https://github.com/duerrsimon/bioicons/blob/main/static/icons/cc-by-3.0/Human_physiology/Servier/capillary.svg
+  original_url: https://raw.githubusercontent.com/duerrsimon/bioicons/main/static/icons/cc-by-3.0/Human_physiology/Servier/capillary.svg
+  author: Servier
+  license: CC BY 3.0
+  sha256: ec581e615f25bcbb0eb29ead56d2ab5bce8efa76d672e8ddc0b57567f7d4f99c
+  role: Mạng mao mạch phổi (B1/B2)
+  license_url: https://creativecommons.org/licenses/by/3.0/
+- file: bioicons-erythrocyte.svg
+  source_page: https://github.com/duerrsimon/bioicons/blob/main/static/icons/cc-by-3.0/Blood_Immunology/Servier/erythrocyte.svg
+  original_url: https://raw.githubusercontent.com/duerrsimon/bioicons/main/static/icons/cc-by-3.0/Blood_Immunology/Servier/erythrocyte.svg
+  author: Servier
+  license: CC BY 3.0
+  sha256: 6f794ea5de4a5883e485ae300646ce019ed7cba2055d562b036e3f96cd7c9862
+  role: Hồng cầu mang hemoglobin gắn O₂ (B2/B3/B4)
+  license_url: https://creativecommons.org/licenses/by/3.0/
+- file: bioicons-edema-capillaries.svg
+  source_page: https://github.com/duerrsimon/bioicons/blob/main/static/icons/cc-by-3.0/Human_physiology/Servier/edema-capillaries.svg
+  original_url: https://raw.githubusercontent.com/duerrsimon/bioicons/main/static/icons/cc-by-3.0/Human_physiology/Servier/edema-capillaries.svg
+  author: Servier
+  license: CC BY 3.0
+  sha256: 3170312594a6a9ddd64cdc2230df2af7d9c717e9bab75278ce4df901c3e97c15
+  role: Dịch kẽ phù quanh mao mạch làm dày rào khuếch tán (B4)
+  license_url: https://creativecommons.org/licenses/by/3.0/
+- file: niaid-alveoli-14.svg
+  source_page: https://bioart.niaid.nih.gov/bioart/14
+  original_url: https://upload.wikimedia.org/wikipedia/commons/f/f5/Alveoli_%28NIH_BioArt_14%29.svg
+  author: NIAID Visual & Medical Arts (NIH BioArt 14)
+  license: Public Domain
+  sha256: 29f9ced1f4742c85c22565539d85d81d7cd1ef1dec0035f28d265cdde02aff98
+  role: Chùm phế nang (B1 kính lúp 1 / B2 bối cảnh)
+- file: reactome-alveolus-R-ICO-014769.svg
+  source_page: https://reactome.org/icon-lib/R-ICO-014769
+  original_url: https://reactome.org/icon/R-ICO-014769.svg
+  author: Reactome Icon Library
+  license: CC BY 4.0
+  sha256: cda3c49aa6745004805208886e0305bb93d4c27996c1786757f319f9445df762
+  role: Mặt cắt biểu mô phế nang (B2–B4)
+  license_url: https://reactome.org/license
+- file: reactome-endothelial-R-ICO-014492.svg
+  source_page: https://reactome.org/icon-lib/R-ICO-014492
+  original_url: https://reactome.org/icon/R-ICO-014492.svg
+  author: Reactome Icon Library
+  license: CC BY 4.0
+  sha256: d525c895db3c7aa37832786a877550e358fdab0b7a99456d53392c626a73fff4
+  role: Tế bào nội mô mao mạch phổi (B2–B4)
+  license_url: https://reactome.org/license
+medical_audit:
+  checked_claims: true
+  checked_anatomy: true
+  auditor_role: medical_expert
+  audited_at: '2026-11-19T12:40:00+07:00'
+  passed: true
+  notes: Đã đối chiếu 7 nguồn Europe PMC (Makanya 2013, Powers 2023, Petersson 2023,
+    Patel 2023, Doyle 2023, Tetaj 2026, Fermoyle 2021) và kiểm tra tính sạch của 7
+    SVG chuẩn giấy phép. Chờ bác sĩ duyệt ở cổng y khoa.
+open_issues:
+- id: alveolar-surfactant-and-type2-simplification
+  severity: doctor_confirmation
+  category: mechanism_simplification
+  steps:
+  - B2
+  - B4
+  summary: Mặt cắt hàng rào máu – khí tập trung vào lớp biểu mô phế nang, khoảng kẽ
+    và nội mô mao mạch; lược bớt lớp surfactant bề mặt và phế bào II để giữ sơ đồ khuếch
+    tán rõ cho người xem phổ thông.
+  doctor_action_needed: Bác sĩ xác nhận mức đơn giản hóa sơ đồ màng phế nang – mao
+    mạch ở bước B2–B4.
+preview_frames:
+- previews/b1.png
+- previews/b2.png
+- previews/b3.png
+- previews/b4.png
+- previews/credits.png

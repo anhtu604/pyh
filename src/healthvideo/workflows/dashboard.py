@@ -45,6 +45,7 @@ from healthvideo.workflows import (
     decision_card,
     factory,
     feedback_inbox,
+    medanim_library,
     product_review,
     production_retry,
     researcher,
@@ -1837,6 +1838,78 @@ class PinLimiter:
             raise PermissionError(f'PIN không đúng (còn {MAX_PIN_FAILURES - self.failures} lần thử).')
 
 
+def medanim_catalog_payload(root: Path) -> dict:
+    """List reusable medical animations and doctor PIN/reviewer readiness."""
+    items = medanim_library.list_medanim_library(root)
+    counts = Counter(str(item.get('status') or 'invalid') for item in items)
+    return {
+        'items': items,
+        'total': len(items),
+        'approved_count': counts.get('approved', 0),
+        'pending_count': counts.get('pending', 0),
+        'needs_reapproval_count': counts.get('needs_reapproval', 0),
+        'rejected_count': counts.get('rejected', 0),
+        'invalid_count': counts.get('invalid', 0),
+        'pin_set': pin_path().is_file(),
+        'reviewer': reviewer_name(),
+    }
+
+
+def medanim_decide(
+    root: Path,
+    anim_id: str,
+    action: str,
+    body: dict,
+    *,
+    limiter: PinLimiter,
+    verify: Callable[[str], bool] | None = None,
+    now: Callable[[], datetime] = lambda: datetime.now().astimezone(),
+) -> dict:
+    """Approve or reject a medical animation library entry after PIN verification."""
+    if action not in {'approve', 'reject'}:
+        raise LookupError('Không có thao tác này')
+    reviewer = reviewer_name() or str(body.get('reviewer', '')).strip()
+    if not reviewer:
+        raise ValueError('Nhập tên bác sĩ duyệt.')
+    reason = str(body.get('reason', '')).strip()
+    if action == 'reject' and not reason:
+        raise ValueError('Nhập lý do từ chối hoặc yêu cầu sửa.')
+    pin_file = pin_path()
+    if not pin_file.is_file():
+        raise ValueError('Chưa đặt PIN; chạy healthvideo review set-pin một lần.')
+    pin = str(body.get('pin', ''))
+    limiter.check(pin, verify or (lambda value: verify_pin(value, path=pin_file)))
+    if not _operator_config().exists():
+        write_yaml_atomic(_operator_config(), {'reviewer': reviewer})
+    if action == 'approve':
+        record = medanim_library.approve_medanim_entry(
+            root,
+            anim_id,
+            reviewer=reviewer,
+            pin=pin,
+            note=str(body.get('note', '')),
+            pin_file=pin_file,
+            now=now(),
+        )
+        return {
+            'approval': record.model_dump(mode='json'),
+            'message': f'Đã duyệt hoạt cảnh {anim_id}.',
+        }
+    record = medanim_library.reject_medanim_entry(
+        root,
+        anim_id,
+        reviewer=reviewer,
+        reason=reason,
+        pin=pin,
+        pin_file=pin_file,
+        now=now(),
+    )
+    return {
+        'rejection': record.model_dump(mode='json'),
+        'message': f'Đã từ chối hoạt cảnh {anim_id}.',
+    }
+
+
 def decide(root: Path, project_dir: Path, body: dict, *, limiter: PinLimiter,
            verify: Callable[[str], bool] | None = None,
            now: Callable[[], datetime] = lambda: datetime.now().astimezone()) -> str:
@@ -2010,6 +2083,10 @@ class _Handler(BaseHTTPRequestHandler):
                 self._json({'entries': feedback_inbox.view(self.server.root)})
             elif path == '/api/standards':
                 self._json({'entries': standards.load(self.server.root)[::-1]})
+            elif path == '/api/medanim':
+                self._json(medanim_catalog_payload(self.server.root))
+            elif len(parts) >= 5 and parts[:2] == ['api', 'medanim'] and parts[3] == 'preview':
+                self._file(medanim_library.resolve_medanim_preview(self.server.root, parts[2], '/'.join(parts[4:])))
             elif len(parts) == 4 and parts[0] == 'api' and parts[1] in {'project', 'projects'} and parts[3] == 'card':
                 project_dir, _ = self.server.project_dir(parts[2])
                 self._json(_gate_card_with_style(project_dir))
@@ -2190,6 +2267,8 @@ class DashboardServer(ThreadingHTTPServer):
     def dispatch(self, parts: list[str], body: dict | None = None) -> str | dict:
         if parts == ['api', 'studio']:
             return self.start_studio()
+        if len(parts) == 4 and parts[:2] == ['api', 'medanim'] and parts[3] in {'approve', 'reject'}:
+            return medanim_decide(self.root, parts[2], parts[3], body or {}, limiter=self.limiter)
         extra = dashboard_operations.post_route(self, parts, body or {})
         if extra is not None:
             return extra

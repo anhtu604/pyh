@@ -1,0 +1,262 @@
+schema_version: '1.0'
+id: atherosclerotic-plaque-rupture
+title: Tích tụ LDL dưới nội mô, mảng xơ vữa và huyết khối khi nứt vỡ bao xơ
+category: pathology
+summary: Minh họa quá trình hình thành và biến chứng của mảng xơ vữa động mạch vành
+  từ thấm giữ và oxy hóa hạt LDL dưới lớp nội mô tổn thương, thu hút bạch cầu đơn
+  nhân tạo tế bào bọt, tụ lõi hoại tử dưới bao xơ collagen do tế bào cơ trơn tổng hợp,
+  đến nứt vỡ bao xơ gây kết tập tiểu cầu và fibrin tạo huyết khối bít lòng mạch.
+target_duration_seconds: 35
+compositions:
+  landscape: MedAnimAtheroscleroticPlaqueRupture
+  portrait: null
+sources:
+- id: jebari2022
+  pmid: '35328769'
+  pmcid: PMC8954705
+  doi: 10.3390/ijms23063346
+  citation: 'Jebari-Benslaiman S, Galicia-García U, Larrea-Sebal A, et al. Pathophysiology
+    of Atherosclerosis. Int J Mol Sci. 2022;23(6):3346.'
+  checked_in: full_text
+  url: https://europepmc.org/article/PMC/PMC8954705
+- id: henein2022
+  pmid: '36361701'
+  pmcid: PMC9658900
+  doi: 10.3390/ijms232112906
+  citation: 'Henein MY, Vancheri S, Longo G, Vancheri F. The Role of Inflammation
+    in Cardiovascular Disease. Int J Mol Sci. 2022;23(21):12906.'
+  checked_in: abstract
+  url: https://europepmc.org/article/PMC/PMC9658900
+- id: boren2020
+  pmid: '32052833'
+  pmcid: PMC7308544
+  doi: 10.1093/eurheartj/ehz962
+  citation: Borén J, Chapman MJ, Krauss RM, et al. Low-density lipoproteins cause
+    atherosclerotic cardiovascular disease. Eur Heart J. 2020;41(24):2313-2330.
+  checked_in: full_text
+  url: https://europepmc.org/article/PMC/PMC7308544
+- id: wirka2019
+  pmid: '31359001'
+  pmcid: PMC7274198
+  doi: 10.1038/s41591-019-0512-5
+  citation: Wirka RC, Wagh D, Paik DT, et al. Atheroprotective roles of smooth muscle
+    cell phenotypic modulation and the TCF21 disease gene as revealed by single-cell
+    analysis. Nat Med. 2019;25(8):1280-1289.
+  checked_in: abstract
+  url: https://europepmc.org/article/PMC/PMC7274198
+steps:
+- id: B1
+  t_start: 0.0
+  t_end: 8.0
+  narration: Khi lớp nội mô động mạch vành suy yếu, nhiều hạt LDL thấm xuống dưới
+    và bị oxy hóa.
+  visual: Tim và hệ động mạch vành (niaid-heart-228.svg) kèm lát cắt các lớp thành
+    động mạch (bioicons-vascular-tunic-artery.svg); MagnifierZoom từ động mạch vành
+    mở sang mặt cắt lớp áo trong với nội mô (reactome-endothelial-R-ICO-014492.svg),
+    LDL (bioicons-ldl-1.svg) thấm xuống chuyển thành oxLDL (bioicons-lipid-ldl-1.svg)
+    sau 60f giữ hình.
+  claim: Xơ vữa động mạch khởi phát khi rối loạn chức năng nội mô đi kèm thấm giữ
+    và oxy hóa các hạt lipoprotein tỷ trọng thấp (LDL) trong lớp áo trong.
+  quotes:
+  - source_id: jebari2022
+    quote: Atherosclerosis initiates upon endothelial dysfunction accompanied by low-density
+      lipoprotein (LDL) retention and its modification in the intima [17,18].
+    locator: 3. Atherosclerosis Initiation and Fatty Streak Formation
+  - source_id: henein2022
+    quote: Within the arterial wall, low-density lipoprotein cholesterol undergoes
+      an oxidation.
+    locator: Abstract
+- id: B2
+  t_start: 8.0
+  t_end: 16.0
+  narration: Bạch cầu đơn nhân xuyên qua thành mạch, nuốt LDL oxy hóa và biến thành
+    tế bào bọt.
+  visual: Mặt cắt thành mạch mở rộng >= 60% khung cho thấy bạch cầu đơn nhân (bioicons-monocyte.svg)
+    xuyên khe nội mô vào lớp áo trong, thu nhận hạt oxLDL và biệt hóa thành các tế
+    bào bọt giàu lipid (bioicons-foam-cell-1.svg).
+  claim: Bạch cầu đơn nhân xâm nhập lớp áo trong biệt hóa thành đại thực bào, bắt giữ
+    mạnh LDL biến đổi và hình thành tế bào bọt.
+  quotes:
+  - source_id: jebari2022
+    quote: Once in the intima, monocytes are differentiated into macrophages that can
+      be polarized to the M1 (pro-inflammatory) or M2 (anti-inflammatory) phenotype
+      [141,142].
+    locator: 3.4. Monocyte Recruitment and Foam Cell Formation
+  - source_id: jebari2022
+    quote: Modified LDLs are avidly captured by differentiated monocytes and VSMC,
+      which promote foam cell formation [19,20].
+    locator: 3. Atherosclerosis Initiation and Fatty Streak Formation
+- id: B3
+  t_start: 16.0
+  t_end: 24.0
+  narration: Tế bào bọt tụ thành lõi hoại tử giàu mỡ, phía trên được che bởi bao xơ
+    sợi collagen.
+  visual: Các tế bào bọt hợp nhất thành lõi hoại tử giàu lipid nâng vòm thành mạch
+    lên phía lòng mạch; tế bào cơ trơn (bioicons-smooth-muscle-fiber.svg) di cư phủ
+    lớp sợi collagen (bioicons-collagen-1.svg) tạo bao xơ bảo vệ phía trên.
+  claim: Đại thực bào thoái hóa tụ thành lõi hoại tử giàu lipid được bao bọc bởi bao
+    xơ sợi collagen có sự tham gia bảo vệ của tế bào cơ trơn biến đổi.
+  quotes:
+  - source_id: henein2022
+    quote: Macrophages catabolize the oxidized lipoproteins and coalesce into a lipid-rich
+      necrotic core, encapsulated by a collagen fibrous cap, leading to the formation
+      of fibro-atheroma.
+    locator: Abstract
+  - source_id: wirka2019
+    quote: In response to various stimuli, vascular smooth muscle cells (SMCs) can
+      de-differentiate, proliferate and migrate in a process known as phenotypic modulation.
+    locator: Abstract
+- id: B4
+  t_start: 24.0
+  t_end: 32.0
+  narration: Khi bao xơ mỏng nứt vỡ, tiểu cầu kết tập cùng sợi fibrin lập tức tạo cục
+    huyết khối bít lòng mạch.
+  visual: Vết nứt bao xơ và tách lớp nội mô được dựng bằng SVG <mask> mềm tự nhiên;
+    lõi hoại tử phơi bày kích hoạt tiểu cầu (reactome-platelet-active-R-ICO-014907.svg
+    và niaid-platelet-415.svg) kết tập cùng mạng fibrin (bioicons-fibrin-1.svg) và
+    hồng cầu (niaid-red-blood-cell-442.svg) tạo cục huyết khối cản dòng máu kèm mascot
+    góc.
+  claim: Bao xơ mỏng dần trở nên dễ tổn thương; khi nứt vỡ, khoang dưới nội mô tiếp
+    xúc trực tiếp với máu làm tiểu cầu nhanh chóng hoạt hóa, kết tập và khởi phát
+    huyết khối.
+  quotes:
+  - source_id: henein2022
+    quote: macrophages exert a catabolic effect on the fibrous cap, resulting in a
+      thin-cap fibro-atheroma which makes the plaque vulnerable.
+    locator: Abstract
+  - source_id: jebari2022
+    quote: When the plaque fissures or ruptures, the subendothelial space is exposed
+      to blood, triggering a coagulation process to cover the wound [186,236].
+    locator: 5.2. Plaque Rupture and Thrombus Formation
+  - source_id: boren2020
+    quote: Thrombosis evolves with a predominance of platelets that are rapidly activated
+      and recruited from the blood to the growing thrombus.
+    locator: Which plaque components favour a thrombotic reaction upon rupture?
+assets:
+- file: bioicons-vascular-tunic-artery.svg
+  source_page: https://github.com/duerrsimon/bioicons/blob/main/static/icons/cc-by-3.0/Human_physiology/Servier/vascular-tunic-artery.svg
+  original_url: https://raw.githubusercontent.com/duerrsimon/bioicons/main/static/icons/cc-by-3.0/Human_physiology/Servier/vascular-tunic-artery.svg
+  author: Servier
+  license: CC BY 3.0
+  sha256: 6e478f054508444b5684bfb7e6dcf20f0f5697edb3d8251410080106fcb09eae
+  role: Cấu trúc các lớp thành động mạch (B1 tổng quan)
+  license_url: https://creativecommons.org/licenses/by/3.0/
+- file: bioicons-ldl-1.svg
+  source_page: https://github.com/duerrsimon/bioicons/blob/main/static/icons/cc-by-3.0/Blood_Immunology/Servier/ldl-1.svg
+  original_url: https://raw.githubusercontent.com/duerrsimon/bioicons/main/static/icons/cc-by-3.0/Blood_Immunology/Servier/ldl-1.svg
+  author: Servier
+  license: CC BY 3.0
+  sha256: c7302dd670b68d2869fc61c2d1b5bb3cd82c1267e17095c8d58c5b35da5d6856
+  role: Hạt lipoprotein tỷ trọng thấp LDL (B1)
+  license_url: https://creativecommons.org/licenses/by/3.0/
+- file: bioicons-lipid-ldl-1.svg
+  source_page: https://github.com/duerrsimon/bioicons/blob/main/static/icons/cc-by-3.0/Human_physiology/Servier/lipid-ldl-1.svg
+  original_url: https://raw.githubusercontent.com/duerrsimon/bioicons/main/static/icons/cc-by-3.0/Human_physiology/Servier/lipid-ldl-1.svg
+  author: Servier
+  license: CC BY 3.0
+  sha256: 7eccd678a4df55b5905347a4257c94d05ab884cba62436bbd8954994ab3154e9
+  role: Hạt LDL oxy hóa oxLDL tích tụ dưới nội mô (B1/B2)
+  license_url: https://creativecommons.org/licenses/by/3.0/
+- file: bioicons-monocyte.svg
+  source_page: https://github.com/duerrsimon/bioicons/blob/main/static/icons/cc-by-3.0/Blood_Immunology/Servier/monocyte.svg
+  original_url: https://raw.githubusercontent.com/duerrsimon/bioicons/main/static/icons/cc-by-3.0/Blood_Immunology/Servier/monocyte.svg
+  author: Servier
+  license: CC BY 3.0
+  sha256: e163fa6bd355143528ef3707be0b536d339001d27f23d88e4eef0b314ac8f43c
+  role: Bạch cầu đơn nhân xuyên thành mạch (B2)
+  license_url: https://creativecommons.org/licenses/by/3.0/
+- file: bioicons-foam-cell-1.svg
+  source_page: https://github.com/duerrsimon/bioicons/blob/main/static/icons/cc-by-3.0/Blood_Immunology/Servier/foam-cell-1.svg
+  original_url: https://raw.githubusercontent.com/duerrsimon/bioicons/main/static/icons/cc-by-3.0/Blood_Immunology/Servier/foam-cell-1.svg
+  author: Servier
+  license: CC BY 3.0
+  sha256: 2656af163080fc863089aab157e9b737917fe533004b35dca45bbcd6c2ed5b79
+  role: Tế bào bọt giàu lipid từ đại thực bào (B2–B4)
+  license_url: https://creativecommons.org/licenses/by/3.0/
+- file: bioicons-smooth-muscle-fiber.svg
+  source_page: https://github.com/duerrsimon/bioicons/blob/main/static/icons/cc-by-3.0/Human_physiology/Servier/smooth-muscle-fiber.svg
+  original_url: https://raw.githubusercontent.com/duerrsimon/bioicons/main/static/icons/cc-by-3.0/Human_physiology/Servier/smooth-muscle-fiber.svg
+  author: Servier
+  license: CC BY 3.0
+  sha256: 6c758f53c5795c047e5bac9639ffee881968edd541d0d9edd87617a205590462
+  role: Tế bào cơ trơn thành mạch di cư (B1–B4)
+  license_url: https://creativecommons.org/licenses/by/3.0/
+- file: bioicons-collagen-1.svg
+  source_page: https://github.com/duerrsimon/bioicons/blob/main/static/icons/cc-by-3.0/Tissues/Servier/collagen-1.svg
+  original_url: https://raw.githubusercontent.com/duerrsimon/bioicons/main/static/icons/cc-by-3.0/Tissues/Servier/collagen-1.svg
+  author: Servier
+  license: CC BY 3.0
+  sha256: 4960273ee7ce9aaaa25e5cc402f0ac985dc7c3beadd514cf8f4ea058bd6046d0
+  role: Sợi collagen tạo bao xơ mảng xơ vữa (B3/B4)
+  license_url: https://creativecommons.org/licenses/by/3.0/
+- file: bioicons-fibrin-1.svg
+  source_page: https://github.com/duerrsimon/bioicons/blob/main/static/icons/cc-by-3.0/Blood_Immunology/Servier/fibrin-1.svg
+  original_url: https://raw.githubusercontent.com/duerrsimon/bioicons/main/static/icons/cc-by-3.0/Blood_Immunology/Servier/fibrin-1.svg
+  author: Servier
+  license: CC BY 3.0
+  sha256: ddb6cbd4a818d918c768b3f350874939e62b03c1338e235865b5fd64cfd12e1c
+  role: Sợi fibrin mạng đông huyết khối (B4)
+  license_url: https://creativecommons.org/licenses/by/3.0/
+- file: niaid-heart-228.svg
+  source_page: https://bioart.niaid.nih.gov/bioart/228
+  original_url: https://bioart.niaid.nih.gov/api/bioarts/228/files/630873
+  author: NIAID Visual & Medical Arts — Ryan Kissinger (Courtesy of NIAID)
+  license: Public Domain
+  sha256: e2260fd13db30aae8f5a4ab4df1fbbf3582c6599315b8380cac08bfe832d9aa9
+  role: Tim và hệ động mạch vành (B1 tổng quan)
+- file: reactome-endothelial-R-ICO-014492.svg
+  source_page: https://reactome.org/icon-lib/R-ICO-014492
+  original_url: https://reactome.org/icon/R-ICO-014492.svg
+  author: Reactome Icon Library
+  license: CC BY 4.0
+  sha256: d525c895db3c7aa37832786a877550e358fdab0b7a99456d53392c626a73fff4
+  role: Lớp tế bào nội mô thành mạch (B1–B4)
+  license_url: https://reactome.org/license
+- file: reactome-platelet-active-R-ICO-014907.svg
+  source_page: https://reactome.org/icon-lib/R-ICO-014907
+  original_url: https://reactome.org/icon/R-ICO-014907.svg
+  author: Reactome Icon Library
+  license: CC BY 4.0
+  sha256: fe636e2d5edfad83b597893355f10290738f9d7f436aed9357cff74dc64a040b
+  role: Tiểu cầu hoạt hóa kết tập tại vết nứt bao xơ (B4)
+  license_url: https://reactome.org/license
+- file: niaid-platelet-415.svg
+  source_page: https://bioart.niaid.nih.gov/bioart/415
+  original_url: https://upload.wikimedia.org/wikipedia/commons/7/75/Platelet_%28NIH_BioArt_415_-_633719%29.svg
+  author: NIAID Visual & Medical Arts (NIH BioArt 415)
+  license: Public Domain
+  sha256: d55a9ee86a3e452abd081764f33d96498e0ee7697723025370f3160e9a13b528
+  role: Tiểu cầu trong huyết khối động mạch (B4)
+- file: niaid-red-blood-cell-442.svg
+  source_page: https://bioart.niaid.nih.gov/bioart/442
+  original_url: https://bioart.niaid.nih.gov/api/bioarts/442/files/634619
+  author: NIAID Visual & Medical Arts — Ryan Kissinger (Courtesy of NIAID)
+  license: Public Domain
+  sha256: 964dae2e047f674c0b352cf50b1ef7b4c0f11934697b93d281b57239178d04b3
+  role: Hồng cầu trong dòng máu và cục huyết khối (B1–B4)
+medical_audit:
+  checked_claims: true
+  checked_anatomy: true
+  auditor_role: medical_expert
+  audited_at: '2026-11-19T12:40:00+07:00'
+  passed: true
+  notes: Đã đối chiếu 4 nguồn Europe PMC (Jebari-Benslaiman 2022, Henein 2022, Borén
+    2020, Wirka 2019); xác nhận 13 SVG sạch không text/script nhúng. Chờ bác sĩ duyệt
+    ở cổng y khoa.
+open_issues:
+- id: vsmc-cap-fibromyocyte-and-erosion-distinction
+  severity: doctor_confirmation
+  category: mechanism_simplification
+  steps:
+  - B3
+  - B4
+  summary: Minh họa tập trung vào biến chứng nứt vỡ bao xơ mỏng dẫn đến huyết khối
+    trên mảng xơ vữa vành; chưa tách nhánh xói mòn mảng xơ vữa hay vôi hóa nặng.
+  doctor_action_needed: Bác sĩ xác nhận phạm vi tập trung vào cơ chế nứt vỡ bao xơ
+    xơ vữa.
+preview_frames:
+- previews/b1.png
+- previews/b2.png
+- previews/b3.png
+- previews/b4.png
+- previews/credits.png

@@ -1,0 +1,186 @@
+schema_version: '1.0'
+id: macrophage-phagocytosis
+title: Đại thực bào nhận diện, nuốt vi khuẩn và hợp nhất phagolysosome
+category: microbiology
+summary: Minh họa đại thực bào dùng thụ thể PRR nhận diện PAMP bề mặt vi khuẩn, vươn
+  chân giả actin ôm gọn tạo túi thực bào, hợp nhất với lysosome axit hóa nhờ bơm V-ATPase
+  và tiêu hủy vi khuẩn bên trong bằng ROS và enzym thủy phân mà vẫn giữ nguyên vẹn
+  màng tế bào.
+target_duration_seconds: 35
+compositions:
+  landscape: MedAnimMacrophagePhagocytosis
+  portrait: null
+sources:
+- id: uribe2020
+  pmid: '32582172'
+  pmcid: PMC7280488
+  doi: 10.3389/fimmu.2020.01066
+  citation: Uribe-Querol E, Rosales C. Phagocytosis Our Current Understanding of a
+    Universal Biological Process. Front Immunol. 2020;11:1066.
+  checked_in: full_text
+  url: https://europepmc.org/article/PMC/PMC7280488
+- id: vieira2002
+  pmid: '12061891'
+  pmcid: PMC1222826
+  doi: 10.1042/bj20020691
+  citation: Vieira OV, Botelho RJ, Grinstein S. Phagosome maturation aging gracefully.
+    Biochem J. 2002;366(Pt 3):689-704.
+  checked_in: abstract
+  url: https://europepmc.org/article/PMC/PMC1222826
+steps:
+- id: B1
+  t_start: 0.0
+  t_end: 8.0
+  narration: Đại thực bào tuần tra mô, dùng thụ thể nhận diện khuôn mẫu gắn lên phân
+    tử bề mặt vi khuẩn.
+  visual: Toàn cảnh đại thực bào (niaid-macrophage-308.svg) tiếp cận vi khuẩn (bioicons-generic-bacterium.svg)
+    trên nền >= 60% khung; MagnifierZoom từ vùng tiếp xúc màng mở sang chi tiết thụ
+    thể PRR gắn phân tử PAMP và giữ sạch 60f trước khi hiện nhãn.
+  claim: Các thụ thể nhận diện khuôn mẫu (PRR) nhận diện trực tiếp các mẫu phân tử
+    gắn mầm bệnh (PAMP) trên bề mặt vi khuẩn để khởi phát thực bào.
+  quotes:
+  - source_id: uribe2020
+    quote: Receptors directly recognizing pathogen-associated molecular patterns (PAMPs)
+      are the pattern-recognition receptors (PRRs).
+    locator: Detection of the Target Particle
+- id: B2
+  t_start: 8.0
+  t_end: 16.0
+  narration: Màng tế bào vươn chân giả bao bọc vi khuẩn rồi khép kín, tạo thành túi
+    thực bào bên trong.
+  visual: Cảnh song song trong đại thực bào cho thấy chân giả actin (bioicons-engulfing-membrane.svg
+    kèm sợi F-actin teal) ôm bắt vi khuẩn, rồi khép kín thành túi thực bào (bioicons-phagocytosis-2d.svg)
+    với nhãn xuất hiện tuần tự từng thẻ.
+  claim: Quá trình trùng hợp sợi F-actin tạo chân giả vươn ôm kín mục tiêu để hình
+    thành không bào bắt nguồn từ màng sinh chất gọi là túi thực bào.
+  quotes:
+  - source_id: uribe2020
+    quote: Then, pseudopods are formed around the particle until the membrane completely
+      covers the particle to form a new phagosome inside the cell.
+    locator: Activation of the Internalization Process
+  - source_id: vieira2002
+    quote: The initial stage of the elimination process is the internalization of the
+      particles into a plasma membrane-derived vacuole known as the phagosome.
+    locator: Abstract
+- id: B3
+  t_start: 16.0
+  t_end: 24.0
+  narration: Túi thực bào trưởng thành hợp nhất với lysosome, bơm proton axit hóa lòng
+    túi tạo phagolysosome.
+  visual: MagnifierZoom thứ hai từ túi thực bào mở sang cận cảnh túi thực bào (bioicons-vacuole-blue.svg)
+    hợp nhất nhiều lysosome (reactome-lysosome-R-ICO-012966.svg), thể hiện chú giải
+    bơm V-ATPase và enzym thủy phân sau 60f giữ hình.
+  claim: Ở giai đoạn cuối của quá trình trưởng thành, túi thực bào hợp nhất với lysosome
+    thành phagolysosome có môi trường rất axit (pH xuống tới 4.5) nhờ tích tụ bơm V-ATPase.
+  quotes:
+  - source_id: uribe2020
+    quote: At the last stage of phagosome maturation, phagosomes fuse with lysosomes
+      to become phagolysosomes (3).
+    locator: Phagolysosome
+  - source_id: uribe2020
+    quote: First, phagolysosomes are very acidic (pH as low as 4.5) due to the accumulation
+      of many V-ATPase molecules on their membrane (136).
+    locator: Phagolysosome
+- id: B4
+  t_start: 24.0
+  t_end: 32.0
+  narration: Gốc oxy hóa mạnh và enzym thủy phân tiêu hủy vi khuẩn an toàn, không làm
+    vỡ màng tế bào.
+  visual: Trong lòng phagolysosome kín, vi khuẩn phân giải mềm qua SVG <mask> dưới
+    tác động của hạt ROS và enzym thủy phân; bên phải đặt thẻ chu trình thực bào (bioicons-phagocytosis.svg)
+    cho thấy đại thực bào sống sót nguyên vẹn cùng mascot góc.
+  claim: Phagolysosome mang phức hợp NADPH oxidase tạo gốc oxy hóa (ROS) và nhiều enzym
+    thủy phân (cathepsin, protease, lysozyme, lipase) để phân hủy vi khuẩn bị nuốt
+    vào.
+  quotes:
+  - source_id: uribe2020
+    quote: The phagolysosome membrane also presents the NADPH oxidase complex, that
+      is responsible for producing reactive oxygen species (ROS), such as superoxide
+      (O2−) (137, 138).
+    locator: Phagolysosome
+  - source_id: uribe2020
+    quote: In addition, the phagolysosome contains several hydrolytic enzymes, such
+      as cathepsins, proteases, lysozymes, and lipases, which contribute to degrade
+      ingested microorganisms (135) (Figure 6).
+    locator: Phagolysosome
+assets:
+- file: bioicons-generic-bacterium.svg
+  source_page: https://github.com/duerrsimon/bioicons/blob/main/static/icons/cc-0/Microbiology/Pauline_Franz/generic-bacterium.svg
+  original_url: https://raw.githubusercontent.com/duerrsimon/bioicons/main/static/icons/cc-0/Microbiology/Pauline_Franz/generic-bacterium.svg
+  author: Pauline Franz
+  license: CC0
+  sha256: 09006cb4996ca4176e1722e8ff22f3568b852718898538be4204ed8b66743115
+  role: Vi khuẩn trực khuẩn mang kháng nguyên bề mặt (B1–B4)
+  license_url: https://creativecommons.org/publicdomain/zero/1.0/
+- file: bioicons-engulfing-membrane.svg
+  source_page: https://github.com/duerrsimon/bioicons/blob/main/static/icons/cc-by-4.0/Cell_membrane/Helicase_11/engulfing_membrane.svg
+  original_url: https://raw.githubusercontent.com/duerrsimon/bioicons/main/static/icons/cc-by-4.0/Cell_membrane/Helicase_11/engulfing_membrane.svg
+  author: Helicase 11
+  license: CC BY 4.0
+  sha256: 7262d85bf12ac08645f271f1db643a187f5f225ae9db6424a092b4d26bb7f618
+  role: Màng chân giả đang ôm bắt mục tiêu (B1/B2)
+  license_url: https://creativecommons.org/licenses/by/4.0/
+- file: bioicons-phagocytosis-2d.svg
+  source_page: https://github.com/duerrsimon/bioicons/blob/main/static/icons/cc-by-3.0/Cell_membrane/Servier/phagocytosis-2d.svg
+  original_url: https://raw.githubusercontent.com/duerrsimon/bioicons/main/static/icons/cc-by-3.0/Cell_membrane/Servier/phagocytosis-2d.svg
+  author: Servier
+  license: CC BY 3.0
+  sha256: 155b783c1036eb82e41262fea3457dcdb810c63827c463e2c8ef26f373ac4897
+  role: Mặt cắt 2D tạo hốc thực bào và túi thực bào (B2)
+  license_url: https://creativecommons.org/licenses/by/3.0/
+- file: bioicons-vacuole-blue.svg
+  source_page: https://github.com/duerrsimon/bioicons/blob/main/static/icons/cc-by-3.0/Cell_membrane/Servier/emptycell-vacuole-blue-1.svg
+  original_url: https://raw.githubusercontent.com/duerrsimon/bioicons/main/static/icons/cc-by-3.0/Cell_membrane/Servier/emptycell-vacuole-blue-1.svg
+  author: Servier
+  license: CC BY 3.0
+  sha256: bfe07513cfdf01f075b313035a18008876b133fc37d5907451f96d03641253d0
+  role: Túi thực bào trưởng thành trước hợp nhất (B3/B4)
+  license_url: https://creativecommons.org/licenses/by/3.0/
+- file: bioicons-phagocytosis.svg
+  source_page: https://github.com/duerrsimon/bioicons/blob/main/static/icons/cc-by-3.0/Cell_membrane/Servier/phagocytosis.svg
+  original_url: https://raw.githubusercontent.com/duerrsimon/bioicons/main/static/icons/cc-by-3.0/Cell_membrane/Servier/phagocytosis.svg
+  author: Servier
+  license: CC BY 3.0
+  sha256: 9430e0d2cc9114c9abc46b29f33cc587580c3ade2599dcafc7228d4743329367
+  role: Chu trình thực bào và hợp nhất phagolysosome (B4)
+  license_url: https://creativecommons.org/licenses/by/3.0/
+- file: niaid-macrophage-308.svg
+  source_page: https://bioart.niaid.nih.gov/bioart/308
+  original_url: https://upload.wikimedia.org/wikipedia/commons/f/fb/Macrophage_%28NIH_BioArt_308%29.svg
+  author: NIAID Visual & Medical Arts (NIH BioArt 308)
+  license: Public Domain
+  sha256: 2f9208eaf4d52a535295fb875437acfd109137c915dc03a127aee242092cbbc5
+  role: Đại thực bào với chân giả (B1 tổng quan)
+- file: reactome-lysosome-R-ICO-012966.svg
+  source_page: https://reactome.org/icon-lib/R-ICO-012966
+  original_url: https://reactome.org/icon/R-ICO-012966.svg
+  author: Reactome Icon Library
+  license: CC BY 4.0
+  sha256: 2157e2aef523251fd68f967b3308c68f85fee1b37d2dd7313abb0257cbd600b5
+  role: Lysosome axit chứa enzym thủy phân (B3/B4)
+  license_url: https://reactome.org/license
+medical_audit:
+  checked_claims: true
+  checked_anatomy: true
+  auditor_role: medical_expert
+  audited_at: '2026-11-19T12:40:00+07:00'
+  passed: true
+  notes: Đã đối chiếu Uribe-Querol & Rosales 2020 (PMC7280488) và Vieira et al. 2002
+    (PMC1222826); kiểm tra 7 SVG không chứa script hay text nhúng. Chờ bác sĩ duyệt
+    ở cổng y khoa.
+open_issues:
+- id: opsonin-receptor-vs-direct-prr
+  severity: doctor_confirmation
+  category: mechanism_simplification
+  steps:
+  - B1
+  summary: Minh họa tập trung vào thụ thể PRR gắn trực tiếp PAMP bề mặt vi khuẩn (như
+    Dectin-1/scavenger receptor); lược bớt nhánh opsonin hóa qua FcγR/bổ thể để giữ
+    khung hình gọn.
+  doctor_action_needed: Bác sĩ xác nhận mức đơn giản hóa thụ thể nhận diện ở B1.
+preview_frames:
+- previews/b1.png
+- previews/b2.png
+- previews/b3.png
+- previews/b4.png
+- previews/credits.png

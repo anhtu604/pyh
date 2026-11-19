@@ -1810,3 +1810,142 @@ def test_video_gate_card_surfaces_station_12_pyh_style_score(tmp_path, monkeypat
     finally:
         srv.shutdown()
         srv.server_close()
+
+
+def test_medanim_dashboard_api_preview_and_pin_approve_reject(tmp_path, monkeypatch):
+    from datetime import UTC, datetime
+
+    from healthvideo.approver_pin import set_pin
+    from healthvideo.storage.files import sha256_file, write_yaml_atomic
+    from healthvideo.workflows import medanim_library
+
+    entry_dir = tmp_path / 'library' / 'medanim' / 'alveolar-gas-exchange'
+    (entry_dir / 'assets').mkdir(parents=True, exist_ok=True)
+    (entry_dir / 'previews').mkdir(parents=True, exist_ok=True)
+    svg_path = entry_dir / 'assets' / 'alveolus.svg'
+    svg_path.write_bytes(b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"/>\n')
+    png_bytes = b'\x89PNG\r\n\x1a\npreview'
+    (entry_dir / 'previews' / 'b1.png').write_bytes(png_bytes)
+
+    write_yaml_atomic(entry_dir / 'animation.yaml', {
+        'schema_version': '1.0',
+        'id': 'alveolar-gas-exchange',
+        'title': 'Trao đổi khí tại phế nang',
+        'category': 'physiology',
+        'summary': 'Khuếch tán O2 và CO2 qua màng phế nang - mao mạch.',
+        'target_duration_seconds': 45,
+        'compositions': {'landscape': 'MedAnimAlveolarGasExchange', 'portrait': None},
+        'sources': [{
+            'id': 'wagner2015',
+            'pmid': '25595605',
+            'pmcid': 'PMC4318661',
+            'doi': '10.1183/09031936.00039214',
+            'citation': 'Wagner PD. Eur Respir J. 2015.',
+            'checked_in': 'full_text',
+        }],
+        'steps': [{
+            'id': 'B1',
+            'narration': 'Oxy đi qua màng phế nang - mao mạch.',
+            'visual': 'Phế nang và mao mạch phổi.',
+            'claim': 'Khuếch tán thụ động qua màng mỏng.',
+            'quotes': [{
+                'source_id': 'wagner2015',
+                'quote': 'Oxygen diffuses across the alveolar capillary membrane into pulmonary capillary blood.',
+                'locator': 'Introduction',
+            }],
+        }],
+        'assets': [{
+            'file': 'alveolus.svg',
+            'source_page': 'https://bioart.niaid.nih.gov/bioart/1',
+            'original_url': 'https://bioart.niaid.nih.gov/api/bioarts/1/files/1',
+            'author': 'NIAID BioArt',
+            'license': 'Public Domain',
+            'sha256': sha256_file(svg_path),
+        }],
+        'medical_audit': {
+            'checked_claims': True,
+            'checked_anatomy': True,
+            'auditor_role': 'medical_expert',
+            'audited_at': datetime(2026, 11, 19, 12, 0, tzinfo=UTC).isoformat(),
+            'passed': True,
+        },
+        'open_issues': [],
+        'preview_frames': ['previews/b1.png'],
+    })
+
+    pin_file = tmp_path / 'config' / 'approver-pin.json'
+    set_pin('918273', path=pin_file)
+    monkeypatch.setattr(factory, 'running_pid', lambda _: None)
+    monkeypatch.setattr(dashboard, 'pin_path', lambda: pin_file)
+    monkeypatch.setattr(medanim_library, 'pin_path', lambda: pin_file)
+
+    srv = dashboard.DashboardServer(tmp_path, 0, token='tok', agents=list, actions={})
+    thread = threading.Thread(target=srv.serve_forever, daemon=True)
+    thread.start()
+    try:
+        # HTML keeps R3.3b markers + adds MedAnim tab
+        st_html, html = request(srv, 'GET', '/')
+        assert st_html == 200
+        assert 'Thư viện hoạt cảnh' in html
+        assert 'id="medanim"' in html
+        assert '/api/medanim' in html
+        assert 'Điểm phong cách PYH (Trạm 12)' in html
+
+        # GET /api/medanim lists pending entry
+        st_list, raw_list = request(srv, 'GET', '/api/medanim')
+        assert st_list == 200
+        catalog = json.loads(raw_list)
+        assert catalog['total'] == 1
+        assert catalog['pending_count'] == 1
+        assert catalog['items'][0]['status'] == 'pending'
+
+        # GET /api/medanim/<id>/preview/<name> serves image & blocks traversal
+        port = srv.server_address[1]
+        conn = HTTPConnection('127.0.0.1', port, timeout=5)
+        conn.request('GET', '/api/medanim/alveolar-gas-exchange/preview/b1.png',
+                     headers={'Host': f'127.0.0.1:{port}'})
+        resp = conn.getresponse()
+        body_bytes = resp.read()
+        conn.close()
+        assert resp.status == 200
+        assert body_bytes == png_bytes
+        assert request(srv, 'GET', '/api/medanim/alveolar-gas-exchange/preview/..%2Fanimation.yaml')[0] == 404
+
+        # POST /api/medanim/<id>/approve requires token and valid PIN
+        assert request(srv, 'POST', '/api/medanim/alveolar-gas-exchange/approve')[0] == 403
+        st_bad, _ = post_json(srv, '/api/medanim/alveolar-gas-exchange/approve',
+                              {'pin': '000000', 'reviewer': 'BS An'})
+        assert st_bad == 403
+        assert not (entry_dir / 'doctor-approval.yaml').exists()
+
+        st_ok, res_ok = post_json(srv, '/api/medanim/alveolar-gas-exchange/approve',
+                                 {'pin': '918273', 'reviewer': 'BS An', 'note': 'Đạt'})
+        assert st_ok == 200, res_ok
+        assert res_ok['approval']['anim_id'] == 'alveolar-gas-exchange'
+        assert (entry_dir / 'doctor-approval.yaml').is_file()
+
+        after_approve = json.loads(request(srv, 'GET', '/api/medanim')[1])
+        assert after_approve['approved_count'] == 1
+        assert after_approve['items'][0]['status'] == 'approved'
+
+        # Editing animation.yaml flips status to needs_reapproval automatically
+        anim_yaml = read_yaml(entry_dir / 'animation.yaml')
+        anim_yaml['summary'] = 'Cập nhật nội dung sau duyệt.'
+        write_yaml_atomic(entry_dir / 'animation.yaml', anim_yaml)
+        after_edit = json.loads(request(srv, 'GET', '/api/medanim')[1])
+        assert after_edit['needs_reapproval_count'] == 1
+        assert after_edit['items'][0]['status'] == 'needs_reapproval'
+
+        # POST /api/medanim/<id>/reject requires reason + PIN
+        st_rej_no_reason, _ = post_json(srv, '/api/medanim/alveolar-gas-exchange/reject',
+                                        {'pin': '918273', 'reviewer': 'BS An', 'reason': ' '})
+        assert st_rej_no_reason == 400
+        st_rej, res_rej = post_json(srv, '/api/medanim/alveolar-gas-exchange/reject',
+                                    {'pin': '918273', 'reviewer': 'BS An', 'reason': 'Sửa lại bước B1'})
+        assert st_rej == 200, res_rej
+        assert res_rej['rejection']['reason'] == 'Sửa lại bước B1'
+        after_reject = json.loads(request(srv, 'GET', '/api/medanim')[1])
+        assert after_reject['items'][0]['status'] == 'rejected'
+    finally:
+        srv.shutdown()
+        srv.server_close()

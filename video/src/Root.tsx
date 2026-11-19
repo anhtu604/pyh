@@ -2,7 +2,11 @@ import React from 'react';
 import {Composition} from 'remotion';
 import {HealthVideo} from './HealthVideo';
 import {Thumbnail} from './Thumbnail';
+import {MedAnimAlveolarGasExchange} from './medanim/MedAnimAlveolarGasExchange';
+import {MedAnimAtheroscleroticPlaqueRupture} from './medanim/MedAnimAtheroscleroticPlaqueRupture';
 import {MedAnimLiverEnzymeLeak, MedAnimLiverEnzymeLeakVertical} from './medanim/MedAnimLiverEnzymeLeak';
+import {MedAnimMacrophagePhagocytosis} from './medanim/MedAnimMacrophagePhagocytosis';
+import {MEDANIM_DURATION_FRAMES} from './medanim/medAnimShared';
 import {FPS as MEDANIM_FPS, TOTAL_FRAMES as MEDANIM_LIVER_FRAMES} from './medanim/liverEnzymeLeak';
 import {parseRenderInput} from './types';
 import type {RenderInput, Scene} from './types';
@@ -94,5 +98,11 @@ export const RemotionRoot: React.FC = () => (
       fps={MEDANIM_FPS} width={1920} height={1080} />
     <Composition id="MedAnimLiverEnzymeLeakVertical" component={MedAnimLiverEnzymeLeakVertical} durationInFrames={MEDANIM_LIVER_FRAMES}
       fps={MEDANIM_FPS} width={1080} height={1920} />
+    <Composition id="MedAnimAlveolarGasExchange" component={MedAnimAlveolarGasExchange} durationInFrames={MEDANIM_DURATION_FRAMES}
+      fps={MEDANIM_FPS} width={1920} height={1080} />
+    <Composition id="MedAnimMacrophagePhagocytosis" component={MedAnimMacrophagePhagocytosis} durationInFrames={MEDANIM_DURATION_FRAMES}
+      fps={MEDANIM_FPS} width={1920} height={1080} />
+    <Composition id="MedAnimAtheroscleroticPlaqueRupture" component={MedAnimAtheroscleroticPlaqueRupture} durationInFrames={MEDANIM_DURATION_FRAMES}
+      fps={MEDANIM_FPS} width={1920} height={1080} />
   </>
 );

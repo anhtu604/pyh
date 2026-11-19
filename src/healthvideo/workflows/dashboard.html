@@ -384,6 +384,18 @@ pre.md{white-space:pre-wrap;word-break:break-word;font-family:'Be Vietnam Pro',s
 .ops-assets{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-top:14px}
 .ops-asset{border:1px solid var(--line-strong);border-radius:10px;overflow:hidden;padding:10px;min-width:0}
 .ops-asset img{width:100%;height:150px;object-fit:contain;background:var(--bg2);border-radius:6px}
+.medanim-list{display:grid;gap:14px;margin-top:14px}
+.medanim-card{padding:16px 18px;border-radius:14px;background:rgba(148,173,255,.04);border:1px solid var(--line)}
+.medanim-card.pending,.medanim-card.needs_reapproval{border-color:hsl(38 96% 60% / .48)}
+.medanim-card.approved{border-color:hsl(168 78% 52% / .4)}
+.medanim-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.medanim-previews{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;margin:10px 0}
+.medanim-preview{border:1px solid var(--line);border-radius:10px;padding:6px;background:var(--bg2)}
+.medanim-preview img{width:100%;aspect-ratio:16/9;object-fit:contain;border-radius:6px;display:block;background:#f7f4ec}
+.medanim-step{padding:10px 12px;border-radius:10px;background:rgba(8,12,24,.28);border:1px solid var(--line);margin-top:8px}
+html[data-theme="light"] .medanim-step{background:rgba(15,23,42,.03)}
+.medanim-review{margin-top:12px;padding:12px 14px;border-radius:12px;background:rgba(148,173,255,.06);border:1px solid var(--line-strong)}
+.medanim-pin-row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:10px}
 
 /* ---------- 3D Isometric Workshop ---------- */
 :root{
@@ -638,6 +650,7 @@ html[data-theme="light"]{
     <a href="#progress" data-home-tab="progress">Tiến độ</a>
     <a href="#workshop" data-home-tab="workshop">Sơ đồ xưởng</a>
     <a href="#research-panel" data-home-tab="research-panel">Kho đề tài</a>
+    <a href="#medanim" data-home-tab="medanim">Thư viện hoạt cảnh <span class="tag" id="medanim-nav-badge" hidden>0</span></a>
     <a href="#channel" data-home-tab="channel">Kênh</a>
   </nav>
 
@@ -798,6 +811,27 @@ html[data-theme="light"]{
       </form>
     </div>
     <div id="channel-body"></div>
+  </section>
+
+  <!-- 5b. Thư viện hoạt cảnh y khoa dùng lại -->
+  <section class="glass card" id="medanim" data-home-view="medanim" hidden aria-labelledby="medanim-title">
+    <div class="res-bar">
+      <div>
+        <h2 id="medanim-title" style="margin:0;font-size:18px">Thư viện hoạt cảnh y khoa</h2>
+        <div class="meta" id="medanim-summary">Chưa tải thư viện hoạt cảnh.</div>
+      </div>
+      <div class="res-head">
+        <button type="button" class="btn" id="btn-medanim-refresh">Làm mới</button>
+      </div>
+    </div>
+    <div class="res-filters" style="margin-top:10px" id="medanim-filters">
+      <button type="button" class="btn primary" data-medanim-filter="all">Tất cả</button>
+      <button type="button" class="btn ghost" data-medanim-filter="pending">Chờ duyệt</button>
+      <button type="button" class="btn ghost" data-medanim-filter="needs_reapproval">Cần duyệt lại</button>
+      <button type="button" class="btn ghost" data-medanim-filter="approved">Đã duyệt</button>
+    </div>
+    <p class="sub" style="margin-top:8px">Bác sĩ kiểm từng bước cơ chế, câu trích nguyên văn Europe PMC (≤25 từ), giấy phép hình mở (Public Domain / CC0 / CC BY 3.0 / CC BY 4.0) và ảnh xem trước rồi duyệt 1 lần bằng PIN. Mọi sửa đổi sau khi duyệt tự chuyển về trạng thái cần duyệt lại.</p>
+    <div class="medanim-list" id="medanim-list" aria-live="polite"><div class="empty">Đang tải thư viện hoạt cảnh…</div></div>
   </section>
 
   <!-- Legacy stats hook kept hidden for compatibility -->
@@ -2007,6 +2041,7 @@ async function refresh(){
     syncChannelAnalysis();
     renderChannelPublish();
     await loadProgress();
+    loadMedanimLibrary(false).catch(()=>{});
   }catch(e){
     wsOffline = true;
     $('offline').classList.add('show');
@@ -4006,7 +4041,190 @@ function showHomeView(){
   }
   document.querySelectorAll('[data-home-view]').forEach(el => { el.hidden = el.dataset.homeView !== active; });
   if(active === 'progress') loadProgress();
+  if(active === 'medanim') loadMedanimLibrary(true);
 }
+let medanimData = null, medanimFilter = 'all';
+const MEDANIM_STATUS = {
+  approved: {cls:'done', label:'✓ Đã duyệt (còn hiệu lực)'},
+  pending: {cls:'gate', label:'Chờ bác sĩ duyệt'},
+  needs_reapproval: {cls:'bad', label:'! Cần duyệt lại (tệp đã đổi)'},
+  rejected: {cls:'bad', label:'✕ Đã từ chối'},
+  invalid: {cls:'bad', label:'Lỗi dữ liệu/tài sản'},
+};
+function safeHref(url){
+  const s = String(url || '').trim();
+  return /^https?:\/\//i.test(s) ? s : '';
+}
+function medanimSourceLinks(s){
+  const links = [];
+  if(s.pmid) links.push(`<a href="https://europepmc.org/article/MED/${encodeURIComponent(s.pmid)}" target="_blank" rel="noopener noreferrer">PMID ${esc(s.pmid)}</a>`);
+  if(s.pmcid) links.push(`<a href="https://europepmc.org/article/PMC/${encodeURIComponent(s.pmcid)}" target="_blank" rel="noopener noreferrer">${esc(s.pmcid)}</a>`);
+  if(s.doi) links.push(`<a href="https://doi.org/${encodeURI(s.doi)}" target="_blank" rel="noopener noreferrer">DOI ${esc(s.doi)}</a>`);
+  const u = safeHref(s.url);
+  if(u) links.push(`<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">Europe PMC</a>`);
+  return links.join(' · ');
+}
+function renderMedanimLibrary(force = false){
+  const listEl = $('medanim-list'), sumEl = $('medanim-summary'), badgeEl = $('medanim-nav-badge');
+  if(!listEl || !medanimData) return;
+  const items = Array.isArray(medanimData.items) ? medanimData.items : [];
+  const needReview = (medanimData.pending_count || 0) + (medanimData.needs_reapproval_count || 0);
+  if(sumEl){
+    sumEl.textContent = items.length
+      ? `${items.length} hoạt cảnh · ${medanimData.approved_count || 0} đã duyệt · ${needReview} chờ duyệt/duyệt lại`
+      : 'Chưa có hoạt cảnh nào trong library/medanim/.';
+  }
+  if(badgeEl){
+    badgeEl.hidden = needReview <= 0;
+    badgeEl.textContent = String(needReview);
+  }
+  const activeEl = document.activeElement;
+  if(!force && activeEl && listEl.contains(activeEl) && /^(INPUT|TEXTAREA|SELECT)$/i.test(activeEl.tagName)){
+    return;
+  }
+  const filtered = items.filter(it => medanimFilter === 'all' || it.status === medanimFilter);
+  const nextSig = JSON.stringify([medanimFilter, medanimData.pin_set, medanimData.reviewer, filtered.map(it => [it.id, it.status, it.content_sha256, (it.errors||[]).length, it.approval?.reviewed_at, it.rejection?.reviewed_at])]);
+  if(!force && listEl.dataset.medSig === nextSig) return;
+  listEl.dataset.medSig = nextSig;
+
+  if(!filtered.length){
+    listEl.innerHTML = `<div class="empty">${items.length ? 'Không có hoạt cảnh khớp bộ lọc.' : 'Chưa có hoạt cảnh nào trong library/medanim/.'}</div>`;
+    return;
+  }
+  const needRevInput = !medanimData.reviewer;
+  listEl.innerHTML = filtered.map(it => {
+    const st = MEDANIM_STATUS[it.status] || {cls:'pending', label:it.status || 'Chưa rõ'};
+    const srcMap = {};
+    (it.sources || []).forEach(s => { if(s.id) srcMap[s.id] = s; });
+    const audit = it.medical_audit || {};
+    const comps = [it.compositions?.landscape ? `16:9 ${it.compositions.landscape}` : '', it.compositions?.portrait ? `9:16 ${it.compositions.portrait}` : ''].filter(Boolean).join(' · ');
+    const errs = [...(it.reapproval_reasons || []), ...(it.errors || [])];
+    const errHtml = errs.length ? `<div class="danger-box"><b>Cần kiểm tra:</b><ul style="margin:4px 0 0 18px">${errs.map(e => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
+    const rejHtml = it.status === 'rejected' && it.rejection ? `<div class="danger-box"><b>Đã từ chối (${esc(it.rejection.reviewer)}):</b> ${esc(it.rejection.reason)}</div>` : '';
+    const issues = Array.isArray(it.open_issues) ? it.open_issues : [];
+    const issueHtml = issues.length ? `<div class="warnbox"><b>Điểm mở cần bác sĩ lưu ý (${issues.length}):</b><ul style="margin:4px 0 0 18px">${issues.map(o => `<li><b>${esc(o.id || o.category || 'issue')}</b>${o.severity ? ' ('+esc(o.severity)+')' : ''}: ${esc(o.summary || o.finding || o.target || JSON.stringify(o))}${o.doctor_action_needed ? ' — <i>'+esc(o.doctor_action_needed)+'</i>' : ''}</li>`).join('')}</ul></div>` : '';
+    const previews = (it.preview_frames || []).filter(p => p.exists !== false);
+    const previewHtml = previews.length ? `<div class="medanim-previews">${previews.map(p => `<div class="medanim-preview"><img loading="lazy" src="${esc(p.url)}" alt="${esc(it.title)} · ${esc(p.name)}"><div class="meta" style="margin-top:4px">${esc(p.name)}</div></div>`).join('')}</div>` : '';
+    const stepsHtml = (it.steps || []).map(step => {
+      const qs = (step.quotes || []).map(q => {
+        const src = srcMap[q.source_id] || {id: q.source_id};
+        const links = medanimSourceLinks(src);
+        return `<blockquote>“${esc(q.quote)}”<cite>${esc(q.source_id)} · ${esc(q.locator)}${q.scope ? ' · '+esc(q.scope) : ''}${links ? ' · '+links : ''}</cite></blockquote>`;
+      }).join('');
+      return `<div class="medanim-step">
+        <div><span class="rid">${esc(step.id)}</span>${step.t_start!=null&&step.t_end!=null ? ` <span class="tag">${esc(step.t_start)}s–${esc(step.t_end)}s</span>` : ''}</div>
+        <div style="margin-top:4px"><b>Lời đọc:</b> ${esc(step.narration)}</div>
+        <div class="sub" style="margin-top:4px"><b>Hình ảnh:</b> ${esc(step.visual)}</div>
+        <div style="margin-top:4px;font-size:13.5px"><b>Claim y khoa:</b> ${esc(step.claim)}</div>
+        ${qs}
+      </div>`;
+    }).join('');
+    const sourcesHtml = (it.sources || []).length ? `<details style="margin-top:10px"><summary style="cursor:pointer;font-weight:600">Nguồn y văn Europe PMC (${it.sources.length})</summary><ul style="margin:6px 0 0 18px">${it.sources.map(s => {
+      const links = medanimSourceLinks(s);
+      return `<li style="margin-bottom:4px"><b>${esc(s.id)}</b>: ${esc(s.citation)} <span class="tag">${esc(s.checked_in)}</span>${links ? ' · '+links : ''}${s.scope ? ` <span class="sub">(${esc(s.scope)})</span>` : ''}</li>`;
+    }).join('')}</ul></details>` : '';
+    const assetsHtml = (it.assets || []).length ? `<details style="margin-top:8px"><summary style="cursor:pointer;font-weight:600">Giấy phép hình ảnh &amp; SHA-256 (${it.assets.length} tệp)</summary><div class="ch-list">${it.assets.map(a => {
+      const sp = safeHref(a.source_page), ou = safeHref(a.original_url);
+      return `<div class="ch-row"><div><b>${esc(a.file)}</b> · <span class="chip ${a.hash_ok ? 'done' : 'bad'}">${esc(a.license)} · ${a.hash_ok ? 'SHA-256 khớp' : 'Lệch/thiếu SHA-256'}</span><div class="meta">Tác giả: ${esc(a.author)}${a.role ? ' · '+esc(a.role) : ''}</div><div class="meta">sha256: ${esc((a.sha256||'').slice(0,16))}… ${sp?`· <a href="${esc(sp)}" target="_blank" rel="noopener noreferrer">Trang nguồn</a>`:''} ${ou?`· <a href="${esc(ou)}" target="_blank" rel="noopener noreferrer">File gốc</a>`:''}</div></div></div>`;
+    }).join('')}</div></details>` : '';
+    const canApprove = Boolean(medanimData.pin_set && audit.passed === true && !(it.errors||[]).length && it.status !== 'approved');
+    const approvalBox = it.status === 'approved' && it.approval ? `
+      <div class="medanim-review" style="border-color:hsl(168 78% 52% / .4)">
+        <div><b style="color:var(--teal)">✓ Đã duyệt 1 lần vào thư viện dùng lại</b> · BS ${esc(it.approval.reviewer)} · ${esc((it.approval.reviewed_at||'').slice(0,19).replace('T',' '))}</div>
+        <div class="meta">content_sha256: ${esc((it.approval.content_sha256||'').slice(0,20))}…${it.approval.note ? ' · Ghi chú: '+esc(it.approval.note) : ''}</div>
+      </div>` : `
+      <form class="medanim-review" data-medanim-form="${esc(it.id)}" autocomplete="off">
+        <div><b>Duyệt 1 lần đưa vào thư viện hoạt cảnh dùng lại</b> ${!medanimData.pin_set ? '<span class="chip bad">Chưa đặt PIN (chạy healthvideo review set-pin)</span>' : (audit.passed !== true ? '<span class="chip bad">Cần medical_audit.passed = true trước khi duyệt</span>' : '')}</div>
+        <div class="medanim-pin-row">
+          ${needRevInput ? `<label style="display:grid;gap:4px;font-size:13px">Tên bác sĩ duyệt<input class="inp" name="reviewer" maxlength="80" required></label>` : ''}
+          <label style="flex:1;min-width:210px;display:grid;gap:4px;font-size:13px">Ghi chú duyệt hoặc lý do từ chối<input class="inp" name="note" maxlength="2000" placeholder="Ghi chú tùy chọn khi duyệt; bắt buộc nếu từ chối…"></label>
+          <label style="display:grid;gap:4px;font-size:13px">PIN bác sĩ<input class="inp pin" name="pin" type="password" inputmode="numeric" autocomplete="new-password" required></label>
+          <button type="submit" class="btn primary" ${canApprove ? '' : 'disabled'}>Duyệt hoạt cảnh · PIN</button>
+          <button type="button" class="btn danger" data-medanim-reject="${esc(it.id)}" ${medanimData.pin_set ? '' : 'disabled'}>Từ chối · PIN</button>
+        </div>
+      </form>`;
+    return `<article class="medanim-card ${esc(it.status || '')}">
+      <div class="medanim-head">
+        <div>
+          <h3 style="margin:0;font-size:17px">${esc(it.title || it.id)}</h3>
+          <div class="meta">${esc(it.id)} · ${esc(it.category || '—')} · ${esc(it.target_duration_seconds || 0)}s${comps ? ' · '+esc(comps) : ''} · hash ${esc((it.content_sha256||'').slice(0,12))}</div>
+        </div>
+        <span class="chip ${st.cls}">${esc(st.label)}</span>
+      </div>
+      ${it.summary ? `<p style="margin-top:8px">${esc(it.summary)}</p>` : ''}
+      <div class="rmeta">
+        <span class="tag">Audit y khoa (${esc(audit.auditor_role || '—')}): ${audit.passed ? 'Đạt' : 'Chưa đạt'}</span>
+        <span class="tag">Kiểm claim: ${audit.checked_claims ? '✓' : '✕'}</span>
+        <span class="tag">Kiểm giải phẫu: ${audit.checked_anatomy ? '✓' : '✕'}</span>
+      </div>
+      ${errHtml}${rejHtml}${issueHtml}${previewHtml}
+      <details open style="margin-top:10px"><summary style="cursor:pointer;font-weight:700">Các bước hoạt cảnh &amp; trích dẫn Europe PMC (${(it.steps||[]).length} bước)</summary>${stepsHtml}</details>
+      ${sourcesHtml}${assetsHtml}${approvalBox}
+    </article>`;
+  }).join('');
+
+  listEl.querySelectorAll('[data-medanim-form]').forEach(form => {
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const id = form.dataset.medanimForm;
+      const pinEl = form.querySelector('[name=pin]');
+      const pin = pinEl ? pinEl.value : '';
+      if(pinEl) pinEl.value = '';
+      const payload = {
+        pin,
+        note: form.querySelector('[name=note]')?.value || '',
+        reviewer: form.querySelector('[name=reviewer]')?.value || '',
+      };
+      const btn = form.querySelector('button[type=submit]');
+      if(btn) btn.disabled = true;
+      try{
+        const res = await postJson(`/api/medanim/${encodeURIComponent(id)}/approve`, payload);
+        toast(res.message || 'Đã duyệt hoạt cảnh.');
+        await loadMedanimLibrary(true);
+      }catch(ex){ toast(ex.message, true); if(btn) btn.disabled = false; }
+    };
+  });
+  listEl.querySelectorAll('[data-medanim-reject]').forEach(btn => {
+    btn.onclick = async () => {
+      const id = btn.dataset.medanimReject;
+      const form = btn.closest('form');
+      const pinEl = form?.querySelector('[name=pin]');
+      const pin = pinEl ? pinEl.value : '';
+      if(pinEl) pinEl.value = '';
+      const reason = form?.querySelector('[name=note]')?.value?.trim() || '';
+      if(!reason){ toast('Nhập lý do từ chối vào ô ghi chú trước khi bấm Từ chối.', true); form?.querySelector('[name=note]')?.focus(); return; }
+      if(!pin){ toast('Nhập PIN bác sĩ trước khi từ chối.', true); pinEl?.focus(); return; }
+      btn.disabled = true;
+      try{
+        const res = await postJson(`/api/medanim/${encodeURIComponent(id)}/reject`, {
+          pin,
+          reason,
+          reviewer: form?.querySelector('[name=reviewer]')?.value || '',
+        });
+        toast(res.message || 'Đã từ chối hoạt cảnh.');
+        await loadMedanimLibrary(true);
+      }catch(ex){ toast(ex.message, true); btn.disabled = false; }
+    };
+  });
+}
+async function loadMedanimLibrary(force = false){
+  try{
+    const r = await fetch('/api/medanim', {cache:'no-store'});
+    if(!r.ok) return;
+    medanimData = await r.json();
+    renderMedanimLibrary(force);
+  }catch(e){}
+}
+document.querySelectorAll('[data-medanim-filter]').forEach(btn => {
+  btn.onclick = () => {
+    medanimFilter = btn.dataset.medanimFilter || 'all';
+    document.querySelectorAll('[data-medanim-filter]').forEach(b => {
+      b.className = b === btn ? 'btn primary' : 'btn ghost';
+    });
+    renderMedanimLibrary(true);
+  };
+});
+if($('btn-medanim-refresh')) $('btn-medanim-refresh').onclick = () => loadMedanimLibrary(true);
 window.addEventListener('hashchange', showHomeView);
 showHomeView();
 refresh(); loadChat(); setInterval(refresh,3000);

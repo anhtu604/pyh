@@ -1,0 +1,365 @@
+schema_version: '1.0'
+id: liver-enzyme-leak
+title: Tế bào gan tổn thương → ALT/AST vào máu
+category: pathophysiology
+summary: Minh họa cơ chế tổn thương màng tế bào gan và ty thể làm giải phóng ALT,
+  c-AST và m-AST qua lòng xoang vào tĩnh mạch trung tâm, dẫn lưu về tuần hoàn chung,
+  đồng thời phân biệt nguồn AST ngoài gan ở cơ vân và cơ tim.
+target_duration_seconds: 53
+compositions:
+  landscape: MedAnimLiverEnzymeLeak
+  portrait: MedAnimLiverEnzymeLeakVertical
+sources:
+- id: kietzmann2017
+  pmid: '28126520'
+  pmcid: PMC5257182
+  doi: 10.1016/j.redox.2017.01.012
+  citation: 'Kietzmann T. Metabolic zonation of the liver: The oxygen gradient revisited.
+    Redox Biol. 2017;11:622-630.'
+  checked_in: full_text
+  url: https://europepmc.org/article/PMC/PMC5257182
+- id: vernon2022
+  pmid: '29763190'
+  pmcid: null
+  doi: null
+  citation: 'Vernon H, Wehrle CJ, Alia VSK, Kasi A. Anatomy, Abdomen and Pelvis: Liver.
+    StatPearls. 2022.'
+  checked_in: abstract
+  url: https://europepmc.org/article/MED/29763190
+- id: mcgill2016
+  pmid: '28337112'
+  pmcid: PMC5318690
+  doi: 10.17179/excli2016-800
+  citation: McGill MR. The past and present of serum aminotransferases and the future
+    of liver injury biomarkers. EXCLI J. 2016;15:817-828.
+  checked_in: full_text
+  url: https://europepmc.org/article/PMC/PMC5318690
+- id: moriles2024
+  pmid: '32644704'
+  pmcid: null
+  doi: null
+  citation: Moriles KE, Zubair M, Azer SA. Alanine Aminotransferase (ALT) Test. StatPearls.
+    2024.
+  checked_in: abstract
+  url: https://europepmc.org/article/MED/32644704
+- id: panteghini1990
+  pmid: '2225456'
+  pmcid: null
+  doi: 10.1016/0009-9120(90)80062-n
+  citation: Panteghini M. Aspartate aminotransferase isoenzymes. Clin Biochem. 1990;23(4):311-319.
+  checked_in: abstract
+  url: https://europepmc.org/article/MED/2225456
+- id: turamanlar2012
+  pmid: '25206997'
+  pmcid: PMC4115865
+  doi: 10.5152/balkanmedj.2012.020
+  citation: 'Turamanlar O, Kırpıko O, Ozen OA, et al. Absence of middle hepatic vein
+    combined with retro-aortic left renal vein: a very rare case report. Balkan Med
+    J. 2012;29(2):205-207.'
+  checked_in: abstract
+  url: https://europepmc.org/article/PMC/PMC4115865
+- id: kamiike1989
+  pmid: '2620458'
+  pmcid: null
+  doi: 10.1016/0009-8981(89)90216-7
+  citation: Kamiike W, et al. Different patterns of leakage of cytosolic and mitochondrial
+    enzymes. Clin Chim Acta. 1989;185(3):265-270.
+  checked_in: abstract
+  url: https://europepmc.org/article/MED/2620458
+  scope: Ischemic rat liver, not a universal clinical severity rule.
+steps:
+- id: B1
+  t_start: 0.0
+  t_end: 8.0
+  narration: Gan gồm nhiều tiểu thùy; giữa mỗi tiểu thùy là tĩnh mạch trung tâm, ở
+    rìa là các khoảng cửa.
+  visual: 'Lá gan vector SVG (niaid-liver-230.svg) hiển thị cân đối >= 60% vùng nội
+    dung (không mờ bitmap). Khung định vị teal trên vùng nhu mô gan (>= 24f) -> đường
+    dẫn -> kính lúp MagnifierZoom nền đặc #F7F4EC mở rộng sang tiểu thùy gan (servier-liver-lobule.png
+    <= 1.0x, có thể kèm bối cảnh lục giác dbcls-hepatic-lobule.svg), hình gan gốc
+    lùi mờ nhẹ phía sau qua magnifierOverviewOpacity (tuyệt đối không cross-fade chồng
+    mờ 2 tỷ lệ). Giữ hình tiểu thùy >= 2s (60f) trước khi hiện nhãn "Tĩnh mạch trung
+    tâm" và "Khoảng cửa". Mini-map Gan -> Tiểu thùy -> Tế bào dùng pill/badge nhấn,
+    không gạch chân.'
+  claim: Tiểu thùy gan cổ điển có dạng gần lục giác, tĩnh mạch trung tâm ở giữa; các
+    góc là khoảng cửa (bộ ba cửa) gồm nhánh tĩnh mạch cửa, nhánh động mạch gan và
+    ống mật.
+  quotes:
+  - source_id: kietzmann2017
+    quote: Classically it is of almost hexagonal shape with a central vein in the
+      middle.
+    locator: Fig. 1A
+  - source_id: vernon2022
+    quote: At the vertices of the hexagon is a triad of a bile duct branch, a portal
+      vein branch, and a hepatic artery branch
+    locator: Abstract
+- id: B2
+  t_start: 8.0
+  t_end: 16.0
+  narration: Máu từ tĩnh mạch cửa và động mạch gan hòa vào nhau, chảy qua xoang gan
+    về tĩnh mạch trung tâm.
+  visual: Cảnh tiểu thùy và sơ đồ cơ chế chiếm >= 60% khung hình, cân đối không thừa
+    khoảng trống trái; nhãn chỉ lần lượt "Tĩnh mạch cửa", "Động mạch gan", "Xoang
+    gan". Vẽ đường dòng chảy teal từ CẢ HAI nhánh (nhánh tĩnh mạch cửa và nhánh động
+    mạch gan tại khoảng cửa) hợp lưu hòa trộn vào nhau chảy dọc xoang gan về tĩnh
+    mạch trung tâm, cùng hồng cầu vector (niaid-red-blood-cell-442.svg) trôi theo
+    dòng; mũi tên mật navy đi xuống ống mật về khoảng cửa ngược chiều dòng máu kèm
+    chú thích rõ ràng.
+  claim: Máu từ nhánh tĩnh mạch cửa và nhánh động mạch gan ở khoảng cửa hòa trộn,
+    chảy qua các xoang gan giữa các bè tế bào gan về tĩnh mạch trung tâm.
+  quotes:
+  - source_id: kietzmann2017
+    quote: The blood coming from the branches of the portal vein and the hepatic artery
+      in the portal tracts flows as a mixture through the sinusoids
+    locator: Fig. 1A-B
+  - source_id: vernon2022
+    quote: Blood flows from the portal vein branch and hepatic artery branch across
+      the lobule and finally into the central vein
+    locator: Abstract
+- id: B3
+  t_start: 16.0
+  t_end: 24.0
+  narration: Trong tế bào gan, ALT chủ yếu nằm ở bào tương, còn AST có ở cả bào tương
+    lẫn ty thể.
+  visual: 'Khung định vị teal trên vùng bè tế bào tiểu thùy -> đường dẫn -> kính lúp
+    MagnifierZoom nền đặc #F7F4EC mở rộng sang tế bào gan vector (niaid-hepatocyte-203.svg),
+    các ty thể vector (niaid-mitochondria-352.svg) và lòng mạch máu vector sạch (niaid-blood-vessel-55.svg
+    làm lòng xoang tạm thời với nhãn "Lòng xoang gan / Sinusoidal lumen" và hồng cầu
+    vector); hình tiểu thùy phía sau lùi mờ qua magnifierOverviewOpacity. Giữ hình
+    tế bào >= 2s (60f) trước nhãn "Bào tương" và "Ty thể". Không tự vẽ lỗ cửa sổ LSEC;
+    bỏ sạch mọi ghi chú nội bộ (*) khỏi khung hình (xem open_issues).'
+  claim: 'ALT có dạng bào tương (ALT1) và dạng ty thể (ALT2); ALT1 là dạng chiếm ưu
+    thế trong gan, nên ALT được mô tả là chủ yếu ở bào tương tế bào gan. AST có hai
+    isoenzyme: bào tương (c-AST) và ty thể (m-AST).'
+  quotes:
+  - source_id: mcgill2016
+    quote: ALT1 is now known to be the dominant isoform of ALT in the liver (Lindblom
+      et al., 2007).
+    locator: Main text
+  - source_id: moriles2024
+    quote: ALT is aggregated primarily in the cytosol of hepatocytes, consists of
+      496 amino acids, and has a half-life of approximately 47 hours.
+    locator: Abstract
+  - source_id: panteghini1990
+    quote: exists in human tissues as two distinct isoenzymes, one located in the
+      cytoplasm (c-AST), and the other in mitochondria (m-AST).
+    locator: Abstract
+- id: B4
+  t_start: 24.0
+  t_end: 36.0
+  narration: Tổn thương nhẹ làm men bào tương thoát ra; tổn thương nặng, hoại tử có
+    thể giải phóng thêm AST ty thể, như trong mô hình gan chuột thiếu máu.
+  visual: 'Dùng SVG <mask> mềm tự nhiên (bỏ vết cắt clipPath hình chữ nhật thô) ở
+    vùng vi nhung mao mặt xoang tại INJURY_RING cho giai đoạn nhẹ (740f: men bào tương
+    ALT + c-AST thoát vào lòng xoang) và trên màng ty thể ở giai đoạn nặng/hoại tử
+    (850f/880f: m-AST thoát thêm). Giữ gọn thẻ phạm vi "Minh họa cơ chế · mô hình
+    gan chuột thiếu máu (Kamiike 1989)" không đè hình hoặc phụ đề.'
+  claim: Tăng aminotransferase huyết thanh thường được cho là do tế bào tổn thương
+    làm mất toàn vẹn màng bào tương, men thoát vào máu; mặt tế bào gan hướng về xoang
+    gan. Đây là cơ chế phổ biến nhất, không phải duy nhất (còn tăng biểu hiện gen,
+    macroenzyme...).
+  quotes:
+  - source_id: mcgill2016
+    quote: It is generally thought that aminotransferase elevations are due to cell
+      damage with plasma membrane disruption.
+    locator: Main text
+  - source_id: moriles2024
+    quote: any process that leads to loss of hepatocyte membrane integrity or necrosis
+      results in the release of ALT in high concentrations in the plasma.
+    locator: Abstract
+  - source_id: kamiike1989
+    quote: mitochondrial enzymes are liberated into the blood only after appreciable
+      disintegration of the cells, probably necrosis
+    locator: Abstract
+    scope: Ischemic rat liver, not a universal clinical severity rule.
+- id: B5
+  t_start: 36.0
+  t_end: 44.0
+  narration: Từ tĩnh mạch trung tâm, máu về tĩnh mạch gan rồi tĩnh mạch chủ dưới,
+    nên xét nghiệm máu đo được men.
+  visual: 'Đóng kính lúp mượt từ tế bào về lại tiểu thùy (MagnifierZoom close); chấm
+    men theo hồng cầu trôi dọc xoang lên tĩnh mạch trung tâm (đường teal); bố cục
+    tiểu thùy bên trái + chuỗi mũi tên teal dẫn từ tĩnh mạch trung tâm -> "Tĩnh mạch
+    gan" -> "Tĩnh mạch chủ dưới" -> "Xét nghiệm máu: ALT, AST" kết thúc bằng ống máu
+    vector SVG (niaid-blood-vial-52.svg), phủ >= 60% khung hình cân đối.'
+  claim: Tĩnh mạch trung tâm là nhánh của tĩnh mạch gan; tĩnh mạch gan đổ vào tĩnh
+    mạch chủ dưới. Xét nghiệm đánh giá tổn thương gan bằng cách đo hoạt độ trong huyết
+    tương của các men vốn nằm trong tế bào gan.
+  quotes:
+  - source_id: turamanlar2012
+    quote: The hepatic and renal veins drain into the inferior vena cava.
+    locator: Abstract
+  - source_id: moriles2024
+    quote: Most commonly, this is accomplished by measuring the plasma activities
+      of enzymes found within liver cells
+    locator: Abstract
+- id: B6
+  t_start: 44.0
+  t_end: 50.0
+  narration: AST còn có nhiều ở cơ vân và cơ tim, nên AST tăng không chỉ do gan.
+  visual: 'Khung chốt chuyển mượt sang ba biểu tượng cơ quan vector SVG đặt cân đối
+    (>= 60% khung): Gan (niaid-liver-230.svg), Cơ vân (reactome-muscle-R-ICO-014108.svg),
+    Cơ tim (niaid-heart-228.svg); hạt AST xuất phát từ cả ba cơ quan, ALT nhấn ở gan.
+    Mascot góc (myth_bust -> thumbs_up), thẻ cuối ghi đầy đủ credit nguồn hình (NIAID
+    NIH BioArt, Servier Medical Art, Reactome, DBCLS nếu hiển thị) và 7 nguồn y văn.
+    Phụ đề tĩnh theo trang không gạch chân.'
+  claim: Cơ vân, cơ tim và gan là các nguồn chính của AST, nên AST không đặc hiệu
+    cho gan. ALT chủ yếu ở gan nhưng cũng có ở thận, tim, cơ; ALT tăng nhạy nhưng
+    không đặc hiệu cho nguyên nhân.
+  quotes:
+  - source_id: panteghini1990
+    quote: Striated muscle, myocardium, and liver tissues are the main sources of
+      AST.
+    locator: Abstract
+  - source_id: moriles2024
+    quote: Alanine aminotransferase (ALT) is an enzyme found predominantly in the
+      liver but also in other tissues such as the kidneys, heart, and muscle cells.
+    locator: Abstract
+assets:
+- file: niaid-liver-230.svg
+  source_page: https://bioart.niaid.nih.gov/bioart/230
+  original_url: https://bioart.niaid.nih.gov/api/bioarts/230/files/630883
+  author: NIAID Visual & Medical Arts — Ryan Kissinger (Courtesy of NIAID)
+  license: Public Domain
+  sha256: 4eb567dbe9159feae60c151d688f441378ce24447bcc04128ef1f6f52774bf24
+  role: Lá gan — cảnh B1 (mở đầu >=60% khung) và nguồn ALT/AST tại gan B6
+- file: servier-liver-lobule.png
+  source_page: https://smart.servier.com/smart_image/liver-overview/
+  original_url: https://smart.servier.com/wp-content/uploads/2016/10/foie_coupe.png
+  author: Servier Medical Art (Laboratoires Servier)
+  license: CC BY 4.0
+  sha256: 599bc1f0c34203350b55cc9ac95e5c93665a6f10ddf37651ac7674af682b37a0
+  role: Tiểu thùy gan dạng khối 3D — khoảng cửa (TM cửa + ĐM gan + ống mật) -> xoang
+    gan -> TM trung tâm (B1, B2, B5)
+  license_url: https://creativecommons.org/licenses/by/4.0/
+- file: dbcls-hepatic-lobule.svg
+  source_page: https://commons.wikimedia.org/wiki/File:201904_hepatic_lobule.svg
+  original_url: https://upload.wikimedia.org/wikipedia/commons/d/dd/201904_hepatic_lobule.svg
+  author: DataBase Center for Life Science (DBCLS)
+  license: CC BY 4.0
+  sha256: c6256c968f7b2ffe5b66f3656430f91f51f0ff1c61ea14a819b370fe87979b70
+  role: Tiểu thùy gan mặt cắt lục giác cổ điển (TM trung tâm giữa, 6 khoảng cửa ở
+    góc) — tùy chọn vector bổ trợ B1/B2
+  license_url: https://creativecommons.org/licenses/by/4.0/
+- file: niaid-hepatocyte-203.svg
+  source_page: https://bioart.niaid.nih.gov/bioart/203
+  original_url: https://bioart.niaid.nih.gov/api/bioarts/203/files/630473
+  author: NIAID Visual & Medical Arts — Ryan Kissinger (Courtesy of NIAID)
+  license: Public Domain
+  sha256: 01dd25b7dcd7a0211a2cdf60c53b33230c60f9304a5f870608a51ff2481613b7
+  role: Tế bào gan có vi nhung mao mặt xoang (B3, B4)
+- file: niaid-mitochondria-352.svg
+  source_page: https://bioart.niaid.nih.gov/bioart/352
+  original_url: https://bioart.niaid.nih.gov/api/bioarts/352/files/641583
+  author: NIAID Visual & Medical Arts — Ryan Kissinger (Courtesy of NIAID)
+  license: Public Domain
+  sha256: 1a8323ba1448ce49318f701c34c2a63ce9c4b9e391ee87876baa55c4293000e1
+  role: Ty thể đặt trong bào tương tế bào gan (B3, B4)
+- file: niaid-blood-vessel-55.svg
+  source_page: https://bioart.niaid.nih.gov/bioart/55
+  original_url: https://bioart.niaid.nih.gov/api/bioarts/55/files/627999
+  author: NIAID Visual & Medical Arts — Ryan Kissinger (Courtesy of NIAID)
+  license: Public Domain
+  sha256: 716a9942b72d64daa500bd7bacf76215983fa50d4a287af43f94c374c0e41fdc
+  role: Mặt cắt lòng mạch máu có tế bào nội mô (dùng tạm làm lòng xoang sạch ở B3/B4;
+    KHÔNG phải LSEC có cửa sổ)
+- file: niaid-red-blood-cell-442.svg
+  source_page: https://bioart.niaid.nih.gov/bioart/442
+  original_url: https://bioart.niaid.nih.gov/api/bioarts/442/files/634619
+  author: NIAID Visual & Medical Arts — Ryan Kissinger (Courtesy of NIAID)
+  license: Public Domain
+  sha256: 964dae2e047f674c0b352cf50b1ef7b4c0f11934697b93d281b57239178d04b3
+  role: Hồng cầu chảy trong xoang gan (B2, B3, B4, B5)
+- file: niaid-blood-vial-52.svg
+  source_page: https://bioart.niaid.nih.gov/bioart/52
+  original_url: https://bioart.niaid.nih.gov/api/bioarts/52/files/627974
+  author: NIAID Visual & Medical Arts — Ryan Kissinger (Courtesy of NIAID)
+  license: Public Domain
+  sha256: e8ca581f37bfb6f1120577efe6bb06842987dab3278ddc6df6fe3df1d3a5a354
+  role: Ống máu xét nghiệm nắp đỏ sạch không chữ nhòe (B5)
+- file: reactome-muscle-R-ICO-014108.svg
+  source_page: https://reactome.org/icon-lib/R-ICO-014108
+  original_url: https://reactome.org/icon/R-ICO-014108.svg
+  author: Cristoffer Sevilla (Designer), Marija Orlic-Milacic (Curator) — Reactome
+    Icon Library
+  license: CC BY 4.0
+  sha256: 89d1fa02ff75f7bd5e314dcb18d2ae9105c4b8e2d77c0a3b063430ab9f2c9cbb
+  role: Cơ vân (bụng cơ có gân hai đầu) — nguồn AST ngoài gan (B6)
+  license_url: https://reactome.org/license
+- file: niaid-heart-228.svg
+  source_page: https://bioart.niaid.nih.gov/bioart/228
+  original_url: https://bioart.niaid.nih.gov/api/bioarts/228/files/630873
+  author: NIAID Visual & Medical Arts — Ryan Kissinger (Courtesy of NIAID)
+  license: Public Domain
+  sha256: e2260fd13db30aae8f5a4ab4df1fbbf3582c6599315b8380cac08bfe832d9aa9
+  role: Tim (cơ tim) — nguồn AST ngoài gan (B6)
+medical_audit:
+  checked_claims: true
+  checked_anatomy: true
+  auditor_role: medical_expert
+  audited_at: '2026-11-19T12:25:00+07:00'
+  passed: true
+  notes: Đã kiểm tra 7 nguồn Europe PMC (Kietzmann 2017, Vernon 2022, McGill 2016,
+    Moriles 2024, Panteghini 1990, Turamanlar 2012, Kamiike 1989) và kiểm định độc
+    lập vòng 2 (review-r2.md). Còn mục mở lsec-fenestrated-endothelium chờ bác sĩ
+    duyệt dùng mạch sạch tạm hoặc bổ sung LSEC chuẩn.
+open_issues:
+- id: lsec-fenestrated-endothelium
+  severity: blocking_for_final_acceptance
+  category: missing_licensed_histology_asset
+  steps:
+  - B3
+  - B4
+  summary: 'Kho mở hợp lệ (Servier, NIAID BioArt, Reactome, Wikimedia Commons PD/CC0/CC
+    BY) chưa có hình vector/PNG tách lớp sạch không chữ cho nội mô xoang gan có cửa
+    sổ (LSEC — không có màng đáy liên tục).
+
+    '
+  checked_evidence: 'Servier endothelium_01..07 và NIAID BioArt 55 là nội mô liên
+    tục thường; DBCLS File:202104_Fenestrated_capillary.svg (CC BY 4.0) có bao màng
+    đáy liên tục (không chuẩn mô học xoang gan); NIAID BioArt 565 (CC BY 4.0) có vẽ
+    endothelial fenestration nhưng kèm chữ tiếng Anh và thanh thước 50 µm trên hình.
+
+    '
+  r2_handling: 'Dùng mạch máu vector sạch niaid-blood-vessel-55.svg (Public Domain)
+    với nhãn chuẩn "Lòng xoang gan / Sinusoidal lumen", tuyệt đối không tự vẽ lỗ cửa
+    sổ và bỏ ghi chú nội bộ (*) khỏi khung hình.
+
+    '
+  doctor_action_needed: Bác sĩ xem xét duyệt dùng tạm mạch sạch cho mục đích minh
+    họa cơ chế hoặc cung cấp hình LSEC chuẩn.
+- id: servier-lobule-unlabelled-anatomy
+  severity: doctor_confirmation
+  category: anatomy_identification
+  steps:
+  - B1
+  - B2
+  - B5
+  summary: 'Hình khối tiểu thùy servier-liver-lobule.png không có nhãn gốc; nhận diện
+    ống xanh lá = ống mật, ống xanh dương đáy = nhánh TM cửa, ống đỏ = nhánh ĐM gan,
+    trụ xanh dương đỉnh = TM trung tâm dựa trên Kietzmann 2017 Fig. 1A. Đã bổ sung
+    dbcls-hepatic-lobule.svg (lục giác cổ điển, CC BY 4.0).
+
+    '
+  doctor_action_needed: Bác sĩ xác nhận định danh mạch, hợp lưu ĐM gan + TM cửa và
+    chiều dòng mật trên khối 3D.
+- id: space-of-disse-and-alt2-simplification
+  severity: doctor_confirmation
+  category: mechanism_simplification
+  steps:
+  - B3
+  - B4
+  summary: 'Chưa thể hiện khoang Disse riêng vì thiếu asset LSEC; bỏ qua tiểu phần
+    ALT2 ty thể để giữ minh họa ALT chủ yếu ở bào tương (McGill 2016); phân biệt nhẹ
+    vs nặng/hoại tử ghi rõ giới hạn mô hình gan chuột thiếu máu (Kamiike 1989).
+
+    '
+  doctor_action_needed: Bác sĩ xác nhận mức đơn giản hóa và thẻ giới hạn trên khung
+    hình.
+preview_frames:
+- previews/b1.png
+- previews/b2.png
+- previews/b4-mild.png
+- previews/b4-severe.png
+- previews/b5.png
+- previews/b6.png
