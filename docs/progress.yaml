@@ -305,9 +305,9 @@ phases:
     note: 'Rà soát 2026-11-19: PermissionError (WinError 5/32/33) bị gán configuration (runner.py, agents.py); gate_review chỉ chặn khi passed is False; vibi.py gọi ffmpeg không timeout. Prompt: cache/model-test/prompts/prompt-r3-11-retry-and-qa.md; worktree E:/pyh-r3-11. Đang chạy codex.'
   - id: R3.12
     title: Kế hoạch short sai luật clip dọc (2 chủ thể giải phẫu) phải bị bắt sớm và được agent viết lại; mở khóa PYH-003
-    status: doing
+    status: done
     owner: codex (gpt-6.1-sol)
-    note: 'PYH-003 kẹt produce: shorts-plan CL02 (S12-S19) có 3 cảnh cùng hepatocyte_sinusoid_unit, shorts_plan_ready chỉ kiểm hash nên trạm shorts_plan không chạy lại. Brief: scratchpad brief-r3-12.md; worktree E:/pyh-r3-12.'
+    note: 'Đã merge fbe4d37, pytest 2317 đạt, ruff sạch; xưởng khởi động lại PID 36468 để nạp code mới. PYH-003 kẹt produce: shorts-plan CL02 (S12-S19) có 3 cảnh cùng hepatocyte_sinusoid_unit, shorts_plan_ready chỉ kiểm hash nên trạm shorts_plan không chạy lại. Brief: scratchpad brief-r3-12.md; worktree E:/pyh-r3-12.'
   - id: R3.6
     title: Mở rộng nguồn y văn — Elsevier làm provider tìm kiếm, PubMed connector để kiểm chéo khi nghiệm thu
     status: done
