@@ -16,6 +16,9 @@ FPS = 30
 CLIP_MIN_FRAMES = 60 * FPS
 CLIP_MAX_FRAMES = 180 * FPS
 CLIP_CTA_FRAMES = 3 * FPS
+STYLE_A_MASCOT_MAX_WIDTH_PERCENT = 28.0
+STYLE_A_SUBTITLE_POSITION = "bottom_center"
+STYLE_A_HOOK_MAX_SECONDS = 2.0
 
 
 class ClipSpec(BaseModel):
@@ -27,6 +30,24 @@ class ClipSpec(BaseModel):
     last_scene_id: str
     hook_scene_id: str | None = None
     outro_scene_id: str | None = None
+    mascot_max_width_percent: float | None = Field(
+        default=None,
+        gt=0,
+        le=STYLE_A_MASCOT_MAX_WIDTH_PERCENT,
+        allow_inf_nan=False,
+        exclude_if=lambda v: v is None,
+    )
+    subtitle_position: Literal["bottom_center"] | None = Field(
+        default=None,
+        exclude_if=lambda v: v is None,
+    )
+    hook_window_seconds: float | None = Field(
+        default=None,
+        gt=0,
+        le=STYLE_A_HOOK_MAX_SECONDS,
+        allow_inf_nan=False,
+        exclude_if=lambda v: v is None,
+    )
 
 
 class ClipPlan(BaseModel):
@@ -61,15 +82,34 @@ def resolve_clip_scenes(clip: ClipSpec, storyboard: Storyboard) -> tuple[Scene, 
     return tuple(hook + list(storyboard.scenes[first : last + 1]) + outro)
 
 
+def validate_style_a_vertical_clip(clip: ClipSpec) -> None:
+    """Require Style A §6 (Trạm 15) 9:16 layout metadata on a vertical clip."""
+    if clip.mascot_max_width_percent is None or clip.mascot_max_width_percent > STYLE_A_MASCOT_MAX_WIDTH_PERCENT:
+        raise ValueError(
+            f"{clip.id}: chuẩn A 9:16 yêu cầu mascot_max_width_percent <= {STYLE_A_MASCOT_MAX_WIDTH_PERCENT:g}%"
+        )
+    if clip.subtitle_position != STYLE_A_SUBTITLE_POSITION:
+        raise ValueError(
+            f"{clip.id}: chuẩn A 9:16 yêu cầu subtitle_position={STYLE_A_SUBTITLE_POSITION!r}"
+        )
+    if clip.hook_window_seconds is None or clip.hook_window_seconds > STYLE_A_HOOK_MAX_SECONDS:
+        raise ValueError(
+            f"{clip.id}: chuẩn A 9:16 yêu cầu hook_window_seconds <= {STYLE_A_HOOK_MAX_SECONDS:g}s"
+        )
+
+
 def validate_clip_plan(
     plan: ClipPlan, storyboard: Storyboard, claims: Mapping[str, EvidenceClaim],
     *, min_frames: int = CLIP_MIN_FRAMES, max_frames: int = CLIP_MAX_FRAMES,
+    require_style_a: bool = False,
 ) -> dict[str, tuple[Scene, ...]]:
     """Block clips that run too short/long, cite unknown claims, or drop a caveat."""
     if storyboard.format_profile != "youtube_long":
         raise ValueError("clip plan requires a youtube_long storyboard")
     resolved: dict[str, tuple[Scene, ...]] = {}
     for clip in plan.clips:
+        if require_style_a:
+            validate_style_a_vertical_clip(clip)
         scenes = resolve_clip_scenes(clip, storyboard)
         frames = sum(scene.duration_frames for scene in scenes) + CLIP_CTA_FRAMES
         if not min_frames <= frames <= max_frames:

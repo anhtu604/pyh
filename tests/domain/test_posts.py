@@ -267,3 +267,100 @@ def test_thumbnail_headline_number_needs_claim():
     assert errors("5 điều cần biết [claim:C01]") == []
     assert any("C99" in e for e in errors("5 điều [claim:C99]"))
     assert any("thumbnail.headline" in e for e in errors("5 điều cần biết", ("5 điều cần biết",)))
+
+
+def test_style_a_thumbnail_rules_and_backcompat() -> None:
+    # Legacy thumbnail without Style A fields keeps exact dump & passes default validate_posts.
+    legacy = _valid_post_set(
+        thumbnail={
+            "headline": "Vì sao cần theo dõi huyết áp?",
+            "background_prompt": "unlabeled heart",
+            "seed": 7,
+        }
+    )
+    assert "mascot_pose" not in legacy.model_dump(mode="json")["thumbnail"]
+    assert (
+        validate_posts(
+            legacy,
+            approved_claim_ids=APPROVED_CLAIMS,
+            chapter_titles=CHAPTERS,
+            source_labels=SOURCES,
+        )
+        == []
+    )
+    # Requiring Style A rejects the legacy 7-word thumbnail missing mascot/mechanism/theme.
+    strict_errors = validate_posts(
+        legacy,
+        approved_claim_ids=APPROVED_CLAIMS,
+        chapter_titles=CHAPTERS,
+        source_labels=SOURCES,
+        require_style_a_thumbnail=True,
+    )
+    assert any("tối đa 4 từ" in e for e in strict_errors)
+    assert any("thumbnail.mascot_pose" in e for e in strict_errors)
+    assert any("thumbnail.mechanism_visual" in e for e in strict_errors)
+    assert any("thumbnail.background_theme" in e for e in strict_errors)
+
+    # Valid Style A thumbnail (<= 4 visible words ignoring [claim:C01]) passes.
+    for theme in ("off_white", "night"):
+        valid = _valid_post_set(
+            thumbnail={
+                "headline": "5 mmHg huyết áp [claim:C01]",
+                "background_prompt": "flat 2D matte background",
+                "seed": 11,
+                "mascot_pose": "surprised",
+                "mechanism_visual": "artery_cross_section",
+                "background_theme": theme,
+                "font_family": "Be Vietnam Pro",
+                "font_weight": 800,
+            }
+        )
+        assert (
+            validate_posts(
+                valid,
+                approved_claim_ids=APPROVED_CLAIMS,
+                chapter_titles=CHAPTERS,
+                source_labels=SOURCES,
+                require_style_a_thumbnail=True,
+            )
+            == []
+        )
+
+    # Partial Style A fields trigger Style A validation automatically even with default flag.
+    too_long = _valid_post_set(
+        thumbnail={
+            "headline": "Năm từ là quá dài",
+            "background_prompt": "flat 2D matte background",
+            "seed": 12,
+            "mascot_pose": "thinking",
+            "mechanism_visual": "artery_cross_section",
+            "background_theme": "off_white",
+        }
+    )
+    long_errors = validate_posts(
+        too_long,
+        approved_claim_ids=APPROVED_CLAIMS,
+        chapter_titles=CHAPTERS,
+        source_labels=SOURCES,
+    )
+    assert any("tối đa 4 từ" in e for e in long_errors)
+
+    # Invalid background_theme, mascot_pose, or font_weight fails Pydantic validation.
+    with pytest.raises(ValidationError):
+        _valid_post_set(
+            thumbnail={
+                "headline": "Huyết áp cao",
+                "background_prompt": "flat",
+                "seed": 1,
+                "background_theme": "red",
+            }
+        )
+    with pytest.raises(ValidationError):
+        _valid_post_set(
+            thumbnail={
+                "headline": "Huyết áp cao",
+                "background_prompt": "flat",
+                "seed": 1,
+                "font_weight": 600,
+            }
+        )

@@ -135,3 +135,45 @@ def test_package_preserves_snapshot_and_rejects_edits(tmp_path):
     assert (package / 'workflow/standards.yaml').read_bytes() == original
     manifest = json.loads((package / 'manifest.json').read_text(encoding='utf-8'))
     assert manifest['payload_sha256']['workflow/standards.yaml'] == hashlib.sha256(snapshot.read_bytes()).hexdigest()
+
+
+def test_pin_standards_pins_style_a_spec_and_sha256_immutably(tmp_path):
+    from healthvideo.workflows.create_project_v2 import create_project_v2
+
+    spec_file = tmp_path / module().STYLE_SPEC_FILE
+    spec_file.parent.mkdir(parents=True, exist_ok=True)
+    spec_file.write_text('# Style A spec v1\n', encoding='utf-8')
+    expected_sha = hashlib.sha256(spec_file.read_bytes()).hexdigest()
+
+    hash_v1 = module().standards_hash(tmp_path)
+    project = create_project_v2(tmp_path / 'projects', 'style-a-test', 'TEST', now=datetime.now(UTC))
+    revision = project / 'revisions/001'
+    snapshot = revision / 'workflow/standards.yaml'
+    assert snapshot.is_file()
+    data = read_yaml(snapshot)
+    assert data['style_spec'] == {
+        'path': module().STYLE_SPEC_FILE.as_posix(),
+        'sha256': expected_sha,
+    }
+    assert module().pinned_style_spec(revision) == data['style_spec']
+    assert module().style_a_active(revision) is True
+
+    # Editing the spec later changes standards_hash(root) but does not rewrite pinned snapshot.
+    spec_file.write_text('# Style A spec v2\n', encoding='utf-8')
+    assert module().standards_hash(tmp_path) != hash_v1
+    assert module().pin_standards(tmp_path, project).read_bytes() == snapshot.read_bytes()
+    assert module().pinned_style_spec(revision)['sha256'] == expected_sha
+    block = standards.prompt_block(tmp_path, slug=project.name)
+    assert module().STYLE_SPEC_FILE.as_posix() in block
+    assert expected_sha in block
+
+
+def test_legacy_standards_snapshot_without_style_spec_remains_readable(tmp_path):
+    project = create_v2_project_fixture(tmp_path / 'projects')
+    revision = project / 'revisions/001'
+    snapshot = revision / 'workflow/standards.yaml'
+    write_yaml_atomic(snapshot, {'version': 1, 'standards': [_standard_entry(1)]})
+    assert module().pinned_style_spec(revision) is None
+    assert module().style_a_active(revision) is False
+    block = standards.prompt_block(tmp_path, slug=project.name)
+    assert 'Clear TEST standard' in block

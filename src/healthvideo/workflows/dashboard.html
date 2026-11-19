@@ -1154,8 +1154,8 @@ function renderOverview(ov){
     ...decs.map(d => d.kind === 'script_guidance' || d.kind === 'product_guidance'
       ? {slug:d.slug, code:d.code, title:d.title, guidance:true, productGuidance:d.kind === 'product_guidance', guidanceRole:d.role || '', guidanceView:d.view || '', stuck:d.stuck || '', rounds:d.rounds || 0,
          sub:`${d.message || 'Trạm 07 chưa đạt sau 3 chu kỳ'}${d.rounds ? ` (${d.rounds} vòng)` : ''} · tiêu chí kẹt: ${d.stuck || 'chưa rõ'}`}
-      : {slug:d.slug, code:d.code, title:d.title, gate:d.gate, sub:`${d.count} điểm cần quyết`, btn:`Mở thẻ quyết định (${d.count})`}),
-    ...gateOnly.map(p => ({slug:p.slug, code:p.code, title:p.title, gate:p.gate, sub:'Gói đã sẵn sàng để duyệt', btn:'Mở gói duyệt'})),
+      : {slug:d.slug, code:d.code, title:d.title, gate:d.gate, styleScore:d.style_score || null, sub:`${d.count} điểm cần quyết`, btn:`Mở thẻ quyết định (${d.count})`}),
+    ...gateOnly.map(p => ({slug:p.slug, code:p.code, title:p.title, gate:p.gate, styleScore:null, sub:'Gói đã sẵn sàng để duyệt', btn:'Mở gói duyệt'})),
   ];
   if(!rows.length){
     decBox.innerHTML = '<div class="todo-calm">Không có việc nào cần bác sĩ lúc này</div>';
@@ -1174,6 +1174,7 @@ function renderOverview(ov){
       </div>` : `
       <div class="todo-row">
         <span class="chip gate">${esc(GATE_LABEL[r.gate] || 'Cần duyệt')}</span>
+        ${r.gate === 'video' && r.styleScore ? `<span class="chip ${r.styleScore.passed ? 'done' : 'gate'}" data-style-score="${esc(r.styleScore.score)}">Phong cách PYH: ${esc(r.styleScore.score)}/10</span>` : ''}
         <div class="todo-main">
           <div class="todo-t" title="${esc(r.title)}">${r.code ? esc(r.code) + ' · ' : ''}${esc(r.title)}</div>
           <div class="todo-s">${esc(r.sub)}</div>
@@ -2070,7 +2071,13 @@ function renderDecisionCardSlot(b){
     slot.innerHTML = '';
     return;
   }
-  const checks = (card.auto_checks || []).map(c =>
+  const styleScore = b.gate === 'video'
+    ? (card.style_score || (b.product_review && b.product_review.style_score) || null)
+    : null;
+  const styleBadge = styleScore
+    ? `<span class="chip ${styleScore.passed ? 'done' : 'gate'}" data-style-score="${esc(styleScore.score)}">${styleScore.passed ? '✓' : '!'} Điểm phong cách PYH (Trạm 12): ${esc(styleScore.score)}/10</span>`
+    : '';
+  const checks = styleBadge + (card.auto_checks || []).map(c =>
     `<span class="chip ${c.passed?'done':'gate'}">${c.passed?'✓':'!'} ${esc(c.label)}: ${esc(c.summary)}</span>`
   ).join('');
   const itemsHtml = (card.items || []).map(item => {

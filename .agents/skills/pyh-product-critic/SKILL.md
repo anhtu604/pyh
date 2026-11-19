@@ -20,9 +20,11 @@ description: Use when PYH product_review independently evaluates the final video
 - Đọc prompt `product_review.md`, lấy `active_revision` từ `{project}/project.yaml`.
   Mọi sản phẩm dưới đây thuộc `revisions/<rev>/`.
 - Chạy `healthvideo step review-frames {project} --every 4` theo prompt;
-  đọc index.json trong thư mục lệnh trả về, mở từng contact sheet thực tế.
+  đọc `index.json` và `hook-transitions/index.json` trong thư mục lệnh trả về,
+  mở từng contact sheet định kỳ lẫn khung quanh hook (0–3 s) và chuyển cảnh giữa các scene.
 - Đối chiếu `script/script.yaml`, `storyboard/storyboard.yaml`,
-  `renders/scene-timing.json`, `reviews/video-qa.json`, `posts/posts.yaml`.
+  `renders/scene-timing.json`, `reviews/video-qa.json`, `posts/posts.yaml` và chuẩn phong cách
+  `docs/superpowers/specs/2026-11-17-pyh-style-a-mascot-host.md`.
 - Đọc `profiles/pronunciation.vi.yaml`; không mở Playwright/trình duyệt
   hay chạy script ngoài theo `character-animation-qa`.
 
@@ -40,10 +42,15 @@ description: Use when PYH product_review independently evaluates the final video
   không yêu cầu mọi video có đủ ba tầng hay nhắc thuốc.
 - `bai_dang`: title/thumbnail/caption hứa đúng phần video trả lời, không hù dọa,
   clickbait, hứa chữa khỏi hoặc thêm claim chưa duyệt.
+- `dung_phong_cach_pyh`: chấm theo spec `2026-11-17-pyh-style-a-mascot-host.md` trên contact sheet
+  định kỳ + `hook-transitions/` (hook 0–3 s và chuyển cảnh): màu `off_white/navy/teal/yellow/night`
+  ≤ 3 màu nổi không đỏ báo động; chữ Be Vietnam Pro đọc rõ 720p; mascot đúng 9 tư thế và đúng nghĩa;
+  sơ đồ dựng dần từng beat và zoom kính lúp (không cross-fade chồng mờ); phụ đề tĩnh theo trang
+  không highlight từng chữ và không đè nhãn/mascot/nguồn.
 
 ## Đầu ra
 - Chỉ ghi `revisions/<rev>/reviews/product-review.yaml`, không sửa/render.
-- Giữ sáu key `scores` trên, `summary`, `issues`, `checked`, `decisions`;
+- Giữ đủ bảy key `scores` trên (gồm `dung_phong_cach_pyh`), `summary`, `issues`, `checked`, `decisions`;
   điểm 1–10, dưới 7 phải có issue với `at`, `criterion`, `problem`, `fix`, `fixable`.
 - `fixable: true` chỉ nếu sửa trọn bằng SVG trong `video/src/anatomy/`
   hoặc `posts/posts.yaml`; phải đổi lời/cảnh/thời lượng/FLUX/profiles là false.
@@ -52,7 +59,7 @@ description: Use when PYH product_review independently evaluates the final video
 - `checked` chỉ ghi phép kiểm đã thực hiện; nêu giới hạn âm thanh trong summary.
 
 ## Xong khi / Thiếu dữ liệu hoặc lỗi
-- Báo cáo đủ sáu tiêu chí với vị trí và hướng sửa cụ thể, không tự duyệt cổng.
+- Báo cáo đủ bảy tiêu chí với vị trí và hướng sửa cụ thể, không tự duyệt cổng.
 - Thiếu contact sheet/QA/timing: chỉ rõ phần chưa kiểm, không chấm như đã xem đủ.
   Lỗi công cụ ghi log thật, retry đúng budget prompt; không sửa trạng thái/hash
   hoặc giả bước lấy khung hình lỗi đã thành công.

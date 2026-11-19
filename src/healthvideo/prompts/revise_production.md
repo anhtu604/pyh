@@ -14,6 +14,7 @@
 3. Nếu góp ý cần sửa bất kỳ tệp nào thuộc cổng y khoa, dừng, không sửa gì, ghi rõ trong báo cáo: "Cần bác sĩ chạy `review reopen --gate medical --changed <tệp> --resume-to draft_ready`" và liệt kê tệp + thay đổi dự kiến. Sau khi bác sĩ mở cổng, bước `draft` sẽ sửa và nộp lại.
 4. Nếu chỉ sửa component SVG, chạy `healthvideo step resume {project} --gate video --to production_in_progress`; lệnh này tự từ chối nếu tệp đã duyệt y khoa bị đổi.
 5. Khi sửa SVG: giữ phong cách sơ đồ tiếng Việt có leader line/mũi tên; tối đa 6 nhãn không chồng/cắt. Đọc `reviews/visual-review.yaml` và contact sheet để sửa lỗi nhìn thấy. Nếu cần đổi beat/subject/prompt FLUX (`docs/reference/image-prompting.md`), áp dụng mục 3 vì các trường này thuộc storyboard/manifest đã duyệt; không sửa lách cổng.
+6. Kỷ luật thợ dựng (`docs/superpowers/specs/2026-11-17-pyh-style-a-mascot-host.md` mục 5): chỉ sửa đúng lỗi bị nêu, tuyệt đối không tự thêm hiệu ứng, chuyển động hay mẫu motion ngoài bộ động tác nhận diện (dựng sơ đồ dần, vòng nhấn teal, gạch chân vàng, thẻ thuật ngữ, thẻ nguồn; tối đa 2 mẫu `video/src/motion` khác trong một chương) để "cho sinh động"; không bounce ở chuyển cảnh, zoom y khoa chỉ dùng kính lúp mục 3b (không cross-fade chồng mờ).
 
 ## Lệnh được dùng
 - `healthvideo step resume {project} --gate video --to production_in_progress`

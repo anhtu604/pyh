@@ -26,13 +26,18 @@ LOG = 'reviews/product-review-log.yaml'
 RENDER_MANIFEST = 'renders/render-manifest.json'
 PASS_SCORE = 7
 MAX_REVIEWS = 3  # one first look plus two fixes, then the doctor sees the score
-CRITERIA: dict[str, str] = {
+STYLE_CRITERION = 'dung_phong_cach_pyh'
+LEGACY_CRITERIA: dict[str, str] = {
     'hinh_khop_loi': 'Hình khớp lời đọc từng cảnh, đúng cơ chế',
     'hinh_ro': 'Hình rõ, nhãn tiếng Việt đọc được, không chồng hay cắt chữ',
     'nhip_dung': 'Nhịp dựng nhanh, không giữ một hình quá lâu',
     'am_thanh_phu_de': 'Phụ đề khớp lời, phát âm thuật ngữ đúng, nhạc không lấn giọng',
     'mo_ket': 'Mở đầu cuốn hút, kết rõ ràng có nhận diện kênh',
     'bai_dang': 'Bài đăng đúng nội dung video, không hứa hẹn quá đà',
+}
+CRITERIA: dict[str, str] = {
+    **LEGACY_CRITERIA,
+    STYLE_CRITERION: 'Đúng phong cách PYH (màu, chữ, mascot đúng nghĩa, sơ đồ dựng dần, phụ đề)',
 }
 ProductAction = Literal['product_review', 'revise_product', 'submit_video']
 
@@ -126,16 +131,17 @@ def require_passed_review(project: Path) -> None:
     report = ProductReviewReport.model_validate({
         key: latest[key] for key in ProductReviewReport.model_fields if key in latest
     })
-    _validated(report)
+    _validated(report, allow_legacy=True)
     if (latest.get('passed') is not True
             or any(score < PASS_SCORE for score in report.scores.values())
             or len(report.decisions) > MAX_DECISIONS):
         raise ValueError('Trạm 12 chưa đạt; chưa được nộp bác sĩ duyệt video.')
 
 
-def _validated(report: ProductReviewReport) -> None:
+def _validated(report: ProductReviewReport, *, allow_legacy: bool = False) -> None:
     validate_decisions(report.decisions)
-    if set(report.scores) != set(CRITERIA):
+    allowed_keys = (set(CRITERIA), set(LEGACY_CRITERIA)) if allow_legacy else (set(CRITERIA),)
+    if set(report.scores) not in allowed_keys:
         raise ValueError('Báo cáo duyệt sản phẩm phải có đủ đúng các tiêu chí.')
     if any(not 1 <= score <= 10 for score in report.scores.values()):
         raise ValueError('Điểm duyệt sản phẩm phải từ 1 đến 10.')
@@ -262,6 +268,26 @@ def revision_notes(project: Path) -> str:
     return '\n'.join([f"Người duyệt sản phẩm chấm lần {latest['round']}: {latest['summary']}", *rows])
 
 
+def style_score(root: Path) -> dict | None:
+    """Return the latest PYH style score from Station 12 if present."""
+    rounds = _log(root)['rounds']
+    if not rounds:
+        return None
+    latest = rounds[-1]
+    scores = latest.get('scores') or {}
+    if STYLE_CRITERION not in scores:
+        return None
+    value = int(scores[STYLE_CRITERION])
+    return {
+        'key': STYLE_CRITERION,
+        'label': CRITERIA[STYLE_CRITERION],
+        'score': value,
+        'pass_score': PASS_SCORE,
+        'passed': value >= PASS_SCORE,
+        'round': latest.get('round'),
+    }
+
+
 def review_view(root: Path) -> dict | None:
     """Latest score in display form for the app and the video packet."""
     rounds = _log(root)['rounds']
@@ -273,8 +299,12 @@ def review_view(root: Path) -> dict | None:
         'round': latest['round'],
         'passed': latest['passed'],
         'summary': latest.get('overall') or latest['summary'],
-        'scores': [{'label': label, 'score': latest['scores'][key]}
-                   for key, label in CRITERIA.items()],
+        'scores': [
+            {'key': key, 'label': label, 'score': latest['scores'][key]}
+            for key, label in CRITERIA.items()
+            if key in latest['scores']
+        ],
+        'style_score': style_score(root),
         'issues': [{**item, 'line': item['at'], 'criterion': CRITERIA[item['criterion']],
                     'fix': item['fix'] + ('' if item['fixable'] else ' (cần bác sĩ mở cổng y khoa)')}
                    for item in latest['issues']],

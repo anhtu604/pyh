@@ -92,11 +92,16 @@ def _entry_markdown(entry: dict) -> str:
 
 def prompt_block(root: Path, *, slug: str | None = None) -> str:
     """Markdown block of standing standards, newest first, within a character budget."""
-    from healthvideo.workflows.factory_standards import accepted_standards
+    from healthvideo.workflows.factory_standards import (
+        accepted_standards,
+        pinned_style_spec,
+        style_spec_pin,
+    )
 
     entries = [entry for entry in load(root) if entry.get('slug') == 'chung'
                or (slug is not None and entry.get('slug') == slug)]
     accepted = accepted_standards(root)
+    style_spec: dict[str, str] | None = style_spec_pin(root)
     if slug is not None:
         projects = (root / 'projects').resolve()
         project = (projects / slug).resolve()
@@ -109,8 +114,10 @@ def prompt_block(root: Path, *, slug: str | None = None) -> str:
             if not snapshot.is_relative_to(project):
                 raise ValueError('Standards snapshot ngoài project.')
             if snapshot.is_file():
-                accepted = {entry['stage']: entry for entry in read_yaml(snapshot)['standards']}
-    if not entries and not accepted:
+                snapshot_data = read_yaml(snapshot)
+                accepted = {entry['stage']: entry for entry in snapshot_data.get('standards', [])}
+                style_spec = pinned_style_spec(snapshot.parents[1])
+    if not entries and not accepted and style_spec is None:
         return ''
     header = (
         '## Chuẩn của bác sĩ\n'
@@ -119,6 +126,10 @@ def prompt_block(root: Path, *, slug: str | None = None) -> str:
     )
     body: list[str] = []
     used = len(header)
+    if style_spec is not None:
+        chunk = f"- Chuẩn phong cách PYH: `{style_spec['path']}` (sha256: `{style_spec['sha256']}`)"
+        body.append(chunk)
+        used += len(chunk) + 1
     for stage, entry in sorted(accepted.items()):
         chunk = f"- Giai đoạn {stage} · v{entry['version']}: {entry['text']}"
         body.append(chunk)

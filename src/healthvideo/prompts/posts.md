@@ -25,7 +25,12 @@ bằng cắt bỏ điều kiện áp dụng. Không thêm trường schema hay t
 3. Mọi câu có chữ số (trừ mốc giờ đầu dòng chương trong `youtube_description`) bắt buộc phải gắn `[claim:<id>]` trỏ tới `claim_id` đã duyệt y khoa trong `evidence/ledger.yaml`.
 4. Trong `youtube_description`, ghi đầy đủ mốc giờ chương kèm đúng tiêu đề chương từ `outline.yaml` và danh sách nguồn tham khảo dùng đúng nhãn nguồn (`title` của từng bản ghi trong `evidence/ledger.yaml`).
 5. Chạy `healthvideo step posts-check {project}` và sửa `revisions/<rev>/posts/posts.yaml` cho tới khi không còn lỗi.
-6. Thêm khối `thumbnail`: `headline` (1–60 ký tự, tính cả dấu claim), `background_prompt`, `seed` (số nguyên không âm). Headline ngắn, gây tò mò, đúng nội dung đã duyệt; không giật tít sai sự thật, không hứa chữa bệnh. Có chữ số phải gắn `[claim:<id>]` đã duyệt; renderer sẽ bỏ dấu claim khi vẽ chữ. Prompt nền chỉ mô tả minh họa trang trí, không chữ/số/nhãn/logo; chủ thể bên phải, chừa khoảng thoáng bên trái. Chữ và logo do Remotion dựng.
+6. Thêm khối `thumbnail` theo **Chuẩn phong cách PYH — Hướng A** (`docs/superpowers/specs/2026-11-17-pyh-style-a-mascot-host.md` mục 6, Trạm 14):
+   - `headline`: tối đa **4 từ hiển thị** (không tính thẻ `[claim:<id>]`), 1–60 ký tự, dùng chữ **Be Vietnam Pro 800** (`font_family: "Be Vietnam Pro"`, `font_weight: 800`). Ngắn, gây tò mò đúng nội dung đã duyệt; không giật tít sai sự thật, không hứa chữa bệnh; có chữ số phải gắn `[claim:<id>]` đã duyệt (renderer sẽ bỏ dấu claim khi vẽ chữ).
+   - `mascot_pose`: bắt buộc một trong 9 tư thế hợp lệ trong `profiles/brand.vi.yaml` (`welcome`, `explain`, `caution`, `point_up`, `thinking`, `surprised`, `thumbs_up`, `blank_board`, `myth_bust`), khớp sắc thái tiêu đề.
+   - `mechanism_visual`: một hình cơ chế cụ thể lấy từ video (không nhồi nhiều hình).
+   - `background_theme`: bắt buộc `off_white` (`#F7F4EC`) hoặc `night` (`#0A1C2E`); tối đa 3 màu nổi, không đỏ báo động.
+   - `background_prompt` và `seed` (số nguyên không âm): nền phẳng 2D matte theo `background_theme`, không chữ/số/nhãn/logo; chừa khoảng thoáng cho chữ và mascot, chủ thể/hình cơ chế rõ ràng. Chữ và logo do Remotion dựng.
 
 ## Lệnh được dùng
 - `healthvideo step posts-check {project}`

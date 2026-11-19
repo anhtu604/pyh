@@ -23,6 +23,59 @@ CANDIDATES = 'reviews/visual/candidates.yaml'
 REPORT = 'reviews/visual-review.yaml'
 MAX_REGENERATIONS = 2
 CONTACT_SHEET_TIMEOUT = 15 * 60  # Decode the full video and sample every scene/beat.
+STYLE_ERROR_CODES: dict[str, str] = {
+    'style_palette': 'Sai bảng màu PYH (off_white/navy/teal/yellow/night, >3 màu nổi hoặc đỏ báo động)',
+    'style_typography': 'Sai font Be Vietnam Pro, cỡ chữ nhỏ dưới ngưỡng hoặc tương phản < 4.5:1',
+    'style_mascot_pose': 'Tư thế mascot không khớp ý lời đọc hoặc sai bảng 9 tư thế mục 2',
+    'style_stroke': 'Sai nét 2D phẳng matte (gradient, bóng đổ, grain, ảnh stock hoặc lệch nét navy)',
+    'style_medical_art': 'Dùng FLUX/tự vẽ thay hình y khoa chuẩn khoa học hoặc sai màu giải phẫu thực tế',
+    'style_caption': 'Phụ đề đè hình/nhãn/mascot, vượt dòng/ký tự hoặc có tô sáng từng chữ',
+    'style_zoom': 'Phóng to y khoa dùng cross-fade chồng mờ thay vì kính lúp hoặc lệch vùng nguồn',
+}
+MASCOT_POSES: frozenset[str] = frozenset({
+    'welcome', 'explain', 'point_up', 'thinking', 'surprised',
+    'caution', 'myth_bust', 'blank_board', 'thumbs_up',
+})
+
+
+def _extract_style_code(raw: str) -> str:
+    return raw.split(':', 1)[0].strip()
+
+
+def validate_style_issues(row: dict) -> list[str]:
+    """Validate optional style_issues/mascot_pose fields and any style_* codes in layout_issues."""
+    codes: list[str] = []
+    pose = row.get('mascot_pose')
+    if pose is not None and (not isinstance(pose, str) or pose not in MASCOT_POSES):
+        raise ValueError(f'Unknown mascot_pose: {pose!r}')
+    raw_style = row.get('style_issues')
+    if raw_style is not None:
+        if not isinstance(raw_style, list):
+            raise TypeError('Visual review style_issues must be a list')
+        for item in raw_style:
+            if isinstance(item, str):
+                code = _extract_style_code(item)
+            elif isinstance(item, dict):
+                code = item.get('code', '')
+                if not isinstance(code, str):
+                    raise TypeError('Visual review style_issues entry code must be a string')
+                for note_key in ('detail', 'note'):
+                    if note_key in item and item[note_key] is not None and not isinstance(item[note_key], str):
+                        raise TypeError(f'Visual review style_issues {note_key} must be a string')
+            else:
+                raise TypeError('Visual review style_issues items must be strings or mappings')
+            if code not in STYLE_ERROR_CODES:
+                raise ValueError(f'Unknown style error code: {code!r}')
+            if code not in codes:
+                codes.append(code)
+    for issue in row.get('layout_issues', []):
+        if isinstance(issue, str) and issue.lstrip().startswith('style_'):
+            code = _extract_style_code(issue.lstrip())
+            if code not in STYLE_ERROR_CODES:
+                raise ValueError(f'Unknown style error code: {code!r}')
+            if code not in codes:
+                codes.append(code)
+    return codes
 
 
 def review_pending(project: Path) -> bool:
@@ -46,6 +99,7 @@ def review_complete(root: Path) -> bool:
         for asset in data['assets']:
             for scene in asset['scenes']:
                 row = rows.get(scene, {})
+                validate_style_issues(row)
                 if asset.get('selected'):
                     if row.get('decision') != 'select' or row.get('selected') != asset['selected']:
                         raise ValueError('Visual review selection changed after agent decision')
@@ -134,6 +188,8 @@ def _consume_report(root: Path, data: dict, board: Storyboard) -> None:
         if any(not str(row.get('reason', '')).strip() or
                not isinstance(row.get('layout_issues'), list) for row in rows):
             raise ValueError('Visual review requires a reason and layout_issues list')
+        for row in rows:
+            validate_style_issues(row)
         selections = {row.get('selected') for row in rows}
         kinds = {row.get('decision') for row in rows}
         if kinds == {'select'} and len(selections) == 1:

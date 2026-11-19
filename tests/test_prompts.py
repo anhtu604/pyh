@@ -136,3 +136,29 @@ def test_company_20_new_prompts_reference_step_commands() -> None:
     assert "healthvideo step storyboard" in sb
     assert "healthvideo step voice-prep" in vp
     assert "healthvideo step shorts-plan" in sp
+
+
+def test_r33b_style_a_prompts_and_skills_contracts() -> None:
+    from pathlib import Path
+
+    vr_prompt = (PROMPTS_DIR / "visual_review.md").read_text(encoding="utf-8")
+    vr_skill = Path(".agents/skills/pyh-art-director/SKILL.md").read_text(encoding="utf-8")
+    for code in ("style_palette", "style_mascot_pose", "style_stroke", "style_zoom"):
+        assert code in vr_prompt
+        assert code in vr_skill
+    assert "mascot_pose" in vr_prompt and "mascot_pose" in vr_skill
+
+    for path in (
+        PROMPTS_DIR / "revise_production.md",
+        PROMPTS_DIR / "revise_product.md",
+        Path(".agents/skills/pyh-editor/SKILL.md"),
+    ):
+        text = path.read_text(encoding="utf-8")
+        assert "cho sinh động" in text
+        assert "mục 5" in text
+
+    pr_prompt = (PROMPTS_DIR / "product_review.md").read_text(encoding="utf-8")
+    pr_skill = Path(".agents/skills/pyh-product-critic/SKILL.md").read_text(encoding="utf-8")
+    for token in ("dung_phong_cach_pyh", "hook-transitions"):
+        assert token in pr_prompt
+        assert token in pr_skill

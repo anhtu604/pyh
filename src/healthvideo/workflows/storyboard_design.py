@@ -13,7 +13,7 @@ from healthvideo.domain.outline import Outline, validate_outline
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.script import Script
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
-from healthvideo.domain.storyboard import Storyboard
+from healthvideo.domain.storyboard import Storyboard, validate_style_a_mascot_poses
 from healthvideo.storage.files import (
     canonical_json_hash,
     read_yaml,
@@ -23,6 +23,7 @@ from healthvideo.storage.files import (
 )
 from healthvideo.storage.revision_lock import revision_lock
 from healthvideo.workflows.draft import _project, _validate, validate_estimated_layout
+from healthvideo.workflows.factory_standards import style_a_active
 
 
 def storyboard_ready(project_dir: Path) -> bool:
@@ -47,6 +48,8 @@ def storyboard_ready(project_dir: Path) -> bool:
         storyboard = Storyboard.model_validate(read_yaml(required[1]))
         assets = AssetManifest.model_validate(read_yaml(required[2]))
         _validate(revision, script, storyboard, assets, project=project)
+        if style_a_active(revision):
+            validate_style_a_mascot_poses(storyboard)
         validate_estimated_layout(project_dir, script, storyboard, assets)
         clip_path = revision / "script/clip-plan.yaml"
         if storyboard.format_profile == "youtube_long" and clip_path.is_file():
@@ -146,6 +149,8 @@ def _submit_storyboard_design(
                 staging / "script/outline.yaml", outline.model_dump(mode="json")
             )
         style_issues = _validate(staging, script, storyboard, assets, project=project)
+        if style_a_active(staging):
+            validate_style_a_mascot_poses(storyboard)
         validate_estimated_layout(project_dir, script, storyboard, assets, clip_plan=clip_plan)
         if (staging / "script/outline.yaml").is_file():
             ledger = read_yaml(staging / "evidence/ledger.yaml")

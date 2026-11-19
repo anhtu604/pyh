@@ -45,9 +45,14 @@ def create_project_v2(root: Path, slug: str, title: str, *, now: datetime) -> Pa
         # Legacy roots remain readable; configured factories pin only accepted versions.
         from healthvideo.workflows.factory_standards import (
             STANDARDS_FILE,
+            STYLE_SPEC_FILE,
             pin_standards,
         )
-        if root.name == 'projects' or (root.parent / STANDARDS_FILE).exists():
+        if (
+            root.name == 'projects'
+            or (root.parent / STANDARDS_FILE).exists()
+            or (root.parent / STYLE_SPEC_FILE).exists()
+        ):
             pin_standards(root.parent, staging_dir)
         _validate_staging(staging_dir, manifest)
         if project_dir.exists():

@@ -259,3 +259,48 @@ def test_role_model_override_picks_the_chain(tmp_path):
     company = company.model_copy(update={'roles': {**company.roles, 'product_critic': critic}})
     run_queue(tmp_path, replace(_deps(project, state, invoke), company=company))
     assert seen == [special]
+
+
+def test_pyh_style_criterion_required_for_new_reviews_and_exposed_in_view(tmp_path):
+    project = _project(tmp_path)
+    assert pr.STYLE_CRITERION in pr.CRITERIA
+    _report(project, scores=dict.fromkeys(pr.LEGACY_CRITERIA, 8))
+    with pytest.raises(ValueError, match='đủ đúng'):
+        pr.record_review(project, pr.render_hash(project))
+
+    _report(project, scores={**dict.fromkeys(pr.LEGACY_CRITERIA, 8), pr.STYLE_CRITERION: 9})
+    entry = pr.record_review(project, pr.render_hash(project))
+    assert entry['passed'] is True
+    style = pr.style_score(project / REV)
+    assert style is not None
+    assert style['key'] == pr.STYLE_CRITERION
+    assert style['score'] == 9
+    assert style['passed'] is True
+    view = pr.review_view(project / REV)
+    assert view['style_score'] == style
+    assert any(row['key'] == pr.STYLE_CRITERION and row['score'] == 9 for row in view['scores'])
+
+
+def test_legacy_pre_r33b_product_review_log_remains_valid_and_viewable(tmp_path):
+    project = _project(tmp_path)
+    write_yaml_atomic(project / REV / pr.LOG, {
+        'version': 1,
+        'submitted': 0,
+        'rounds': [{
+            'round': 1,
+            'render_sha256': pr.render_hash(project),
+            'passed': True,
+            'scores': dict.fromkeys(pr.LEGACY_CRITERIA, 8),
+            'summary': 'Bản duyệt cũ trước R3.3b.',
+            'issues': [],
+            'checked': ['Đã kiểm contact sheet'],
+            'decisions': [],
+        }],
+    })
+    pr.require_passed_review(project)
+    assert pr.next_product_action(project) == 'submit_video'
+    assert pr.style_score(project / REV) is None
+    view = pr.review_view(project / REV)
+    assert view is not None
+    assert view['style_score'] is None
+    assert len(view['scores']) == len(pr.LEGACY_CRITERIA)

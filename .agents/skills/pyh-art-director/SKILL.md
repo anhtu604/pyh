@@ -20,12 +20,20 @@ description: Use when PYH visual_review must inspect generated image candidates 
 - Đọc `docs/reference/image-prompting.md` khi cần viết prompt thay thế.
 
 ## Phán đoán công việc
+- Đối chiếu chuẩn phong cách PYH (`docs/superpowers/specs/2026-11-17-pyh-style-a-mascot-host.md`, mục 1–3b):
+  - Kiểm ảnh/FLUX theo mục 1: nền `off_white #F7F4EC`, nét/chữ `navy #12304A` 6 px phẳng 2D matte,
+    nhấn `teal #18A6A6`, chốt `yellow #F4B942`, tối đa 3 màu nổi, không đỏ báo động, không gradient,
+    không bóng đổ/nhựa 3D, không grain, không ảnh stock, loại chữ/số AI và vật thể lạ.
+  - FLUX chỉ cho cảnh đời sống; không dùng FLUX cho hình giải phẫu/y khoa (mục 3).
+  - Chọn/kiểm tư thế mascot theo đúng 9 tư thế mục 2: `welcome`, `explain`, `point_up`,
+    `thinking`, `surprised`, `caution`, `myth_bust`, `blank_board`, `thumbs_up`; mỗi tư thế khớp ý lời đọc.
+  - Báo mọi lệch phong cách bằng mã lỗi chuẩn `style_*` trong `style_issues`:
+    `style_palette`, `style_typography`, `style_mascot_pose`, `style_stroke`,
+    `style_medical_art`, `style_caption`, `style_zoom`.
 - Hình phải giúp hiểu đúng câu: đúng cơ quan, bên, vị trí và biểu hiện;
   không biến minh họa trang trí thành bằng chứng hay suy diễn chẩn đoán.
-- Kiểm phong cách vector y khoa phẳng 2D nền kem, không bóng nhựa 3D;
-  loại chữ/số AI, vật thể lạ, đạo cụ ánh sáng thừa và ẩn dụ khó hiểu.
-- Kiểm chữ/nhãn/phụ đề có dải riêng, đọc ở kích thước nhỏ,
-  không che chủ thể/tổn thương, chồng nhau hay cắt mép.
+- Kiểm chữ/nhãn/phụ đề có dải riêng, đọc ở kích thước nhỏ (720p),
+  không che chủ thể/tổn thương, chồng nhau hay cắt mép; phụ đề tĩnh theo trang, không highlight từng chữ.
 - Đối chiếu contact sheet với nhịp câu và điều cần nhấn; hiệu ứng đều theo
   khoảng thời gian không tự chứng minh hình có ích hoặc video hấp dẫn.
 - Chỉ ảnh/contact sheet không chứng minh đã nghe âm thanh hoặc xem mọi khung.
@@ -37,8 +45,8 @@ description: Use when PYH visual_review must inspect generated image candidates 
 ## Đầu ra
 - Chỉ ghi `revisions/<rev>/reviews/visual-review.yaml`:
   `candidate_index_sha256` đúng file vừa đọc, `inspected_images` chỉ ảnh đã mở,
-  `scenes` đủ từng cảnh với `scene`, `decision`, `selected`, `reason`,
-  `layout_issues`, `new_prompt` đúng schema prompt.
+  `scenes` đủ từng cảnh với `scene`, `decision`, `selected`, `mascot_pose` (khi có mascot),
+  `reason`, `layout_issues`, `style_issues` (dùng mã `style_*`), `new_prompt` đúng schema prompt.
 - `reason` nêu thứ thật thấy và liên hệ lời thoại; layout lỗi vẫn phải ghi.
 - Không sửa script/storyboard/manifest/index/ảnh/approval, không tự chạy GPU.
   Python áp dụng báo cáo, sinh lại trong budget tối đa hai vòng. Chỉ fallback SVG

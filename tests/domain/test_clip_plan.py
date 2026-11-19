@@ -157,3 +157,35 @@ def test_clip_plan_accepts_mechanism_scenes_and_preserves_anatomy(visual: str) -
     assert rendered.scenes[0].visual == visual
     assert rendered.scenes[0].anatomy == board.scenes[0].anatomy
     assert [scene.claim_id for scene in rendered.scenes] == ["C01", "C02"]
+
+
+def test_style_a_vertical_clip_constraints() -> None:
+    # Legacy clip omits Style A fields when dumped.
+    legacy = _plan()
+    assert "mascot_max_width_percent" not in legacy.model_dump(mode="json")["clips"][0]
+
+    # Invalid Style A 9:16 values are rejected by ClipSpec.
+    with pytest.raises(ValidationError):
+        _with(_clip("CL01", "S01", "S02", mascot_max_width_percent=30.0))
+    with pytest.raises(ValidationError):
+        _with(_clip("CL01", "S01", "S02", subtitle_position="top_center"))
+    with pytest.raises(ValidationError):
+        _with(_clip("CL01", "S01", "S02", hook_window_seconds=2.5))
+
+    # require_style_a=True rejects legacy clips missing the 9:16 Style A fields.
+    with pytest.raises(ValueError, match="mascot_max_width_percent <= 28%"):
+        validate_clip_plan(legacy, _board(), CLAIMS, require_style_a=True)
+
+    # Valid Style A 9:16 clips pass with require_style_a=True.
+    style_a_fields = {
+        "mascot_max_width_percent": 26.0,
+        "subtitle_position": "bottom_center",
+        "hook_window_seconds": 1.8,
+    }
+    valid_plan = _plan(
+        _clip("CL01", "S01", "S02", **style_a_fields),
+        _clip("CL02", "S03", "S04", **style_a_fields),
+        _clip("CL03", "S05", "S06", **style_a_fields),
+    )
+    resolved = validate_clip_plan(valid_plan, _board(), CLAIMS, require_style_a=True)
+    assert list(resolved) == ["CL01", "CL02", "CL03"]

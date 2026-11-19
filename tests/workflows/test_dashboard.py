@@ -1753,3 +1753,60 @@ def test_script_guidance_ignores_other_blocked_reasons(tmp_path, monkeypatch):
     handler = _handler_of(tmp_path, monkeypatch, 'draft_ready', blocked='Bước posts lỗi: thiếu file')
     assert handler['kind'] == 'blocked'
     assert not any(d.get('kind') == 'script_guidance' for d in dashboard.overview(tmp_path)['decisions'])
+
+
+def test_video_gate_card_surfaces_station_12_pyh_style_score(tmp_path, monkeypatch):
+    from healthvideo.storage.files import write_yaml_atomic
+    from healthvideo.workflows import product_review as pr
+
+    project = create_v2_project_fixture(tmp_path / 'projects', state='awaiting_medical_review')
+    manifest = read_yaml(project / 'project.yaml')
+    manifest['state'] = 'awaiting_video_review'
+    write_yaml_atomic(project / 'project.yaml', manifest)
+    rev = project / 'revisions/001'
+    write_yaml_atomic(rev / pr.LOG, {
+        'version': 1,
+        'submitted': 1,
+        'rounds': [{
+            'round': 1,
+            'render_sha256': 'a' * 64,
+            'passed': True,
+            'scores': {**dict.fromkeys(pr.LEGACY_CRITERIA, 8), pr.STYLE_CRITERION: 9},
+            'summary': 'Đạt chuẩn phong cách PYH.',
+            'issues': [],
+            'checked': ['Đã kiểm contact sheet và hook-transitions'],
+            'decisions': [],
+        }],
+    })
+    monkeypatch.setattr(factory, 'running_pid', lambda _: None)
+    monkeypatch.setattr(dashboard, 'pin_path', lambda: tmp_path / 'config' / 'approver-pin.json')
+    srv = dashboard.DashboardServer(tmp_path, 0, token='tok', agents=lambda: ['codex'], actions={})
+    thread = threading.Thread(target=srv.serve_forever, daemon=True)
+    thread.start()
+    try:
+        status, ov_body = request(srv, 'GET', '/api/overview')
+        assert status == 200
+        ov = json.loads(ov_body)
+        dec = next(d for d in ov['decisions'] if d['slug'] == project.name)
+        assert dec['gate'] == 'video'
+        assert dec['style_score']['score'] == 9
+        assert dec['style_score']['passed'] is True
+
+        status, card_body = request(srv, 'GET', f'/api/project/{project.name}/card')
+        assert status == 200
+        card = json.loads(card_body)
+        assert card['style_score']['score'] == 9
+
+        status, bundle_body = request(srv, 'GET', f'/api/project/{project.name}/bundle')
+        assert status == 200
+        bundle = json.loads(bundle_body)
+        assert bundle['card']['style_score']['score'] == 9
+        assert bundle['product_review']['style_score']['score'] == 9
+
+        status, html = request(srv, 'GET', '/')
+        assert status == 200
+        assert 'Điểm phong cách PYH (Trạm 12)' in html
+        assert 'Phong cách PYH:' in html
+    finally:
+        srv.shutdown()
+        srv.server_close()

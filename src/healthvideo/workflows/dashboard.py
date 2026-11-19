@@ -1290,6 +1290,18 @@ def _project_status_line(
     return label
 
 
+def _gate_card_with_style(project_dir: Path) -> dict | None:
+    """Attach Station 12 PYH style score to the video gate card when available."""
+    card_data = decision_card.card(project_dir)
+    if card_data is None or card_data.get('gate') != 'video':
+        return card_data
+    rev = project_dir / 'revisions' / card_data['revision']
+    style = product_review.style_score(rev)
+    if style is None:
+        return card_data
+    return {**card_data, 'style_score': style}
+
+
 def overview(
     root: Path,
     *,
@@ -1332,17 +1344,20 @@ def overview(
 
     for path, project in factory.projects(root):
         note = _blocked_note(root, path, project)
-        current_card = decision_card.card(path)
+        current_card = _gate_card_with_style(path)
         title = factory.project_title(path, project)
         if current_card is not None:
-            decisions.append({
+            row = {
                 'slug': path.name,
                 'code': codes[path.name],
                 'title': title,
                 'gate': current_card['gate'],
                 'count': len(current_card['decisions']),
                 'revision': project.active_revision,
-            })
+            }
+            if current_card.get('style_score') is not None:
+                row['style_score'] = current_card['style_score']
+            decisions.append(row)
         guidance = _script_guidance(path, note)
         if (('Storyboard cần hướng dẫn:' in (note or '')
              or 'Góp ý y khoa chưa có vị trí:' in (note or '')) and current_card is None):
@@ -1753,7 +1768,7 @@ def review_bundle(root: Path, project_dir: Path, project: ProjectManifestV2) -> 
         'shorts_plan': _safe_yaml(rev / 'posts/shorts-plan.yaml'),
         'thumbnail_url': _project_preview_url(project_dir, project),
         'timeline': timeline(project_dir),
-        'card': decision_card.card(project_dir),
+        'card': _gate_card_with_style(project_dir),
         'activity': activity(root, limit=50, slug=project_dir.name)['items'],
         'script_review': review_view(rev),
         'product_review': product_review.review_view(rev),
@@ -1997,7 +2012,7 @@ class _Handler(BaseHTTPRequestHandler):
                 self._json({'entries': standards.load(self.server.root)[::-1]})
             elif len(parts) == 4 and parts[0] == 'api' and parts[1] in {'project', 'projects'} and parts[3] == 'card':
                 project_dir, _ = self.server.project_dir(parts[2])
-                self._json(decision_card.card(project_dir))
+                self._json(_gate_card_with_style(project_dir))
             elif len(parts) == 4 and parts[0] == 'api' and parts[1] in {'project', 'projects'} and parts[3] == 'timeline':
                 project_dir, _ = self.server.project_dir(parts[2])
                 self._json(timeline(project_dir))

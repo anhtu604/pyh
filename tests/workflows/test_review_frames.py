@@ -424,3 +424,42 @@ def test_review_frames_includes_new_and_modified_components(tmp_path):
     assert frames.UNAPPROVED_COMPONENTS_HEADING in md_text
     assert "- artery_cross_section: new" in md_text
     assert "- heart: modified" in md_text
+
+
+def test_sample_hook_and_transition_frames_covers_0_to_3s_and_scene_boundaries():
+    data = RenderInput(
+        title="Synthetic",
+        audio_file="audio/test.wav",
+        scenes=(
+            scene(1, 0, 120),
+            scene(2, 120, 120, visual="whiteboard"),
+            scene(3, 240, 120),
+        ),
+    )
+    focus = frames.sample_hook_and_transition_frames(data)
+    by_frame = {s.frame: s for s in focus}
+    # Hook 0-3s at 30fps every 0.5s: 0, 15, 30, 45, 60, 75, 90
+    for f in (0, 15, 30, 45, 60, 75, 90):
+        assert f in by_frame
+        assert "hook" in by_frame[f].tag
+    # Transitions around boundaries 120 and 240 (before -6, at 0, after +12)
+    for f in (114, 120, 132, 234, 240, 252):
+        assert f in by_frame
+        assert "transition" in by_frame[f].tag
+    assert [s.frame for s in focus] == sorted(by_frame)
+
+
+def test_review_frames_writes_hook_and_transition_sheets_alongside_periodic(tmp_path):
+    project, _, _ = setup_project(tmp_path, video=True)
+    calls = []
+    output = frames.review_frames(project, runner=fake_runner(calls))
+    assert len([c for c in calls if c[0] == "ffmpeg"]) == 1
+    main_index = json.loads((output / "index.json").read_text(encoding="utf-8"))
+    assert [e["frame"] for e in main_index["frames"]] == [9, 99]
+    assert main_index["hook_transitions_index"] == "hook-transitions/index.json"
+    assert main_index["hook_transition_sheets"]
+    focus_index = json.loads((output / "hook-transitions/index.json").read_text(encoding="utf-8"))
+    focus_frames = {e["frame"]: e["tag"] for e in focus_index["frames"]}
+    assert 0 in focus_frames and "hook" in focus_frames[0]
+    assert 90 in focus_frames and "transition" in focus_frames[90]
+    assert (output / "hook-transitions/sheet-01.png").is_file()

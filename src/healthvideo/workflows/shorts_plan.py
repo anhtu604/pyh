@@ -16,10 +16,13 @@ from healthvideo.workflows.draft import _project
 
 SHORTS_PLAN_ARTIFACT = "posts/shorts-plan.yaml"
 _CLAIM_REF_RE = re.compile(r"\[claim:([^\]]+)\]")
+STYLE_A_MASCOT_MAX_WIDTH_PERCENT = 28.0
+STYLE_A_SUBTITLE_POSITION = "bottom_center"
+STYLE_A_HOOK_MAX_SECONDS = 2.0
 
 
 class ShortClipSpec(BaseModel):
-    """Validated vertical clip specification keeping medical caveats and 9:16 safe zones."""
+    """Validated vertical clip specification keeping medical caveats and 9:16 Style A safe zones."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -33,6 +36,19 @@ class ShortClipSpec(BaseModel):
     caption: Nonblank
     safety_caveat: Nonblank
     safe_zone_checked: bool = False
+    mascot_max_width_percent: float = Field(
+        default=STYLE_A_MASCOT_MAX_WIDTH_PERCENT,
+        gt=0,
+        le=STYLE_A_MASCOT_MAX_WIDTH_PERCENT,
+        allow_inf_nan=False,
+    )
+    subtitle_position: Literal["bottom_center"] = STYLE_A_SUBTITLE_POSITION
+    hook_window_seconds: float = Field(
+        default=STYLE_A_HOOK_MAX_SECONDS,
+        gt=0,
+        le=STYLE_A_HOOK_MAX_SECONDS,
+        allow_inf_nan=False,
+    )
 
     @model_validator(mode="after")
     def _require_safe_zone(self) -> ShortClipSpec:

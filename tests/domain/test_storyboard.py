@@ -192,3 +192,87 @@ def test_stat_gauge_and_kinetic_term_scene_and_ledger_validation() -> None:
     citations = resolve_citations(script, valid_ledger, (gauge_scene,))
     assert "[1]" in citations
     assert citations["[1]"][0].id == "R01"
+
+
+def test_style_a_mascot_pose_validation_and_backcompat() -> None:
+    from healthvideo.domain.storyboard import validate_style_a_mascot_poses
+
+    def make_scene(
+        scene_id: str,
+        start: int,
+        *,
+        chapter_id: str | None = None,
+        visual: str = "whiteboard",
+        mascot_pose: str | None = None,
+        visual_assets: list[dict[str, object]] | None = None,
+    ) -> Scene:
+        payload: dict[str, object] = {
+            "id": scene_id,
+            "start_frame": start,
+            "duration_frames": 90,
+            "narration": f"Lời thoại {scene_id}.",
+            "visual": visual,
+        }
+        if visual == "whiteboard":
+            payload["on_screen_text"] = f"Nội dung {scene_id}"
+        if chapter_id is not None:
+            payload["chapter_id"] = chapter_id
+        if mascot_pose is not None:
+            payload["mascot_pose"] = mascot_pose
+        if visual_assets is not None:
+            payload["visual_assets"] = visual_assets
+        return Scene.model_validate(payload)
+
+    # Legacy scene without mascot_pose omits the field when dumped.
+    legacy = make_scene("S01", 0)
+    assert "mascot_pose" not in legacy.model_dump(mode="json")
+
+    # Invalid pose name is rejected by MascotPose enum.
+    with pytest.raises(ValidationError):
+        make_scene("S01", 0, mascot_pose="dancing")
+
+    # Conflicting mascot_pose and visual_assets pose is rejected.
+    with pytest.raises(ValidationError, match="conflicts with mascot visual asset pose"):
+        make_scene(
+            "S01",
+            0,
+            mascot_pose="welcome",
+            visual_assets=[{"path": "assets/brand/surprised.png", "role": "mascot", "pose": "surprised"}],
+        )
+
+    # Missing mascot_pose on hook, chapter start CH02, and outro fails Style A check.
+    missing_board = Storyboard(
+        title="Style A missing",
+        format_profile="youtube_long",
+        scenes=(
+            make_scene("S01", 0, chapter_id="CH01"),
+            make_scene("S02", 90, chapter_id="CH01"),
+            make_scene("S03", 180, chapter_id="CH02"),
+            make_scene("S04", 270, chapter_id="CH02", visual="brand_outro"),
+        ),
+    )
+    with pytest.raises(ValueError, match="thiếu mascot_pose") as exc_info:
+        validate_style_a_mascot_poses(missing_board)
+    message = str(exc_info.value)
+    assert "S01" in message
+    assert "S03" in message
+    assert "S04" in message
+    assert "S02" not in message
+
+    # Valid Style A storyboard: explicit mascot_pose or mascot visual_assets on hook, chapter starts, outro.
+    valid_board = Storyboard(
+        title="Style A valid",
+        format_profile="youtube_long",
+        scenes=(
+            make_scene("S01", 0, chapter_id="CH01", mascot_pose="surprised"),
+            make_scene("S02", 90, chapter_id="CH01"),
+            make_scene(
+                "S03",
+                180,
+                chapter_id="CH02",
+                visual_assets=[{"path": "assets/brand/explain.png", "role": "mascot", "pose": "explain"}],
+            ),
+            make_scene("S04", 270, chapter_id="CH02", visual="brand_outro", mascot_pose="thumbs_up"),
+        ),
+    )
+    validate_style_a_mascot_poses(valid_board)

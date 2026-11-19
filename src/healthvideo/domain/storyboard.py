@@ -356,6 +356,7 @@ class Scene(BaseModel):
     stat_gauge: StatGauge | None = Field(default=None, exclude_if=lambda v: v is None)
     kinetic_term: KineticTerm | None = Field(default=None, exclude_if=lambda v: v is None)
     motion: SceneMotion | None = Field(default=None, exclude_if=lambda v: v is None)
+    mascot_pose: MascotPose | None = Field(default=None, exclude_if=lambda v: v is None)
     visual_assets: tuple[VisualAssetRef, ...] = ()
     labels: tuple[AssetTextLabel, ...] = Field(default=(), exclude_if=lambda value: not value)
     annotations: tuple[AssetTextLabel, ...] = Field(default=(), exclude_if=lambda value: not value)
@@ -472,7 +473,23 @@ class Scene(BaseModel):
         paths = [asset.path for asset in self.visual_assets]
         if len(paths) != len(set(paths)):
             raise ValueError(f"Scene {self.id}: duplicate visual asset path")
+        if self.mascot_pose is not None:
+            for asset in self.visual_assets:
+                if asset.role == "mascot" and asset.pose != self.mascot_pose:
+                    raise ValueError(
+                        f"Scene {self.id}: mascot_pose ({self.mascot_pose.value}) "
+                        f"conflicts with mascot visual asset pose ({asset.pose})"
+                    )
         return self
+
+    def resolved_mascot_pose(self) -> MascotPose | None:
+        """Return explicit ``mascot_pose`` or the pose from a declared mascot asset."""
+        if self.mascot_pose is not None:
+            return self.mascot_pose
+        for asset in self.visual_assets:
+            if asset.role == "mascot" and asset.pose is not None:
+                return asset.pose
+        return None
 
 
 class Storyboard(BaseModel):
@@ -551,3 +568,29 @@ def validate_anatomy_subjects(storyboard: Storyboard) -> None:
                 f"Scene {scene.id}: unsupported anatomy subject {scene.anatomy.subject!r}; "
                 f"supported subjects: {', '.join(subjects)}"
             )
+
+
+def validate_style_a_mascot_poses(storyboard: Storyboard) -> None:
+    """Require a valid ``mascot_pose`` on hook, each chapter opening, and outro (Style A §6)."""
+    if not storyboard.scenes:
+        return
+    valid_poses = ", ".join(pose.value for pose in MascotPose)
+    missing: list[str] = []
+    seen_chapter: str | None = None
+    last_index = len(storyboard.scenes) - 1
+    for index, scene in enumerate(storyboard.scenes):
+        roles: list[str] = []
+        if index == 0:
+            roles.append("hook")
+        if scene.chapter_id is not None and scene.chapter_id != seen_chapter:
+            roles.append(f"đầu chương {scene.chapter_id}")
+            seen_chapter = scene.chapter_id
+        if index == last_index or scene.visual == "brand_outro":
+            roles.append("outro")
+        if roles and scene.resolved_mascot_pose() is None:
+            missing.append(f"Scene {scene.id} ({'/'.join(roles)})")
+    if missing:
+        raise ValueError(
+            "Storyboard không đạt chuẩn phong cách A — thiếu mascot_pose "
+            f"(9 tư thế hợp lệ: {valid_poses}) tại: {', '.join(missing)}"
+        )

@@ -48,6 +48,7 @@ from healthvideo.domain.storyboard import (
     SUPPORTED_ANATOMY_SUBJECTS,  # noqa: F401 - compatibility export
     Storyboard,
     validate_anatomy_subjects,
+    validate_style_a_mascot_poses,
 )
 from healthvideo.domain.visual_budget import validate_visual_budget
 from healthvideo.render.beats import resolve_scene_beats
@@ -90,6 +91,7 @@ from healthvideo.visuals.flux import (
     illustration_recipe_hash,
     validate_illustration_png,
 )
+from healthvideo.workflows.factory_standards import pinned_style_spec, style_a_active
 from healthvideo.workflows.gate_review import (
     MEDICAL_APPROVAL_ARTIFACT,
     hash_reviewed_artifacts,
@@ -279,6 +281,9 @@ def _produce_v2(
         read_yaml(layout.artifact_root / "storyboard" / "storyboard.yaml")
     )
     validate_anatomy_subjects(storyboard)
+    style_spec = pinned_style_spec(layout.artifact_root)
+    if style_a_active(layout.artifact_root):
+        validate_style_a_mascot_poses(storyboard)
     asset_manifest = load_asset_manifest(layout.artifact_root / "assets/asset-manifest.yaml")
     visual_budget_report = validate_visual_budget(storyboard, asset_manifest)
     visual_budget_qa = visual_budget_report.model_dump(mode="json")
@@ -344,6 +349,7 @@ def _produce_v2(
             "alignment": alignment_identity(),
             "sfx": sfx_identity(storyboard, layout.artifact_root),
             "visual_review": visual_identity(layout.artifact_root),
+            **({"style_spec": style_spec} if style_spec is not None else {}),
             **(
                 {"clip_plan": read_yaml(layout.artifact_root / CLIP_PLAN_ARTIFACT),
                  "clip_brand": clip_brand.model_dump(mode="json")}
@@ -630,6 +636,7 @@ def _produce_v2(
             {
                 "input_hash": input_hash,
                 "visual_review": visual_identity(layout.artifact_root),
+                **({"style_spec": style_spec} if style_spec is not None else {}),
                 "output": OUTPUT_NAME,
                 "provider": provider_name,
                 "asset_sha256": dict(asset_hashes),

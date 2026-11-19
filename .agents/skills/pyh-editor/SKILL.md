@@ -22,6 +22,11 @@ description: Use when PYH revise_production or revise_product needs permitted SV
   và thư viện `video/src/anatomy/` cho component cần sửa.
 
 ## Phán đoán công việc
+- Kỷ luật thợ dựng (`docs/superpowers/specs/2026-11-17-pyh-style-a-mascot-host.md` mục 5 & 6):
+  chỉ sửa đúng lỗi bị nêu; tuyệt đối không tự thêm hiệu ứng, chuyển động, bounce hay mẫu motion
+  ngoài bộ động tác nhận diện ở mục 5 (dựng sơ đồ dần, vòng nhấn teal, gạch chân vàng,
+  thẻ thuật ngữ, thẻ nguồn; tối đa 2 mẫu `video/src/motion` khác trong một chương) để "cho sinh động".
+  Zoom y khoa dùng kính lúp mục 3b, không cross-fade chồng mờ giả zoom.
 - Sửa hình giúp hiểu đúng câu đang đọc: chủ thể, nhãn, mũi tên, thứ tự nhấn;
   không chỉ thêm hiệu ứng đều mỗi 6 giây rồi coi chất lượng đã đạt.
 - Giữ giới hạn timing/beat hiện hành; không đổi storyboard đã khóa để né lỗi.

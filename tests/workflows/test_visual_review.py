@@ -238,3 +238,53 @@ def test_contact_sheet_survives_more_than_100_sampled_frames(tmp_path):
     prepare_contact_sheet(tmp_path)
 
     assert len(list((tmp_path / 'reviews/visual').glob('contact-sheet-*.jpg'))) == 6
+
+
+def test_visual_review_accepts_valid_style_codes_and_mascot_pose(tmp_path):
+    from healthvideo.workflows.visual_review import (
+        REPORT,
+        STYLE_ERROR_CODES,
+        ensure_candidates,
+        review_complete,
+        validate_style_issues,
+    )
+
+    manifest = AssetManifest.model_validate({'assets': [illustration_record()]})
+    ensure_candidates(tmp_path, _board(), manifest, generate=_generate)
+    submit(tmp_path)
+    report = read_yaml(tmp_path / REPORT)
+    report['scenes'][0].update(
+        mascot_pose='explain',
+        style_issues=[
+            'style_palette: có màu đỏ báo động',
+            {'code': 'style_stroke', 'detail': 'có bóng đổ 3D'},
+        ],
+        layout_issues=['style_caption: phụ đề chạm nhãn'],
+    )
+    write_yaml_atomic(tmp_path / REPORT, report)
+    assert validate_style_issues(report['scenes'][0]) == [
+        'style_palette', 'style_stroke', 'style_caption',
+    ]
+    assert {'style_palette', 'style_typography', 'style_mascot_pose', 'style_stroke',
+            'style_medical_art', 'style_caption', 'style_zoom'} <= set(STYLE_ERROR_CODES)
+    ensure_candidates(tmp_path, _board(), manifest, generate=_generate)
+    assert review_complete(tmp_path)
+
+
+@pytest.mark.parametrize(('patch', 'match'), [
+    ({'style_issues': ['style_unknown_code']}, 'Unknown style error code'),
+    ({'style_issues': [{'code': 'not_a_style_code'}]}, 'Unknown style error code'),
+    ({'layout_issues': ['style_bogus: sai']}, 'Unknown style error code'),
+    ({'mascot_pose': 'dancing_wildly'}, 'Unknown mascot_pose'),
+])
+def test_visual_review_rejects_invalid_style_code_or_pose(tmp_path, patch, match):
+    from healthvideo.workflows.visual_review import REPORT, ensure_candidates
+
+    manifest = AssetManifest.model_validate({'assets': [illustration_record()]})
+    ensure_candidates(tmp_path, _board(), manifest, generate=_generate)
+    submit(tmp_path)
+    report = read_yaml(tmp_path / REPORT)
+    report['scenes'][0].update(patch)
+    write_yaml_atomic(tmp_path / REPORT, report)
+    with pytest.raises(ValueError, match=match):
+        ensure_candidates(tmp_path, _board(), manifest, generate=_generate)

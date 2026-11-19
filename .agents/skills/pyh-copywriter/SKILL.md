@@ -35,9 +35,12 @@ description: Use when the PYH posts step needs titles, descriptions, clip captio
   (`tiktok`, `shorts`, `reels` từng clip), `facebook_post`, `youtube_community`, `thumbnail`.
 - Chương đúng giờ/tên từ outline, nguồn đúng title record trong ledger;
   câu có chữ số gắn `[claim:<id>]` trừ mốc giờ đầu dòng chương như prompt.
-- Thumbnail `headline` 1–60 ký tự kể cả dấu claim, `background_prompt`,
-  `seed` nguyên không âm. Nền phẳng 2D, chủ thể bên phải, thoáng trái,
-  không chữ/số/nhãn/logo; renderer vẽ chữ/logo, không bịa ảnh nguồn.
+- Thumbnail theo **Chuẩn phong cách PYH — Hướng A** (`docs/superpowers/specs/2026-11-17-pyh-style-a-mascot-host.md` mục 6, Trạm 14):
+  - `headline`: tối đa **4 từ hiển thị** (sau khi bỏ `[claim:<id>]`), chữ **Be Vietnam Pro 800** (`font_family: "Be Vietnam Pro"`, `font_weight: 800`).
+  - `mascot_pose`: bắt buộc một trong 9 tư thế hợp lệ trong `profiles/brand.vi.yaml`, khớp tiêu đề.
+  - `mechanism_visual`: một hình cơ chế rõ ràng từ video.
+  - `background_theme`: `off_white` hoặc `night` (tối đa 3 màu nổi, không đỏ báo động).
+  - `background_prompt` và `seed` nguyên không âm: nền phẳng 2D matte, chủ thể bên phải, thoáng trái, không chữ/số/nhãn/logo; renderer vẽ chữ/logo, không bịa ảnh nguồn.
 
 ## Xong khi
 - `healthvideo step posts-check {project}` exit 0 và lời hứa khớp payoff;

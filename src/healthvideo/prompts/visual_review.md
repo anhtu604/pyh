@@ -5,11 +5,12 @@ Ghi chú bác sĩ: {doctor_note}
 
 Mục tiêu: xem thật mọi ảnh ứng viên và contact sheet trước khi Python dựng bản cuối.
 Đọc project.yaml để xác định revision; chỉ ghi trong revision này.
-Đọc `reviews/visual/candidates.yaml`, storyboard và lời thoại đã duyệt.
+Đọc `reviews/visual/candidates.yaml`, storyboard, lời thoại đã duyệt và chuẩn phong cách `docs/superpowers/specs/2026-11-17-pyh-style-a-mascot-host.md` (mục 1–3b).
 Dùng công cụ xem ảnh để mở TỪNG candidate và MỌI `contact_sheets[].path` trong index.
 Không suy đoán nội dung ảnh từ tên file hay prompt. Ghi trung thực những gì đã xem.
-Kiểm ảnh có đúng bộ phận/bệnh trong lời thoại; không có chữ AI, vật thể lạ hoặc ẩn dụ khó hiểu.
-Kiểm contact sheet: chữ có dải riêng, không đè ảnh, nhãn đọc được và không bị cắt.
+Kiểm từng ảnh/FLUX theo mục 1: nền `off_white #F7F4EC`, nét/chữ `navy #12304A` phẳng 2D matte, nhấn `teal #18A6A6` / `yellow #F4B942`, tối đa 3 màu nổi, không đỏ báo động, không gradient/bóng đổ/grain/ảnh stock, không chữ AI; FLUX chỉ cho cảnh đời sống (không dùng FLUX cho hình y khoa).
+Kiểm và chọn tư thế mascot theo bảng 9 tư thế mục 2 (`welcome`, `explain`, `point_up`, `thinking`, `surprised`, `caution`, `myth_bust`, `blank_board`, `thumbs_up`) khớp đúng ý lời đọc.
+Kiểm contact sheet: phụ đề tĩnh theo trang không đè ảnh/nhãn/mascot, nhãn đọc được ở 720p, không bị cắt; zoom y khoa dùng kính lúp mục 3b (không cross-fade chồng mờ).
 Không sửa script, storyboard, manifest, candidate index, ảnh hoặc approval.
 
 Ghi `reviews/visual-review.yaml`:
@@ -20,8 +21,10 @@ scenes:
   - scene: S01
     decision: select # hoặc reject
     selected: reviews/visual/asset-00/round-0/candidate-2.png # null nếu reject
+    mascot_pose: explain # tư thế mascot mục 2 (tùy chọn nếu cảnh có mascot)
     reason: "Nêu bộ phận nhìn thấy và liên hệ trực tiếp với lời thoại"
-    layout_issues: [] # mô tả vấn đề thật nhìn thấy, nếu có
+    layout_issues: [] # mô tả vấn đề bố cục nhìn thấy, nếu có
+    style_issues: [] # mã lệch phong cách: style_palette, style_typography, style_mascot_pose, style_stroke, style_medical_art, style_caption, style_zoom (kèm ": mô tả" nếu cần)
     new_prompt: null # reject: prompt mới cụ thể bằng tiếng Anh, no text
 ```
 Chỉ quyết định các asset chưa có `selected` hoặc `fallback`; vòng sau chỉ mở ảnh mới của asset còn chờ và contact sheet làm ngữ cảnh. Cảnh đã chọn giữ nguyên, không chấm lại. Báo cáo có thể chỉ gồm cảnh còn chờ; Python giữ quyết định cũ. Không nêu lỗi mới ở cảnh không đổi, trừ an toàn y khoa nghiêm trọng ghi `blocking_safety: true` và lý do, dừng chờ bác sĩ. Cảnh dùng chung ảnh phải chọn giống nhau.

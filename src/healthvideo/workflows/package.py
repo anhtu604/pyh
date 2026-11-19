@@ -18,7 +18,7 @@ from pydantic import BaseModel
 
 from healthvideo.domain.evidence import EvidenceClaim, SourceRecord
 from healthvideo.domain.gate_review import GateApprovalRecord, GateKind
-from healthvideo.domain.posts import CLAIM_REF, PostSet
+from healthvideo.domain.posts import CLAIM_REF, PostSet, validate_style_a_thumbnail
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.script import Script
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
@@ -39,6 +39,7 @@ from healthvideo.storage.files import (
 )
 from healthvideo.storage.project_layout import ProjectLayout, resolve_project_layout
 from healthvideo.workflows.citations import resolve_citations
+from healthvideo.workflows.factory_standards import style_a_active
 from healthvideo.workflows.gate_review import (
     MEDICAL_APPROVAL_ARTIFACT,
     POSTS_ARTIFACT,
@@ -104,6 +105,12 @@ def _package_v2(layout: ProjectLayout) -> Path:
         canonical_json_hash(posts_data),
     )
     posts = PostSet.model_validate(posts_data)
+    if posts.thumbnail is not None and style_a_active(layout.artifact_root):
+        thumb_errors = validate_style_a_thumbnail(posts.thumbnail)
+        if thumb_errors:
+            raise ValueError(
+                "Thumbnail không đạt chuẩn phong cách A: " + "; ".join(thumb_errors)
+            )
 
     renders_dir = layout.artifact_root / "renders"
     video = renders_dir / OUTPUT_NAME
@@ -483,6 +490,19 @@ def _posts_markdown(posts: PostSet) -> str:
             "",
         ]
     )
+    if posts.thumbnail is not None:
+        lines.extend(["## Thumbnail", "", f"- **Headline:** {posts.thumbnail.headline}"])
+        if posts.thumbnail.mascot_pose is not None:
+            lines.append(f"- **Mascot pose:** {posts.thumbnail.mascot_pose.value}")
+        if posts.thumbnail.mechanism_visual is not None:
+            lines.append(f"- **Hình cơ chế:** {posts.thumbnail.mechanism_visual}")
+        if posts.thumbnail.background_theme is not None:
+            lines.append(f"- **Nền:** {posts.thumbnail.background_theme}")
+        if posts.thumbnail.font_family is not None or posts.thumbnail.font_weight is not None:
+            font = posts.thumbnail.font_family or "Be Vietnam Pro"
+            weight = posts.thumbnail.font_weight or 800
+            lines.append(f"- **Font:** {font} {weight}")
+        lines.append("")
     # posts.yaml keeps [claim:…] for audit; the paste-ready copy must not show them.
     return re.sub(r"[ \t]*" + CLAIM_REF.pattern, "", "\n".join(lines))
 

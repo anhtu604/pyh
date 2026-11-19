@@ -5,6 +5,7 @@ import math
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
+from itertools import pairwise
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -143,6 +144,73 @@ def render_unapproved_components_section(
 class FrameSample:
     scene_id: str
     frame: int
+    tag: str = ""
+
+
+HOOK_WINDOW_SECONDS = 3.0
+HOOK_SAMPLE_STEP_SECONDS = 0.5
+TRANSITION_BEFORE_SECONDS = 0.2
+TRANSITION_AFTER_SECONDS = 0.4
+
+
+def _scene_for_frame(data: RenderInput, frame: int):
+    for scene in data.scenes:
+        if scene.start_frame <= frame < scene.start_frame + scene.duration_frames:
+            return scene
+    return None
+
+
+def sample_hook_and_transition_frames(
+    data: RenderInput,
+    *,
+    start: float | None = None,
+    end: float | None = None,
+) -> list[FrameSample]:
+    """Sample frames around the 0-3s hook and every scene transition boundary."""
+    for value in (start, end):
+        if value is not None and (not math.isfinite(value) or value < 0):
+            raise ValueError("Sampling seconds must be finite and nonnegative")
+    if not data.scenes:
+        raise ValueError("Render input has no scenes")
+    last = max(s.start_frame + s.duration_frames for s in data.scenes) - 1
+    first_frame = math.ceil((start or 0) * data.fps)
+    last_frame = min(last, math.floor(end * data.fps) if end is not None else last)
+    if first_frame > last_frame:
+        return []
+    tagged: dict[int, list[str]] = {}
+
+    def _add(frame: int, tag: str) -> None:
+        if not (first_frame <= frame <= last_frame):
+            return
+        if _scene_for_frame(data, frame) is None:
+            return
+        tags = tagged.setdefault(frame, [])
+        if tag not in tags:
+            tags.append(tag)
+
+    hook_steps = round(HOOK_WINDOW_SECONDS / HOOK_SAMPLE_STEP_SECONDS)
+    for i in range(hook_steps + 1):
+        _add(round(i * HOOK_SAMPLE_STEP_SECONDS * data.fps), "hook")
+
+    ordered_scenes = sorted(data.scenes, key=lambda s: s.start_frame)
+    before_offset = max(1, round(TRANSITION_BEFORE_SECONDS * data.fps))
+    after_offset = max(1, round(TRANSITION_AFTER_SECONDS * data.fps))
+    for prev_scene, next_scene in pairwise(ordered_scenes):
+        boundary = next_scene.start_frame
+        before_frame = max(prev_scene.start_frame, boundary - before_offset)
+        after_frame = min(
+            next_scene.start_frame + next_scene.duration_frames - 1,
+            boundary + after_offset,
+        )
+        for frame in (before_frame, boundary, after_frame):
+            _add(frame, "transition")
+
+    samples: list[FrameSample] = []
+    for frame in sorted(tagged):
+        scene = _scene_for_frame(data, frame)
+        if scene is not None:
+            samples.append(FrameSample(scene.id, frame, "+".join(tagged[frame])))
+    return samples
 
 
 def sample_frames(
@@ -215,22 +283,28 @@ def tile_frames(
                 )
             draw = ImageDraw.Draw(tile)
             draw.rectangle((0, height - 30, width, height), fill="black")
+            label = (
+                f"{sample.scene_id} [{sample.tag}] {timestamp(sample.frame, data.fps)}"
+                if sample.tag
+                else f"{sample.scene_id}  {timestamp(sample.frame, data.fps)}"
+            )
             draw.text(
                 (8, height - 26),
-                f"{sample.scene_id}  {timestamp(sample.frame, data.fps)}",
+                label,
                 font=font,
                 fill="white",
             )
             sheet.paste(tile, (cell % 4 * width, cell // 4 * height))
-            entries.append(
-                {
-                    "scene_id": sample.scene_id,
-                    "frame": sample.frame,
-                    "time": sample.frame / data.fps,
-                    "sheet": name,
-                    "cell": cell,
-                }
-            )
+            entry = {
+                "scene_id": sample.scene_id,
+                "frame": sample.frame,
+                "time": sample.frame / data.fps,
+                "sheet": name,
+                "cell": cell,
+            }
+            if sample.tag:
+                entry["tag"] = sample.tag
+            entries.append(entry)
         sheet.save(output / name)
     return entries
 
@@ -288,12 +362,15 @@ def review_frames(
     samples = sample_frames(data, start=start, end=end, every=every)
     if not samples:
         raise ValueError("No scene samples in the requested range; use --every")
+    focus_samples = sample_hook_and_transition_frames(data, start=start, end=end)
     output.mkdir(parents=True, exist_ok=True)
     # Invalidate the old QA index before doing work, including on failed retries.
     (output / "index.json").unlink(missing_ok=True)
     (output / "mechanism/index.json").unlink(missing_ok=True)
+    (output / "hook-transitions/index.json").unlink(missing_ok=True)
     (output / "unapproved-components.md").unlink(missing_ok=True)
     (output / "mechanism/unapproved-components.md").unlink(missing_ok=True)
+    (output / "hook-transitions/unapproved-components.md").unlink(missing_ok=True)
     input_hash = sha256_file(input_path)
     if not video.is_file():
         video = output / "draft.mp4"
@@ -316,7 +393,10 @@ def review_frames(
     video_hash = sha256_file(video)
     with TemporaryDirectory(prefix=".frames-", dir=output) as temp:
         # Decode once instead of replaying the video from the beginning for each sample.
-        selected_frames = sorted({sample.frame for sample in samples})
+        selected_frames = sorted(
+            {sample.frame for sample in samples}
+            | {sample.frame for sample in focus_samples}
+        )
         selection = Path(temp) / 'select.txt'
         # FFmpeg's expression parser has a recursion limit for long addition chains.
         terms = [f'eq(n\\,{frame})' for frame in selected_frames]
@@ -349,6 +429,13 @@ def review_frames(
             output / "mechanism",
             data,
         )
+        focus_images = [frame_images[sample.frame] for sample in focus_samples]
+        focus_entries = tile_frames(
+            focus_samples,
+            focus_images,
+            output / "hook-transitions",
+            data,
+        )
     if input_hash != sha256_file(input_path) or video_hash != sha256_file(video):
         raise RuntimeError("Render input or video changed during frame review; retry")
     resolved_repo = _resolve_repo_root(project_dir, repo)
@@ -358,6 +445,8 @@ def review_frames(
         "render_input_sha256": input_hash,
         "video_sha256": video_hash,
         "video": video.relative_to(renders).as_posix(),
+        "hook_transitions_index": "hook-transitions/index.json",
+        "hook_transition_sheets": list(dict.fromkeys(item["sheet"] for item in focus_entries)),
         "unapproved_components_heading": (
             UNAPPROVED_COMPONENTS_HEADING if unapproved else None
         ),
@@ -367,6 +456,7 @@ def review_frames(
     for directory, items in (
         (output, entries),
         (output / "mechanism", mechanism_entries),
+        (output / "hook-transitions", focus_entries),
     ):
         (directory / "index.json").write_text(
             json.dumps({**metadata, "frames": items}, ensure_ascii=False, indent=2)

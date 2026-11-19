@@ -6,7 +6,13 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from healthvideo.domain.brand import MascotPose
+
 CLAIM_REF = re.compile(r"\[claim:([A-Za-z0-9_.-]+)\]")
+THUMBNAIL_MAX_WORDS = 4
+THUMBNAIL_FONT_FAMILY = "Be Vietnam Pro"
+THUMBNAIL_FONT_WEIGHT = 800
+THUMBNAIL_BACKGROUND_THEMES = ("off_white", "night")
 _CHAPTER_TIMESTAMP_PREFIX = re.compile(
     r"^\s*\d{1,2}:\d{2}(?::\d{2})?(?=\s|$|[-–—:])\s*[-–—:]?\s*"
 )
@@ -33,6 +39,19 @@ class ThumbnailSpec(BaseModel):
     headline: str = Field(min_length=1, max_length=60)
     background_prompt: str = Field(min_length=1, pattern=r"\S")
     seed: int = Field(strict=True, ge=0, lt=2**63)
+    mascot_pose: MascotPose | None = Field(default=None, exclude_if=lambda v: v is None)
+    mechanism_visual: str | None = Field(
+        default=None, min_length=1, pattern=r"\S", exclude_if=lambda v: v is None
+    )
+    background_theme: Literal["off_white", "night"] | None = Field(
+        default=None, exclude_if=lambda v: v is None
+    )
+    font_family: Literal["Be Vietnam Pro"] | None = Field(
+        default=None, exclude_if=lambda v: v is None
+    )
+    font_weight: Literal[800] | None = Field(
+        default=None, exclude_if=lambda v: v is None
+    )
 
     @field_validator("headline")
     @classmethod
@@ -40,6 +59,51 @@ class ThumbnailSpec(BaseModel):
         if not CLAIM_REF.sub("", value).strip():
             raise ValueError("thumbnail headline must contain visible text")
         return value
+
+    def has_style_a_fields(self) -> bool:
+        return any(
+            value is not None
+            for value in (
+                self.mascot_pose,
+                self.mechanism_visual,
+                self.background_theme,
+                self.font_family,
+                self.font_weight,
+            )
+        )
+
+
+def validate_style_a_thumbnail(thumbnail: ThumbnailSpec) -> list[str]:
+    """Validate Style A §6 (Trạm 14) thumbnail rules: mascot + <=4 words + mechanism + theme."""
+    errors: list[str] = []
+    visible = CLAIM_REF.sub("", thumbnail.headline).strip()
+    words = [word for word in visible.split() if word]
+    if len(words) > THUMBNAIL_MAX_WORDS:
+        errors.append(
+            f"thumbnail.headline: chuẩn phong cách A chỉ cho phép tối đa "
+            f"{THUMBNAIL_MAX_WORDS} từ (hiện có {len(words)} từ): {visible}"
+        )
+    if thumbnail.mascot_pose is None:
+        errors.append(
+            "thumbnail.mascot_pose: chuẩn phong cách A bắt buộc có mascot_pose khớp tiêu đề"
+        )
+    if thumbnail.mechanism_visual is None or not thumbnail.mechanism_visual.strip():
+        errors.append(
+            "thumbnail.mechanism_visual: chuẩn phong cách A bắt buộc có một hình cơ chế"
+        )
+    if thumbnail.background_theme not in THUMBNAIL_BACKGROUND_THEMES:
+        errors.append(
+            "thumbnail.background_theme: chuẩn phong cách A bắt buộc nền off_white hoặc night"
+        )
+    if thumbnail.font_family is not None and thumbnail.font_family != THUMBNAIL_FONT_FAMILY:
+        errors.append(
+            f"thumbnail.font_family: chuẩn phong cách A yêu cầu font {THUMBNAIL_FONT_FAMILY}"
+        )
+    if thumbnail.font_weight is not None and thumbnail.font_weight != THUMBNAIL_FONT_WEIGHT:
+        errors.append(
+            f"thumbnail.font_weight: chuẩn phong cách A yêu cầu weight {THUMBNAIL_FONT_WEIGHT}"
+        )
+    return errors
 
 
 class PostSet(BaseModel):
@@ -109,6 +173,7 @@ def validate_posts(
     approved_claim_ids: set[str],
     chapter_titles: Sequence[str],
     source_labels: Sequence[str],
+    require_style_a_thumbnail: bool = False,
 ) -> list[str]:
     """Return validation errors for ``posts`` (empty list when valid)."""
     errors: list[str] = []
@@ -117,6 +182,11 @@ def validate_posts(
         errors.append(
             f"youtube_titles: cần 2–3 tiêu đề, hiện có {len(posts.youtube_titles)}"
         )
+
+    if posts.thumbnail is not None and (
+        require_style_a_thumbnail or posts.thumbnail.has_style_a_fields()
+    ):
+        errors.extend(validate_style_a_thumbnail(posts.thumbnail))
 
     ordered_chapters = sorted(
         (title for title in chapter_titles if title),

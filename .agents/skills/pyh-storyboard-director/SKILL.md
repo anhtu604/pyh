@@ -13,6 +13,7 @@ description: Use when PYH storyboard_design designs storyboard.yaml, asset-manif
 
 ## Đầu vào
 - Đọc `project.yaml` lấy `active_revision`; làm việc trong `revisions/<rev>/`.
+- Đọc `workflow/standards.yaml` (nếu có) và chuẩn phong cách đã ghim `docs/superpowers/specs/2026-11-17-pyh-style-a-mascot-host.md` (Hướng A "Mascot dẫn chuyện").
 - Đọc `script/script.yaml`, `script/outline.yaml`, `explainer/explainer.yaml`, `evidence/ledger.yaml`, và `docs/reference/image-prompting.md`, `docs/reference/motion-vocabulary.md`.
 - Nếu có góp ý từ `reviews/script-review-log.yaml` liên quan phân cảnh/nhịp hình, sửa dứt điểm.
 
@@ -27,10 +28,10 @@ description: Use when PYH storyboard_design designs storyboard.yaml, asset-manif
 - **Cấm giả nguồn**: không tạo SVG/PNG giả chụp tài liệu nghiên cứu; diễn giải ledger luôn dùng `source_card` lấy nguyên metadata từ `evidence/ledger.yaml`.
 - Giữ nguyên `script/script.yaml` (không đổi lời đọc hay claim của biên kịch).
 
-## Mascot thương hiệu theo nhịp cảnh
-- Hook dùng `welcome`, `surprised` hoặc `thinking` theo lời mở; đính chính niềm tin sai dùng `myth_bust`; cảnh báo dấu hiệu nguy hiểm dùng `caution`; tóm ý/chuyển chương dùng `point_up` hoặc `explain`; kết + CTA và `brand_outro` dùng `thumbs_up` hoặc `welcome`, giữ logo thương hiệu.
-- Gợi ý 4–8 lần cho video dài, ≤1 lần mỗi clip dọc; điều chỉnh theo nội dung, không ép đủ số. CTA clip tự thêm đã có mascot `welcome`, nên ưu tiên không thêm mascot trong các cảnh cắt khi CTA này đủ nhận diện.
-- Không che vùng giải phẫu, biểu đồ, phụ đề hay thẻ nguồn; kiểm cả 16:9 và 9:16. Bỏ mascot ở cảnh cơ chế chính nếu làm rối. Mascot chỉ phản ứng, không nói claim y khoa mới; không chữ/số trên ảnh, `blank_board` chỉ là khung trống. Chữ riêng bằng Remotion vẫn phải tuân thủ claim/nguồn hiện hành.
+## Mascot thương hiệu theo nhịp cảnh (Chuẩn A — Mascot dẫn chuyện)
+- **Bắt buộc `mascot_pose`** (thuộc đúng 9 tư thế hợp lệ trong `profiles/brand.vi.yaml`: `welcome`, `explain`, `caution`, `point_up`, `thinking`, `surprised`, `thumbs_up`, `blank_board`, `myth_bust`) ở **hook (cảnh đầu)**, **đầu mỗi chương (`CH01`, `CH02`, ...)**, và **outro (`brand_outro`)**. Ghi `mascot_pose` trực tiếp trên `Scene` và/hoặc đồng bộ với `visual_assets` (`role: mascot`, `pose: ...`); nếu khai cả hai phải khớp nhau. Khi revision ghim chuẩn A (`workflow/standards.yaml`), validator sẽ **từ chối** storyboard thiếu `mascot_pose` tại các mốc này.
+- Chọn tư thế đúng nghĩa theo bảng mục 2 spec chuẩn A: hook (trong 3 giây đầu) dùng `surprised`, `thinking` hoặc `welcome`; mở chương dùng `welcome`, `blank_board` hoặc `explain`; đính chính niềm tin sai dùng `myth_bust`; cảnh báo dấu hiệu nguy hiểm dùng `caution`; chỉ điểm/nhãn dùng `point_up`; kết + CTA và `brand_outro` dùng `thumbs_up` hoặc `welcome` bên cạnh logo. Giữ một tư thế ≥ 2 giây, chỉ đổi khi ý đổi; zoom y khoa dùng kính lúp, không cross-fade giả zoom; phụ đề tĩnh theo trang.
+- Không che vùng giải phẫu (chủ thể ≥ 60% khung ở cảnh cơ chế), biểu đồ, phụ đề hay thẻ nguồn; kiểm cả 16:9 và 9:16. Bỏ mascot ở cảnh dữ liệu dày nếu làm rối (hoặc thu nhỏ ở góc khi chỉ điểm). Mascot chỉ phản ứng/dẫn chuyện, không nói claim y khoa mới; không chữ/số trên ảnh, `blank_board` chỉ là khung trống. Chữ riêng bằng Remotion vẫn phải tuân thủ claim/nguồn hiện hành.
 - Đọc `profiles/brand.vi.yaml`: chọn `mascot.artwork[pose].path`, kiểm SHA-256 khớp `mascot.artwork[pose].sha256`, chép nguyên PNG vào revision, ví dụ `assets/brand/welcome.png`. Không sửa brand/ảnh hay tự sinh lại mascot. Chỉ khai báo tham chiếu không tự chép ảnh hoặc tạo manifest.
 - Scene ghi `visual_assets: [{path: assets/brand/welcome.png, role: mascot, pose: welcome}]`; không dùng `asset_id`. Path tương đối POSIX từ gốc revision, phải trùng path trong manifest.
 - Manifest: `path: assets/brand/welcome.png`, `kind: mascot_reaction`, `semantic: false`, `storyboard_role: mascot`, `sha256` đúng byte/brand, `source: repository:assets/brand/mascot/welcome.png`, `creator` và `license` chép nguyên `brand.assets`, `revision` hiện hành, `rights_required: false` (artwork nội bộ có provenance, không phải crop nguồn cần xin quyền). Không bịa giấy phép.
