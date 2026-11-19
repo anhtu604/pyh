@@ -975,6 +975,12 @@ def _shorts_plan_validation_problem(project_dir: Path) -> str | None:
             f"{SHORTS_PLAN_ARTIFACT} revision_hash lệch "
             f"(trong file: {plan.revision_hash[:12]}, hiện tại: {expected_hash[:12]})"
         )
+    try:
+        from healthvideo.workflows.shorts_plan import sync_shorts_plan_to_clip_plan
+
+        sync_shorts_plan_to_clip_plan(revision_root)
+    except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+        return f"{SHORTS_PLAN_ARTIFACT} chưa hợp lệ: {_sanitize_reason(exc)}"
     return None
 
 

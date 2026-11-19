@@ -31,7 +31,11 @@ from healthvideo.workflows.storyboard_design import (
     storyboard_ready,
     submit_storyboard_design,
 )
-from tests.helpers import create_v2_project_fixture, submit_video_fixture
+from tests.helpers import (
+    create_long_form_project_fixture,
+    create_v2_project_fixture,
+    submit_video_fixture,
+)
 
 NOW = datetime(2026, 11, 19, 3, 0, tzinfo=UTC)
 
@@ -178,7 +182,8 @@ def test_package_enforces_style_a_thumbnail_when_pinned(tmp_path: Path) -> None:
 
 
 def test_shorts_plan_enforces_style_a_9x16_defaults_and_limits(tmp_path: Path) -> None:
-    project = create_v2_project_fixture(tmp_path / "projects")
+    project = create_long_form_project_fixture(tmp_path / "projects")
+    approve_gate(project, GateKind.MEDICAL, reviewer="BS Test", now=NOW)
     base_clip = {
         "id": "CL01",
         "title": "Hook 9:16 chuẩn A",

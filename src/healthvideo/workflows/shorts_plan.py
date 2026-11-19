@@ -324,8 +324,7 @@ def shorts_plan_ready(project_dir: Path) -> bool:
             target = revision / SHORTS_PLAN_ARTIFACT
             if not target.is_file():
                 return False
-            rev_hash = _revision_hash(revision)
-            plan = ShortsPlan.model_validate(read_yaml(target))
+            sync_shorts_plan_to_clip_plan(revision)
     except (OSError, TypeError, ValueError):
         return False
-    return plan.revision_hash == rev_hash
+    return True

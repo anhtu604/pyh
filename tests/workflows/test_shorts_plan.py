@@ -349,3 +349,64 @@ def test_sync_shorts_plan_blocks_narration_drift_and_tampered_style_a(tmp_path: 
         ShortClipSpec.model_validate({**base, "subtitle_position": "top_left"})
     with pytest.raises(ValidationError):
         ShortClipSpec.model_validate({**base, "hook_window_seconds": 2.5})
+
+
+@pytest.mark.parametrize("same_subject", [True, False])
+def test_ready_and_diagnosis_validate_clip_semantics(tmp_path: Path, same_subject: bool) -> None:
+    from healthvideo.workflows.runner import _shorts_plan_validation_problem
+
+    project = _approved_long_form(tmp_path)
+    revision = project / "revisions/001"
+    board_path = revision / "storyboard/storyboard.yaml"
+    board = read_yaml(board_path)
+    # Three mechanisms in the whole long form do not trigger its four-subject rule.
+    board["scenes"][4].update(visual="whiteboard", anatomy=None, beats=[])
+    if same_subject:
+        board["scenes"][3]["anatomy"]["subject"] = board["scenes"][2]["anatomy"]["subject"]
+    write_yaml_atomic(board_path, board)
+    # Seed a synthetic approval matching this regression fixture's artifacts.
+    from healthvideo.workflows.gate_review import (
+        hash_reviewed_artifacts,
+        medical_reviewed_paths,
+    )
+
+    approval_path = revision / "reviews/medical-approval.yaml"
+    approval = read_yaml(approval_path)
+    approval["artifact_hashes"] = hash_reviewed_artifacts(medical_reviewed_paths(revision))
+    write_yaml_atomic(approval_path, approval)
+    target = revision / SHORTS_PLAN_ARTIFACT
+    write_yaml_atomic(target, {
+        "revision_hash": _revision_hash(revision),
+        "clips": [{"id": "CL02", "title": "Synthetic clip", "hook_text": "Hook",
+                   "start_scene_id": "S03", "end_scene_id": "S04", "target_seconds": 63,
+                   "caption": "Caption", "safety_caveat": "Caveat", "safe_zone_checked": True}],
+    })
+    assert shorts_plan_ready(project) is (not same_subject)
+    problem = _shorts_plan_validation_problem(project)
+    if same_subject:
+        assert "CL02" in problem
+        assert "ít nhất 2 anatomy.subject" in problem
+        with pytest.raises(ValueError, match="CL02"):
+            save_shorts_plan(project, target)
+    else:
+        assert problem is None
+        approval_path.unlink()
+        assert shorts_plan_ready(project) is False
+        assert "current medical approval" in _shorts_plan_validation_problem(project)
+
+
+def test_shorts_plan_ready_missing_file(tmp_path: Path) -> None:
+    project = _approved_long_form(tmp_path)
+    assert shorts_plan_ready(project) is False
+
+
+def test_shorts_plan_ready_read_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from healthvideo.workflows import shorts_plan
+
+    project = _approved_long_form(tmp_path)
+
+    def unreadable(*args, **kwargs):
+        raise OSError("temporary read failure")
+
+    monkeypatch.setattr(shorts_plan, "_project", unreadable)
+    assert shorts_plan_ready(project) is False

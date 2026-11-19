@@ -26,7 +26,11 @@ from healthvideo.workflows.draft import submit_script_draft
 from healthvideo.workflows.factory_deps import read_state, reject_note
 from healthvideo.workflows.gate_review import approve_gate, check_revision_posts
 from healthvideo.workflows.runner import RunDeps, gpu_mutex, run_queue
-from tests.helpers import create_v2_project_fixture, write_posts_fixture
+from tests.helpers import (
+    create_long_form_project_fixture,
+    create_v2_project_fixture,
+    write_posts_fixture,
+)
 from tests.workflows.test_draft import SOURCE, _evidence_ready
 
 
@@ -213,7 +217,7 @@ def test_submit_script_draft_then_parallel_storyboard_and_voice_prep_before_crit
 
 
 def test_post_medical_parallel_branches_and_gpu_mutex_exclusivity(tmp_path: Path):
-    proj_a = create_v2_project_fixture(tmp_path / "projects", state=WorkflowState.AWAITING_MEDICAL_REVIEW)
+    proj_a = create_long_form_project_fixture(tmp_path / "projects")
     approve_gate(proj_a, GateKind.MEDICAL, reviewer="BS Nguyễn Văn An", now=datetime.now(UTC))
     (proj_a / "revisions/001/posts/posts.yaml").unlink(missing_ok=True)
     slug = proj_a.name

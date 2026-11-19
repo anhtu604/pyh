@@ -4,7 +4,7 @@ A clip only points at existing storyboard scenes, so it cannot carry new wording
 ``extra="forbid"`` keeps free text, and therefore new claims, out of the plan.
 """
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -98,6 +98,21 @@ def validate_style_a_vertical_clip(clip: ClipSpec) -> None:
         )
 
 
+def vertical_clip_storyboard(storyboard: Storyboard, scenes: Sequence[Scene]) -> Storyboard:
+    """Build and validate the same retimed vertical storyboard used for rendering."""
+    retimed: list[Scene] = []
+    start = 0
+    for scene in scenes:
+        retimed.append(scene.model_copy(update={"start_frame": start, "chapter_id": None}))
+        start += scene.duration_frames
+    return Storyboard(
+        title=storyboard.title,
+        scenes=tuple(retimed),
+        visual_budget_profile=storyboard.visual_budget_profile,
+        format_profile="vertical_clip",
+    )
+
+
 def validate_clip_plan(
     plan: ClipPlan, storyboard: Storyboard, claims: Mapping[str, EvidenceClaim],
     *, min_frames: int = CLIP_MIN_FRAMES, max_frames: int = CLIP_MAX_FRAMES,
@@ -111,6 +126,20 @@ def validate_clip_plan(
         if require_style_a:
             validate_style_a_vertical_clip(clip)
         scenes = resolve_clip_scenes(clip, storyboard)
+        try:
+            vertical_clip_storyboard(storyboard, scenes)
+        except ValueError as error:
+            subjects = ", ".join(
+                f"{scene.id}={scene.anatomy.subject if scene.anatomy else 'không có anatomy'}"
+                for scene in scenes
+            )
+            reason = str(error)
+            if "vertical_clip requires at least 2 anatomy.subject values" in reason:
+                reason = (
+                    "clip dọc cần chọn khoảng cảnh có ít nhất 2 anatomy.subject khác nhau "
+                    "(hoặc có ít hơn 2 cảnh cơ chế)"
+                )
+            raise ValueError(f"{clip.id}: {reason}; chủ thể từng cảnh: {subjects}") from error
         frames = sum(scene.duration_frames for scene in scenes) + CLIP_CTA_FRAMES
         if not min_frames <= frames <= max_frames:
             raise ValueError(

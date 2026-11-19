@@ -20,6 +20,7 @@ from healthvideo.domain.clip_plan import (
     CLIP_MIN_FRAMES,
     ClipPlan,
     validate_clip_plan,
+    vertical_clip_storyboard,
 )
 from healthvideo.domain.evidence import EvidenceClaim
 from healthvideo.domain.license_ledger import LicenseEntry, LicenseLedger
@@ -211,19 +212,7 @@ def clip_render_input(
     brand: BrandProfile | None = None,
 ) -> RenderInput:
     """Re-time the clip's approved scenes from frame 0 as a 9:16 render (re-laid out, not cropped)."""
-    retimed: list[Scene] = []
-    start = 0
-    for scene in scenes:
-        retimed.append(
-            scene.model_copy(update={"start_frame": start, "chapter_id": None})
-        )
-        start += scene.duration_frames
-    board = Storyboard(
-        title=storyboard.title,
-        scenes=tuple(retimed),
-        visual_budget_profile=storyboard.visual_budget_profile,
-        format_profile="vertical_clip",
-    )
+    board = vertical_clip_storyboard(storyboard, scenes)
     brand = brand or load_brand_profile(BRAND_PROFILE_PATH)
     result = build_render_input(board, audio_file)
     return RenderInput.model_validate(

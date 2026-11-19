@@ -189,3 +189,28 @@ def test_style_a_vertical_clip_constraints() -> None:
     )
     resolved = validate_clip_plan(valid_plan, _board(), CLAIMS, require_style_a=True)
     assert list(resolved) == ["CL01", "CL02", "CL03"]
+
+
+@pytest.mark.parametrize("subjects", [
+    ("artery_cross_section",) * 3,
+    ("artery_cross_section", "heart", "heart"),
+    ("artery_cross_section",),
+])
+def test_clip_mechanism_variety(subjects: tuple[str, ...]) -> None:
+    data = _board().model_dump(mode="json")
+    for scene, subject in zip(data["scenes"][2:], subjects):
+        scene.update(
+            visual="process_animation",
+            anatomy={"subject": subject, "state": "normal", "severity": 0,
+                     "motion": "Synthetic test motion"},
+            beats=[{"at": 0, "focus": "overview"}, {"at": 1, "focus": None}],
+        )
+    board = Storyboard.model_validate(data)
+    plan = _plan(_clip("CL02", "S03", "S05"))
+    if len(subjects) >= 2 and len(set(subjects)) < 2:
+        with pytest.raises(ValueError, match="CL02:.*ít nhất 2 anatomy.subject") as error:
+            validate_clip_plan(plan, board, CLAIMS)
+        for scene_id in ("S03", "S04", "S05"):
+            assert f"{scene_id}=artery_cross_section" in str(error.value)
+    else:
+        assert validate_clip_plan(plan, board, CLAIMS)["CL02"] == board.scenes[2:5]
