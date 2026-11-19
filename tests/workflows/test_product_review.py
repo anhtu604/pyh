@@ -16,6 +16,11 @@ from healthvideo.domain.state_graph import TransitionContext, transition_v2
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.storage.queue import add_to_queue
 from healthvideo.workflows import product_review as pr
+from healthvideo.workflows.factory_standards import (
+    STYLE_SPEC_FILE,
+    pin_standards,
+    style_a_active,
+)
 from healthvideo.workflows.gate_review import approve_gate
 from healthvideo.workflows.produce import submit_video
 from healthvideo.workflows.runner import RunDeps, run_queue
@@ -263,11 +268,35 @@ def test_role_model_override_picks_the_chain(tmp_path):
 
 def test_pyh_style_criterion_required_for_new_reviews_and_exposed_in_view(tmp_path):
     project = _project(tmp_path)
+    spec_path = tmp_path / STYLE_SPEC_FILE
+    spec_path.parent.mkdir(parents=True, exist_ok=True)
+    spec_path.write_text('# Style A spec\n', encoding='utf-8')
+    pin_standards(tmp_path, project)
+    assert style_a_active(project / REV) is True
     assert pr.STYLE_CRITERION in pr.CRITERIA
+    assert pr.criteria_for_revision(project / REV) == pr.CRITERIA
+
     _report(project, scores=dict.fromkeys(pr.LEGACY_CRITERIA, 8))
     with pytest.raises(ValueError, match='đủ đúng'):
         pr.record_review(project, pr.render_hash(project))
 
+    _report(
+        project,
+        scores={**dict.fromkeys(pr.LEGACY_CRITERIA, 8), pr.STYLE_CRITERION: 5},
+        issues=[{
+            'at': 'S02',
+            'criterion': pr.STYLE_CRITERION,
+            'problem': 'Chưa dùng mascot Style A.',
+            'fix': 'Thêm pose mascot.',
+            'fixable': True,
+        }],
+    )
+    failed_entry = pr.record_review(project, pr.render_hash(project))
+    assert failed_entry['passed'] is False
+    with pytest.raises(ValueError, match='Trạm 12 chưa đạt'):
+        pr.require_passed_review(project)
+
+    _render(project, 2)
     _report(project, scores={**dict.fromkeys(pr.LEGACY_CRITERIA, 8), pr.STYLE_CRITERION: 9})
     entry = pr.record_review(project, pr.render_hash(project))
     assert entry['passed'] is True
@@ -279,6 +308,117 @@ def test_pyh_style_criterion_required_for_new_reviews_and_exposed_in_view(tmp_pa
     view = pr.review_view(project / REV)
     assert view['style_score'] == style
     assert any(row['key'] == pr.STYLE_CRITERION and row['score'] == 9 for row in view['scores'])
+
+
+def test_pre_style_a_revision_does_not_block_gate_on_pyh_style_criterion(tmp_path):
+    project = _project(tmp_path)
+    assert style_a_active(project / REV) is False
+    assert pr.criteria_for_revision(project / REV) == pr.LEGACY_CRITERIA
+
+    # 6 legacy criteria >= 7 pass directly without requiring dung_phong_cach_pyh.
+    _report(project, scores=dict.fromkeys(pr.LEGACY_CRITERIA, 8))
+    entry_six = pr.record_review(project, pr.render_hash(project))
+    assert entry_six['passed'] is True
+    pr.require_passed_review(project)
+    assert pr.next_product_action(project) == 'submit_video'
+
+    # 7 criteria with low dung_phong_cach_pyh (< 7) stays non-blocking when all 6 legacy >= 7.
+    _render(project, 2)
+    _report(
+        project,
+        scores={**dict.fromkeys(pr.LEGACY_CRITERIA, 8), pr.STYLE_CRITERION: 4},
+        issues=[{
+            'at': 'S01',
+            'criterion': pr.STYLE_CRITERION,
+            'problem': 'Video cũ không theo mascot Style A.',
+            'fix': 'Gợi ý tham khảo cho video mới.',
+            'fixable': True,
+        }],
+    )
+    entry_advisory = pr.record_review(project, pr.render_hash(project))
+    assert entry_advisory['passed'] is True
+    pr.require_passed_review(project)
+    assert pr.next_product_action(project) == 'submit_video'
+    advisory_style = pr.style_score(project / REV)
+    assert advisory_style is not None and advisory_style['score'] == 4 and advisory_style['passed'] is False
+
+    # If a legacy criterion also fails, revision_notes keeps legacy fix notes and hides Style A churn.
+    _render(project, 3)
+    _report(
+        project,
+        scores={**dict.fromkeys(pr.LEGACY_CRITERIA, 8), 'hinh_ro': 5, pr.STYLE_CRITERION: 4},
+        issues=[
+            {
+                'at': 'S02',
+                'criterion': 'hinh_ro',
+                'problem': 'Nhãn bị cắt.',
+                'fix': 'Thu nhỏ nhãn.',
+                'fixable': True,
+            },
+            {
+                'at': 'S01',
+                'criterion': pr.STYLE_CRITERION,
+                'problem': 'Thiếu mascot Style A.',
+                'fix': 'Dựng lại mascot.',
+                'fixable': True,
+            },
+        ],
+    )
+    failed_legacy = pr.record_review(project, pr.render_hash(project))
+    assert failed_legacy['passed'] is False
+    notes = pr.revision_notes(project)
+    assert 'Thu nhỏ nhãn.' in notes
+    assert 'Dựng lại mascot.' not in notes
+
+
+def test_run_queue_pre_style_a_passes_gate_and_missing_report_records_retry_reason(tmp_path):
+    project = _queue(tmp_path)
+    state = {'value': WorkflowState.PRODUCTION_IN_PROGRESS, 'renders': 1}
+    prompts: list[str] = []
+
+    def invoke(agents, prompt, *, cwd, log_dir, **_):
+        del cwd
+        log_dir.mkdir(parents=True, exist_ok=True)
+        prompts.append(prompt)
+        _report(
+            project,
+            scores={**dict.fromkeys(pr.LEGACY_CRITERIA, 8), pr.STYLE_CRITERION: 3},
+            issues=[{
+                'at': 'S01',
+                'criterion': pr.STYLE_CRITERION,
+                'problem': 'Chưa theo mascot A.',
+                'fix': 'Bỏ qua trên video cũ.',
+                'fixable': True,
+            }],
+        )
+        return AgentResult(agents[0].cli, True, False, log_dir / 'fake.log')
+
+    report = run_queue(tmp_path, _deps(project, state, invoke))
+    assert report.blocked == []
+    assert report.at_gate == [SLUG]
+    assert state['value'] == WorkflowState.AWAITING_VIDEO_REVIEW
+    assert 'TRƯỚC Chuẩn phong cách A' in prompts[0]
+
+    # When Style A is active and critic omits report, concrete missing-file cause lands in both blocked & agent-retry.
+    other_root = tmp_path / 'missing-report'
+    other_project = _queue(other_root)
+    (other_root / STYLE_SPEC_FILE).parent.mkdir(parents=True, exist_ok=True)
+    (other_root / STYLE_SPEC_FILE).write_text('# Style A spec\n', encoding='utf-8')
+    pin_standards(other_root, other_project)
+    other_state = {'value': WorkflowState.PRODUCTION_IN_PROGRESS, 'renders': 1}
+
+    def silent_invoke(agents, prompt, *, cwd, log_dir, **_):
+        del cwd
+        log_dir.mkdir(parents=True, exist_ok=True)
+        assert 'đã ghim Chuẩn phong cách PYH' in prompt
+        return AgentResult(agents[0].cli, True, False, log_dir / 'fake.log')
+
+    blocked_report = run_queue(other_root, _deps(other_project, other_state, silent_invoke))
+    assert blocked_report.blocked == [SLUG]
+    blocked_text = (other_root / 'topics/logs' / SLUG / 'blocked.txt').read_text(encoding='utf-8')
+    assert 'reviews/product-review.yaml' in blocked_text
+    retry_data = read_yaml(other_root / 'topics/logs' / SLUG / 'agent-retry.yaml')
+    assert 'reviews/product-review.yaml' in retry_data['steps']['product_review']['reason']
 
 
 def test_legacy_pre_r33b_product_review_log_remains_valid_and_viewable(tmp_path):

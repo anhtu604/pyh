@@ -499,3 +499,333 @@ def test_maker_slots_for_critic_uses_latest_per_role_and_falls_back_to_primary_a
     assert excluded_b == (slot_b,)
     remaining_b = [s for s in company_two.chain("script_critic") if s not in excluded_b]
     assert remaining_b == [slot_a]
+
+
+def test_maker_slots_for_critic_skips_malformed_rows_and_resets_after_critic(tmp_path: Path):
+    import json
+
+    from healthvideo.agents import ACTIVITY_FILE
+    from healthvideo.company import Company, ModelSlot, Role
+    from healthvideo.workflows.runner import _maker_slots_for_critic
+
+    slot_a = ModelSlot(cli="agy", model="model-a")
+    slot_b = ModelSlot(cli="codex", model="model-b")
+    slot_c = ModelSlot(cli="claude", model="model-c")
+    company = Company(
+        roles={
+            "script_critic": Role(
+                id="script_critic",
+                name="Kiểm duyệt kịch bản",
+                tier="hard",
+                skills=("pyh-script-critic",),
+                steps=("script_review",),
+                models=(slot_a, slot_b, slot_c),
+            ),
+        },
+        tiers={"hard": (slot_a, slot_b, slot_c)},
+    )
+    act_path = tmp_path / ACTIVITY_FILE
+    act_path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [
+        "{not-json",
+        json.dumps({"slug": "topic-c", "role": "writer", "ok": True, "cli": "ollama", "model": "qwen3"}),
+        json.dumps({"slug": "topic-c", "role": "storyboard_director", "ok": True, "cli": slot_a.cli, "model": slot_a.model}),
+        json.dumps({"slug": "topic-c", "role": "script_critic", "ok": True, "cli": slot_b.cli, "model": slot_b.model}),
+        json.dumps({"slug": "topic-c", "role": "writer", "ok": True, "cli": slot_c.cli, "model": slot_c.model}),
+    ]
+    act_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    assert _maker_slots_for_critic(tmp_path, "topic-c", "script_critic", company=company) == (slot_c,)
+
+
+def test_gpu_mutex_is_thread_reentrant_and_mutually_exclusive(tmp_path: Path):
+    entered_nested = False
+    with gpu_mutex(tmp_path), gpu_mutex(tmp_path):
+        entered_nested = True
+    assert entered_nested
+
+    concurrent = 0
+    max_concurrent = 0
+    guard = threading.Lock()
+
+    def thread_worker():
+        nonlocal concurrent, max_concurrent
+        with gpu_mutex(tmp_path), gpu_mutex(tmp_path):
+            with guard:
+                concurrent += 1
+                max_concurrent = max(max_concurrent, concurrent)
+            time.sleep(0.05)
+            with guard:
+                concurrent -= 1
+
+    workers = [threading.Thread(target=thread_worker) for _ in range(3)]
+    for th in workers:
+        th.start()
+    for th in workers:
+        th.join()
+    assert max_concurrent == 1
+
+
+def test_parallel_branches_aggregates_errors_and_preserves_waiting_model_step(
+    tmp_path: Path, monkeypatch
+):
+    from datetime import timedelta
+
+    from healthvideo.agents import AllAgentsExhausted
+    from healthvideo.storage.files import canonical_json_hash
+
+    proj = create_v2_project_fixture(tmp_path / "projects", state=WorkflowState.DRAFT_READY)
+    slug = proj.name
+    write_yaml_atomic(
+        tmp_path / "topics/queue.yaml",
+        {
+            "version": 1,
+            "entries": [
+                {"slug": slug, "title": "Parallel Fail", "question": "Q?", "added": "2026-11-18"}
+            ],
+        },
+    )
+    (proj / "revisions/001/script/voice-prep.yaml").unlink(missing_ok=True)
+    monkeypatch.setattr(
+        storyboard_design,
+        "validate_estimated_layout",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            ValueError("Estimated layout precheck failed: whiteboard_svg outside 11-14%")
+        ),
+    )
+
+    def invoke_both_invalid(slots, prompt, **kwargs):
+        del slots, prompt
+        step = kwargs["step"]
+        if step == "voice_prep":
+            vp_path = proj / "revisions/001/script/voice-prep.yaml"
+            script_data = read_yaml(proj / "revisions/001/script/script.yaml")
+            sheet = voice_prep.VoicePrepSheet(
+                script_hash="0" * 64 if canonical_json_hash(script_data) != "0" * 64 else "1" * 64,
+                notes="mismatched",
+            )
+            write_yaml_atomic(vp_path, sheet.model_dump(mode="json"))
+        return AgentResult("fake", True, False, kwargs["log_dir"] / f"{step}.log")
+
+    deps = RunDeps(
+        create_project=lambda root, entry: proj,
+        read_state=read_state,
+        reject_note=reject_note,
+        python_steps={},
+        changed_code_paths=lambda _: [],
+        invoke=invoke_both_invalid,
+        expert_brief_ready=lambda _: True,
+        storyboard_ready=storyboard_design.storyboard_ready,
+        voice_prep_ready=voice_prep.voice_prep_ready,
+        parallel_branches=True,
+    )
+    report = run_queue(tmp_path, deps, once=True)
+    assert report.blocked == [slug]
+    blocked_text = (tmp_path / "topics/logs" / slug / "blocked.txt").read_text(encoding="utf-8")
+    assert "Estimated layout precheck failed" in blocked_text
+    assert "voice-prep.yaml script_hash lệch" in blocked_text
+    retry_data = read_yaml(tmp_path / "topics/logs" / slug / "agent-retry.yaml")
+    assert "Estimated layout precheck failed" in retry_data["steps"]["storyboard_design"]["reason"]
+    assert "voice-prep.yaml script_hash lệch" in retry_data["steps"]["voice_prep"]["reason"]
+
+    # Sibling branch succeeding in post-medical fan-out must NOT wipe waiting-model-step.yaml of a quota-hit branch.
+    root2 = tmp_path / "fanout-quota"
+    proj2 = create_v2_project_fixture(root2 / "projects", state=WorkflowState.AWAITING_MEDICAL_REVIEW)
+    approve_gate(proj2, GateKind.MEDICAL, reviewer="BS An", now=datetime.now(UTC))
+    (proj2 / "revisions/001/posts/posts.yaml").unlink(missing_ok=True)
+    slug2 = proj2.name
+    write_yaml_atomic(
+        root2 / "topics/queue.yaml",
+        {
+            "version": 1,
+            "entries": [
+                {"slug": slug2, "title": "Quota Fanout", "question": "Q?", "added": "2026-11-18"}
+            ],
+        },
+    )
+
+    def invoke_quota_branch(slots, prompt, **kwargs):
+        del slots, prompt
+        step = kwargs["step"]
+        if step == "posts":
+            time.sleep(0.08)
+            write_posts_fixture(proj2 / "revisions/001")
+            return AgentResult("fake", True, False, kwargs["log_dir"] / "posts.log")
+        raise AllAgentsExhausted(datetime.now(UTC) + timedelta(minutes=15))
+
+    deps2 = RunDeps(
+        create_project=lambda root, entry: proj2,
+        read_state=read_state,
+        reject_note=reject_note,
+        python_steps={"produce": lambda p: None},
+        changed_code_paths=lambda _: [],
+        invoke=invoke_quota_branch,
+        posts_ready=lambda p: not check_revision_posts(p / "revisions/001", require_medical_approval=True),
+        shorts_plan_ready=lambda p: (p / "revisions/001/posts/shorts-plan.yaml").is_file(),
+        parallel_branches=True,
+    )
+    report2 = run_queue(root2, deps2, once=True)
+    assert report2.waiting_model == [slug2]
+    assert report2.blocked == []
+    resume = read_yaml(root2 / "topics/logs" / slug2 / "waiting-model-step.yaml")
+    assert resume["step"] == "shorts_plan"
+
+
+def test_unchanged_state_diagnostics_surface_exact_causes_across_steps(tmp_path: Path):
+    from healthvideo.workflows.gate_review import POSTS_ARTIFACT
+
+    # 1. draft fails M6.4 final outro mismatch -> exact cause in blocked.txt + agent-retry.yaml
+    root1 = tmp_path / "draft-outro"
+    proj1 = _evidence_ready(root1 / "projects")
+    slug1 = proj1.name
+    rev1 = proj1 / "revisions/001"
+    (rev1 / "evidence/expert-brief.md").parent.mkdir(parents=True, exist_ok=True)
+    (rev1 / "evidence/expert-brief.md").write_text("# Brief\n", encoding="utf-8")
+    write_yaml_atomic(
+        root1 / "topics/queue.yaml",
+        {
+            "version": 1,
+            "entries": [{"slug": slug1, "title": "Draft Outro", "question": "Q?", "added": "2026-11-18"}],
+        },
+    )
+
+    def invoke_bad_outro(slots, prompt, **kwargs):
+        del slots, prompt
+        write_yaml_atomic(
+            rev1 / "script/script.yaml",
+            {
+                "schema_version": "1.0",
+                "title": "Test",
+                "format_profile": "hook_outro_v1",
+                "lines": [
+                    {"id": "N01", "text": "Mở đầu.", "purpose": "content"},
+                    {"id": "N99", "text": "Outro tự chế sai text.", "purpose": "outro"},
+                ],
+            },
+        )
+        return AgentResult("fake", True, False, kwargs["log_dir"] / "draft.log")
+
+    deps1 = RunDeps(
+        create_project=lambda root, entry: proj1,
+        read_state=read_state,
+        reject_note=reject_note,
+        python_steps={},
+        changed_code_paths=lambda _: [],
+        invoke=invoke_bad_outro,
+        expert_brief_ready=lambda _: True,
+    )
+    report1 = run_queue(root1, deps1, once=True)
+    assert report1.blocked == [slug1]
+    blocked1 = (root1 / "topics/logs" / slug1 / "blocked.txt").read_text(encoding="utf-8")
+    assert "agent không làm đổi trạng thái" in blocked1
+    assert "M6.4 final outro must match pinned text" in blocked1
+    retry1 = read_yaml(root1 / "topics/logs" / slug1 / "agent-retry.yaml")
+    assert "M6.4 final outro must match pinned text" in retry1["steps"]["draft"]["reason"]
+
+    # 2. posts step leaves posts/posts.yaml missing -> exact cause in blocked.txt + agent-retry.yaml
+    root2 = tmp_path / "missing-posts"
+    proj2 = create_v2_project_fixture(root2 / "projects", state=WorkflowState.AWAITING_MEDICAL_REVIEW)
+    approve_gate(proj2, GateKind.MEDICAL, reviewer="BS An", now=datetime.now(UTC))
+    (proj2 / "revisions/001" / POSTS_ARTIFACT).unlink(missing_ok=True)
+    slug2 = proj2.name
+    write_yaml_atomic(
+        root2 / "topics/queue.yaml",
+        {
+            "version": 1,
+            "entries": [{"slug": slug2, "title": "Posts Fail", "question": "Q?", "added": "2026-11-18"}],
+        },
+    )
+    deps2 = RunDeps(
+        create_project=lambda root, entry: proj2,
+        read_state=read_state,
+        reject_note=reject_note,
+        python_steps={},
+        changed_code_paths=lambda _: [],
+        invoke=lambda slots, prompt, **kw: AgentResult("fake", True, False, kw["log_dir"] / "posts.log"),
+        posts_ready=lambda p: not check_revision_posts(p / "revisions/001", require_medical_approval=True),
+        shorts_plan_ready=lambda _: True,
+        product_review_pending=lambda _: True,
+        parallel_branches=False,
+    )
+    report2 = run_queue(root2, deps2, once=True)
+    assert report2.blocked == [slug2]
+    blocked2 = (root2 / "topics/logs" / slug2 / "blocked.txt").read_text(encoding="utf-8")
+    assert "agent không làm đổi trạng thái (posts)" in blocked2
+    assert POSTS_ARTIFACT in blocked2
+    retry2 = read_yaml(root2 / "topics/logs" / slug2 / "agent-retry.yaml")
+    assert POSTS_ARTIFACT in retry2["steps"]["posts"]["reason"]
+
+    # 3. research at TOPIC_SELECTED leaves evidence/question.yaml missing -> exact cause
+    root3 = tmp_path / "missing-question"
+    proj3 = create_v2_project_fixture(root3 / "projects")
+    manifest3 = read_yaml(proj3 / "project.yaml")
+    write_yaml_atomic(
+        proj3 / "project.yaml",
+        {**manifest3, "state": WorkflowState.TOPIC_SELECTED.value},
+    )
+    (proj3 / "revisions/001/evidence/question.yaml").unlink(missing_ok=True)
+    slug3 = proj3.name
+    write_yaml_atomic(
+        root3 / "topics/queue.yaml",
+        {
+            "version": 1,
+            "entries": [{"slug": slug3, "title": "Research Fail", "question": "Q?", "added": "2026-11-18"}],
+        },
+    )
+    deps3 = RunDeps(
+        create_project=lambda root, entry: proj3,
+        read_state=read_state,
+        reject_note=reject_note,
+        python_steps={},
+        changed_code_paths=lambda _: [],
+        invoke=lambda slots, prompt, **kw: AgentResult("fake", True, False, kw["log_dir"] / "research.log"),
+        expert_brief_ready=lambda _: True,
+    )
+    report3 = run_queue(root3, deps3, once=True)
+    assert report3.blocked == [slug3]
+    blocked3 = (root3 / "topics/logs" / slug3 / "blocked.txt").read_text(encoding="utf-8")
+    assert "agent không làm đổi trạng thái (research, trạng thái topic_selected)" in blocked3
+    assert "evidence/question.yaml" in blocked3
+
+    # 4. revise_production when a medical-gated artifact drifted from medical-approval.yaml
+    root4 = tmp_path / "drifted-medical"
+    proj4 = create_v2_project_fixture(root4 / "projects", state=WorkflowState.AWAITING_MEDICAL_REVIEW)
+    approve_gate(proj4, GateKind.MEDICAL, reviewer="BS An", now=datetime.now(UTC))
+    manifest4 = read_yaml(proj4 / "project.yaml")
+    write_yaml_atomic(
+        proj4 / "project.yaml",
+        {
+            **manifest4,
+            "state": WorkflowState.NEEDS_PRODUCTION_REVISION.value,
+            "side_state": {
+                "type": WorkflowState.NEEDS_PRODUCTION_REVISION.value,
+                "resume_state": WorkflowState.PRODUCTION_IN_PROGRESS.value,
+                "reason_code": "need_prod_fix",
+                "entered_at": datetime.now(UTC).isoformat(),
+            },
+        },
+    )
+    script4_path = proj4 / "revisions/001/script/script.yaml"
+    script4 = read_yaml(script4_path)
+    script4["title"] = "Modified behind medical gate"
+    write_yaml_atomic(script4_path, script4)
+    slug4 = proj4.name
+    write_yaml_atomic(
+        root4 / "topics/queue.yaml",
+        {
+            "version": 1,
+            "entries": [{"slug": slug4, "title": "Revise Prod Fail", "question": "Q?", "added": "2026-11-18"}],
+        },
+    )
+    deps4 = RunDeps(
+        create_project=lambda root, entry: proj4,
+        read_state=read_state,
+        reject_note=reject_note,
+        python_steps={},
+        changed_code_paths=lambda _: [],
+        invoke=lambda slots, prompt, **kw: AgentResult("fake", True, False, kw["log_dir"] / "revise.log"),
+    )
+    report4 = run_queue(root4, deps4, once=True)
+    assert report4.blocked == [slug4]
+    blocked4 = (root4 / "topics/logs" / slug4 / "blocked.txt").read_text(encoding="utf-8")
+    assert "script/script.yaml" in blocked4
+    assert "medical-approval.yaml" in blocked4

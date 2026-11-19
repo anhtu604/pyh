@@ -7,6 +7,8 @@ import shutil
 from pathlib import Path
 from tempfile import mkdtemp
 
+import yaml
+
 from healthvideo.domain.asset_manifest import AssetManifest
 from healthvideo.domain.clip_plan import ClipPlan
 from healthvideo.domain.outline import Outline, validate_outline
@@ -26,36 +28,52 @@ from healthvideo.workflows.draft import _project, _validate, validate_estimated_
 from healthvideo.workflows.factory_standards import style_a_active
 
 
-def storyboard_ready(project_dir: Path) -> bool:
-    """Return True when active revision has valid storyboard, asset manifest, and clip plan if required."""
+def storyboard_validation_error(project_dir: Path) -> str | None:
+    """Return the first concrete validation error blocking ``storyboard_ready``, or None."""
     project_file = project_dir / "project.yaml"
     if not project_file.is_file():
-        return False
+        return "thiếu project.yaml"
     try:
         project = _project(project_dir)
-    except (OSError, TypeError, ValueError):
-        return False
+    except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+        return f"project.yaml lỗi: {exc}"
     revision = project_dir / "revisions" / project.active_revision
     required = (
-        revision / "script/script.yaml",
-        revision / "storyboard/storyboard.yaml",
-        revision / "assets/asset-manifest.yaml",
+        "script/script.yaml",
+        "storyboard/storyboard.yaml",
+        "assets/asset-manifest.yaml",
     )
-    if not all(path.is_file() for path in required):
-        return False
+    missing = [rel for rel in required if not (revision / rel).is_file()]
+    if missing:
+        return "thiếu " + ", ".join(missing)
     try:
-        script = Script.model_validate(read_yaml(required[0]))
-        storyboard = Storyboard.model_validate(read_yaml(required[1]))
-        assets = AssetManifest.model_validate(read_yaml(required[2]))
+        script = Script.model_validate(read_yaml(revision / required[0]))
+    except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+        return f"script/script.yaml lỗi: {exc}"
+    try:
+        storyboard = Storyboard.model_validate(read_yaml(revision / required[1]))
+    except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+        return f"storyboard/storyboard.yaml lỗi: {exc}"
+    try:
+        assets = AssetManifest.model_validate(read_yaml(revision / required[2]))
+    except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+        return f"assets/asset-manifest.yaml lỗi: {exc}"
+    try:
         _validate(revision, script, storyboard, assets, project=project)
         if style_a_active(revision):
             validate_style_a_mascot_poses(storyboard)
         validate_estimated_layout(project_dir, script, storyboard, assets)
-        clip_path = revision / "script/clip-plan.yaml"
-        if storyboard.format_profile == "youtube_long" and clip_path.is_file():
+    except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+        return str(exc) or type(exc).__name__
+    clip_path = revision / "script/clip-plan.yaml"
+    if storyboard.format_profile == "youtube_long" and clip_path.is_file():
+        try:
             ClipPlan.model_validate(read_yaml(clip_path))
-        outline_path = revision / "script/outline.yaml"
-        if outline_path.is_file():
+        except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+            return f"script/clip-plan.yaml lỗi: {exc}"
+    outline_path = revision / "script/outline.yaml"
+    if outline_path.is_file():
+        try:
             ledger = read_yaml(revision / "evidence/ledger.yaml")
             claim_ids = [
                 str(item.get("id"))
@@ -63,9 +81,14 @@ def storyboard_ready(project_dir: Path) -> bool:
                 if isinstance(item, dict) and item.get("id")
             ]
             validate_outline(Outline.model_validate(read_yaml(outline_path)), storyboard, claim_ids)
-    except (OSError, TypeError, ValueError):
-        return False
-    return True
+        except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+            return f"script/outline.yaml lỗi: {exc}"
+    return None
+
+
+def storyboard_ready(project_dir: Path) -> bool:
+    """Return True when active revision has valid storyboard, asset manifest, and clip plan if required."""
+    return storyboard_validation_error(project_dir) is None
 
 
 def submit_storyboard_design(

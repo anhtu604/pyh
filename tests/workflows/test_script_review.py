@@ -464,3 +464,38 @@ def test_doctor_pending_request_restarts_exhausted_budget_once_and_runs_writer(t
     reset_for_doctor_guidance(project, str(path))
     assert read_yaml(log_path)['cycle_start'] == 6
     assert next_script_action(project) == 'draft'
+
+
+def test_station_07_cycle_cap_formats_score_and_missing_report_names_file(tmp_path):
+    project = _project(tmp_path)
+    with pytest.raises(ValueError, match=r'thiếu reviews/script-review\.yaml'):
+        record_review(project, script_hash(project))
+
+    # Simulate reaching MAX_CYCLES * MAX_REVIEWS where final round fails 'dung_yeu_cau' at 6/10.
+    for cycle in range(MAX_CYCLES):
+        for number in range(MAX_REVIEWS):
+            _script(project, f'Phiên bản {cycle}-{number}')
+            failing = 'giong_nguoi_that' if number == 0 else 'dung_yeu_cau'
+            scores = {**dict.fromkeys(CRITERIA, 8), failing: 6}
+            _report(
+                project,
+                scores=scores,
+                issues=[{
+                    'line': 'N01',
+                    'criterion': failing,
+                    'problem': f'Cần sửa tiêu chí {failing} (vòng {cycle}-{number}).',
+                    'fix': 'Chỉnh lại đúng câu hỏi.',
+                }],
+            )
+            record_review(project, script_hash(project))
+            log_path = project / 'revisions/001' / LOG
+            log_data = read_yaml(log_path)
+            for row in log_data['rounds']:
+                row.pop('snapshot', None)
+            write_yaml_atomic(log_path, log_data)
+        if cycle < MAX_CYCLES - 1:
+            assert next_script_action(project) == 'draft'
+
+    with pytest.raises(ValueError, match=r'3 chu kỳ \(6 vòng\).*đúng nghĩa claim \(6/10\).*Bác sĩ.*chat') as exc_info:
+        next_script_action(project)
+    assert 'claim 6.' not in str(exc_info.value)

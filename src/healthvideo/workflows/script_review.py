@@ -159,7 +159,7 @@ def next_script_action(project: Path) -> ScriptAction:
                 updated['rewrite_pending_hash'] = current
             write_yaml_atomic(root / LOG, updated)
             return 'script_review' if rewritten else 'draft'
-        stuck = ', '.join(f'{CRITERIA[key]} {score}'
+        stuck = ', '.join(f'{CRITERIA[key]} ({score}/10)'
                           for key, score in rounds[-1]['scores'].items() if score < PASS_SCORE)
         if not stuck:
             stuck = 'còn quá 5 điểm khó cần bác sĩ quyết định'
@@ -227,7 +227,7 @@ def record_review(project: Path, reviewed_hash: str) -> dict:
         raise ValueError('Agent chấm điểm không được sửa kịch bản.')
     report_file = root / REPORT
     if not report_file.is_file():
-        raise ValueError('Agent chấm điểm chưa ghi báo cáo.')
+        raise ValueError('Agent chấm điểm chưa ghi báo cáo (thiếu reviews/script-review.yaml).')
     try:
         report = ScriptReviewReport.model_validate(read_yaml(report_file))
     except yaml.YAMLError as exc:

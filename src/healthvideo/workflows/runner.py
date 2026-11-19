@@ -15,6 +15,8 @@ from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
+import yaml
+
 from healthvideo.agents import (
     ACTIVITY_FILE,
     AgentResult,
@@ -28,10 +30,18 @@ from healthvideo.company import (
     load_company,
     role_skill_block,
 )
+from healthvideo.domain.evidence import EvidenceClaim, SourceRecord
+from healthvideo.domain.gate_review import GateApprovalRecord
+from healthvideo.domain.hook_outro import CHANNEL_OUTRO_TEXT, OUTRO_TEXT
 from healthvideo.domain.project_v2 import WorkflowState
 from healthvideo.domain.queue import QueueEntry
+from healthvideo.domain.script import Script
+from healthvideo.domain.script_style import lint_script_style
 from healthvideo.process import process_token
+from healthvideo.qa.script import review_script
+from healthvideo.storage.explainer import read_explainer
 from healthvideo.storage.files import (
+    canonical_json_hash,
     read_yaml,
     write_text_atomic,
     write_yaml_atomic,
@@ -39,6 +49,14 @@ from healthvideo.storage.files import (
 from healthvideo.storage.project_layout import resolve_project_layout
 from healthvideo.storage.queue import load_queue
 from healthvideo.workflows import change_request, chat, expert, product_review
+from healthvideo.workflows.factory_standards import style_a_active
+from healthvideo.workflows.gate_review import (
+    MEDICAL_APPROVAL_ARTIFACT,
+    POSTS_ARTIFACT,
+    check_revision_posts,
+    hash_reviewed_artifacts,
+    medical_reviewed_paths,
+)
 from healthvideo.workflows.production_retry import (
     _sanitize_reason,
     agent_fingerprint,
@@ -63,8 +81,11 @@ from healthvideo.workflows.script_review import (
     revision_notes,
     script_hash,
 )
+from healthvideo.workflows.shorts_plan import SHORTS_PLAN_ARTIFACT, ShortsPlan
 from healthvideo.workflows.standards import prompt_block
+from healthvideo.workflows.storyboard_design import storyboard_validation_error
 from healthvideo.workflows.visual_review import review_pending
+from healthvideo.workflows.voice_prep import VOICE_PREP_ARTIFACT, VoicePrepSheet
 
 StepKind = Literal[
     "create",
@@ -203,6 +224,7 @@ class RunDeps:
 
 _REPORT_LOCK = threading.RLock()
 _GPU_THREAD_LOCK = threading.Lock()
+_GPU_LOCK_STATE = threading.local()
 _TOPIC_LOCKS_GUARD = threading.Lock()
 _TOPIC_LOCKS: dict[str, threading.RLock] = {}
 
@@ -219,7 +241,20 @@ def _topic_lock(slug: str) -> threading.RLock:
 @contextmanager
 def gpu_mutex(root: Path) -> Iterator[None]:
     """Serialize heavy RTX 3060 GPU/TTS/Remotion production across threads and processes."""
-    lock_file = root / "cache" / "gpu-mutex.lock"
+    lock_file = (root / "cache" / "gpu-mutex.lock").resolve()
+    depths: dict[str, int] | None = getattr(_GPU_LOCK_STATE, "depths", None)
+    if depths is None:
+        depths = {}
+        _GPU_LOCK_STATE.depths = depths
+    lock_key = str(lock_file)
+    depth = depths.get(lock_key, 0)
+    if depth > 0:
+        depths[lock_key] = depth + 1
+        try:
+            yield
+        finally:
+            depths[lock_key] = depth
+        return
     lock_file.parent.mkdir(parents=True, exist_ok=True)
     with _GPU_THREAD_LOCK, lock_file.open("a+b") as stream:
         if stream.tell() == 0:
@@ -235,18 +270,22 @@ def gpu_mutex(root: Path) -> Iterator[None]:
                     break
                 except OSError:
                     time.sleep(0.1)
+            depths[lock_key] = 1
             try:
                 yield
             finally:
+                depths.pop(lock_key, None)
                 stream.seek(0)
                 msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
         else:
             import fcntl
 
             fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
+            depths[lock_key] = 1
             try:
                 yield
             finally:
+                depths.pop(lock_key, None)
                 fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
 
 
@@ -263,23 +302,33 @@ def _maker_slots_for_critic(
     act_path = root / ACTIVITY_FILE
     if not act_path.is_file():
         return ()
-    latest_by_role: dict[str, ModelSlot] = {}
     try:
-        for line in act_path.read_text(encoding="utf-8", errors="replace").splitlines():
-            if not line.strip():
-                continue
-            row = json.loads(line)
-            role = row.get("role")
-            if (
-                row.get("slug") == slug
-                and role in maker_roles
-                and row.get("ok") is True
-                and row.get("cli")
-                and row.get("model")
-            ):
-                latest_by_role[str(role)] = ModelSlot(cli=str(row["cli"]), model=str(row["model"]))
-    except (OSError, ValueError):
+        lines = act_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
         return ()
+    overall_latest: dict[str, ModelSlot] = {}
+    since_last_critic: dict[str, ModelSlot] = {}
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(row, dict) or row.get("slug") != slug or row.get("ok") is not True:
+            continue
+        role = row.get("role")
+        if role == critic_role:
+            since_last_critic.clear()
+            continue
+        if role in maker_roles and row.get("cli") and row.get("model"):
+            try:
+                slot = ModelSlot(cli=str(row["cli"]), model=str(row["model"]))
+            except ValueError:
+                continue
+            overall_latest[str(role)] = slot
+            since_last_critic[str(role)] = slot
+    latest_by_role = since_last_critic or overall_latest
     if not latest_by_role:
         return ()
     excluded = tuple(dict.fromkeys(latest_by_role.values()))
@@ -289,8 +338,9 @@ def _maker_slots_for_critic(
     if not [slot for slot in critic_chain if slot.model_identity not in excluded_identities]:
         primary_role = maker_order[0]
         primary_slot = latest_by_role.get(primary_role)
-        if primary_slot is not None and any(slot.model_identity != primary_slot.model_identity
-                                            for slot in critic_chain):
+        if primary_slot is not None and any(
+            slot.model_identity != primary_slot.model_identity for slot in critic_chain
+        ):
             return (primary_slot,)
     return excluded
 
@@ -532,10 +582,31 @@ def _build_step_prompt(
                        'Chờ lệnh xong, mở contact sheet của các cảnh có issue và cảnh kề; '
                        'xem tổng thể ngắn. Không nhận đã nghe âm thanh. '
                        'Đối chiếu QA/phát âm hiện hành khi issue liên quan âm thanh.')
+    style_note = ""
+    if step in {"product_review", "revise_product"} and (project_dir / "project.yaml").is_file():
+        revision_dir = resolve_project_layout(project_dir).artifact_root
+        if style_a_active(revision_dir):
+            style_note = (
+                "## Chuẩn phong cách áp dụng (Trạm 12)\n"
+                "- Revision này đã ghim Chuẩn phong cách PYH — Hướng A trong `workflow/standards.yaml`: "
+                "bắt buộc chấm đủ 7 tiêu chí (gồm `dung_phong_cach_pyh >= 7`) để qua Trạm 12."
+            )
+        else:
+            style_note = (
+                "## Chuẩn phong cách áp dụng (Trạm 12)\n"
+                "- Revision này được tạo TRƯỚC Chuẩn phong cách A (`workflow/standards.yaml` chưa ghim Chuẩn A): "
+                "`dung_phong_cach_pyh` chỉ mang tính tham khảo/tùy chọn và KHÔNG chặn cổng Trạm 12 "
+                "nếu 6 tiêu chí gốc (`hinh_khop_loi`, `hinh_ro`, `nhip_dung`, `am_thanh_phu_de`, `mo_ket`, `bai_dang`) "
+                "đều đạt >= 7. Không yêu cầu dựng lại video cũ theo mascot Style A hay zoom kính lúp."
+            )
     standards_block = prompt_block(root, slug=entry.slug)
-    if standards_block:
+    extra_blocks = "\n\n".join(part for part in (style_note, standards_block.rstrip()) if part)
+    if extra_blocks:
         body, heading, rules = prompt.rpartition("## Quy tắc cứng")
-        prompt = f"{body.rstrip()}\n\n{standards_block.rstrip()}\n\n{heading}{rules}"
+        if heading:
+            prompt = f"{body.rstrip()}\n\n{extra_blocks}\n\n{heading}{rules}"
+        else:
+            prompt = f"{prompt.rstrip()}\n\n{extra_blocks}\n"
     return prompt
 
 
@@ -555,6 +626,8 @@ def _run_agent_invocation(
     log_dir: Path,
     rewriting: bool = False,
     answering: bool = False,
+    defer_validation_record: bool = False,
+    mark_blocked_on_failure: bool = True,
 ) -> tuple[str, Path | None, str | None, dict[str, str] | None]:
     """Run one agent step with fingerprint retry gating, failover & quarantine."""
     prompt = _build_step_prompt(
@@ -569,10 +642,10 @@ def _run_agent_invocation(
                 if status["retry_after"]
                 else "cần sửa đầu vào hoặc cấu hình"
             )
-            _mark_blocked(
-                root, entry.slug, f"bước {step}: {waiting}; {status['reason']}", report
-            )
-            return "blocked", None, None, None
+            blocked_reason = f"bước {step}: {waiting}; {status['reason']}"
+            if mark_blocked_on_failure:
+                _mark_blocked(root, entry.slug, blocked_reason, report)
+            return "blocked", None, None, {"error": blocked_reason}
     before = deps.code_snapshot(root) if deps.code_snapshot is not None else None
     reviewing = step in {"script_review", "product_review"}
     reviewed_hash = (
@@ -743,10 +816,10 @@ def _run_agent_invocation(
                 observed_fingerprint=agent_fingerprint(root, project_dir, step, brief_context),
             )
         _record_code_changes(root, entry.slug, deps, report, before)
-        _mark_blocked(
-            root, entry.slug, f"bước {step} lỗi: {_sanitize_reason(exc)}", report
-        )
-        return "blocked", None, None, None
+        blocked_reason = f"bước {step} lỗi: {_sanitize_reason(exc)}"
+        if mark_blocked_on_failure:
+            _mark_blocked(root, entry.slug, blocked_reason, report)
+        return "blocked", None, None, {"error": blocked_reason}
 
     if not result.ok:
         if is_project_paused(root, entry.slug):
@@ -764,40 +837,301 @@ def _run_agent_invocation(
                 observed_fingerprint=agent_fingerprint(root, project_dir, step, brief_context),
             )
         _record_code_changes(root, entry.slug, deps, report, before)
-        _mark_blocked(
-            root,
-            entry.slug,
-            f"agent {result.agent} thất bại ở bước {step}",
-            report,
-            log_path=result.log_path,
-        )
-        return "blocked", result.log_path, None, None
+        blocked_reason = f"agent {result.agent} thất bại ở bước {step}"
+        if mark_blocked_on_failure:
+            _mark_blocked(
+                root,
+                entry.slug,
+                blocked_reason,
+                report,
+                log_path=result.log_path,
+            )
+        return "blocked", result.log_path, None, {"error": blocked_reason}
 
-    with _topic_lock(entry.slug):
+    if not defer_validation_record:
+        with _topic_lock(entry.slug):
+            record_agent_failure(
+                root,
+                project_dir,
+                step,
+                fingerprint,
+                "validation",
+                ValueError(f"bước {step}: đầu ra hoặc trạng thái chưa hợp lệ"),
+                observed_fingerprint=agent_fingerprint(root, project_dir, step, brief_context),
+            )
+    _record_code_changes(root, entry.slug, deps, report, before)
+    return "ok", result.log_path, reviewed_hash, {"fingerprint": fingerprint}
+
+
+def _record_agent_validation_failure(
+    root: Path,
+    slug: str,
+    project_dir: Path,
+    step: str,
+    brief_context: str,
+    pre_fingerprint: str | None,
+    reason: str,
+) -> None:
+    """Record a concrete post-step validation error in agent-retry.yaml once."""
+    with _topic_lock(slug):
+        observed = agent_fingerprint(root, project_dir, step, brief_context)
+        fingerprint = pre_fingerprint or observed
         record_agent_failure(
             root,
             project_dir,
             step,
             fingerprint,
             "validation",
-            ValueError(f"bước {step}: đầu ra hoặc trạng thái chưa hợp lệ"),
-            observed_fingerprint=agent_fingerprint(root, project_dir, step, brief_context),
+            ValueError(reason),
+            observed_fingerprint=observed,
         )
-    _record_code_changes(root, entry.slug, deps, report, before)
-    return "ok", result.log_path, reviewed_hash, {"fingerprint": fingerprint}
+
+
+def _revision_root_or_error(project_dir: Path) -> tuple[Path | None, str | None]:
+    project_yaml = project_dir / "project.yaml"
+    if not project_yaml.is_file():
+        return None, "thiếu project.yaml"
+    try:
+        return resolve_project_layout(project_dir).artifact_root, None
+    except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+        return None, f"project.yaml chưa hợp lệ: {_sanitize_reason(exc)}"
+
+
+def _posts_validation_problem(project_dir: Path) -> str | None:
+    revision_root, root_err = _revision_root_or_error(project_dir)
+    if revision_root is None:
+        return f"{POSTS_ARTIFACT} chưa hợp lệ ({root_err})"
+    if not (revision_root / POSTS_ARTIFACT).is_file():
+        return f"thiếu {POSTS_ARTIFACT}"
+    try:
+        issues = check_revision_posts(revision_root)
+    except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+        return f"{POSTS_ARTIFACT} chưa hợp lệ: {_sanitize_reason(exc)}"
+    if issues:
+        return f"{POSTS_ARTIFACT} chưa hợp lệ: {'; '.join(issues[:4])}"
+    return None
+
+
+def _diagnose_posts_error(project_dir: Path) -> str:
+    return _posts_validation_problem(project_dir) or f"{POSTS_ARTIFACT} chưa hợp lệ"
+
+
+def _voice_prep_validation_problem(project_dir: Path) -> str | None:
+    revision_root, root_err = _revision_root_or_error(project_dir)
+    if revision_root is None:
+        return f"{VOICE_PREP_ARTIFACT} chưa hợp lệ ({root_err})"
+    vp_path = revision_root / VOICE_PREP_ARTIFACT
+    if not vp_path.is_file():
+        return f"thiếu {VOICE_PREP_ARTIFACT}"
+    script_path = revision_root / "script" / "script.yaml"
+    if not script_path.is_file():
+        return f"thiếu script/script.yaml để đối chiếu {VOICE_PREP_ARTIFACT}"
+    try:
+        sheet = VoicePrepSheet.model_validate(read_yaml(vp_path))
+    except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+        return f"{VOICE_PREP_ARTIFACT} chưa hợp lệ: {_sanitize_reason(exc)}"
+    try:
+        script_data = read_yaml(script_path)
+    except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+        return f"script/script.yaml chưa hợp lệ: {_sanitize_reason(exc)}"
+    expected_hash = canonical_json_hash(script_data)
+    if sheet.script_hash != expected_hash:
+        return (
+            f"voice-prep.yaml script_hash lệch "
+            f"(trong {VOICE_PREP_ARTIFACT}: {sheet.script_hash[:12]}, script hiện tại: {expected_hash[:12]})"
+        )
+    return None
+
+
+def _diagnose_voice_prep_error(project_dir: Path) -> str:
+    return _voice_prep_validation_problem(project_dir) or f"{VOICE_PREP_ARTIFACT} chưa hợp lệ"
+
+
+def _shorts_plan_validation_problem(project_dir: Path) -> str | None:
+    revision_root, root_err = _revision_root_or_error(project_dir)
+    if revision_root is None:
+        return f"{SHORTS_PLAN_ARTIFACT} chưa hợp lệ ({root_err})"
+    plan_path = revision_root / SHORTS_PLAN_ARTIFACT
+    if not plan_path.is_file():
+        return f"thiếu {SHORTS_PLAN_ARTIFACT}"
+    try:
+        plan = ShortsPlan.model_validate(read_yaml(plan_path))
+    except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+        return f"{SHORTS_PLAN_ARTIFACT} chưa hợp lệ: {_sanitize_reason(exc)}"
+    script_path = revision_root / "script" / "script.yaml"
+    board_path = revision_root / "storyboard" / "storyboard.yaml"
+    if not script_path.is_file():
+        return f"thiếu script/script.yaml để đối chiếu {SHORTS_PLAN_ARTIFACT}"
+    if not board_path.is_file():
+        return f"thiếu storyboard/storyboard.yaml để đối chiếu {SHORTS_PLAN_ARTIFACT}"
+    try:
+        expected_hash = canonical_json_hash(
+            {"script": read_yaml(script_path), "storyboard": read_yaml(board_path)}
+        )
+    except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+        return f"không đọc được script/storyboard để đối chiếu {SHORTS_PLAN_ARTIFACT}: {_sanitize_reason(exc)}"
+    if plan.revision_hash != expected_hash:
+        return (
+            f"{SHORTS_PLAN_ARTIFACT} revision_hash lệch "
+            f"(trong file: {plan.revision_hash[:12]}, hiện tại: {expected_hash[:12]})"
+        )
+    return None
+
+
+def _diagnose_shorts_plan_error(project_dir: Path) -> str:
+    return _shorts_plan_validation_problem(project_dir) or f"{SHORTS_PLAN_ARTIFACT} chưa hợp lệ"
+
+
+def _diagnose_script_error(revision_root: Path) -> str | None:
+    script_path = revision_root / "script" / "script.yaml"
+    if not script_path.is_file():
+        return "thiếu script/script.yaml"
+    try:
+        script = Script.model_validate(read_yaml(script_path))
+    except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+        return f"script/script.yaml chưa hợp lệ: {_sanitize_reason(exc)}"
+    if not script.lines:
+        return "script/script.yaml chưa có dòng lời thoại nào"
+    if script.format_profile == "hook_outro_v1":
+        outro = script.lines[-1]
+        if outro.purpose != "outro" or outro.text not in {CHANNEL_OUTRO_TEXT, OUTRO_TEXT}:
+            return "M6.4 final outro must match pinned text (outro cuối trong script/script.yaml chưa khớp mẫu pin)"
+    claims: list[EvidenceClaim] = []
+    ledger_path = revision_root / "evidence" / "ledger.yaml"
+    if ledger_path.is_file():
+        try:
+            ledger_raw = read_yaml(ledger_path)
+            claims = [
+                EvidenceClaim.model_validate(item)
+                for item in (ledger_raw.get("claims") or [])
+            ]
+        except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+            return f"evidence/ledger.yaml chưa hợp lệ: {_sanitize_reason(exc)}"
+    explainer = None
+    explainer_path = revision_root / "explainer" / "explainer.yaml"
+    if explainer_path.is_file():
+        try:
+            explainer = read_explainer(revision_root)
+        except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+            return f"explainer/explainer.yaml chưa hợp lệ: {_sanitize_reason(exc)}"
+    elif script.format_profile == "explain_first_v1":
+        return "thiếu explainer/explainer.yaml (bắt buộc cho explain_first_v1)"
+    if claims or explainer is not None or script.format_profile == "explain_first_v1":
+        qa_issues = [
+            f"{iss.line_id or 'script'}:{iss.code}({iss.message})"
+            for iss in review_script(script, claims, [], explainer=explainer)
+            if iss.severity == "error"
+        ]
+        if qa_issues:
+            return f"script/script.yaml lỗi QA: {'; '.join(qa_issues[:4])}"
+    style_blocks = [
+        f"{iss.line_id}:{iss.rule}({iss.excerpt})"
+        for iss in lint_script_style(script)
+        if iss.severity == "block"
+    ]
+    if style_blocks:
+        return f"script/script.yaml vi phạm văn phong: {'; '.join(style_blocks[:4])}"
+    return None
+
+
+def _diagnose_unchanged_state(
+    deps: RunDeps, project_dir: Path, step: str, state: WorkflowState
+) -> str:
+    prefix = f"agent không làm đổi trạng thái ({step}, trạng thái {state.value})"
+    revision_root, root_err = _revision_root_or_error(project_dir)
+    if revision_root is None:
+        return f"{prefix}: {root_err}"
+
+    if step == "research":
+        expert_err = _expert_unfinished(project_dir, deps, state)
+        if expert_err:
+            return f"{prefix}: {expert_err}"
+        if state == WorkflowState.TOPIC_SELECTED and not (revision_root / "evidence" / "question.yaml").is_file():
+            return f"{prefix}: thiếu evidence/question.yaml (agent chưa tạo câu hỏi nghiên cứu PICO)"
+        ledger_path = revision_root / "evidence" / "ledger.yaml"
+        if not ledger_path.is_file():
+            return f"{prefix}: thiếu evidence/ledger.yaml (agent chưa hoàn tất tổng hợp chứng cứ)"
+        try:
+            ledger_raw = read_yaml(ledger_path)
+            if not isinstance(ledger_raw, Mapping):
+                return f"{prefix}: evidence/ledger.yaml phải là mapping YAML"
+            for rec in ledger_raw.get("records") or []:
+                SourceRecord.model_validate(rec)
+            for cl in ledger_raw.get("claims") or []:
+                EvidenceClaim.model_validate(cl)
+        except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+            return f"{prefix}: evidence/ledger.yaml chưa hợp lệ: {_sanitize_reason(exc)}"
+        explainer_path = revision_root / "explainer" / "explainer.yaml"
+        if not explainer_path.is_file():
+            return f"{prefix}: thiếu explainer/explainer.yaml"
+        try:
+            read_explainer(revision_root)
+        except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+            return f"{prefix}: explainer/explainer.yaml chưa hợp lệ: {_sanitize_reason(exc)}"
+        return f"{prefix}: tệp chứng cứ đã có nhưng agent chưa gọi lệnh chuyển sang evidence_ready"
+
+    if step in {"draft", "revise_medical"}:
+        script_err = _diagnose_script_error(revision_root)
+        if script_err:
+            return f"{prefix}: {script_err}"
+        if (revision_root / "storyboard" / "storyboard.yaml").is_file():
+            sb_err = storyboard_validation_error(project_dir)
+            if sb_err:
+                return f"{prefix}: {sb_err}"
+        if step == "revise_medical" and (revision_root / VOICE_PREP_ARTIFACT).is_file():
+            vp_err = _voice_prep_validation_problem(project_dir)
+            if vp_err:
+                return f"{prefix}: {vp_err}"
+        return f"{prefix}: agent chưa gọi lệnh nộp để chuyển trạng thái từ {state.value}"
+
+    if step == "revise_production":
+        approval_path = revision_root / MEDICAL_APPROVAL_ARTIFACT
+        if approval_path.is_file():
+            try:
+                record = GateApprovalRecord.model_validate(read_yaml(approval_path))
+                reviewed_paths = medical_reviewed_paths(revision_root)
+                current_hashes = hash_reviewed_artifacts(reviewed_paths)
+                drifted = [
+                    rel
+                    for rel in reviewed_paths
+                    if record.artifact_hashes.get(rel) != current_hashes.get(rel)
+                ]
+                if drifted:
+                    return (
+                        f"{prefix}: tệp khóa cổng y khoa đã lệch hash so với {MEDICAL_APPROVAL_ARTIFACT}: "
+                        + ", ".join(drifted[:5])
+                    )
+            except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+                return f"{prefix}: {MEDICAL_APPROVAL_ARTIFACT} chưa hợp lệ: {_sanitize_reason(exc)}"
+        if (revision_root / "storyboard" / "storyboard.yaml").is_file() and not deps.storyboard_ready(project_dir):
+            sb_err = storyboard_validation_error(project_dir) or "storyboard.yaml chưa hợp lệ"
+            return f"{prefix}: {sb_err}"
+        if (revision_root / POSTS_ARTIFACT).is_file() and not deps.posts_ready(project_dir):
+            return f"{prefix}: {_diagnose_posts_error(project_dir)}"
+        if (revision_root / VOICE_PREP_ARTIFACT).is_file() and not deps.voice_prep_ready(project_dir):
+            return f"{prefix}: {_diagnose_voice_prep_error(project_dir)}"
+        if (revision_root / SHORTS_PLAN_ARTIFACT).is_file() and not deps.shorts_plan_ready(project_dir):
+            return f"{prefix}: {_diagnose_shorts_plan_error(project_dir)}"
+        return (
+            f"{prefix}: agent không thay đổi trạng thái {state.value} "
+            "(chưa gọi lệnh nộp sau sửa dựng hoặc yêu cầu chạm tệp khóa cổng y khoa)"
+        )
+
+    return f"{prefix}: agent hoàn tất nhưng chưa chuyển trạng thái"
 
 
 def _validate_nonstate_agent_step(
     deps: RunDeps, project_dir: Path, step: str
 ) -> str | None:
     if step == "posts" and not deps.posts_ready(project_dir):
-        return "agent không làm đổi trạng thái: posts.yaml chưa hợp lệ"
+        return f"agent không làm đổi trạng thái (posts): {_diagnose_posts_error(project_dir)}"
     if step == "storyboard_design" and not deps.storyboard_ready(project_dir):
-        return "agent không làm đổi trạng thái: storyboard.yaml chưa hợp lệ"
+        detail = storyboard_validation_error(project_dir) or "storyboard.yaml chưa hợp lệ"
+        return f"agent không làm đổi trạng thái (storyboard_design): {detail}"
     if step == "voice_prep" and not deps.voice_prep_ready(project_dir):
-        return "agent không làm đổi trạng thái: script/voice-prep.yaml chưa hợp lệ"
+        return f"agent không làm đổi trạng thái (voice_prep): {_diagnose_voice_prep_error(project_dir)}"
     if step == "shorts_plan" and not deps.shorts_plan_ready(project_dir):
-        return "agent không làm đổi trạng thái: posts/shorts-plan.yaml chưa hợp lệ"
+        return f"agent không làm đổi trạng thái (shorts_plan): {_diagnose_shorts_plan_error(project_dir)}"
     return None
 
 
@@ -822,10 +1156,14 @@ def _run_parallel_branches(
                 clear_retry(root, entry.slug)
                 return "ok", None, None
             except Exception as exc:  # noqa: BLE001
-                record_failure(root, project_dir, deps.read_state(project_dir), exc)
-                return "blocked", None, f"bước produce lỗi: {type(exc).__name__}: {exc}"
+                try:
+                    failed_state = deps.read_state(project_dir)
+                except Exception:  # noqa: BLE001
+                    failed_state = WorkflowState.MEDICALLY_APPROVED
+                record_failure(root, project_dir, failed_state, exc)
+                return "blocked", None, f"bước produce lỗi: {_sanitize_reason(exc)}"
         b_log_dir = root / "topics" / "logs" / entry.slug / f"parallel-{b_step}"
-        status, log_p, _, _ = _run_agent_invocation(
+        status, log_p, _, meta = _run_agent_invocation(
             root,
             deps,
             entry,
@@ -834,15 +1172,25 @@ def _run_parallel_branches(
             step=b_step,
             brief_context=brief_context,
             log_dir=b_log_dir,
+            defer_validation_record=True,
+            mark_blocked_on_failure=False,
         )
         if status != "ok":
-            return status, log_p, None
+            return status, log_p, (meta or {}).get("error")
         problem = _validate_nonstate_agent_step(deps, project_dir, b_step)
         if problem:
+            _record_agent_validation_failure(
+                root,
+                entry.slug,
+                project_dir,
+                b_step,
+                brief_context,
+                (meta or {}).get("fingerprint"),
+                problem,
+            )
             return "blocked", log_p, problem
         with _topic_lock(entry.slug):
             clear_agent_retry(root, entry.slug, b_step)
-            clear_model_resume(root, entry.slug)
         return "ok", log_p, None
 
     with ThreadPoolExecutor(max_workers=len(branches)) as pool:
@@ -854,16 +1202,33 @@ def _run_parallel_branches(
             except Exception as exc:  # noqa: BLE001
                 outcomes[b_step] = ("blocked", None, f"bước {b_step} lỗi: {_sanitize_reason(exc)}")
 
-    if any(res[0] == "waiting_model" for res in outcomes.values()):
-        return "waiting_model", len(branches)
-    if any(res[0] == "paused" for res in outcomes.values()):
+    if any(outcomes[b_step][0] == "paused" for b_step in branches):
         return "paused", len(branches)
-    for b_step in branches:
-        st, log_p, err = outcomes[b_step]
-        if st != "ok":
-            if err:
-                _mark_blocked(root, entry.slug, err, report, log_path=log_p)
-            return "blocked", len(branches)
+    blocked_items = [
+        (b_step, outcomes[b_step][1], outcomes[b_step][2])
+        for b_step in branches
+        if outcomes[b_step][0] == "blocked"
+    ]
+    if blocked_items:
+        (root / "topics" / "logs" / entry.slug / WAITING_MODEL_FILE).unlink(missing_ok=True)
+        with _REPORT_LOCK:
+            if entry.slug in report.waiting_model:
+                report.waiting_model.remove(entry.slug)
+        parts = [
+            f"{b_step}: {err}" if len(blocked_items) > 1 else err
+            for b_step, _, err in blocked_items
+            if err
+        ]
+        combined_err = "; ".join(parts) or (
+            f"nhánh song song lỗi ({', '.join(b for b, _, _ in blocked_items)})"
+        )
+        first_log = next((lp for _, lp, _ in blocked_items if lp is not None), None)
+        _mark_blocked(root, entry.slug, combined_err, report, log_path=first_log)
+        return "blocked", len(branches)
+    if any(outcomes[b_step][0] == "waiting_model" for b_step in branches):
+        return "waiting_model", len(branches)
+    with _topic_lock(entry.slug):
+        clear_model_resume(root, entry.slug)
     _mark_advanced(root, entry.slug, report)
     return "ok", len(branches)
 
@@ -1058,6 +1423,7 @@ def _run_topic(
 
                 log_dir = root / "topics" / "logs" / entry.slug
                 result_log_path: Path | None = None
+                pre_fingerprint: str | None = None
 
                 if step in AGENT_STEPS:
                     reviewing = step in {"script_review", "product_review"}
@@ -1068,7 +1434,7 @@ def _run_topic(
                         if reviewing
                         else ""
                     )
-                    outcome, result_log_path, _, _ = _run_agent_invocation(
+                    outcome, result_log_path, _, invoke_meta = _run_agent_invocation(
                         root,
                         deps,
                         entry,
@@ -1079,21 +1445,35 @@ def _run_topic(
                         log_dir=log_dir,
                         rewriting=rewriting,
                         answering=answering,
+                        defer_validation_record=True,
                     )
                     if outcome != "ok":
                         break
                     if is_project_paused(root, entry.slug):
                         break
+                    pre_fingerprint = (invoke_meta or {}).get("fingerprint")
                     if reviewing:
                         record = (record_review if step == "script_review"
                                   else product_review.record_review)
                         try:
                             record(project_dir, reviewed_hash)
                         except (OSError, ValueError) as exc:
+                            reason = (
+                                f"{'chấm kịch bản' if step == 'script_review' else 'duyệt sản phẩm'} lỗi: {exc}"
+                            )
+                            _record_agent_validation_failure(
+                                root,
+                                entry.slug,
+                                project_dir,
+                                step,
+                                brief_context,
+                                pre_fingerprint,
+                                reason,
+                            )
                             _mark_blocked(
                                 root,
                                 entry.slug,
-                                f"{'chấm kịch bản' if step == 'script_review' else 'duyệt sản phẩm'} lỗi: {exc}",
+                                reason,
                                 report,
                                 log_path=result_log_path,
                             )
@@ -1134,14 +1514,25 @@ def _run_topic(
                             with gpu_mutex(root), _production_running(root, entry.slug):
                                 deps.python_steps["produce"](project_dir)
                         except Exception as exc:  # noqa: BLE001
-                            if not isinstance(exc, ValueError):
+                            reason = f"visual_review lỗi: {exc}"
+                            if isinstance(exc, ValueError):
+                                _record_agent_validation_failure(
+                                    root,
+                                    entry.slug,
+                                    project_dir,
+                                    step,
+                                    brief_context,
+                                    pre_fingerprint,
+                                    reason,
+                                )
+                            else:
                                 with _topic_lock(entry.slug):
                                     clear_agent_retry(root, entry.slug, step)
                                     clear_model_resume(root, entry.slug)
                             record_failure(
                                 root, project_dir, deps.read_state(project_dir), exc
                             )
-                            _mark_blocked(root, entry.slug, f"visual_review lỗi: {exc}", report)
+                            _mark_blocked(root, entry.slug, reason, report)
                             break
                         clear_retry(root, entry.slug)
                 elif step in deps.python_steps:
@@ -1176,26 +1567,57 @@ def _run_topic(
 
                 steps_taken += 1
                 new_state = deps.read_state(project_dir)
-                nonstate_problem = _validate_nonstate_agent_step(deps, project_dir, step)
                 if step in {"visual_review", "script_review", "product_review", "revise_product"}:
                     _mark_advanced(root, entry.slug, report)
                 elif rewriting:
                     unused = _unused_answers(project_dir)
                     if unused:
+                        _record_agent_validation_failure(
+                            root, entry.slug, project_dir, step, brief_context, pre_fingerprint, unused
+                        )
                         _mark_blocked(root, entry.slug, unused, report, log_path=result_log_path)
                         break
-                    if next_script_action(project_dir) == "draft":
+                    try:
+                        rewrite_action = next_script_action(project_dir)
+                    except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+                        reason = f"agent không sửa kịch bản theo nhận xét biên tập: {_sanitize_reason(exc)}"
+                        _record_agent_validation_failure(
+                            root, entry.slug, project_dir, step, brief_context, pre_fingerprint, reason
+                        )
+                        _mark_blocked(root, entry.slug, reason, report, log_path=result_log_path)
+                        break
+                    if rewrite_action == "draft":
+                        rev_root, _ = _revision_root_or_error(project_dir)
+                        detail = _diagnose_script_error(rev_root) if rev_root is not None else None
+                        reason = (
+                            f"agent không sửa kịch bản theo nhận xét biên tập: {detail}"
+                            if detail
+                            else "agent không sửa kịch bản theo nhận xét biên tập (script/script.yaml chưa thay đổi sau phê bình)"
+                        )
+                        _record_agent_validation_failure(
+                            root, entry.slug, project_dir, step, brief_context, pre_fingerprint, reason
+                        )
                         _mark_blocked(
                             root,
                             entry.slug,
-                            "agent không sửa kịch bản theo nhận xét biên tập",
+                            reason,
                             report,
                             log_path=result_log_path,
                         )
                         break
                     _mark_advanced(root, entry.slug, report)
                 elif step in {"posts", "storyboard_design", "voice_prep", "shorts_plan"}:
+                    nonstate_problem = _validate_nonstate_agent_step(deps, project_dir, step)
                     if nonstate_problem:
+                        _record_agent_validation_failure(
+                            root,
+                            entry.slug,
+                            project_dir,
+                            step,
+                            brief_context,
+                            pre_fingerprint,
+                            nonstate_problem,
+                        )
                         _mark_blocked(
                             root,
                             entry.slug,
@@ -1210,15 +1632,22 @@ def _run_topic(
                 ):
                     problem = _expert_unfinished(project_dir, deps, state)
                     if problem:
+                        _record_agent_validation_failure(
+                            root, entry.slug, project_dir, step, brief_context, pre_fingerprint, problem
+                        )
                         _mark_blocked(root, entry.slug, problem, report, log_path=result_log_path)
                         break
                     _mark_advanced(root, entry.slug, report)
                 else:
                     if step in AGENT_STEPS and new_state == state:
+                        reason = _diagnose_unchanged_state(deps, project_dir, step, state)
+                        _record_agent_validation_failure(
+                            root, entry.slug, project_dir, step, brief_context, pre_fingerprint, reason
+                        )
                         _mark_blocked(
                             root,
                             entry.slug,
-                            "agent không làm đổi trạng thái",
+                            reason,
                             report,
                             log_path=result_log_path,
                         )

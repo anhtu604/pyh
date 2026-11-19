@@ -19,6 +19,7 @@ from healthvideo.workflows.decision_card import (
     Decision,
     validate_decisions,
 )
+from healthvideo.workflows.factory_standards import style_a_active
 
 PENDING = 'reviews/product/pending.yaml'
 REPORT = 'reviews/product-review.yaml'
@@ -121,8 +122,14 @@ def next_product_action(project: Path) -> ProductAction:
     return 'revise_product'
 
 
+def criteria_for_revision(root: Path) -> dict[str, str]:
+    """Return blocking Station 12 criteria: 7 for Style A revisions, 6 for legacy revisions."""
+    return CRITERIA if style_a_active(root) else LEGACY_CRITERIA
+
+
 def require_passed_review(project: Path) -> None:
-    rounds = _log(_root(project))['rounds']
+    root = _root(project)
+    rounds = _log(root)['rounds']
     if not rounds:
         raise ValueError('Trạm 12 chưa có kết quả kiểm định sản phẩm.')
     latest = rounds[-1]
@@ -131,14 +138,23 @@ def require_passed_review(project: Path) -> None:
     report = ProductReviewReport.model_validate({
         key: latest[key] for key in ProductReviewReport.model_fields if key in latest
     })
-    _validated(report, allow_legacy=True)
+    style_required = style_a_active(root)
+    _validated(report, allow_legacy=not style_required, style_required=style_required)
+    blocking = criteria_for_revision(root)
     if (latest.get('passed') is not True
-            or any(score < PASS_SCORE for score in report.scores.values())
+            or any(report.scores[key] < PASS_SCORE for key in blocking)
             or len(report.decisions) > MAX_DECISIONS):
         raise ValueError('Trạm 12 chưa đạt; chưa được nộp bác sĩ duyệt video.')
 
 
-def _validated(report: ProductReviewReport, *, allow_legacy: bool = False) -> None:
+def _validated(
+    report: ProductReviewReport,
+    *,
+    allow_legacy: bool = False,
+    style_required: bool | None = None,
+) -> None:
+    if style_required is None:
+        style_required = not allow_legacy
     validate_decisions(report.decisions)
     allowed_keys = (set(CRITERIA), set(LEGACY_CRITERIA)) if allow_legacy else (set(CRITERIA),)
     if set(report.scores) not in allowed_keys:
@@ -149,8 +165,9 @@ def _validated(report: ProductReviewReport, *, allow_legacy: bool = False) -> No
         if issue.criterion not in CRITERIA:
             raise ValueError(f'Tiêu chí không tồn tại: {issue.criterion}')
     covered = {issue.criterion for issue in report.issues}
-    missing = [key for key, score in report.scores.items()
-               if score < PASS_SCORE and key not in covered]
+    checked_keys = CRITERIA if style_required else LEGACY_CRITERIA
+    missing = [key for key in checked_keys
+               if report.scores.get(key, PASS_SCORE) < PASS_SCORE and key not in covered]
     if missing:
         raise ValueError('Tiêu chí chưa đạt thiếu chỗ cần sửa: ' + ', '.join(missing))
 
@@ -162,7 +179,7 @@ def record_review(project: Path, reviewed_hash: str) -> dict:
         raise ValueError('Agent duyệt sản phẩm không được dựng lại hay sửa bản dựng.')
     report_file = root / REPORT
     if not report_file.is_file():
-        raise ValueError('Agent duyệt sản phẩm chưa ghi báo cáo.')
+        raise ValueError('Agent duyệt sản phẩm chưa ghi báo cáo (thiếu reviews/product-review.yaml).')
     try:
         report = ProductReviewReport.model_validate(read_yaml(report_file))
     except yaml.YAMLError as exc:
@@ -172,11 +189,13 @@ def record_review(project: Path, reviewed_hash: str) -> dict:
     report = ProductReviewReport.model_validate(scoped_review.reconcile(
         previous if previous and not previous['passed'] and previous.get('snapshot') is not None else None,
         report.model_dump(mode='json'), 'at'))
-    _validated(report)
+    style_required = style_a_active(root)
+    _validated(report, allow_legacy=not style_required, style_required=style_required)
+    blocking = criteria_for_revision(root)
     entry = {
         'round': len(log['rounds']) + 1,
         'render_sha256': reviewed_hash,
-        'passed': (all(score >= PASS_SCORE for score in report.scores.values())
+        'passed': (all(report.scores[key] >= PASS_SCORE for key in blocking)
                    and len(report.decisions) <= MAX_DECISIONS),
         **report.model_dump(mode='json'),
         'snapshot': snapshot(project),
@@ -256,12 +275,16 @@ def mark_submitted(artifact_root: Path) -> None:
 
 def revision_notes(project: Path) -> str:
     """Render the fixable issues of the latest round as instructions for the fixer."""
-    rounds = _cycle(_root(project))
+    root = _root(project)
+    rounds = _cycle(root)
     if not rounds:
         return ''
     latest = rounds[-1]
+    style_required = style_a_active(root)
     rows = [f"- {item['at']} ({CRITERIA[item['criterion']]}): {item['problem']} "
-            f"Hướng sửa: {item['fix']}" for item in latest['issues'] if item['fixable']]
+            f"Hướng sửa: {item['fix']}"
+            for item in latest['issues']
+            if item['fixable'] and (style_required or item['criterion'] != STYLE_CRITERION)]
     if len(latest.get('decisions', [])) > MAX_DECISIONS:
         rows.append('Còn quá 5 điểm khó: tự xử lý các lỗi thuộc thẩm quyền; '
                     'không tự quyết điểm cần bác sĩ. Xếp điểm nặng nhất trước.')
