@@ -1309,7 +1309,19 @@ def _run_topic(
                     quota_step = model_resume_step(root, project_dir, brief_context)
                     outstanding = outstanding_agent_retry(root, project_dir, brief_context)
                 forced_step = outstanding[0] if outstanding else quota_step
-                if outstanding and not outstanding[1]["allowed"]:
+                repair_shorts = (
+                    outstanding is not None
+                    and outstanding[0] in {"visual_review", "produce"}
+                    and outstanding[1]["kind"] == "validation"
+                    and next_step(state) == "produce"
+                    and _existing_invalid_shorts_plan(deps, project_dir)
+                )
+                if repair_shorts:
+                    # Preserve the downstream hold; only its prerequisite may run.
+                    # Keep this forced through final selection, and let shorts_plan's
+                    # own persisted budget block a second failed repair.
+                    forced_step = "shorts_plan"
+                elif outstanding and not outstanding[1]["allowed"]:
                     status = outstanding[1]
                     waiting = (f"đang chờ thử lại lúc {status['retry_after']}"
                                if status['retry_after'] else "cần sửa đầu vào hoặc cấu hình")
