@@ -8,7 +8,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from healthvideo.evidence.elsevier import ElsevierClient
+from healthvideo.domain.evidence import CandidateSource, EvidenceQuestion
+from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
+from healthvideo.evidence.elsevier import ElsevierClient, ScopusProvider
+from healthvideo.storage.files import write_yaml_atomic
+from healthvideo.workflows.evidence import search_literature
 
 KEY = 'sk-test-elsevier-0123456789'
 TOKEN = 'inst-test-token-987'
@@ -175,3 +179,182 @@ def test_cli_search_prints_json(monkeypatch, tmp_path):
     assert result.exit_code == 0, result.output
     assert json.loads(result.output)[0]['doi'] == '10.1016/j.example.2020.01.001'
     assert KEY not in result.output
+
+
+def test_scopus_provider_maps_entries_with_and_without_pmid_and_creator():
+    body = {
+        'search-results': {
+            'entry': [
+                {
+                    'dc:title': 'Urate-lowering therapy and gout flares',
+                    'prism:doi': '10.1016/j.example.2020.01.001',
+                    'prism:coverDate': '2020-03-01',
+                    'prism:publicationName': 'Example Journal',
+                    'citedby-count': '42',
+                    'eid': '2-s2.0-000000001',
+                    'pubmed-id': '32123456',
+                    'dc:creator': 'Smith J.',
+                },
+                {
+                    'dc:title': 'Dietary purines and hyperuricemia',
+                    'eid': '2-s2.0-000000002',
+                },
+            ],
+        },
+    }
+    client = ElsevierClient(KEY, http=FakeHttp(body, body))
+    rows = client.search('gout', count=10)
+    assert rows[0]['pmid'] == '32123456'
+    assert rows[0]['authors'] == ['Smith J.']
+    assert 'pmid' not in rows[1]
+    assert 'authors' not in rows[1]
+
+    provider = ScopusProvider(client)
+    candidates = provider.search('gout', limit=10)
+    assert candidates == [
+        CandidateSource(
+            source_id='scopus-2-s2.0-000000001',
+            database='scopus',
+            title='Urate-lowering therapy and gout flares',
+            authors=['Smith J.'],
+            year=2020,
+            doi='10.1016/j.example.2020.01.001',
+            pmid='32123456',
+            abstract='',
+            venue='Example Journal',
+        ),
+        CandidateSource(
+            source_id='scopus-2-s2.0-000000002',
+            database='scopus',
+            title='Dietary purines and hyperuricemia',
+            authors=[],
+            year=None,
+            doi=None,
+            pmid=None,
+            abstract='',
+            venue='',
+        ),
+    ]
+
+
+def test_scopus_provider_skips_error_and_incomplete_entries():
+    body = {
+        'search-results': {
+            'entry': [
+                {'@_fa': 'true', 'error': 'Result set was empty'},
+                'not-a-dict',
+                {'dc:title': 'Missing eid'},
+                {'dc:title': 'Blank eid', 'eid': '   '},
+                {'eid': '2-s2.0-missing-title'},
+                {'dc:title': '   ', 'eid': '2-s2.0-blank-title'},
+                {'dc:title': None, 'eid': '2-s2.0-null-title'},
+                {
+                    'dc:title': 'Valid Scopus record',
+                    'eid': '2-s2.0-000000099',
+                    'prism:publicationName': 'Lancet',
+                    'prism:coverDate': '2024-06-15',
+                },
+            ],
+        },
+    }
+    provider = ScopusProvider(ElsevierClient(KEY, http=FakeHttp(body)))
+
+    candidates = provider.search('gout', limit=10)
+
+    assert len(candidates) == 1
+    assert candidates[0].source_id == 'scopus-2-s2.0-000000099'
+    assert candidates[0].database == 'scopus'
+    assert candidates[0].title == 'Valid Scopus record'
+    assert candidates[0].venue == 'Lancet'
+    assert candidates[0].year == 2024
+    assert candidates[0].abstract == ''
+
+
+def test_get_default_clients_without_key_omits_scopus_and_creates_no_failure(
+    monkeypatch, tmp_path,
+):
+    from healthvideo.cli import get_default_clients
+
+    monkeypatch.delenv('ELSEVIER_API_KEY', raising=False)
+    monkeypatch.delenv('ELSEVIER_INSTTOKEN', raising=False)
+
+    clients = get_default_clients()
+    assert not any(isinstance(c, ScopusProvider) for c in clients)
+    assert len(clients) == 2
+
+    # Blank key is also treated as unavailable.
+    monkeypatch.setenv('ELSEVIER_API_KEY', '   ')
+    assert not any(isinstance(c, ScopusProvider) for c in get_default_clients())
+
+    # Running search_literature with fake transports produces no failed outcome for Scopus.
+    for client in clients:
+        client.transport = lambda _req: b'{}'
+    project = tmp_path / 'project'
+    manifest = ProjectManifestV2(
+        slug='test', state=WorkflowState.RESEARCH_IN_PROGRESS, active_revision='001',
+    )
+    write_yaml_atomic(project / 'project.yaml', manifest.model_dump(mode='json'))
+    question = EvidenceQuestion(
+        patient_population='adults', intervention='gout', outcome='flare',
+    )
+
+    log = search_literature(project, question, clients=clients, queries=['gout'], limit=5)
+
+    assert all(outcome.status != 'failed' for outcome in log.provider_outcomes)
+    assert all('scopus' not in outcome.provider.lower() for outcome in log.provider_outcomes)
+
+
+def test_get_default_clients_with_key_includes_scopus(monkeypatch, tmp_path):
+    from healthvideo.cli import get_default_clients
+
+    monkeypatch.setenv('ELSEVIER_API_KEY', KEY)
+    clients = get_default_clients()
+    scopus_providers = [c for c in clients if isinstance(c, ScopusProvider)]
+    assert len(scopus_providers) == 1
+    assert len(clients) == 3
+
+    # Verify end-to-end offline search when PubMed and EuropePMC fail.
+    clients[0].transport = lambda _req: (_ for _ in ()).throw(OSError('NCBI blocked'))
+    clients[1].transport = lambda _req: (_ for _ in ()).throw(OSError('EuropePMC unreachable'))
+    scopus_providers[0]._client._http = FakeHttp(SEARCH_BODY)
+
+    project = tmp_path / 'project'
+    manifest = ProjectManifestV2(
+        slug='test', state=WorkflowState.RESEARCH_IN_PROGRESS, active_revision='001',
+    )
+    write_yaml_atomic(project / 'project.yaml', manifest.model_dump(mode='json'))
+    question = EvidenceQuestion(
+        patient_population='adults', intervention='gout', outcome='flare',
+    )
+
+    log = search_literature(project, question, clients=clients, queries=['gout'], limit=5)
+
+    assert log.retrieved_count == 1
+    assert [o.status for o in log.provider_outcomes] == ['failed', 'failed', 'completed']
+
+
+def test_scopus_provider_never_exposes_key_in_repr_exceptions_or_logs(caplog):
+    caplog.set_level(logging.DEBUG)
+    errors = [
+        _http_error(401),
+        _http_error(403),
+        _http_error(500),
+        urllib.error.URLError(f'proxy error leaking {KEY} and {TOKEN}'),
+        b'not valid json',
+        SEARCH_BODY,
+    ]
+    client = ElsevierClient(KEY, TOKEN, http=FakeHttp(*errors))
+    provider = ScopusProvider(client)
+
+    assert KEY not in repr(client) and TOKEN not in repr(client)
+    assert KEY not in repr(provider) and TOKEN not in repr(provider)
+
+    for _ in range(5):
+        with pytest.raises(ValueError) as caught:
+            provider.search('gout', limit=5)
+        assert KEY not in str(caught.value)
+        assert TOKEN not in str(caught.value)
+
+    results = provider.search('gout', limit=5)
+    assert len(results) == 1
+    assert KEY not in caplog.text and TOKEN not in caplog.text

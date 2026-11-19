@@ -18,6 +18,8 @@ import urllib.request
 from types import ModuleType
 from typing import Any
 
+from healthvideo.domain.evidence import CandidateSource
+
 logger = logging.getLogger(__name__)
 
 BASE_URL = 'https://api.elsevier.com/content'
@@ -52,6 +54,30 @@ def _int(value: Any) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _pmid(value: Any) -> str | None:
+    if value is None or isinstance(value, bool):
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _authors(creator: Any) -> list[str]:
+    if isinstance(creator, str):
+        name = creator.strip()
+        return [name] if name else []
+    if isinstance(creator, list):
+        names: list[str] = []
+        for item in creator:
+            if isinstance(item, str) and item.strip():
+                names.append(item.strip())
+            elif isinstance(item, dict):
+                raw = item.get('$') or item.get('authname') or item.get('name') or ''
+                if isinstance(raw, str) and raw.strip():
+                    names.append(raw.strip())
+        return names
+    return []
 
 
 class ElsevierClient:
@@ -92,7 +118,11 @@ class ElsevierClient:
             message = _HTTP_ERRORS.get(exc.code, f'Elsevier trả lỗi HTTP {exc.code}.')
             raise ValueError(message) from None
         except urllib.error.URLError as exc:
-            raise ValueError(f'Không kết nối được Elsevier: {exc.reason}') from None
+            reason = str(exc.reason)
+            for secret in (self._api_key, self._insttoken):
+                if secret:
+                    reason = reason.replace(secret, '[redacted]')
+            raise ValueError(f'Không kết nối được Elsevier: {reason}') from None
 
     def _json(self, path: str, params: dict[str, str]) -> dict:
         raw = self._get(path, params, 'application/json')
@@ -105,24 +135,39 @@ class ElsevierClient:
         return data
 
     def search(self, query: str, count: int = 25) -> list[dict]:
-        """Scopus Search: metadata only (title, doi, year, journal, cited_by, eid)."""
+        """Scopus Search: metadata only (title, doi, year, journal, cited_by, eid, optional pmid/authors)."""
         if not query.strip():
             raise ValueError('Cần truy vấn tìm kiếm.')
         count = max(1, min(int(count), 25))
         data = self._json('/search/scopus', {'query': query, 'count': str(count)})
-        entries = (data.get('search-results') or {}).get('entry') or []
+        raw_entries = (data.get('search-results') or {}).get('entry') or []
+        if isinstance(raw_entries, dict):
+            entries: list[Any] = [raw_entries]
+        elif isinstance(raw_entries, list):
+            entries = raw_entries
+        else:
+            entries = []
         rows = []
         for entry in entries:
             if not isinstance(entry, dict) or 'error' in entry:
                 continue  # Scopus reports an empty result as a single error entry
-            rows.append({
-                'title': entry.get('dc:title', ''),
+            raw_title = entry.get('dc:title')
+            raw_journal = entry.get('prism:publicationName')
+            row: dict[str, Any] = {
+                'title': raw_title if isinstance(raw_title, str) else '',
                 'doi': entry.get('prism:doi'),
                 'year': _year(entry.get('prism:coverDate')),
-                'journal': entry.get('prism:publicationName', ''),
+                'journal': raw_journal if isinstance(raw_journal, str) else '',
                 'cited_by': _int(entry.get('citedby-count')),
                 'eid': entry.get('eid'),
-            })
+            }
+            pmid = _pmid(entry.get('pubmed-id'))
+            if pmid is not None:
+                row['pmid'] = pmid
+            authors = _authors(entry.get('dc:creator'))
+            if authors:
+                row['authors'] = authors
+            rows.append(row)
         return rows
 
     def abstract(self, doi: str) -> dict:
@@ -144,3 +189,55 @@ class ElsevierClient:
         clean = _clean_doi(doi)
         raw = self._get(f'/article/doi/{urllib.parse.quote(clean, safe="/")}', {}, 'text/plain')
         return raw.decode('utf-8', errors='replace')
+
+
+class ScopusProvider:
+    """Literature search provider adapter wrapping ``ElsevierClient`` Scopus Search."""
+
+    def __init__(self, client: ElsevierClient | None = None) -> None:
+        self._client = client if client is not None else ElsevierClient()
+
+    def __repr__(self) -> str:
+        return f'ScopusProvider(available={self._client.available()})'
+
+    def search(self, query: str, limit: int = 10) -> list[CandidateSource]:
+        if limit <= 0:
+            return []
+        rows = self._client.search(query, count=limit)
+        candidates: list[CandidateSource] = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            raw_eid = row.get('eid')
+            eid = raw_eid.strip() if isinstance(raw_eid, str) else ''
+            raw_title = row.get('title')
+            title = raw_title.strip() if isinstance(raw_title, str) else ''
+            if not eid or not title:
+                continue
+            raw_doi = row.get('doi')
+            doi = raw_doi.strip() if isinstance(raw_doi, str) and raw_doi.strip() else None
+            raw_journal = row.get('journal')
+            venue = raw_journal.strip() if isinstance(raw_journal, str) else ''
+            pmid = _pmid(row.get('pmid'))
+            raw_authors = row.get('authors')
+            authors = (
+                [a.strip() for a in raw_authors if isinstance(a, str) and a.strip()]
+                if isinstance(raw_authors, list)
+                else []
+            )
+            raw_year = row.get('year')
+            year = raw_year if isinstance(raw_year, int) and not isinstance(raw_year, bool) else None
+            candidates.append(
+                CandidateSource(
+                    source_id=f'scopus-{eid}',
+                    database='scopus',
+                    title=title,
+                    authors=authors,
+                    year=year,
+                    doi=doi,
+                    pmid=pmid,
+                    abstract='',
+                    venue=venue,
+                )
+            )
+        return candidates[:limit]

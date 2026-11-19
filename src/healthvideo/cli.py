@@ -28,6 +28,7 @@ from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.queue import QueueEntry, QueueError
 from healthvideo.domain.state_graph import SIDE_EXIT_RULES
 from healthvideo.env import hide_child_consoles, load_dotenv
+from healthvideo.evidence import elsevier
 from healthvideo.evidence.clients import EuropePMCClient, PubMedClient
 from healthvideo.process import prepare_subprocess_argv, resolve_pnpm_argv
 from healthvideo.qa.script import lint_project_script
@@ -932,7 +933,11 @@ def review_set_pin() -> None:
 
 
 def get_default_clients() -> list[Any]:
-    return [PubMedClient(), EuropePMCClient()]
+    clients: list[Any] = [PubMedClient(), EuropePMCClient()]
+    scopus_client = elsevier.ElsevierClient()
+    if scopus_client.available():
+        clients.append(elsevier.ScopusProvider(scopus_client))
+    return clients
 
 
 @topic_app.command("list")
