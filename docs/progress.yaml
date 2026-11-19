@@ -303,6 +303,11 @@ phases:
     status: done
     owner: codex (gpt-6.1-sol)
     note: 'Đã merge 56fda2a: classify_failure dùng chung (khóa Windows tạm thời, trần 5), repair không tiêu hao lượt cho lỗi tạm thời, QA video fail-closed khi thiếu/lạ status, ffmpeg vibi timeout 120s. Còn đề xuất D3: ffprobe kiểm bản dựng trong produce.py.'
+  - id: R3.17
+    title: issue_statuses dạng danh sách của agent chấm không làm kẹt xưởng
+    status: done
+    owner: codex (gpt-6.1-sol)
+    note: 'Đã merge e70ddf7: chuẩn hóa [{issue_id,status}] thành dict, prompt nêu rõ hình dạng. PYH-003 qua produce, vào product_review; Trạm 12 báo cùng issue kẹt 2 vòng, chờ bác sĩ quyết phạm vi sửa (nhịp dựng, chữ nhỏ, QA phát âm 110 từ thiếu). Còn đề xuất: tách lỗi hình dạng báo cáo agent thành loại thử lại riêng.'
   - id: R3.13
     title: Báo cáo chấm hình lệch chỉ mục thì coi là cũ và chấm lại (không chặn vĩnh viễn)
     status: done
