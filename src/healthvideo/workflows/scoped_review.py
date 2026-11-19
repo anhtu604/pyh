@@ -8,6 +8,30 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
 
+def normalize_issue_statuses(value: object) -> object:
+    """Accept an unambiguous agent row list; leave legacy mappings to Pydantic."""
+    if not isinstance(value, list):
+        return value
+    statuses: dict[str, str] = {}
+    for item in value:
+        if (not isinstance(item, dict) or 'status' not in item
+                or not ({'issue_id', 'id'} & item.keys())
+                or item.keys() - {'issue_id', 'id', 'status'}):
+            raise ValueError('issue_statuses rows require issue_id (or id) and status only')
+        if 'issue_id' in item and 'id' in item and item['issue_id'] != item['id']:
+            raise ValueError('issue_statuses row has conflicting issue_id and id')
+        issue_id = item['issue_id'] if 'issue_id' in item else item['id']
+        status = item['status']
+        if not isinstance(issue_id, str) or not issue_id.strip():
+            raise ValueError('issue_statuses issue_id must be a nonempty string')
+        if not isinstance(status, str) or status not in {'resolved', 'still_open'}:
+            raise ValueError('issue_statuses status must be resolved or still_open')
+        if issue_id in statuses and statuses[issue_id] != status:
+            raise ValueError(f'issue_statuses has conflicting statuses for {issue_id}')
+        statuses[issue_id] = status
+    return statuses
+
+
 class EditScope(BaseModel):
     model_config = ConfigDict(extra='forbid')
     path: str

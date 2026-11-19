@@ -30,7 +30,7 @@ Sau cổng y khoa, chỉ được sửa component SVG trong `video/src/anatomy/`
 - `fixable: true`: sửa được bằng component SVG hoặc bài đăng; `fixable: false`: phải đổi lời, cảnh, thời lượng, ảnh FLUX hay `profiles/`.
 
 ## Đầu ra
-Vòng đầu kiểm toàn bộ; mỗi issue thêm `issue_id` ổn định. Nếu `fixable: true`, ghi `edits: [{path, start_line, end_line}]` chính xác trong file SVG/posts đã đọc (không giao toàn file). Vòng sau chỉ nhận issue mở + diff: kiểm issue/cảnh kề, xem tổng thể ngắn; không nêu lỗi mới ở phần không đổi trừ `blocking_safety: true` (nguy cơ y khoa nghiêm trọng). Trả `issue_statuses` (`resolved`/`still_open`), `overall` ngắn; giữ điểm tiêu chí không có issue.
+Vòng đầu kiểm toàn bộ; mỗi issue thêm `issue_id` ổn định. Nếu `fixable: true`, ghi `edits: [{path, start_line, end_line}]` chính xác trong file SVG/posts đã đọc (không giao toàn file). Vòng sau chỉ nhận issue mở + diff: kiểm issue/cảnh kề, xem tổng thể ngắn; không nêu lỗi mới ở phần không đổi trừ `blocking_safety: true` (nguy cơ y khoa nghiêm trọng). Trả `issue_statuses` bắt buộc là từ điển `issue_id -> status` (`resolved`/`still_open`), không phải danh sách; ví dụ YAML: `issue_statuses: {PR3-01: still_open, PR3-02: resolved}`. Trả `overall` ngắn; giữ điểm tiêu chí không có issue.
 
 Chỉ ghi đúng một file `{project}/revisions/<rev>/reviews/product-review.yaml`, không sửa file nào khác, không dựng lại video:
 ```yaml

@@ -1,8 +1,58 @@
 """Incremental reviews preserve accepted work and exact repair boundaries."""
 
+from copy import deepcopy
+
 import pytest
 
 from healthvideo.workflows import scoped_review as scoped
+from healthvideo.workflows.product_review import ProductReviewReport
+from healthvideo.workflows.script_review import ScriptReviewReport
+
+
+@pytest.mark.parametrize('model', [ProductReviewReport, ScriptReviewReport])
+@pytest.mark.parametrize('statuses, expected', [
+    ([{'issue_id': 'PR3-01', 'status': 'still_open'},
+      {'issue_id': 'PR3-02', 'status': 'resolved'}],
+     {'PR3-01': 'still_open', 'PR3-02': 'resolved'}),
+    ([{'id': 'I1', 'status': 'resolved'}], {'I1': 'resolved'}),
+    ([{'issue_id': 'I1', 'status': 'resolved'}] * 2, {'I1': 'resolved'}),
+    ([{'issue_id': 'I1', 'id': 'I1', 'status': 'still_open'}], {'I1': 'still_open'}),
+    ({'I1': 'still_open', 'I2': 'resolved'}, {'I1': 'still_open', 'I2': 'resolved'}),
+    ([], {}),
+    ({}, {}),
+])
+def test_review_issue_statuses_normalizes_shape_without_changing_report(model, statuses, expected):
+    payload = {'scores': {'criterion': 6}, 'summary': 'Needs correction',
+               'overall': 'Still blocked', 'issue_statuses': statuses}
+    original = deepcopy(payload)
+    report = model.model_validate(payload).model_dump()
+    assert report['issue_statuses'] == expected
+    assert report['scores'] == payload['scores']
+    assert report['summary'] == payload['summary']
+    assert report['overall'] == payload['overall']
+    assert payload == original
+
+
+@pytest.mark.parametrize('model', [ProductReviewReport, ScriptReviewReport])
+@pytest.mark.parametrize('statuses', [
+    [{'issue_id': 'I1', 'status': 'resolved'}, {'issue_id': 'I1', 'status': 'still_open'}],
+    [{'issue_id': 'I1', 'status': 'unknown'}],
+    {'I1': 'unknown'},
+    [{'issue_id': 'I1'}],
+    [{'status': 'resolved'}],
+    [{'id': 'I1', 'status': 'unknown'}],
+    [{'issue_id': 'I1', 'id': 'I2', 'status': 'resolved'}],
+    [{'issue_id': '', 'status': 'resolved'}],
+    [{'issue_id': 1, 'status': 'resolved'}],
+    [{'issue_id': ['I1'], 'status': 'resolved'}],
+    [{'issue_id': 'I1', 'status': []}],
+    [{'issue_id': 'I1', 'status': 'resolved', 'extra': 'do not discard'}],
+    ['I1'],
+    None,
+])
+def test_review_issue_statuses_rejects_invalid_or_ambiguous_data(model, statuses):
+    with pytest.raises(ValueError):
+        model.model_validate({'scores': {}, 'summary': 'Review', 'issue_statuses': statuses})
 
 
 def issue(**changes):

@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from healthvideo.storage.files import canonical_json_hash, read_yaml, write_yaml_atomic
 from healthvideo.storage.project_layout import resolve_project_layout
@@ -63,6 +63,10 @@ class ScriptReviewReport(BaseModel):
     decisions: list[Decision] = Field(default_factory=list)
     issue_statuses: dict[str, Literal['resolved', 'still_open']] = Field(default_factory=dict)
     overall: str = ''
+
+    _normalize_issue_statuses = field_validator('issue_statuses', mode='before')(
+        scoped_review.normalize_issue_statuses
+    )
 
 
 def _root(project: Path) -> Path:

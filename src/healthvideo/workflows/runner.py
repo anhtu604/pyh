@@ -573,7 +573,9 @@ def _build_step_prompt(
                   'Chỉ kiểm issue mở và ảnh hưởng ngữ cảnh quanh chỗ sửa; xem tổng thể ngắn. '
                   'Không nêu lỗi mới ở phần không đổi trừ an toàn y khoa nghiêm trọng '
                   '(blocking_safety: true, ghi lý do cụ thể). Giữ issue_id và vị trí. '
-                  'Trả issue_statuses cho từng issue: resolved/still_open, overall ngắn. '
+                  'Trả issue_statuses bắt buộc là từ điển issue_id -> status '
+                  '(resolved/still_open), không phải danh sách. Ví dụ YAML: '
+                  'issue_statuses: {PR3-01: still_open, PR3-02: resolved}. overall ngắn. '
                   'Giữ điểm tiêu chí không có issue và các decisions chưa có chỉ dẫn xử lý.\n'
                   + incremental + '\n' + output
                   + '\n## Quy tắc cứng\n' + '\n'.join(f'- {rule}' for rule in HARD_RULES))
