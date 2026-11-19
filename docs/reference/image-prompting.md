@@ -13,7 +13,7 @@ Theo hướng dẫn chính thức của Black Forest Labs, FLUX **không hỗ tr
 ### Công thức chuẩn
 
 ```text
-[Chủ thể + tư thế/hành động] + [Phong cách] + [Bối cảnh] + [Ánh sáng] + [Bảng màu hex Style A]
+[Chủ thể + tư thế/hành động, màu bằng TÊN] + [Phong cách] + [Bối cảnh] + [Ánh sáng] + [Bảng màu hex Style A, một câu ở cuối]
 ```
 
 ### Cụm phong cách, ánh sáng và bảng màu bắt buộc (Style A)
@@ -27,6 +27,7 @@ Theo hướng dẫn chính thức của Black Forest Labs, FLUX **không hỗ tr
   - Nét và chi tiết tối: `navy #12304A`
   - Màu nhấn chính: `teal #18A6A6`
   - Màu điểm chốt / lưu ý: `yellow #F4B942`
+- **Chỗ được đặt mã hex (đo ngày 2026-11-19):** mã hex chỉ đặt trong câu phong cách và câu bảng màu ở cuối prompt. KHÔNG đặt mã hex trong phần mô tả vật thể: đo 15 ảnh cho thấy khi hex đứng cạnh danh từ như `header bars`, FLUX in chính chuỗi mã (vd `F46BDA`, biến thể của `#F4B942`) thành chữ rác lên tờ giấy (3/3 ảnh `lab-slip`). Ở phần vật thể dùng tên màu bằng chữ (`teal`, `navy`, `warm yellow`).
 
 ---
 
@@ -55,7 +56,7 @@ Mọi danh từ chỉ vật thể xuất hiện trong prompt đều có nguy cơ
 - **Ưu tiên bố cục không có bàn tay (tránh lỗi `style_hands`):** FLUX thường vẽ sai số ngón hoặc làm ngón tay dính vào giấy/vật nhỏ.
   - Ưu tiên đặt vật dụng lên mặt bàn, cắt khung trước tay, hoặc dùng góc nhìn từ xa.
   - Nếu cảnh bắt buộc có người và tay, đặt tay ở xa hoặc che một phần / khuất ngoài mép khung (vd: `"distant full-body view"`, `"arms resting behind the desk edge"`, `"hands tucked out of frame"`), tránh cận cảnh bàn tay cầm vật nhỏ.
-- **Danh sách đồng nhất ngắn khi dùng ảnh tham chiếu (`--ref`):** chỉ viết câu lệnh thay đổi ở đầu + một câu giữ nhận diện cốt lõi (*"Keep the exact same character as the reference: round glasses, parted black hair, teal #18A6A6 jacket with yellow #F4B942 badge"*).
+- **Danh sách đồng nhất ngắn khi dùng ảnh tham chiếu (`--ref`):** chỉ viết câu lệnh thay đổi ở đầu + một câu giữ nhận diện cốt lõi (*"Keep the exact same character as the reference: round glasses, parted black hair, teal jacket with warm yellow badge"*).
 - **Không liệt kê bộ phận nằm ngoài khung cắt:** nếu vẽ bán thân từ thắt lưng trở lên mà liệt kê cả quần và giày, mô hình sẽ tự kéo lùi camera để vẽ đủ giày.
 
 ---
@@ -85,8 +86,8 @@ Mô hình không vẽ được tính từ trừu tượng; hãy đổi thành t�
 - **Không viết trừu tượng:** *"người bệnh rất mệt mỏi"*, *"lo lắng về kết quả xét nghiệm"*, *"thói quen uống nhiều đường"*.
 - **Đổi thành hình ảnh cụ thể, an toàn bố cục:**
   - Mệt mỏi / thiếu ngủ → *"distant side-angle view of an adult sitting on the edge of a tidy bed with slumped shoulders and head tilted gently downward, arms resting loosely out of frame behind the blanket fold"*.
-  - Lo lắng trước giấy khám sức khỏe → *"top-down tabletop view of an empty blank folded paper sheet resting beside a pair of navy #12304A eyeglasses and a ceramic cup on a clean flat desk, completely empty space around the desk"*.
-  - Thói quen đồ uống ngọt → *"eye-level tabletop close-up of a tall clear glass filled with amber-yellow #F4B942 iced tea and a teal #18A6A6 straw resting on a coaster beside a plain glass of water"*.
+  - Lo lắng trước giấy khám sức khỏe → *"top-down tabletop view of an empty blank folded paper sheet resting beside a pair of navy eyeglasses and a ceramic cup on a clean flat desk, completely empty space around the desk"*.
+  - Thói quen đồ uống ngọt → *"eye-level tabletop close-up of a tall clear glass filled with amber-yellow iced tea and a teal straw resting on a coaster beside a plain glass of water"*.
 
 ---
 
@@ -94,11 +95,11 @@ Mô hình không vẽ được tính từ trừu tượng; hãy đổi thành t�
 
 | Tình huống đời sống | Prompt cũ (mơ hồ, lệch phong cách) | Prompt mới (khẳng định, đo được khung hình, đúng Style A, không cận cảnh tay) |
 | --- | --- | --- |
-| **1. Tờ kết quả khám trên bàn** | `"Patient holding a lab test report with high numbers, worried, medical art"` | `"Top-down close-up of a clean desk filling the lower frame: an empty blank folded medical slip with simple geometric teal #18A6A6 header bars rests flat beside a pair of navy #12304A eyeglasses and a yellow #F4B942 sticky tab, empty blank paper surfaces. Flat 2D vector editorial illustration, solid flat color fills, uniform navy #12304A outlines, plain flat #F7F4EC background. Flat even lighting with solid color fills. Palette limited to off-white #F7F4EC, navy #12304A, teal #18A6A6, and yellow #F4B942."` |
-| **2. Thói quen đồ uống nhiều đường** | `"Person drinking sugary iced tea causing fatty liver, photorealistic, 8k"` | `"Eye-level tabletop close-up aligned straight with the table surface: a tall glass of iced tea in soft yellow #F4B942 with a teal #18A6A6 straw sits centered beside a smaller plain glass of water on a clean matte table edge, cropped cleanly below the table rim. Flat 2D vector editorial illustration, solid flat color fills, uniform navy #12304A outlines, plain flat #F7F4EC background. Flat even lighting with solid color fills. Matte solid fills using #F7F4EC, #12304A, #18A6A6, and #F4B942."` |
-| **3. Ngồi chờ khám buổi sáng** | `"Worried adult sitting in clinic holding medicine bag, detailed shading"` | `"Wide medium shot from head to knees: an adult in a teal #18A6A6 shirt sits upright on a simple bench with shoulders slightly tense, arms tucked calmly behind a plain tote bag resting on the lap so hands stay hidden from view. Flat 2D vector editorial illustration, solid flat color fills, uniform navy #12304A outlines, plain flat #F7F4EC background. Flat even lighting with solid color fills. Limited palette of #F7F4EC, #12304A, #18A6A6, and yellow #F4B942 accents."` |
-| **4. Góc đo huyết áp đúng tư thế tại nhà** | `"Patient checking blood pressure at home with digital screen numbers, doctor advice"` | `"Side-angle medium shot framed from head to waist: an adult sits upright with back supported against a simple navy #12304A chair, upper arm wrapped in a teal #18A6A6 fabric cuff while the forearm rests flat on a clean desk edge with the hand extending outside the right frame border; a compact cuff monitor with a blank solid-color screen sits on the desk. Flat 2D vector editorial illustration, solid flat color fills, uniform navy #12304A outlines, plain flat #F7F4EC background. Flat even lighting with solid color fills. Palette of #F7F4EC, #12304A, #18A6A6, and #F4B942."` |
-| **5. Thức khuya / giấc ngủ kém** | `"Tired man awake at night by window moonlight, dramatic shadows"` | `"Distant three-quarter wide view of a minimalist bedroom corner: an adult in a plain teal #18A6A6 pajama top sits on the edge of a tidy bed with slumped shoulders and bowed head, arms resting out of sight behind a folded #F7F4EC blanket, with a simple yellow #F4B942 clock silhouette with a blank face on a small nightstand. Flat 2D vector editorial illustration, solid flat color fills, uniform navy #12304A outlines, plain flat #0A1C2E night background. Flat even lighting with solid color fills."` |
+| **1. Tờ kết quả khám trên bàn** | `"Patient holding a lab test report with high numbers, worried, medical art"` | `"Top-down close-up of a clean desk filling the lower frame: an empty blank folded medical slip with simple geometric teal header bars rests flat beside a pair of navy eyeglasses and a warm yellow sticky tab, empty blank paper surfaces. Flat 2D vector editorial illustration, solid flat color fills, uniform navy #12304A outlines, plain flat #F7F4EC background. Flat even lighting with solid color fills. Palette limited to off-white #F7F4EC, navy #12304A, teal #18A6A6, and yellow #F4B942."` |
+| **2. Thói quen đồ uống nhiều đường** | `"Person drinking sugary iced tea causing fatty liver, photorealistic, 8k"` | `"Eye-level tabletop close-up aligned straight with the table surface: a tall glass of iced tea in soft yellow with a teal straw sits centered beside a smaller plain glass of water on a clean matte table edge, cropped cleanly below the table rim. Flat 2D vector editorial illustration, solid flat color fills, uniform navy #12304A outlines, plain flat #F7F4EC background. Flat even lighting with solid color fills. Matte solid fills using #F7F4EC, #12304A, #18A6A6, and #F4B942."` |
+| **3. Ngồi chờ khám buổi sáng** | `"Worried adult sitting in clinic holding medicine bag, detailed shading"` | `"Wide medium shot from head to knees: an adult in a teal shirt sits upright on a simple bench with shoulders slightly tense, arms tucked calmly behind a plain tote bag resting on the lap so hands stay hidden from view. Flat 2D vector editorial illustration, solid flat color fills, uniform navy #12304A outlines, plain flat #F7F4EC background. Flat even lighting with solid color fills. Limited palette of #F7F4EC, #12304A, #18A6A6, and yellow #F4B942 accents."` |
+| **4. Góc đo huyết áp đúng tư thế tại nhà** | `"Patient checking blood pressure at home with digital screen numbers, doctor advice"` | `"Side-angle medium shot framed from head to waist: an adult sits upright with back supported against a simple navy chair, upper arm wrapped in a teal fabric cuff while the forearm rests flat on a clean desk edge with the hand extending outside the right frame border; a compact cuff monitor with a blank solid-color screen sits on the desk. Flat 2D vector editorial illustration, solid flat color fills, uniform navy #12304A outlines, plain flat #F7F4EC background. Flat even lighting with solid color fills. Palette of #F7F4EC, #12304A, #18A6A6, and #F4B942."` |
+| **5. Thức khuya / giấc ngủ kém** | `"Tired man awake at night by window moonlight, dramatic shadows"` | `"Distant three-quarter wide view of a minimalist bedroom corner: an adult in a plain teal pajama top sits on the edge of a tidy bed with slumped shoulders and bowed head, arms resting out of sight behind a folded off-white blanket, with a simple warm yellow clock silhouette with a blank face on a small nightstand. Flat 2D vector editorial illustration, solid flat color fills, uniform navy #12304A outlines, plain flat #0A1C2E night background. Flat even lighting with solid color fills."` |
 
 ---
 
