@@ -838,3 +838,129 @@ def test_invoke_with_failover_optional_local_llm_hook_and_single_fallback(
     assert fb_res.agent == "codex"
     assert fb_res.used_local is False
     assert cli_calls == ["codex"]
+
+
+@pytest.mark.parametrize("winerror", [5, 32])
+def test_cancel_and_marker_cleanup_retry_windows_access_and_sharing_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, winerror: int
+) -> None:
+    from healthvideo.agents import _remove_job_marker
+
+    original_unlink = Path.unlink
+    attempts: dict[str, int] = {}
+
+    def flaky_unlink(path: Path, *args: Any, **kwargs: Any) -> None:
+        if path.name.startswith((".agent-running", ".cancelled-", ".job-")):
+            attempts[path.name] = attempts.get(path.name, 0) + 1
+            if attempts[path.name] <= 2:
+                error = PermissionError("locked")
+                error.winerror = winerror
+                raise error
+        return original_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", flaky_unlink)
+    monkeypatch.setattr("healthvideo.agents.sleep", lambda _: None)
+
+    cancel_file = tmp_path / "logs/.cancelled-job1"
+    cancel_file.parent.mkdir(parents=True, exist_ok=True)
+    cancel_file.write_text("cancelled\n", encoding="utf-8")
+    assert _remove_job_marker(cancel_file) is True
+    assert not cancel_file.exists()
+    assert attempts[cancel_file.name] == 3
+
+    # invoke() also uses _remove_job_marker on .cancelled-<job_id>
+    attempts.clear()
+    res = invoke(
+        CODEX,
+        "prompt",
+        cwd=tmp_path,
+        log_dir=tmp_path / "logs",
+        job_id="job2",
+        runner=lambda *a, **kw: (
+            (tmp_path / "logs/.cancelled-job2").write_text("cancelled\n", encoding="utf-8"),
+            _completed(0, "partial"),
+        )[1],
+    )
+    assert res.failure_kind == "cancelled"
+    assert not (tmp_path / "logs/.cancelled-job2").exists()
+    assert attempts[".cancelled-job2"] == 3
+
+
+def test_cancel_running_job_retries_windows_sharing_violation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+    try:
+        job_dir = tmp_path / "topics/logs/gout-cancel"
+        job_dir.mkdir(parents=True, exist_ok=True)
+        (job_dir / ".agent-running").write_text("codex\n", encoding="utf-8")
+        job_file = job_dir / ".job-test-cancel-win32.json"
+        job_file.write_text(
+            json.dumps({
+                "job_id": "test-cancel-win32",
+                "role": "writer",
+                "slug": "gout-cancel",
+                "step": "draft",
+                "child_pid": proc.pid,
+                "child_process_token": process_token(proc.pid),
+            }),
+            encoding="utf-8",
+        )
+        original_unlink = Path.unlink
+        seen: dict[str, int] = {}
+
+        def flaky_unlink(path: Path, *args: Any, **kwargs: Any) -> None:
+            if path.name in {job_file.name, ".agent-running"}:
+                seen[path.name] = seen.get(path.name, 0) + 1
+                if seen[path.name] <= 2:
+                    error = PermissionError("sharing violation")
+                    error.winerror = 32
+                    raise error
+            return original_unlink(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "unlink", flaky_unlink)
+        monkeypatch.setattr("healthvideo.agents.sleep", lambda _: None)
+
+        cancelled = cancel_running_job(tmp_path, job_id="test-cancel-win32")
+        assert len(cancelled) == 1
+        assert not job_file.exists()
+        assert not (job_dir / ".agent-running").exists()
+        assert seen == {job_file.name: 3, ".agent-running": 3}
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait(timeout=5)
+
+
+def test_child_env_sets_utf8_defaults_and_preserves_vietnamese_over_windows_pipe(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from healthvideo.env import child_env
+
+    monkeypatch.delenv("PYTHONUTF8", raising=False)
+    monkeypatch.delenv("PYTHONIOENCODING", raising=False)
+    env = child_env()
+    assert env["PYTHONUTF8"] == "1"
+    assert env["PYTHONIOENCODING"] == "utf-8"
+
+    # Preserve existing non-empty settings.
+    monkeypatch.setenv("PYTHONUTF8", "0")
+    monkeypatch.setenv("PYTHONIOENCODING", "utf-16")
+    preserved = child_env()
+    assert preserved["PYTHONUTF8"] == "0"
+    assert preserved["PYTHONIOENCODING"] == "utf-16"
+
+    # Real subprocess over a pipe must emit Vietnamese diacritics cleanly (no '?' or cp1252 error).
+    monkeypatch.delenv("PYTHONUTF8", raising=False)
+    monkeypatch.delenv("PYTHONIOENCODING", raising=False)
+    sample = "Đã kiểm tra: bác sĩ uống thuốc bổ gan chuyển hóa đúng?"
+    proc = subprocess.run(
+        [sys.executable, "-c", f"print({sample!r})"],
+        env=child_env(),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="strict",
+        check=True,
+    )
+    assert proc.stdout.strip() == sample

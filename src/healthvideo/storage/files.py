@@ -3,6 +3,8 @@ import hashlib
 import json
 import os
 import shutil
+import sys
+import time
 from collections.abc import Mapping
 from pathlib import Path
 from tempfile import NamedTemporaryFile, mkdtemp
@@ -31,11 +33,39 @@ class DirectoryPromotionError(OSError):
 
 
 def read_yaml(path: Path) -> dict[str, Any]:
-    with path.open(encoding="utf-8") as stream:
-        data = yaml.safe_load(stream)
+    for index, delay in enumerate((0.0, 0.005, 0.015, 0.03)):
+        if delay:
+            time.sleep(delay)
+        try:
+            with path.open(encoding="utf-8") as stream:
+                data = yaml.safe_load(stream)
+            break
+        except PermissionError:
+            if sys.platform != "win32" or index == 3:
+                raise
     if not isinstance(data, Mapping):
         raise TypeError(f"YAML root must be a mapping: {path}")
     return dict(data)
+
+
+_WINDOWS_TRANSIENT_REPLACE_ERRORS = frozenset({5, 32})
+_REPLACE_RETRY_DELAYS = (0.0, 0.005, 0.015, 0.03, 0.06, 0.15)
+
+
+def _replace_with_retry(source: Path, destination: Path) -> None:
+    """Retry transient Windows access/sharing locks during atomic file replacement."""
+    for index, delay in enumerate(_REPLACE_RETRY_DELAYS):
+        if delay:
+            time.sleep(delay)
+        try:
+            os.replace(source, destination)
+            return
+        except PermissionError as error:
+            if (
+                getattr(error, "winerror", None) not in _WINDOWS_TRANSIENT_REPLACE_ERRORS
+                or index == len(_REPLACE_RETRY_DELAYS) - 1
+            ):
+                raise
 
 
 def write_text_atomic(path: Path, text: str) -> None:
@@ -56,12 +86,20 @@ def write_text_atomic(path: Path, text: str) -> None:
             stream.write(text)
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(temporary_path, path)
+        _replace_with_retry(temporary_path, path)
         temporary_path = None
         _fsync_directory(path.parent)
     finally:
         if temporary_path is not None:
-            temporary_path.unlink(missing_ok=True)
+            for delay in (0.0, 0.01, 0.03):
+                if delay:
+                    time.sleep(delay)
+                try:
+                    temporary_path.unlink(missing_ok=True)
+                    break
+                except PermissionError as error:
+                    if getattr(error, "winerror", None) not in _WINDOWS_TRANSIENT_REPLACE_ERRORS:
+                        raise
 
 
 def _fsync_directory(path: Path) -> None:

@@ -227,14 +227,16 @@ class FactoryLock:
         return self
 
     def __exit__(self, *args):
-        self.stream.seek(0)
-        self.stream.truncate()
-        self.stream.flush()
-        if sys.platform == 'win32':
-            import msvcrt
-            self.stream.seek(65536)
-            msvcrt.locking(self.stream.fileno(), msvcrt.LK_UNLCK, 1)
-        self.stream.close()
+        try:
+            self.stream.seek(0)
+            self.stream.truncate()
+            self.stream.flush()
+            if sys.platform == 'win32':
+                import msvcrt
+                self.stream.seek(65536)
+                msvcrt.locking(self.stream.fileno(), msvcrt.LK_UNLCK, 1)
+        finally:
+            self.stream.close()
 
 
 def start_background(root: Path, interval: float = 120) -> int:
@@ -270,7 +272,12 @@ def start_background(root: Path, interval: float = 120) -> int:
 def stop_background(root: Path) -> int | None:
     pid = running_pid(root)
     if pid:
-        os.kill(pid, signal.SIGTERM)
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            if running_pid(root) is None:
+                return None
+            raise
     return pid
 
 

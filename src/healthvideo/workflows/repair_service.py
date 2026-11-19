@@ -45,6 +45,9 @@ REPAIR_COOLDOWN_SECONDS = 120
 QUOTA_COOLDOWN_SECONDS = 300
 REPORT = 'leader-repair.yaml'
 MAINTENANCE_STATE = 'cache/repair-worker/maintenance.json'
+RESTARTING_STATE = 'cache/repair-worker/restarting.json'
+_MAINTENANCE_LOCK_RETRY_DELAYS = (0.02, 0.05, 0.1, 0.2, 0.35, 0.5)
+_RESTART_GRACE_SECONDS = 15.0
 
 _IGNORED_SNAPSHOT_DIRS = frozenset({
     '.git',
@@ -213,24 +216,37 @@ def _paths(root: Path, names: list[str], *, tests: bool = False) -> list[Path]:
     return paths
 
 
-def _lock_factory_for_maintenance(root: Path):
+def _lock_factory_for_maintenance(root: Path, *, timeout: float = 5.0):
     """Hold the factory kernel lock without advertising a live factory PID."""
     path = factory.lock_path(root)
     path.parent.mkdir(parents=True, exist_ok=True)
-    stream = path.open('a+b')
-    try:
-        if sys.platform == 'win32':
-            import msvcrt
-            stream.seek(65536)
-            msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
-        else:
-            import fcntl
-            fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError as error:
-        stream.close()
-        raise factory.FactoryAlreadyRunning(
-            f'Xưởng đang chạy (PID {factory.running_pid(root) or "đang khởi động"}).',
-        ) from error
+    deadline = time.monotonic() + max(0.0, timeout)
+    attempt = 0
+    stream = None
+    while True:
+        try:
+            stream = path.open('a+b')
+            if sys.platform == 'win32':
+                import msvcrt
+                stream.seek(65536)
+                msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            break
+        except OSError as error:
+            if stream is not None:
+                stream.close()
+                stream = None
+            live_pid = factory.running_pid(root)
+            if live_pid is not None:
+                raise factory.FactoryAlreadyRunning(f'Xưởng đang chạy (PID {live_pid}).') from error
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise factory.FactoryAlreadyRunning('Xưởng đang chạy (PID đang khởi động).') from error
+            delay = _MAINTENANCE_LOCK_RETRY_DELAYS[min(attempt, len(_MAINTENANCE_LOCK_RETRY_DELAYS) - 1)]
+            attempt += 1
+            time.sleep(min(delay, remaining))
     stream.seek(0)
     stream.truncate()
     stream.write(json.dumps({
@@ -416,6 +432,57 @@ def _recover_interrupted_diagnoses(root: Path) -> bool:
     return recovered
 
 
+def _mark_factory_restarting(root: Path, *, grace_seconds: float = _RESTART_GRACE_SECONDS) -> None:
+    path = root / RESTARTING_STATE
+    path.parent.mkdir(parents=True, exist_ok=True)
+    seconds = max(0.0, grace_seconds)
+    write_text_atomic(path, json.dumps({
+        'pid': os.getpid(),
+        'process_token': process_token(os.getpid()),
+        'deadline_mono': time.monotonic() + seconds,
+        'expires_at': (datetime.now(UTC) + timedelta(seconds=seconds)).isoformat(),
+    }))
+
+
+def _clear_factory_restarting(root: Path) -> None:
+    (root / RESTARTING_STATE).unlink(missing_ok=True)
+
+
+def _restarting_after_maintenance(root: Path) -> bool:
+    path = root / RESTARTING_STATE
+    if not path.is_file():
+        return False
+    try:
+        state = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        path.unlink(missing_ok=True)
+        return False
+    pid = state.get('pid')
+    token = state.get('process_token')
+    if pid == os.getpid():
+        deadline_mono = state.get('deadline_mono')
+        if isinstance(deadline_mono, (int, float)) and time.monotonic() <= deadline_mono:
+            return True
+        path.unlink(missing_ok=True)
+        return False
+    if not (_valid_pid(pid) and isinstance(token, str) and is_same_process(pid, token)):
+        path.unlink(missing_ok=True)
+        return False
+    try:
+        expires_at = datetime.fromisoformat(str(state.get('expires_at') or ''))
+    except ValueError:
+        path.unlink(missing_ok=True)
+        return False
+    if expires_at > datetime.now(UTC):
+        return True
+    path.unlink(missing_ok=True)
+    return False
+
+
+def _maintenance_or_restarting(root: Path) -> bool:
+    return (root / MAINTENANCE_STATE).is_file() or _restarting_after_maintenance(root)
+
+
 def recover_interrupted_repairs(root: Path) -> bool:
     """Restore backed-up files and factory state if a repair worker crashed mid-maintenance."""
     state_path = root / MAINTENANCE_STATE
@@ -454,7 +521,12 @@ def recover_interrupted_repairs(root: Path) -> bool:
             shutil.rmtree(backup_dir, ignore_errors=True)
         state_path.unlink(missing_ok=True)
         if state.get('was_running') and factory.running_pid(root) is None:
-            factory.start_background(root)
+            _mark_factory_restarting(root)
+            try:
+                factory.start_background(root)
+            finally:
+                if factory.running_pid(root) is not None:
+                    _clear_factory_restarting(root)
         maintenance_recovered = True
     diag_recovered = _recover_interrupted_diagnoses(root)
     return maintenance_recovered or diag_recovered
@@ -470,48 +542,66 @@ def _maintenance(
     work_dir: Path | None = None,
 ):
     """Pause only an idle factory, hold kernel lock, persist backups, and reliably resume."""
-    with chat.locked(root):
-        if _active(root):
-            raise ValueError('Còn tác vụ đang chạy; chờ ranh giới sửa code an toàn.')
-        pid = factory.stop_background(root)
-    was_running = pid is not None
-    if was_running:
-        for _ in range(100):
-            if factory.running_pid(root) is None:
-                break
-            time.sleep(0.1)
-        else:
-            raise RuntimeError('Xưởng chưa dừng để sửa code.')
-    lock_stream = _lock_factory_for_maintenance(root)
+    was_running = False
+    lock_stream = None
     state_path = root / MAINTENANCE_STATE
     backup_dir = (work_dir / 'backups') if work_dir is not None else (root / 'cache/repair-worker/backups' / (slug or 'manual'))
-    before_bytes: dict[str, bytes] = {}
-    before_paths: set[str] = set()
-    if assigned_files is not None:
-        before_bytes, before_paths, manifest = _capture_backups(root, assigned_files, backup_dir)
-    else:
-        before_paths = _workspace_paths(root.resolve())
-        manifest = []
-    state_path.parent.mkdir(parents=True, exist_ok=True)
-    write_text_atomic(state_path, json.dumps({
-        'slug': slug,
-        'attempt': attempt,
-        'was_running': was_running,
-        'pid': os.getpid(),
-        'process_token': process_token(os.getpid()),
-        'started_at': datetime.now(UTC).isoformat(),
-        'backup_dir': str(backup_dir),
-        'backups': manifest,
-        'before_paths': sorted(before_paths),
-    }))
+    backup_created = False
+    state_written = False
     try:
+        with chat.locked(root):
+            if _active(root):
+                raise ValueError('Còn tác vụ đang chạy; chờ ranh giới sửa code an toàn.')
+            pid = factory.stop_background(root)
+            was_running = pid is not None
+        if was_running:
+            _mark_factory_restarting(root)
+            for _ in range(100):
+                if factory.running_pid(root) is None:
+                    break
+                time.sleep(0.1)
+            else:
+                raise RuntimeError('Xưởng chưa dừng để sửa code.')
+        lock_stream = _lock_factory_for_maintenance(root)
+        before_bytes: dict[str, bytes] = {}
+        before_paths: set[str] = set()
+        if assigned_files is not None:
+            backup_created = True
+            before_bytes, before_paths, manifest = _capture_backups(root, assigned_files, backup_dir)
+        else:
+            before_paths = _workspace_paths(root.resolve())
+            manifest = []
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        state_written = True
+        write_text_atomic(state_path, json.dumps({
+            'slug': slug,
+            'attempt': attempt,
+            'was_running': was_running,
+            'pid': os.getpid(),
+            'process_token': process_token(os.getpid()),
+            'started_at': datetime.now(UTC).isoformat(),
+            'backup_dir': str(backup_dir),
+            'backups': manifest,
+            'before_paths': sorted(before_paths),
+        }))
         yield before_bytes, before_paths
     finally:
-        shutil.rmtree(backup_dir, ignore_errors=True)
-        state_path.unlink(missing_ok=True)
-        _unlock_factory_maintenance(lock_stream)
-        if was_running and factory.running_pid(root) is None:
-            factory.start_background(root)
+        try:
+            if backup_created:
+                shutil.rmtree(backup_dir, ignore_errors=True)
+            if state_written:
+                state_path.unlink(missing_ok=True)
+            if lock_stream is not None:
+                _unlock_factory_maintenance(lock_stream)
+        finally:
+            if was_running:
+                if factory.running_pid(root) is None:
+                    _mark_factory_restarting(root)
+                    factory.start_background(root)
+                if factory.running_pid(root) is not None:
+                    _clear_factory_restarting(root)
+            else:
+                _clear_factory_restarting(root)
 
 
 def _ask(root, slug, role, step, prompt, report, model, invoke):
@@ -840,9 +930,24 @@ def repair_once(
                     return 'waiting_idle'
                 record['phase'] = 'repairing'
                 write_yaml_atomic(record_path, record)
-                before_bytes, before_paths = maintenance.enter_context(
-                    _maintenance(root, slug=slug, attempt=record['attempts'], assigned_files=files, work_dir=work)
-                )
+                try:
+                    before_bytes, before_paths = maintenance.enter_context(
+                        _maintenance(root, slug=slug, attempt=record['attempts'], assigned_files=files, work_dir=work)
+                    )
+                except (OSError, ValueError, RuntimeError) as error:
+                    # Infrastructure failure before repair_engineer runs must not consume MAX_REPAIRS.
+                    record['attempts'] = max(0, record['attempts'] - 1)
+                    if _active(root):
+                        record['phase'] = 'waiting_idle'
+                        record.pop('retry_after', None)
+                        record.pop('error', None)
+                    else:
+                        record['phase'] = 'repair_failed'
+                        record['retry_after'] = (
+                            datetime.now(UTC) + timedelta(seconds=REPAIR_COOLDOWN_SECONDS)
+                        ).isoformat()
+                        record['error'] = _sanitize_reason(error)
+                    return record['phase']
                 outcome = _ask(root, slug, 'repair_engineer', 'repair',
                                plan.brief + '\nChỉ sửa: ' + ', '.join(map(str, files))
                                + '\nTuyệt đối không tạo file mới, không sửa file ngoài danh sách, '
@@ -958,6 +1063,18 @@ def stop_background(root: Path, *, wait_seconds: float = 5.0) -> int | None:
     return None
 
 
+def _sync_parent(
+    pid: int | None,
+    parent_pid: int | None,
+    parent_token: str | None,
+) -> tuple[int | None, str | None]:
+    if pid is None:
+        return parent_pid, parent_token
+    if pid != parent_pid:
+        return pid, process_token(pid)
+    return parent_pid, parent_token
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, required=True)
@@ -971,28 +1088,50 @@ def main() -> None:
         with factory.FactoryLock(root / 'cache/repair-worker'):
             while True:
                 if (parent_pid is not None and parent_token and not is_same_process(parent_pid, parent_token)
-                        and not (root / MAINTENANCE_STATE).is_file()):
+                        and not _maintenance_or_restarting(root)):
                     return
                 try:
                     recover_interrupted_repairs(root)
                 except (OSError, ValueError, RuntimeError) as error:
                     print(_sanitize_reason(error), flush=True)
-                if factory.running_pid(root):
+                pid = factory.running_pid(root)
+                if pid is not None:
                     seen_factory = True
+                    parent_pid, parent_token = _sync_parent(pid, parent_pid, parent_token)
+                    _clear_factory_restarting(root)
                     for project, _ in factory.projects(root):
-                        if factory.running_pid(root) is None:
+                        pid = factory.running_pid(root)
+                        if pid is None:
+                            if _maintenance_or_restarting(root):
+                                break
                             return
+                        parent_pid, parent_token = _sync_parent(pid, parent_pid, parent_token)
                         try:
                             repair_once(root, project.name, respect_cooldown=True)
                         except (OSError, ValueError, RuntimeError) as error:
                             print(_sanitize_reason(error), flush=True)
+                        pid = factory.running_pid(root)
+                        if pid is not None:
+                            seen_factory = True
+                            parent_pid, parent_token = _sync_parent(pid, parent_pid, parent_token)
+                            _clear_factory_restarting(root)
+                        elif _maintenance_or_restarting(root):
+                            break
+                        else:
+                            return
                 for _ in range(30):
-                    if seen_factory and factory.running_pid(root) is None and not (root / MAINTENANCE_STATE).is_file():
+                    pid = factory.running_pid(root)
+                    if pid is not None:
+                        seen_factory = True
+                        parent_pid, parent_token = _sync_parent(pid, parent_pid, parent_token)
+                        _clear_factory_restarting(root)
+                    elif _maintenance_or_restarting(root):
+                        time.sleep(0.5)
+                        continue
+                    elif seen_factory:
                         return
-                    if seen_factory and (pid := factory.running_pid(root)) is not None:
-                        parent_pid, parent_token = pid, process_token(pid)
                     if (parent_pid is not None and parent_token and not is_same_process(parent_pid, parent_token)
-                            and not (root / MAINTENANCE_STATE).is_file()):
+                            and not _maintenance_or_restarting(root)):
                         return
                     time.sleep(0.5)
     except factory.FactoryAlreadyRunning:

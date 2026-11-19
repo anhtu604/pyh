@@ -26,7 +26,7 @@ from healthvideo.process import (
     terminate_process_tree,
     timeout_diagnostic,
 )
-from healthvideo.storage.files import read_yaml, write_yaml_atomic
+from healthvideo.storage.files import read_yaml, write_text_atomic, write_yaml_atomic
 
 RUNNING_MARKER = ".agent-running"
 _LOG = logging.getLogger(__name__)
@@ -284,7 +284,7 @@ def _quota_reason(output: str) -> str:
 
 
 def _remove_job_marker(path: Path) -> bool:
-    """Retry a Windows sharing violation without losing the agent result."""
+    """Retry a Windows sharing/access violation without losing the agent result."""
     for delay in (0.0, 0.02, 0.05, 0.1, 0.2):
         if delay:
             sleep(delay)
@@ -292,7 +292,7 @@ def _remove_job_marker(path: Path) -> bool:
             path.unlink(missing_ok=True)
             return True
         except PermissionError as error:
-            if getattr(error, 'winerror', None) not in {32, 33}:
+            if getattr(error, 'winerror', None) not in {5, 32, 33}:
                 raise
     _LOG.warning("Could not remove agent status file after retry: %s", path)
     return False
@@ -334,7 +334,7 @@ def invoke(
     started_at = datetime.now(UTC).isoformat()
     identity = {'job_id': actual_job_id, 'pid': os.getpid(),
                 'process_token': process_token(os.getpid()), 'started_at': started_at}
-    marker.write_text(f"{agent.name}\n{started_at}\n{json.dumps(identity)}\n", encoding="utf-8")
+    write_text_atomic(marker, f"{agent.name}\n{started_at}\n{json.dumps(identity)}\n")
 
     def on_spawn(child_pid: int, child_token: str | None) -> None:
         payload = {
@@ -344,7 +344,7 @@ def invoke(
             'child_process_token': child_token,
             **(meta or {}),
         }
-        job_file.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        write_text_atomic(job_file, json.dumps(payload, ensure_ascii=False))
 
     try:
         if agent.name == 'omniroute':
@@ -374,7 +374,7 @@ def invoke(
             detail = detail.replace(secret, '[redacted]')
         log_path.write_text(f"{type(exc).__name__}: {detail}\n", encoding="utf-8")
         was_cancelled = cancel_file.is_file()
-        cancel_file.unlink(missing_ok=True)
+        _remove_job_marker(cancel_file)
         kind = ('cancelled' if was_cancelled
                 else 'transient' if isinstance(exc, (subprocess.TimeoutExpired, ConnectionError, TimeoutError))
                 else 'configuration' if isinstance(exc, (FileNotFoundError, PermissionError, UnsafeBatchLauncherError))
@@ -393,7 +393,7 @@ def invoke(
             _remove_job_marker(job_file)
 
     was_cancelled = cancel_file.is_file()
-    cancel_file.unlink(missing_ok=True)
+    _remove_job_marker(cancel_file)
     output = f"{completed.stdout or ''}{completed.stderr or ''}"
     for secret in credentials.values():
         output = output.replace(secret, '[redacted]')
@@ -661,14 +661,14 @@ def cancel_running_job(
                 except OSError:
                     pass
             killed = terminate_process_tree(child_pid)
-        job_file.unlink(missing_ok=True)
-        (job_file.parent / RUNNING_MARKER).unlink(missing_ok=True)
+        _remove_job_marker(job_file)
+        _remove_job_marker(job_file.parent / RUNNING_MARKER)
         t_slug = str(data.get("slug") or "")
         t_step = str(data.get("step") or "")
         if clear_retry_holds and t_slug and t_slug not in {"chung", "chat"}:
             slug_dir = logs_root / t_slug
-            (slug_dir / "waiting-model.txt").unlink(missing_ok=True)
-            (slug_dir / "waiting-model-step.yaml").unlink(missing_ok=True)
+            _remove_job_marker(slug_dir / "waiting-model.txt")
+            _remove_job_marker(slug_dir / "waiting-model-step.yaml")
             if t_step:
                 from healthvideo.workflows.production_retry import clear_agent_retry
 

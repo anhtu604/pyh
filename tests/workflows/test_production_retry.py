@@ -283,3 +283,61 @@ def test_agent_recovery_tracks_reopened_rejection_and_semantic_workflow_reason(t
     reopened.parent.mkdir()
     reopened.write_text('reason: Updated doctor note\n', encoding='utf-8')
     assert production_retry.agent_fingerprint(tmp_path, project, 'draft', 'brief') != semantic
+
+
+@pytest.mark.parametrize(
+    "error_factory",
+    [
+        lambda: ValueError("FLUX failed: os error 1455 paging file is too small"),
+        lambda: ValueError("FFmpeg contact sheet failed: Cannot allocate memory"),
+        lambda: ValueError("vibi connection failed; check network"),
+        lambda: ValueError("ACE-Step music generation failed (exit 3221225477)"),
+        lambda: ValueError("FLUX subprocess crashed with exit 3221226505"),
+    ],
+)
+def test_transient_environment_errors_even_as_value_error_remain_transient(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, error_factory
+) -> None:
+    project = _setup_project(tmp_path)
+    state = WorkflowState.MEDICALLY_APPROVED
+    clock = {"now": datetime(2026, 11, 19, 9, 0, 0, tzinfo=UTC)}
+    monkeypatch.setattr(production_retry, "_now", lambda: clock["now"])
+
+    record_failure(tmp_path, project, state, error_factory())
+    status = retry_status(tmp_path, project, state)
+    assert status["kind"] == "transient"
+    assert status["attempts"] == 1
+    assert status["allowed"] is False
+
+    clock["now"] += timedelta(seconds=120)
+    assert retry_status(tmp_path, project, state)["allowed"] is True
+
+
+def test_clear_retry_retries_windows_sharing_violation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = _setup_project(tmp_path)
+    state = WorkflowState.MEDICALLY_APPROVED
+    record_failure(tmp_path, project, state, ValueError("Generated illustration sha256 mismatch"))
+    retry_file = tmp_path / "topics/logs/gout-test/production-retry.yaml"
+    assert retry_file.is_file()
+
+    original_unlink = Path.unlink
+    attempts = 0
+
+    def flaky_unlink(path: Path, *args, **kwargs) -> None:
+        nonlocal attempts
+        if path == retry_file:
+            attempts += 1
+            if attempts <= 2:
+                err = PermissionError("sharing violation")
+                err.winerror = 32
+                raise err
+        return original_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", flaky_unlink)
+    monkeypatch.setattr(production_retry.time, "sleep", lambda _: None)
+
+    clear_retry(tmp_path, "gout-test")
+    assert attempts == 3
+    assert not retry_file.exists()

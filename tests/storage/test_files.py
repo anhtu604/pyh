@@ -109,3 +109,103 @@ def test_replace_directory_atomic_preserves_backup_after_promotion_and_restore_f
 
     assert (destination / "new.txt").read_text(encoding="utf-8") == "new"
     assert list(tmp_path.glob(".publish.superseded-*")) == []
+
+
+@pytest.mark.parametrize("winerror", [5, 32])
+def test_write_text_atomic_retries_transient_windows_locks_and_succeeds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, winerror: int
+) -> None:
+    path = tmp_path / "code-review.yaml"
+    path.write_text("before\n", encoding="utf-8")
+    real_replace = files.os.replace
+    attempts = 0
+    sleeps: list[float] = []
+
+    def flaky_replace(old: Path, new: Path) -> None:
+        nonlocal attempts
+        attempts += 1
+        if attempts <= 4:
+            error = PermissionError("Access is denied" if winerror == 5 else "Sharing violation")
+            error.winerror = winerror
+            raise error
+        real_replace(old, new)
+
+    monkeypatch.setattr(files.os, "replace", flaky_replace)
+    monkeypatch.setattr(files.time, "sleep", lambda seconds: sleeps.append(seconds))
+
+    files.write_text_atomic(path, "after\n")
+
+    assert attempts == 5
+    assert sleeps == [0.005, 0.015, 0.03, 0.06]
+    assert path.read_text(encoding="utf-8") == "after\n"
+    assert [item.name for item in tmp_path.iterdir()] == ["code-review.yaml"]
+
+
+def test_write_text_atomic_exhausts_bounded_retries_and_fails_fast_for_real_perm_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "locked.txt"
+    attempts = 0
+    sleeps: list[float] = []
+
+    def always_winerror5(old: Path, new: Path) -> None:
+        nonlocal attempts
+        attempts += 1
+        error = PermissionError("Access is denied")
+        error.winerror = 5
+        raise error
+
+    monkeypatch.setattr(files.os, "replace", always_winerror5)
+    monkeypatch.setattr(files.time, "sleep", lambda seconds: sleeps.append(seconds))
+
+    with pytest.raises(PermissionError):
+        files.write_text_atomic(path, "new")
+
+    assert attempts == len(files._REPLACE_RETRY_DELAYS)
+    assert len(sleeps) == len(files._REPLACE_RETRY_DELAYS) - 1
+    assert list(tmp_path.iterdir()) == []
+
+    # Non-5/32 PermissionError must fail immediately without sleeping.
+    attempts = 0
+    sleeps.clear()
+
+    def posix_perm_error(old: Path, new: Path) -> None:
+        nonlocal attempts
+        attempts += 1
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(files.os, "replace", posix_perm_error)
+    with pytest.raises(PermissionError):
+        files.write_text_atomic(path, "new")
+
+    assert attempts == 1
+    assert sleeps == []
+
+
+def test_write_text_atomic_concurrent_readers_and_writers_on_same_file(tmp_path: Path) -> None:
+    path = tmp_path / "shared.yaml"
+    files.write_yaml_atomic(path, {"step": "init"})
+    errors: list[Exception] = []
+
+    def reader() -> None:
+        for _ in range(60):
+            try:
+                data = files.read_yaml(path)
+                assert str(data["step"]).startswith(("init", "1-", "2-"))
+            except Exception as exc:  # noqa: BLE001
+                errors.append(exc)
+
+    def writer(worker_id: int) -> None:
+        for idx in range(25):
+            try:
+                files.write_yaml_atomic(path, {"step": f"{worker_id}-{idx}"})
+            except Exception as exc:  # noqa: BLE001
+                errors.append(exc)
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = [pool.submit(reader), pool.submit(reader), pool.submit(writer, 1), pool.submit(writer, 2)]
+        for future in futures:
+            future.result()
+
+    assert errors == []
+    assert files.read_yaml(path)["step"].startswith(("1-", "2-"))

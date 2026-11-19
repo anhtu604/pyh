@@ -58,6 +58,11 @@ def child_env() -> dict[str, str]:
     # Agents call `healthvideo`; it lives beside this interpreter in the venv, not on the user PATH.
     path_key = next((key for key in env if key.upper() == 'PATH'), 'PATH')
     env[path_key] = os.pathsep.join([str(Path(sys.executable).parent), env.get(path_key, '')])
+    # Windows pipes default Python child stdio to cp1252 unless UTF-8 mode is requested.
+    for var, default in (('PYTHONUTF8', '1'), ('PYTHONIOENCODING', 'utf-8')):
+        existing = next((key for key in env if key.upper() == var), None)
+        if existing is None or not env[existing]:
+            env[existing or var] = default
     return env
 
 

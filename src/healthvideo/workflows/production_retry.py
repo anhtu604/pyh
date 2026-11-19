@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
@@ -30,7 +31,46 @@ _SECRET_ENV_KEYS = (
     "YOUTUBE_API_KEY",
     "NCBI_API_KEY",
 )
+_TRANSIENT_ERROR_PATTERNS = (
+    "os error 1455",
+    "paging file is too small",
+    "cannot allocate memory",
+    "vibi connection failed",
+    "3221225477",
+    "3221226505",
+    "memory allocation",
+    "connection reset",
+    "connection refused",
+    "connection timed out",
+    "timed out",
+    "temporarily unavailable",
+    "service unavailable",
+    "http 502",
+    "http 503",
+    "http 504",
+)
+_WINDOWS_TRANSIENT_UNLINK_ERRORS = frozenset({5, 32})
 _CODE_HASH_CACHE: dict[tuple[str, int, int], str] = {}
+
+
+def _is_transient_production_error(error: Exception) -> bool:
+    if not isinstance(error, ValueError):
+        return True
+    detail = str(error).lower()
+    return any(pattern in detail for pattern in _TRANSIENT_ERROR_PATTERNS)
+
+
+def _unlink_with_retry(path: Path) -> None:
+    for delay in (0.0, 0.01, 0.03, 0.08):
+        if delay:
+            time.sleep(delay)
+        try:
+            path.unlink(missing_ok=True)
+            return
+        except PermissionError as error:
+            if getattr(error, "winerror", None) not in _WINDOWS_TRANSIENT_UNLINK_ERRORS:
+                raise
+    path.unlink(missing_ok=True)
 
 
 def _now() -> datetime:
@@ -201,7 +241,7 @@ def record_failure(
     existing = _read_retry_record(path) if path.exists() else None
     fingerprint = production_fingerprint(root, project_dir, state)
     kind: Literal["validation", "transient"] = (
-        "validation" if isinstance(error, ValueError) else "transient"
+        "transient" if _is_transient_production_error(error) else "validation"
     )
     if (
         existing is not None
@@ -229,7 +269,7 @@ def record_failure(
 
 def clear_retry(root: Path, slug: str) -> None:
     """Remove only the production retry record, preserving unrelated block notes."""
-    _retry_path(root, slug).unlink(missing_ok=True)
+    _unlink_with_retry(_retry_path(root, slug))
 
 
 # Agent budgets are independent of the existing production budget. Only a clearly
@@ -402,7 +442,7 @@ def model_resume_step(root: Path, project_dir: Path, brief_context: str) -> str 
     except (OSError, ValueError, TypeError, KeyError, yaml.YAMLError) as exc:
         raise ValueError(f"Invalid model resume record in {path}; restore or remove it before retrying") from exc
     if agent_fingerprint(root, project_dir, step, brief_context) != fingerprint:
-        path.unlink()
+        _unlink_with_retry(path)
         return None
     return step
 
@@ -421,7 +461,7 @@ def record_model_resume(root: Path, project_dir: Path, step: str, brief_context:
 
 
 def clear_model_resume(root: Path, slug: str) -> None:
-    _model_resume_path(root, slug).unlink(missing_ok=True)
+    _unlink_with_retry(_model_resume_path(root, slug))
 
 
 def clear_agent_retry(root: Path, slug: str, step: str) -> None:
@@ -431,7 +471,7 @@ def clear_agent_retry(root: Path, slug: str, step: str) -> None:
     if records:
         write_yaml_atomic(path, {"version": 1, "steps": records})
     else:
-        path.unlink(missing_ok=True)
+        _unlink_with_retry(path)
 
 
 def retry_deadlines(root: Path, slug: str) -> list[datetime]:

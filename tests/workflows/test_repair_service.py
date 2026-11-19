@@ -715,3 +715,197 @@ def test_main_finishes_current_repair_then_exits_when_worker_stops(tmp_path, mon
     monkeypatch.setattr(sys, 'argv', argv)
     repair.main()
     assert completed == ['first']
+
+
+def test_maintenance_restarts_factory_when_setup_fails_after_stop(tmp_path, monkeypatch):
+    project = create_v2_project_fixture(tmp_path / 'projects')
+    src = tmp_path / 'src/mod.py'
+    src.parent.mkdir(parents=True)
+    src.write_text('x = 1\n', encoding='utf-8')
+    monkeypatch.setattr(factory, 'stop_background', lambda root: 13064)
+    monkeypatch.setattr(factory, 'running_pid', lambda root: None)
+    started = []
+    monkeypatch.setattr(factory, 'start_background', lambda root: started.append(root) or 23064)
+    monkeypatch.setattr(
+        repair,
+        '_lock_factory_for_maintenance',
+        lambda root: (_ for _ in ()).throw(factory.FactoryAlreadyRunning('Xưởng đang chạy (PID đang khởi động).')),
+    )
+
+    with (
+        pytest.raises(factory.FactoryAlreadyRunning),
+        repair._maintenance(tmp_path, slug=project.name, attempt=1, assigned_files=[src]),
+    ):
+        pytest.fail('Maintenance body must not run when locking fails')
+
+    assert started == [tmp_path]
+    assert not (tmp_path / repair.MAINTENANCE_STATE).exists()
+
+
+def test_lock_factory_for_maintenance_retries_windows_kernel_teardown_then_succeeds(tmp_path, monkeypatch):
+    if os.name != 'nt':
+        pytest.skip('Windows msvcrt locking path')
+    import msvcrt
+
+    monkeypatch.setattr(factory, 'running_pid', lambda root: None)
+    sleeps = []
+    monkeypatch.setattr(repair.time, 'sleep', lambda s: sleeps.append(s))
+    real_locking = msvcrt.locking
+    calls = 0
+
+    def flaky_locking(fd, mode, nbytes):
+        nonlocal calls
+        if mode == msvcrt.LK_NBLCK:
+            calls += 1
+            if calls <= 3:
+                raise PermissionError(13, 'Permission denied')
+        return real_locking(fd, mode, nbytes)
+
+    monkeypatch.setattr(msvcrt, 'locking', flaky_locking)
+    stream = repair._lock_factory_for_maintenance(tmp_path, timeout=5.0)
+    try:
+        assert calls == 4
+        assert len(sleeps) == 3
+        payload = json.loads(factory.lock_path(tmp_path).read_text(encoding='utf-8'))
+        assert payload['maintenance'] is True
+    finally:
+        repair._unlock_factory_maintenance(stream)
+
+
+def test_lock_factory_for_maintenance_fails_fast_if_live_pid_or_timeout_expired(tmp_path, monkeypatch):
+    if os.name != 'nt':
+        pytest.skip('Windows msvcrt locking path')
+    import msvcrt
+
+    def always_locked(*args):
+        raise PermissionError(13, 'Permission denied')
+
+    monkeypatch.setattr(msvcrt, 'locking', always_locked)
+
+    # 1. Live PID present -> fail immediately with zero sleeps.
+    sleeps = []
+    monkeypatch.setattr(repair.time, 'sleep', lambda s: sleeps.append(s))
+    monkeypatch.setattr(factory, 'running_pid', lambda root: 4242)
+    with pytest.raises(factory.FactoryAlreadyRunning, match='4242'):
+        repair._lock_factory_for_maintenance(tmp_path, timeout=5.0)
+    assert sleeps == []
+
+    # 2. No live PID -> retry up to timeout budget then raise.
+    clock = {'now': 0.0}
+    monkeypatch.setattr(factory, 'running_pid', lambda root: None)
+    monkeypatch.setattr(repair.time, 'monotonic', lambda: clock['now'])
+    monkeypatch.setattr(repair.time, 'sleep', lambda s: clock.__setitem__('now', clock['now'] + s))
+    with pytest.raises(factory.FactoryAlreadyRunning, match='đang khởi động'):
+        repair._lock_factory_for_maintenance(tmp_path, timeout=1.0)
+    assert clock['now'] == pytest.approx(1.0)
+
+
+def test_repair_once_does_not_burn_max_repairs_when_maintenance_infrastructure_fails(tmp_path, monkeypatch):
+    project = create_v2_project_fixture(tmp_path / 'projects')
+    logs = tmp_path / 'topics/logs' / project.name
+    logs.mkdir(parents=True)
+    (logs / 'blocked.txt').write_text('ValueError: sha256 mismatch', encoding='utf-8')
+    src = tmp_path / 'src/fix.py'
+    src.parent.mkdir(parents=True)
+    src.write_text('ok = False\n', encoding='utf-8')
+    test_file = tmp_path / 'tests/test_fix.py'
+    test_file.parent.mkdir(parents=True)
+    test_file.write_text('def test_fix(): pass\n', encoding='utf-8')
+
+    monkeypatch.setattr(repair, '_active', lambda *args: False)
+    monkeypatch.setattr(factory, 'stop_background', lambda root: 13064)
+    monkeypatch.setattr(factory, 'running_pid', lambda root: None)
+    restarted = []
+    monkeypatch.setattr(factory, 'start_background', lambda root: restarted.append(root) or 13065)
+    monkeypatch.setattr(
+        repair,
+        '_lock_factory_for_maintenance',
+        lambda root: (_ for _ in ()).throw(factory.FactoryAlreadyRunning('Xưởng đang chạy (PID đang khởi động).')),
+    )
+
+    def ask_repair(root, slug, role, step, *args):
+        if step == 'repair_diagnose':
+            return repair.Diagnosis(
+                action='repair',
+                cause='Fixture fault',
+                evidence=['blocked.txt'],
+                files=['src/fix.py'],
+                tests=['tests/test_fix.py'],
+                brief='Fix fault',
+            )
+        pytest.fail('repair_engineer must not run when _maintenance failed')
+
+    monkeypatch.setattr(repair, '_ask', ask_repair)
+    assert repair.repair_once(tmp_path, project.name) == 'repair_failed'
+    report = read_yaml(logs / repair.REPORT)
+    assert report['attempts'] == 0
+    assert report.get('transient_failures', 0) == 0
+    assert restarted == [tmp_path]
+
+    # Subsequent real repair attempts still have the full MAX_REPAIRS budget.
+    monkeypatch.setattr(repair, '_maintenance', lambda *args, **kwargs: nullcontext((
+        {'src/fix.py': src.read_bytes()},
+        repair._workspace_paths(tmp_path),
+    )))
+
+    def ask_with_engineer(root, slug, role, step, *args):
+        if step == 'repair_diagnose':
+            return repair.Diagnosis(
+                action='repair',
+                cause='Fixture fault',
+                evidence=['blocked.txt'],
+                files=['src/fix.py'],
+                tests=['tests/test_fix.py'],
+                brief='Fix fault',
+            )
+        if step == 'repair':
+            src.write_text('ok = True\n', encoding='utf-8')
+            return repair.RepairResult(status='ready', summary='Fixed')
+        return repair.Acceptance(passed=True, reason='Verified')
+
+    monkeypatch.setattr(repair, '_ask', ask_with_engineer)
+    monkeypatch.setattr(repair, '_release', lambda *args: None)
+    assert repair.repair_once(tmp_path, project.name, run=lambda argv, **kw: CompletedProcess(argv, 0, 'ok', '')) == 'retry_requested'
+    assert read_yaml(logs / repair.REPORT)['attempts'] == 1
+
+
+def test_main_updates_parent_identity_and_survives_maintenance_restart(tmp_path, monkeypatch):
+    import sys
+
+    state = {'pid': 1111, 'calls': 0}
+    tokens = {1111: 'tok-1111', 2222: 'tok-2222'}
+
+    monkeypatch.setattr(factory, 'running_pid', lambda root: state['pid'])
+    monkeypatch.setattr(repair, 'process_token', lambda pid: tokens.get(pid))
+    monkeypatch.setattr(repair, 'is_same_process', lambda pid, token: state['pid'] == pid and tokens.get(pid) == token)
+    monkeypatch.setattr(repair, 'recover_interrupted_repairs', lambda root: False)
+    monkeypatch.setattr(factory, 'projects', lambda root: [(tmp_path / 'proj', None)])
+
+    def fake_repair_once(root, slug, **kwargs):
+        state['calls'] += 1
+        if state['calls'] == 1:
+            # Simulate _maintenance stopping 1111 and starting 2222 with a brief startup window.
+            repair._mark_factory_restarting(root, grace_seconds=15.0)
+            state['pid'] = None
+            return 'repair_failed'
+        state['pid'] = None  # Normal factory shutdown after observing 2222.
+        return 'idle'
+
+    sleeps = {'count': 0}
+
+    def fake_sleep(_seconds):
+        sleeps['count'] += 1
+        if state['pid'] is None and sleeps['count'] == 1:
+            state['pid'] = 2222
+
+    monkeypatch.setattr(repair, 'repair_once', fake_repair_once)
+    monkeypatch.setattr(repair.time, 'sleep', fake_sleep)
+    monkeypatch.setattr(sys, 'argv', [
+        'repair_service', '--root', str(tmp_path),
+        '--parent-pid', '1111', '--parent-token', 'tok-1111',
+    ])
+
+    repair.main()
+    assert state['calls'] == 2
+    assert sleeps['count'] >= 1
+    assert not (tmp_path / repair.RESTARTING_STATE).exists()
