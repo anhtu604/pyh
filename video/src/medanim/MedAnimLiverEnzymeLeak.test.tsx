@@ -8,11 +8,11 @@ import {
   CREDITS_START, DOTS, dotScreenPosition, GLOSSARY, IMAGES, imageToScreen, IRIS, LABELS, LIVER_BOX,
   LIVER_LOCATOR_START, LIVER_SOURCE_REGION, LIVER_ZOOM, LOBULE_BOX, LOBULE_BOX_SMALL, LOBULE_DETAIL_BOX,
   LOBULE_LOCATOR_START, LOBULE_POINTS, LOBULE_SOURCE_REGION, LOBULE_ZOOM_IN, MERGED_SINUSOID_PATH,
-  MITO_SPOTS, PORTAL_FLOW_PATH, SINUSOID_PATH, STEPS, TOTAL_FRAMES, TRANSITION_LOBULE_TO_SOURCES,
-  captionTiming, litLabel, pathPoint, type Box,
+  MITO_SPOTS, PORTAL_FLOW_PATH, PORTRAIT_GEOMETRY, SINUSOID_PATH, STEPS, TOTAL_FRAMES,
+  TRANSITION_LOBULE_TO_SOURCES, captionTiming, litLabel, pathPoint, sceneChain, sceneLabels, type Box,
 } from './liverEnzymeLeak';
 
-const clock = vi.hoisted(() => ({frame: 0}));
+const clock = vi.hoisted(() => ({frame: 0, width: 1920, height: 1080}));
 vi.mock('remotion', async () => {
   const R = await import('react');
   const Offset = R.createContext(0);
@@ -24,7 +24,8 @@ vi.mock('remotion', async () => {
     return R.createElement(Offset.Provider, {value: parent + from}, children);
   };
   return {
-    useCurrentFrame, Sequence, useVideoConfig: () => ({fps: 30, width: 1920, height: 1080, durationInFrames: TOTAL_FRAMES}),
+    useCurrentFrame, Sequence,
+    useVideoConfig: () => ({fps: 30, width: clock.width, height: clock.height, durationInFrames: TOTAL_FRAMES}),
     AbsoluteFill: ({children, style, ...rest}: {children?: React.ReactNode; style?: React.CSSProperties}) =>
       R.createElement('div', {...rest, style: {position: 'absolute', inset: 0, ...style}}, children),
     Img: (props: Record<string, unknown>) => R.createElement('img', props),
@@ -34,10 +35,18 @@ vi.mock('remotion', async () => {
 
 import {evenWordTiming, firstUseTermWords, paginateCaptions} from '../components/captionPaging';
 
-const {MedAnimLiverEnzymeLeak} = await import('./MedAnimLiverEnzymeLeak');
+const {MedAnimLiverEnzymeLeak, MedAnimLiverEnzymeLeakVertical, cardSize} = await import('./MedAnimLiverEnzymeLeak');
 const renderAt = (frame: number): string => {
   clock.frame = frame;
+  clock.width = 1920;
+  clock.height = 1080;
   return renderToStaticMarkup(<MedAnimLiverEnzymeLeak />);
+};
+const renderVerticalAt = (frame: number): string => {
+  clock.frame = frame;
+  clock.width = 1080;
+  clock.height = 1920;
+  return renderToStaticMarkup(<MedAnimLiverEnzymeLeakVertical />);
 };
 
 const layout = LAYOUTS.youtube_long;
@@ -328,13 +337,13 @@ describe('doctor revision 2 requirements', () => {
   });
 });
 
-it('keeps all animation caption pages at >=4 words, <=2 lines, <=42 chars/line, and <=1 yellow phrase per page', () => {
+const verifyCaptionPages = (maxChars: number, renderFn: (frame: number) => string) => {
   let prior: string[] = [];
   STEPS.forEach((step) => {
     const {firstFrame, framesPerWord} = captionTiming(step);
     const words = evenWordTiming(step.narration, firstFrame, framesPerWord);
     const plain = words.map((w) => w.text);
-    const pages = paginateCaptions(plain, 42);
+    const pages = paginateCaptions(plain, maxChars);
     expect(pages.flatMap((p) => p.lines.flat().map((w) => w.text))).toEqual(plain);
 
     const labelWindows = LABELS.map((l) => ({term: l.vi, start: l.start - step.start, end: l.end - step.start}));
@@ -342,11 +351,11 @@ it('keeps all animation caption pages at >=4 words, <=2 lines, <=42 chars/line, 
       const idxs = p.lines.flat().map((w) => w.index);
       expect(idxs.length).toBeGreaterThanOrEqual(4);
       expect(p.lines.length).toBeLessThanOrEqual(2);
-      p.lines.forEach((line) => expect(line.map((w) => w.text).join(' ').length).toBeLessThanOrEqual(42));
+      p.lines.forEach((line) => expect(line.map((w) => w.text).join(' ').length).toBeLessThanOrEqual(maxChars));
 
       const pageStart = words[idxs[0]].start_frame;
       const pageEnd = words[(idxs.at(-1) ?? -1) + 1]?.start_frame ?? (step.end - step.start);
-      const html = renderAt(step.start + pageStart + 1);
+      const html = renderFn(step.start + pageStart + 1);
       const yellowGroups = (html.match(/data-term-group="true"/g) ?? []).length;
       expect(yellowGroups).toBeLessThanOrEqual(1);
 
@@ -360,5 +369,111 @@ it('keeps all animation caption pages at >=4 words, <=2 lines, <=42 chars/line, 
       expect(eligible.length).toBeLessThanOrEqual(1);
     });
     prior = [...prior, ...plain];
+  });
+};
+
+it('keeps all animation caption pages at >=4 words, <=2 lines, <=42 chars/line, and <=1 yellow phrase per page', () => {
+  verifyCaptionPages(42, renderAt);
+});
+
+describe('9:16 vertical clip (MedAnimLiverEnzymeLeakVertical)', () => {
+  const vLayout = LAYOUTS.vertical_clip;
+  const vBand = captionBox(vLayout);
+  const MINI_MAP_V: Box = {left: 160, top: 24, width: 760, height: 64};
+  const LEGEND_V: Box = {left: 710, top: 1030, width: 220, height: 190};
+  const vCardBox = (l: {vi: string; viLines?: readonly [string, string]; latin: string; at: {x: number; y: number}}) => ({
+    left: l.at.x, top: l.at.y, ...cardSize(l, 'portrait'),
+  });
+
+  it('keeps mascot <= 28% of 1080px width (<= 302px), clear of captions and diagrams', () => {
+    expect(PORTRAIT_GEOMETRY.mascotBox.width).toBeLessThanOrEqual(302);
+    expect(PORTRAIT_GEOMETRY.mascotBox.width / 1080).toBeLessThanOrEqual(0.28);
+    expect(boxesIntersect(PORTRAIT_GEOMETRY.mascotBox, vBand)).toBe(false);
+    expect(vBand.top - (PORTRAIT_GEOMETRY.mascotBox.top + PORTRAIT_GEOMETRY.mascotBox.height)).toBeGreaterThanOrEqual(24);
+    expect(boxesIntersect(PORTRAIT_GEOMETRY.mascotBox, PORTRAIT_GEOMETRY.overviewPanel)).toBe(false);
+    expect(boxesIntersect(PORTRAIT_GEOMETRY.mascotBox, PORTRAIT_GEOMETRY.lobuleDetailBox)).toBe(false);
+    expect(boxesIntersect(PORTRAIT_GEOMETRY.mascotBox, PORTRAIT_GEOMETRY.cellDetailBox)).toBe(false);
+  });
+
+  it('keeps vertical label cards >=52px inside 1080x1920, clear of captions, mascot, mini-map, and legend', () => {
+    const labelsV = sceneLabels('portrait');
+    const chainV = sceneChain('portrait');
+    [...labelsV, ...chainV.map((c) => ({...c, end: c.start + 1}))].forEach((l) => {
+      const box = vCardBox(l);
+      expect(box.left).toBeGreaterThanOrEqual(0);
+      expect(box.left + box.width).toBeLessThanOrEqual(1080);
+      expect(box.top).toBeGreaterThanOrEqual(0);
+      expect(box.top + box.height).toBeLessThanOrEqual(1920);
+      expect(boxesIntersect(box, vBand)).toBe(false);
+      expect(boxesIntersect(box, MINI_MAP_V)).toBe(false);
+      const mascotOn = l.start < STEPS[0].end || l.end > STEPS[5].start;
+      if (mascotOn) expect(boxesIntersect(box, PORTRAIT_GEOMETRY.mascotBox)).toBe(false);
+      if (l.start >= LOBULE_ZOOM_IN.start && l.end <= CELL_CLOSE.end) {
+        expect(boxesIntersect(box, LEGEND_V)).toBe(false);
+      }
+    });
+    chainV.forEach((c) => {
+      expect(boxesIntersect(vCardBox(c), PORTRAIT_GEOMETRY.chainTubeBox)).toBe(false);
+    });
+    expect(boxesIntersect(PORTRAIT_GEOMETRY.lobuleBoxSmall, PORTRAIT_GEOMETRY.chainTubeBox)).toBe(false);
+    expect(boxesIntersect(PORTRAIT_GEOMETRY.chainTubeBox, vBand)).toBe(false);
+
+    // B3/B4 cell labels sit below cellBox and leave sinusoid leader clear of Zoom 2 locator box.
+    expect(PORTRAIT_GEOMETRY.cellBox.top + PORTRAIT_GEOMETRY.cellBox.height).toBeLessThan(1025);
+    const sinLabelV = labelsV.find((l) => l.id === 'sinusoid')!;
+    const sinBoxV = vCardBox(sinLabelV);
+    const sinTargetV = imageToScreen(PORTRAIT_GEOMETRY.lobuleBox, 'lobule', LOBULE_POINTS.sinusoid);
+    const sinFromV = {x: sinBoxV.left + sinBoxV.width / 2, y: sinBoxV.top};
+    const locRight = PORTRAIT_GEOMETRY.lobuleSourceRegion.left + PORTRAIT_GEOMETRY.lobuleSourceRegion.width;
+    const tAtLocRight = (locRight - sinFromV.x) / (sinTargetV.x - sinFromV.x);
+    const yAtLocRight = sinFromV.y + (sinTargetV.y - sinFromV.y) * tAtLocRight;
+    expect(yAtLocRight).toBeGreaterThan(PORTRAIT_GEOMETRY.lobuleSourceRegion.top + PORTRAIT_GEOMETRY.lobuleSourceRegion.height);
+  });
+
+  it('sizes vertical subjects >=60% of 1080px, keeps PNG <=1.0x, and preserves MagnifierZoom + mask mechanics', () => {
+    const minW = 1080 * 0.6;
+    expect(PORTRAIT_GEOMETRY.liverBox.width).toBeGreaterThanOrEqual(minW);
+    expect(PORTRAIT_GEOMETRY.overviewPanel.width).toBeGreaterThanOrEqual(minW);
+    expect(PORTRAIT_GEOMETRY.lobuleDetailBox.width).toBeGreaterThanOrEqual(minW);
+    expect(PORTRAIT_GEOMETRY.cellDetailBox.width).toBeGreaterThanOrEqual(minW);
+    expect(PORTRAIT_GEOMETRY.lobuleBox.width / IMAGES.lobule.width).toBeLessThanOrEqual(1.0);
+    expect(PORTRAIT_GEOMETRY.lobuleBoxSmall.width / IMAGES.lobule.width).toBeLessThanOrEqual(1.0);
+
+    // CELL_DETAIL_BOX center falls inside CELL_BOX and leader endpoints stay < 1080 for MagnifierZoom SVG.
+    const cdCx = PORTRAIT_GEOMETRY.cellDetailBox.left + PORTRAIT_GEOMETRY.cellDetailBox.width / 2;
+    const cdCy = PORTRAIT_GEOMETRY.cellDetailBox.top + PORTRAIT_GEOMETRY.cellDetailBox.height / 2;
+    expect(cdCx).toBeGreaterThan(PORTRAIT_GEOMETRY.cellBox.left + 60);
+    expect(cdCx).toBeLessThan(PORTRAIT_GEOMETRY.cellBox.left + PORTRAIT_GEOMETRY.cellBox.width - 60);
+    expect(cdCy).toBeGreaterThan(PORTRAIT_GEOMETRY.cellBox.top + 60);
+    expect(cdCy).toBeLessThan(PORTRAIT_GEOMETRY.cellBox.top + PORTRAIT_GEOMETRY.cellBox.height - 60);
+    expect(cdCy).toBeLessThan(1080);
+
+    // Sample all B1..B6 + credits + zooms + hold frames cleanly without draft notes or hard clip polygons.
+    const frames = [10, 30, 63, 150, 390, 465, 495, 540, 600, 800, 1000, 1105, 1140, 1300, 1400, 1550];
+    for (const f of frames) {
+      const html = renderVerticalAt(f);
+      expect(html).not.toContain('clip-path:polygon');
+      const visibleText = html.replace(/<[^>]*>/g, ' ');
+      expect(visibleText).not.toContain('*');
+      expect(visibleText).not.toContain('Chưa có hình');
+    }
+    expect(renderVerticalAt(10)).toContain('data-mascot-host="true"');
+    expect(renderVerticalAt(63)).toContain('data-magnifier-lens="true"');
+    expect(renderVerticalAt(390)).toContain('data-medanim-flow="confluence"');
+    expect(renderVerticalAt(540)).not.toContain('Lòng xoang gan');
+    expect(renderVerticalAt(800)).toContain('id="cell-injury-mask"');
+    expect(renderVerticalAt(1000)).toContain('id="mito-injury-mask-0"');
+    expect(renderVerticalAt(1105)).toContain('data-magnifier-lens="true"');
+    expect(renderVerticalAt(1300)).toContain('data-medanim-chain="true"');
+    expect(renderVerticalAt(1400)).toContain('data-medanim-scene="sources"');
+    expect(renderVerticalAt(1550)).toContain('NIAID NIH BioArt Source');
+  });
+
+  it('renders static 9:16 portrait captions <=24 chars/line, <=2 lines, >=4 words/page, <=1 yellow phrase', () => {
+    const html = renderVerticalAt(390);
+    expect(html).toContain('data-format="portrait"');
+    expect(html).not.toContain('text-decoration');
+    expect(html).not.toContain('data-active=');
+    verifyCaptionPages(24, renderVerticalAt);
   });
 });

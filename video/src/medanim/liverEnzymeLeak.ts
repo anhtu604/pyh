@@ -75,6 +75,7 @@ export const irisProgress = (frame: number, w: {start: number; end: number}): nu
 // --- Geometry ------------------------------------------------------------------------------------
 export type Box = {left: number; top: number; width: number; height: number};
 export type Point = {x: number; y: number};
+export type SceneFormat = 'landscape' | 'portrait';
 
 /** Vector SVG liver fills >=60% frame width symmetrically (380..1540) with zero bitmap blur. */
 export const B1_OVERVIEW_PANEL: Box = {left: 380, top: 86, width: 1160, height: 784};
@@ -101,8 +102,6 @@ export const lerp = (a: number, b: number, t: number): number => a + (b - a) * t
 export const lerpBox = (a: Box, b: Box, t: number): Box => ({
   left: lerp(a.left, b.left, t), top: lerp(a.top, b.top, t), width: lerp(a.width, b.width, t), height: lerp(a.height, b.height, t),
 });
-export const lobuleBoxAt = (frame: number): Box =>
-  lerpBox(LOBULE_BOX, LOBULE_BOX_SMALL, smoothstep((frame - LOBULE_SHIFT.start) / (LOBULE_SHIFT.end - LOBULE_SHIFT.start)));
 
 const squareAround = (center: Point, size: number): Box => ({
   left: Math.round(center.x - size / 2),
@@ -126,6 +125,69 @@ export const LOBULE_POINTS = {
 
 /** Locator source region on the Lobule for Zoom 2 (hepatocyte plate beside sinusoid, left of CELL_DETAIL_BOX). */
 export const LOBULE_SOURCE_REGION: Box = squareAround(imageToScreen(LOBULE_BOX, 'lobule', LOBULE_POINTS.plate), 80);
+
+/** Centerline y of the sinusoidal blood vessel lumen above the cell inside CELL_DETAIL_BOX. */
+export const LANE_Y = 205;
+
+export type SceneGeometry = {
+  frame: {width: number; height: number};
+  mascotBox: Box;
+  overviewPanel: Box;
+  liverBox: Box;
+  lobuleDetailBox: Box;
+  cellDetailBox: Box;
+  lobuleBox: Box;
+  lobuleBoxSmall: Box;
+  cellBox: Box;
+  liverSourceRegion: Box;
+  lobuleSourceRegion: Box;
+  laneY: number;
+  chainTubeBox: Box;
+};
+
+const LANDSCAPE_GEOMETRY: SceneGeometry = {
+  frame: {width: 1920, height: 1080},
+  mascotBox: {left: 20, top: 783, width: 340, height: 297},
+  overviewPanel: B1_OVERVIEW_PANEL,
+  liverBox: LIVER_BOX,
+  lobuleDetailBox: LOBULE_DETAIL_BOX,
+  cellDetailBox: CELL_DETAIL_BOX,
+  lobuleBox: LOBULE_BOX,
+  lobuleBoxSmall: LOBULE_BOX_SMALL,
+  cellBox: CELL_BOX,
+  liverSourceRegion: LIVER_SOURCE_REGION,
+  lobuleSourceRegion: LOBULE_SOURCE_REGION,
+  laneY: LANE_Y,
+  chainTubeBox: {left: 1490, top: 545, width: 260 * IMAGES.tube.width / IMAGES.tube.height, height: 260},
+};
+
+const PORTRAIT_LIVER_BOX: Box = {left: 80, top: 250, width: 920, height: 920 * 309.24 / 456.16};
+const PORTRAIT_LOBULE_BOX: Box = {left: 228, top: 230, width: 800 * 847 / 1084, height: 800};
+
+export const PORTRAIT_GEOMETRY: SceneGeometry = {
+  frame: {width: 1080, height: 1920},
+  // Spec section 6 row 15: portrait mascot <= 28% frame width (<= 302 px); 280 px = 25.9%.
+  mascotBox: {left: 24, top: 1336, width: 280, height: Math.round(280 * 297 / 340)},
+  overviewPanel: {left: 48, top: 116, width: 984, height: 1180},
+  liverBox: PORTRAIT_LIVER_BOX,
+  lobuleDetailBox: {left: 48, top: 116, width: 984, height: 1180},
+  cellDetailBox: {left: 48, top: 116, width: 984, height: 1180},
+  lobuleBox: PORTRAIT_LOBULE_BOX,
+  lobuleBoxSmall: {left: 52, top: 170, width: 420, height: 420 * 1084 / 847},
+  cellBox: {left: 190, top: 320, width: 700, height: 700 * 1734 / 1821},
+  liverSourceRegion: squareAround(imageToScreen(PORTRAIT_LIVER_BOX, 'liver', {x: 40, y: 145}), 80),
+  lobuleSourceRegion: squareAround(imageToScreen(PORTRAIT_LOBULE_BOX, 'lobule', LOBULE_POINTS.plate), 80),
+  laneY: 249,
+  chainTubeBox: {left: 220, top: 800, width: 380 * IMAGES.tube.width / IMAGES.tube.height, height: 380},
+};
+
+export const sceneGeometry = (format: SceneFormat): SceneGeometry =>
+  format === 'portrait' ? PORTRAIT_GEOMETRY : LANDSCAPE_GEOMETRY;
+
+export const lobuleBoxAt = (frame: number, format: SceneFormat = 'landscape'): Box => {
+  const g = sceneGeometry(format);
+  return lerpBox(g.lobuleBox, g.lobuleBoxSmall, smoothstep((frame - LOBULE_SHIFT.start) / (LOBULE_SHIFT.end - LOBULE_SHIFT.start)));
+};
 
 /** Portal-vein branch flowing up to the arterial-portal confluence at {375, 395} (source px). */
 export const PORTAL_FLOW_PATH: readonly Point[] = [
@@ -162,8 +224,6 @@ export const CELL_POINTS = {
 export const MITO_SPOTS: readonly Point[] = [
   {x: 1210, y: 560}, {x: 560, y: 980}, {x: 1380, y: 1000}, {x: 900, y: 760},
 ];
-/** Centerline y of the sinusoidal blood vessel lumen above the cell inside CELL_DETAIL_BOX. */
-export const LANE_Y = 205;
 
 /** Point at fraction t (0..1) along a polyline. */
 export const pathPoint = (path: readonly Point[], t: number): Point => {
@@ -216,16 +276,41 @@ export const LABELS: readonly Label[] = [
     at: {x: 1230, y: 145}, target: {image: 'lobule', point: LOBULE_POINTS.centralVein}},
 ];
 
+const PORTRAIT_LABEL_OVERRIDES: Record<string, Partial<Pick<Label, 'at' | 'viLines' | 'target'>>> = {
+  'central-vein': {viLines: ['Tĩnh mạch', 'trung tâm'], at: {x: 670, y: 126}},
+  'portal-triad': {at: {x: 600, y: 1060}},
+  'portal-vein': {viLines: ['Tĩnh mạch', 'cửa'], at: {x: 72, y: 1070}},
+  'hepatic-artery': {viLines: ['Động mạch', 'gan'], at: {x: 590, y: 1070}},
+  'sinusoid': {at: {x: 56, y: 1060}},
+  'cytosol': {at: {x: 72, y: 1040}},
+  'mitochondrion': {at: {x: 72, y: 1040}},
+  'membrane': {at: {x: 72, y: 1025}},
+  'sinusoid-lumen': {at: {x: 72, y: 1025}, target: {screen: {x: 540, y: PORTRAIT_GEOMETRY.laneY}}},
+  'central-vein-2': {viLines: ['Tĩnh mạch', 'trung tâm'], at: {x: 670, y: 126}},
+};
+
+export const sceneLabels = (format: SceneFormat = 'landscape'): readonly Label[] =>
+  format === 'landscape' ? LABELS : LABELS.map((l) => ({...l, ...PORTRAIT_LABEL_OVERRIDES[l.id]}));
+
 /** The single label lit at this frame, if any. */
 export const litLabel = (frame: number): Label | undefined => LABELS.find((l) => frame >= l.start && frame < l.end);
 
 // --- Drainage chain (B5): text nodes + teal arrows, no drawn anatomy -----------------------------
-export type ChainNode = {id: string; vi: string; latin: string; start: number; at: Point};
+export type ChainNode = {id: string; vi: string; viLines?: readonly [string, string]; latin: string; start: number; at: Point};
 export const CHAIN: readonly ChainNode[] = [
   {id: 'hepatic-veins', vi: 'Tĩnh mạch gan', latin: 'Venae hepaticae', start: 1234, at: {x: 940, y: 120}},
   {id: 'ivc', vi: 'Tĩnh mạch chủ dưới', latin: 'Vena cava inferior', start: 1262, at: {x: 940, y: 370}},
   {id: 'blood-test', vi: 'Xét nghiệm máu: ALT, AST', latin: 'Serum aminotransferases', start: 1290, at: {x: 940, y: 620}},
 ];
+
+const PORTRAIT_CHAIN_OVERRIDES: Record<string, Partial<Pick<ChainNode, 'at' | 'viLines'>>> = {
+  'hepatic-veins': {at: {x: 540, y: 210}},
+  'ivc': {viLines: ['Tĩnh mạch', 'chủ dưới'], at: {x: 540, y: 520}},
+  'blood-test': {viLines: ['Xét nghiệm máu:', 'ALT, AST'], at: {x: 460, y: 900}},
+};
+
+export const sceneChain = (format: SceneFormat = 'landscape'): readonly ChainNode[] =>
+  format === 'landscape' ? CHAIN : CHAIN.map((n) => ({...n, ...PORTRAIT_CHAIN_OVERRIDES[n.id]}));
 
 // --- Enzyme dots ---------------------------------------------------------------------------------
 export type Enzyme = 'ALT' | 'AST';
@@ -243,7 +328,7 @@ export const LEAK = {start: 758, travel: 85} as const;
 export const INJURY_RING = 740;
 
 /** Cytosolic dots leave through the injury into the lumen, then drift downstream (to the right). Mito AST stays until 880. */
-export const dotScreenPosition = (dot: Dot, frame: number, cellBox: Box): {p: Point; leaked: number} => {
+export const dotScreenPosition = (dot: Dot, frame: number, cellBox: Box, laneY: number = LANE_Y): {p: Point; leaked: number} => {
   const home = imageToScreen(cellBox, 'cell', dot.home);
   if (dot.inMito && frame < 880) return {p: home, leaked: 0};
   const gate = imageToScreen(cellBox, 'cell', CELL_POINTS.injury);
@@ -251,7 +336,7 @@ export const dotScreenPosition = (dot: Dot, frame: number, cellBox: Box): {p: Po
   const toGate = smoothstep(Math.min(1, t * 1.6));
   const drift = Math.max(0, t * 1.6 - 1) / 0.6;
   const atGate = {x: lerp(home.x, gate.x, toGate), y: lerp(home.y, gate.y, toGate)};
-  const lane = {x: gate.x + drift * (240 + dot.delay * 9), y: lerp(gate.y, LANE_Y + ((dot.delay % 3) - 1) * 14, Math.min(1, drift * 2))};
+  const lane = {x: gate.x + drift * (240 + dot.delay * 9), y: lerp(gate.y, laneY + ((dot.delay % 3) - 1) * 14, Math.min(1, drift * 2))};
   return {p: drift > 0 ? lane : atGate, leaked: t};
 };
 
