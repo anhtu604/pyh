@@ -21,6 +21,56 @@ SKILL_RULE = (
     'Khi skill mâu thuẫn với prompt bước hoặc quy tắc cứng, prompt bước và quy tắc cứng thắng.'
 )
 
+# Concise reading scope for long general skills so roles skip non-PYH workflows.
+SKILL_SECTION_GUIDES: dict[str, str] = {
+    'content-strategy': (
+        'Chỉ đọc "Searchable vs Shareable" và "Content Ideation Sources"; '
+        'bỏ Buyer Stage, Scoring Template, Calendar Split 60/30/10 và link-building; '
+        'dùng rubric THANG_DIEM của PYH.'
+    ),
+    'copy-editing': (
+        'Chỉ đọc Clarity, Voice and Tone, Specificity và AI-Tell Check; '
+        'bỏ bổ sung proof/testimonial (Sweep 4) và không đổi mức chắc chắn của claim '
+        '(lỗi claim chuyển expert/writer).'
+    ),
+    'social': (
+        'Chỉ đọc Hook Formulas, No AI Tells và caption ngắn gọn; '
+        'bỏ Engagement Strategy, Scheduling/Publishing và B2B calendar; '
+        'đầu ra duy nhất theo schema PostSet/ShortsPlan.'
+    ),
+    'youtube-scriptwriting': (
+        'Chỉ đọc hook/through-line/payoff (Checkpoint 3–5); '
+        'bỏ tự research (Checkpoint 2), lời khuyên lặp ý, Binge Loop và không dừng hỏi duyệt checkpoint trong bước batch.'
+    ),
+    'short-form-video': (
+        'Chỉ áp dụng hook, nhịp cắt, loop và 9:16 safe areas cho tác vụ clip từ cảnh đã duyệt; '
+        'không trì hoãn caveat/cảnh báo an toàn, không tạo composition hay tự render.'
+    ),
+    'scripting-and-storyboarding': (
+        'Đọc bảng audio–visual và intent từng shot (SCENE); '
+        'thay Read these first bằng script/outline, profiles/brand.vi.yaml và style PYH đã pin; '
+        'bỏ lịch quay thật và publish/WoopSocial.'
+    ),
+    'visual-style': (
+        'Chỉ đọc phần Apply để ánh xạ style PYH đã pin '
+        '(docs/superpowers/specs/2026-11-17-pyh-style-a-mascot-host.md) sang brand/storyboard/motion hiện có; '
+        'không tự tạo schema hay connector ngoài.'
+    ),
+    'motion-design': (
+        'Chỉ đọc Easing/Timing/Typography/Anti-patterns khi sửa hình; '
+        'thay mục timeline.json/src/lib.ts bằng scene-timing/beats/FOCUS_REGIONS/CUE_ACTIONS của repo, '
+        'bỏ npm run sfx và để Python dựng lại.'
+    ),
+    'remotion-best-practices': (
+        'Chỉ đọc Preserve user changes và React Markup Best Practices cho component được giao; '
+        'bỏ Open the preview (Studio), New project setup, Render the video và không nạp cây references mặc định.'
+    ),
+    'character-animation-qa': (
+        'Chỉ đọc Review Layers và Pass/Revise/Fail để kiểm qua review-frames/index.json và video-qa.json có sẵn; '
+        'bỏ Playwright Pattern và không nhận đã xem chuyển động liên tục từ frame mẫu.'
+    ),
+}
+
 # A critic must not start on the same (cli, model) as the role(s) whose work it grades.
 CRITIC_OF: dict[str, tuple[str, ...]] = {
     'script_critic': ('writer', 'storyboard_director'),
@@ -128,5 +178,10 @@ def role_skill_block(role_id: str, company: Company | None = None) -> str:
     role = (company or load_company()).roles[role_id]
     if not role.skills:
         return ''
-    paths = '\n'.join(f'- {(SKILLS_DIR / name / "SKILL.md").as_posix()}' for name in role.skills)
+    lines = []
+    for name in role.skills:
+        path = (SKILLS_DIR / name / 'SKILL.md').as_posix()
+        guide = SKILL_SECTION_GUIDES.get(name)
+        lines.append(f'- {path} — {guide}' if guide else f'- {path}')
+    paths = '\n'.join(lines)
     return f'## Skill của vai: {role.name}\n{paths}\n\n{SKILL_RULE}\n'

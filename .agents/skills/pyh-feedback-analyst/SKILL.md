@@ -31,6 +31,7 @@ description: Use when PYH feedback_inbox needs a doctor's feedback separated int
 ## Đầu ra
 - Chỉ ghi `{report}` theo schema prompt: `summary`, `tasks`;
   mỗi task có `kind`, `target`, `request`, `done_when`.
+- Mỗi task ghi rõ vai/luồng tiếp nhận trong `request`; giữ nguyên trích ý bác sĩ và những điều chưa rõ, không tự thêm yêu cầu.
 - `done_when` là dấu hiệu kiểm được: lỗi tái hiện bị chặn, check liên quan đạt,
   hoặc câu hứa có phần trả lời cụ thể; không dùng “hay hơn/viral hơn” làm bằng chứng.
 - Không sửa project/code/profiles, không gọi lệnh đổi trạng thái hay tự retry sản xuất;

@@ -6,13 +6,15 @@ description: Use when PYH voice_prep reviews script.yaml before TTS synthesis to
 # Đạo diễn Giọng đọc & Phiên âm PYH (`voice_director`)
 
 ## Đầu vào
-- Đọc `project.yaml` lấy `active_revision`; đọc `revisions/<rev>/script/script.yaml` và từ điển chung `profiles/pronunciation.vi.yaml`.
+- Chỉ nhận dòng thay đổi + `script_hash` + từ điển chung `profiles/pronunciation.vi.yaml` khi tác vụ cung cấp payload delta thu gọn; đọc `project.yaml` lấy `active_revision` và `revisions/<rev>/script/script.yaml` nếu cần đối chiếu.
+- Giữ và tái dùng cache theo nội dung cần phát âm + hash từ điển (`voice-prep-cache.yaml`) để không dịch lại toàn bộ kịch bản không đổi.
 
 ## Phán đoán công việc
-- Quét từng dòng `text` và `delivery` trong `script/script.yaml` để phát hiện từ và ký hiệu dễ bị bộ TTS tiếng Việt đọc sai hoặc ngắt gượng. Khi dữ liệu tác vụ xác nhận bộ TTS thực tế (Vibi hoặc VieNeu), dùng kết quả nghe thử của đúng bộ đó nếu có:
+- Quét từng dòng `text` và `delivery` trong phần cần kiểm tra để phát hiện từ và ký hiệu dễ bị bộ TTS tiếng Việt đọc sai hoặc ngắt gượng. Khi dữ liệu tác vụ xác nhận bộ TTS thực tế (Vibi hoặc VieNeu), dùng kết quả nghe thử của đúng bộ đó nếu có:
   - Từ viết tắt tiếng Anh / y khoa (`HDL`, `LDL`, `HbA1c`, `CT`, `MRI`, `NSAID`, `BMI`, `RNA`, `DNA`).
   - Tên hoạt chất, acid, enzym, vi sinh vật hoặc đơn vị (`uric`, `purin`, `allopurinol`, `mg/dL`, `mmol/L`, `mmHg`, `IU`).
   - Con số ghép ký hiệu có thể đọc nhầm (`30–60 phút`, `< 7%`, `140/90`).
+- Số liệu, liều lượng hoặc đơn vị y khoa không rõ cách đọc an toàn thì ghi chú chuyển chuyên gia y học xác nhận, tuyệt đối không tự đoán hay làm tròn số.
 - Chỉ thêm các mục CHƯA có trong `profiles/pronunciation.vi.yaml` (hoặc cần cách đọc phù hợp cho riêng bài này). Dùng gạch nối tách âm tiết nhẹ nhàng khi cần (ví dụ `u-ríc`), viết thuần tiếng Việt dễ đọc tự nhiên.
 - Không sửa lời thoại gốc `script/script.yaml`, không đổi số liệu y khoa hay claim.
 - Nếu có chỗ khó đọc cần lưu ý bác sĩ hoặc `editor` về sau, ghi ngắn gọn ở `pacing_notes`.

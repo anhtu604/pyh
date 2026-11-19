@@ -10,6 +10,7 @@ from healthvideo.company import (
     CRITIC_OF,
     REPO_ROOT,
     SKILL_RULE,
+    SKILL_SECTION_GUIDES,
     ModelSlot,
     load_company,
     role_skill_block,
@@ -136,7 +137,7 @@ def test_role_skills_follow_spec_table():
     expected = {
         'coordinator': ['pyh-coordinator'],
         'coordinator_senior': ['pyh-coordinator', 'pyh-coordinator-senior'],
-        'researcher': ['content-strategy', 'systematic-literature-review', 'pyh-researcher'],
+        'researcher': ['content-strategy', 'pyh-researcher'],
         'scout': ['content-strategy', 'pyh-scout'],
         'medical_expert': ['pyh-medical-expert'],
         'writer': ['youtube-scriptwriting', 'short-form-video', 'pyh-writer'],
@@ -154,6 +155,7 @@ def test_role_skills_follow_spec_table():
     company = load_company()
     assert {role_id: role.skills for role_id, role in company.roles.items()} == expected
     assert all(1 <= len(skills) <= 3 for skills in expected.values())
+    assert all('systematic-literature-review' not in role.skills for role in company.roles.values())
 
 
 def test_split_script_roles_have_new_names():
@@ -204,6 +206,60 @@ def test_writer_and_critic_skills_reference_doctor_principles():
         text = (REPO_ROOT / '.agents/skills' / skill / 'SKILL.md').read_text(encoding='utf-8')
         assert 'profiles/doctor-feedback.yaml' in text
         assert 'slug: chung' in text
+
+
+def test_skill_section_guides_cover_general_skills_and_scope_role_blocks():
+    expected_guided = {
+        'content-strategy',
+        'copy-editing',
+        'social',
+        'youtube-scriptwriting',
+        'short-form-video',
+        'scripting-and-storyboarding',
+        'visual-style',
+        'motion-design',
+        'remotion-best-practices',
+        'character-animation-qa',
+    }
+    assert expected_guided <= SKILL_SECTION_GUIDES.keys()
+    assert 'Binge Loop' in role_skill_block('writer')
+    assert 'Buyer Stage' in role_skill_block('researcher')
+    assert 'Studio' in role_skill_block('editor')
+    assert 'npm run sfx' in role_skill_block('editor')
+    assert 'Playwright' in role_skill_block('product_critic')
+    assert 'Publishing' in role_skill_block('copywriter')
+    assert 'Sweep 4' in role_skill_block('script_critic')
+
+
+def test_r35_pyh_skills_alignment_and_writer_ownership():
+    skills_dir = REPO_ROOT / '.agents/skills'
+    writer_skill = (skills_dir / 'pyh-writer/SKILL.md').read_text(encoding='utf-8')
+    assert 'storyboard_director' in writer_skill
+    assert 'script/script.yaml' in writer_skill
+    assert 'script/outline.yaml' in writer_skill
+    assert '`slug: chung` hiện hành' in writer_skill
+
+    researcher_skill = (skills_dir / 'pyh-researcher/SKILL.md').read_text(encoding='utf-8')
+    for key in ('viral_engagement', 'urgency_prevention', 'evidence_readiness', 'short_feasibility'):
+        assert key in researcher_skill
+
+    assert 'CoordinatorReply' in (skills_dir / 'pyh-coordinator/SKILL.md').read_text(encoding='utf-8')
+    senior = (skills_dir / 'pyh-coordinator-senior/SKILL.md').read_text(encoding='utf-8')
+    assert 'repair_diagnose' in senior and 'CoordinatorReply' in senior
+    assert 'không tự gán GRADE' in (skills_dir / 'pyh-medical-expert/SKILL.md').read_text(encoding='utf-8')
+    assert 'resolved_issues' in (skills_dir / 'pyh-script-critic/SKILL.md').read_text(encoding='utf-8')
+    assert 'voice-prep-cache.yaml' in (skills_dir / 'pyh-voice-director/SKILL.md').read_text(encoding='utf-8')
+    assert 'không lặp dựng lại bản không đổi' in (skills_dir / 'pyh-editor/SKILL.md').read_text(encoding='utf-8')
+    assert 'trích ý bác sĩ' in (skills_dir / 'pyh-feedback-analyst/SKILL.md').read_text(encoding='utf-8')
+    assert 'không nạp toàn bộ thư mục log' in (skills_dir / 'pyh-repair-engineer/SKILL.md').read_text(encoding='utf-8')
+    assert 'phiên điều hành' in (skills_dir / 'pyh/SKILL.md').read_text(encoding='utf-8')
+    assert 'discover' in (skills_dir / 'pyh-scout/SKILL.md').read_text(encoding='utf-8')
+
+    draft_prompt = (REPO_ROOT / 'src/healthvideo/prompts/draft.md').read_text(encoding='utf-8')
+    assert 'storyboard_director' in draft_prompt
+    assert 'mascot_pose' in draft_prompt
+    assert 'step draft-script' in draft_prompt
+    assert 'slug: chung` hiện hành' in draft_prompt
 
 
 @pytest.mark.parametrize('skills', [['../evil'], ['a/b'], ['a', 'b', 'c', 'd']])

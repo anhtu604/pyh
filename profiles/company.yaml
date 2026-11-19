@@ -55,7 +55,6 @@ roles:
     name: Chuyên viên Nghiên cứu & Phân tích Kênh
     skills:
     - content-strategy
-    - systematic-literature-review
     - pyh-researcher
     steps:
     - topic_research

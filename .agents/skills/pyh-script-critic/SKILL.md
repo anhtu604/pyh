@@ -49,13 +49,13 @@ description: Use when independently evaluating a PYH script at script_review bef
 
 ## Đầu ra
 - Chỉ ghi `revisions/<rev>/reviews/script-review.yaml`, không sửa script.
-- Giữ `scores` sáu key trên, `summary`, `issues`, `checked`, `decisions`;
-  điểm 1–10 theo prompt; mỗi tiêu chí dưới 7 phải có issue tương ứng.
+- Giữ nguyên 6 tiêu chí (`giong_nguoi_that`, `nhip_cau`, `khong_lap_y`, `hinh_anh`, `ca_tinh`, `dung_yeu_cau`) và ngưỡng đạt 7 trong `scores`, cùng `summary`, `issues`, `checked`, `decisions`; mỗi tiêu chí dưới 7 phải có issue tương ứng.
+- Đối chiếu từng issue cũ ở vòng sửa, chỉ ghi vào `resolved_issues` (và `issue_statuses: resolved`) khi đã sửa thật trên diff; lỗi lặp ý (`khong_lap_y`) phải chỉ rõ cặp ID dòng lặp và ý nào giữ ở dòng nào.
 - Issue có `line` thật, `criterion`, `problem`, `fix`; nêu phản ví dụ cụ thể:
   trích chỗ hứa rồi chỉ đoạn chưa trả lời, gợi cách cắt/nối bằng claim hiện có.
 - `decisions` đúng loại điểm khó và schema prompt, một `keep: true`,
   tối đa một `recommended: true`; không đưa lỗi biên tập thường thành câu hỏi cổng.
-  `copy-editing` chỉ giúp soi lỗi, không thêm testimonial hay bằng chứng marketing.
+  `copy-editing` chỉ giúp soi Clarity/Voice/Specificity/AI-Tell, không thêm testimonial hay bằng chứng ngoài ledger.
 
 ## Xong khi / Thiếu dữ liệu hoặc lỗi
 - Báo cáo đủ điểm, nhận xét kiểm chứng được; `checked` chỉ ghi điều đã kiểm.

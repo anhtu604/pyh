@@ -8,11 +8,11 @@ description: Use when discovering Vietnamese health topics, syncing and scoring 
 ## 1. Săn đề tài & Chấm điểm 100 điểm (`topic_research`)
 - Đọc Tủ đề xuất hiện tại (`topics/inbox/index.yaml`), các dự án đã làm (`projects/`), `topics/queue.yaml`, và báo cáo kênh (`topics/channel-insights.yaml` nếu có) để tránh trùng lặp.
 - Tham chiếu nguồn Google Sheet của bác sĩ (`1e-WrbZP062LSlNTF8rmpYuHYECgXI10n6HUtiOBfOXg`: `THANG_DIEM`, `TRANH_CAI_MXH`, `Y_HOC_MOI`, `Trang tính1`).
-- Chấm mọi đề tài mới theo thang 100 điểm `THANG_DIEM`:
-  1. **Viral / Khả năng thu hút (`/40`)**: Hook rõ ràng (`/10`), tính tranh cãi tự nhiên (`/10`), nỗi đau phổ biến ở Việt Nam (`/10`), giá trị chia sẻ/lưu lại (`/10`).
-  2. **Khẩn cấp & Dự phòng (`/25`)**: Mức độ nguy hại nếu hiểu lầm (`/15`), lợi ích dự phòng cho người trưởng thành Việt Nam (`/10`).
-  3. **Mức sẵn sàng bằng chứng (`/20`)**: Có PubMed / WHO / Bộ Y tế (`/10`), có thể phân định rõ ràng (`/10`).
-  4. **Khả thi video ngắn 45–90s (`/15`)**: Dễ minh họa cơ chế/so sánh (`/10`), gọn gàng chi phí thấp (`/5`).
+- Chấm mọi đề tài mới theo thang 100 điểm `THANG_DIEM` (`RubricScore100` đúng tên khóa trong prompt/code; không dùng "Customer Impact" hay thang điểm của skill ngoài):
+  1. **`viral_engagement` (`0..40`)**: Mức độ thu hút và chia sẻ tự nhiên (hook rõ ràng `/10`, tính tranh cãi tự nhiên `/10`, nỗi đau/bối rối phổ biến ở Việt Nam `/10`, giá trị chia sẻ/lưu lại `/10`).
+  2. **`urgency_prevention` (`0..25`)**: Mức độ khẩn cấp và lợi ích dự phòng (nguy hại nếu hiểu lầm `/15`, lợi ích dự phòng cho người trưởng thành Việt Nam `/10`).
+  3. **`evidence_readiness` (`0..20`)**: Mức sẵn sàng bằng chứng y khoa (có PubMed/Europe PMC/WHO/Bộ Y tế `/10`, có thể phân định rõ ràng `/10`).
+  4. **`short_feasibility` (`0..15`)**: Khả thi dựng video ngắn 45–90s (dễ minh họa cơ chế/so sánh `/10`, gọn gàng chi phí thấp `/5`).
 - Phân hạng: **A (`80–100`)**, **B (`65–79`)**, **C (`< 65`)**.
 - Chỉ đề xuất chủ đề có căn cứ y khoa xác minh được (PubMed/DOI/tổ chức uy tín) hoặc tín hiệu tranh luận công khai thật; **tuyệt đối không bịa nguồn, PMID/DOI hay số liệu tương tác**.
 - Đề xuất định dạng phù hợp (`vertical_clip` 45–90s, `youtube_long`, hoặc `both`) kèm `doctor_review_points` nêu rõ điểm bác sĩ cần lưu ý trước khi duyệt.

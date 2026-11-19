@@ -8,6 +8,14 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from healthvideo.domain.clip_plan import (
+    CLIP_MIN_FRAMES,
+    FPS,
+    ClipPlan,
+    ClipSpec,
+    validate_clip_plan,
+)
+from healthvideo.domain.evidence import EvidenceClaim
 from healthvideo.domain.explainer import Nonblank
 from healthvideo.domain.script import Script
 from healthvideo.domain.storyboard import Storyboard
@@ -19,6 +27,7 @@ _CLAIM_REF_RE = re.compile(r"\[claim:([^\]]+)\]")
 STYLE_A_MASCOT_MAX_WIDTH_PERCENT = 28.0
 STYLE_A_SUBTITLE_POSITION = "bottom_center"
 STYLE_A_HOOK_MAX_SECONDS = 2.0
+SHORTS_CLIP_MAX_FRAMES = 90 * FPS
 
 
 class ShortClipSpec(BaseModel):
@@ -74,6 +83,16 @@ class ShortsPlan(BaseModel):
         return self
 
 
+def resolve_revision_root(revision_or_project: Path) -> Path:
+    """Accept either a revision directory or a project directory and return its revision path."""
+    if (revision_or_project / "project.yaml").is_file() and not (
+        revision_or_project / "script/script.yaml"
+    ).is_file():
+        project = _project(revision_or_project)
+        return revision_or_project / "revisions" / project.active_revision
+    return revision_or_project
+
+
 def _revision_hash(revision: Path) -> str:
     script_path = revision / "script/script.yaml"
     sb_path = revision / "storyboard/storyboard.yaml"
@@ -82,6 +101,129 @@ def _revision_hash(revision: Path) -> str:
     return canonical_json_hash(
         {"script": read_yaml(script_path), "storyboard": read_yaml(sb_path)}
     )
+
+
+def _verify_medical_gate(revision: Path, *, require_medical_approval: bool) -> None:
+    if not require_medical_approval:
+        return
+    from healthvideo.domain.gate_review import GateApprovalRecord, GateKind
+    from healthvideo.workflows.gate_review import (
+        MEDICAL_APPROVAL_ARTIFACT,
+        hash_reviewed_artifacts,
+        medical_reviewed_paths,
+    )
+
+    approval_path = revision / MEDICAL_APPROVAL_ARTIFACT
+    if not approval_path.is_file():
+        raise ValueError("Mapping shorts_plan requires a current medical approval")
+    approval = GateApprovalRecord.model_validate(read_yaml(approval_path))
+    if approval.kind is not GateKind.MEDICAL:
+        raise ValueError("Mapping shorts_plan requires a medical approval record")
+    current_hashes = hash_reviewed_artifacts(medical_reviewed_paths(revision))
+    if current_hashes != approval.artifact_hashes:
+        raise ValueError("Mapping shorts_plan requires a current medical approval")
+
+
+def sync_shorts_plan_to_clip_plan(
+    revision_root: Path,
+    *,
+    require_medical_approval: bool = True,
+) -> ClipPlan:
+    """Validate ``posts/shorts-plan.yaml`` against medically approved artifacts and map to ``ClipPlan``."""
+    revision = resolve_revision_root(revision_root)
+    shorts_path = revision / SHORTS_PLAN_ARTIFACT
+    if not shorts_path.is_file():
+        raise FileNotFoundError(f"Missing shorts plan: {shorts_path}")
+
+    _verify_medical_gate(revision, require_medical_approval=require_medical_approval)
+
+    script_path = revision / "script/script.yaml"
+    sb_path = revision / "storyboard/storyboard.yaml"
+    ledger_path = revision / "evidence/ledger.yaml"
+    for required in (script_path, sb_path, ledger_path):
+        if not required.is_file():
+            raise FileNotFoundError(f"shorts_plan sync requires {required}")
+
+    script = Script.model_validate(read_yaml(script_path))
+    storyboard = Storyboard.model_validate(read_yaml(sb_path))
+    if storyboard.format_profile != "youtube_long":
+        raise ValueError("sync_shorts_plan_to_clip_plan requires a youtube_long storyboard")
+
+    ledger = read_yaml(ledger_path)
+    claims = {
+        claim.id: claim
+        for claim in (
+            EvidenceClaim.model_validate(item) for item in ledger.get("claims", [])
+        )
+    }
+
+    plan = ShortsPlan.model_validate(read_yaml(shorts_path))
+    expected_rev_hash = _revision_hash(revision)
+    if not plan.revision_hash or plan.revision_hash != expected_rev_hash:
+        raise ValueError(
+            "posts/shorts-plan.yaml revision_hash does not match approved script/storyboard"
+        )
+
+    scene_index = {scene.id: idx for idx, scene in enumerate(storyboard.scenes)}
+    line_by_id = {line.id: line for line in script.lines}
+    mapped_clips: list[ClipSpec] = []
+
+    for clip in plan.clips:
+        if clip.start_scene_id not in scene_index:
+            raise ValueError(f"{clip.id}: unknown start_scene_id {clip.start_scene_id}")
+        if clip.end_scene_id not in scene_index:
+            raise ValueError(f"{clip.id}: unknown end_scene_id {clip.end_scene_id}")
+        start_idx = scene_index[clip.start_scene_id]
+        end_idx = scene_index[clip.end_scene_id]
+        if start_idx > end_idx:
+            raise ValueError(f"{clip.id}: start_scene_id must not come after end_scene_id")
+
+        for text_field in (clip.hook_text, clip.caption, clip.safety_caveat):
+            for cid in _CLAIM_REF_RE.findall(text_field):
+                if cid not in claims:
+                    raise ValueError(f"{clip.id}: unknown ledger claim {cid}")
+
+        for scene in storyboard.scenes[start_idx : end_idx + 1]:
+            if scene.script_line_id is not None:
+                line = line_by_id.get(scene.script_line_id)
+                if line is None or scene.narration != line.text:
+                    raise ValueError(
+                        f"{clip.id}: scene {scene.id} narration diverges from approved script"
+                    )
+
+        mapped_clips.append(
+            ClipSpec(
+                id=clip.id,
+                title=clip.title.strip()[:100],
+                first_scene_id=clip.start_scene_id,
+                last_scene_id=clip.end_scene_id,
+                mascot_max_width_percent=clip.mascot_max_width_percent,
+                subtitle_position=clip.subtitle_position,
+                hook_window_seconds=clip.hook_window_seconds,
+            )
+        )
+
+    clip_plan = ClipPlan(clips=tuple(mapped_clips))
+    validate_clip_plan(
+        clip_plan,
+        storyboard,
+        claims,
+        min_frames=CLIP_MIN_FRAMES,
+        max_frames=SHORTS_CLIP_MAX_FRAMES,
+        require_style_a=True,
+    )
+    return clip_plan
+
+
+def load_effective_clip_specs(
+    revision_root: Path,
+    *,
+    require_medical_approval: bool = True,
+) -> ClipPlan:
+    """Delegate to ``long_form.load_effective_clip_specs`` without top-level circular imports."""
+    from healthvideo.workflows.long_form import load_effective_clip_specs as _load
+
+    return _load(revision_root, require_medical_approval=require_medical_approval)
 
 
 def save_shorts_plan(project_dir: Path, file_path: Path) -> Path:

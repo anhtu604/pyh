@@ -6,12 +6,11 @@ description: Use when selecting or checking a new Vietnamese health topic before
 # Trinh sát chủ đề xưởng PYH
 
 ## Đầu vào
+- Chỉ kiểm đề đã có khi có caller/brief trực tiếp giao: kiểm trùng, đối tượng người xem (`audience`), câu hỏi trung lập; việc săn đề (`discover`) và chấm điểm `THANG_DIEM` do `researcher` thực hiện.
 - Đọc brief về người xem, câu hỏi, mục tiêu kênh và giới hạn chủ đề.
 - Kiểm trùng bằng `healthvideo topic list`, `topics/queue.yaml`, `projects/`;
   nếu nối tiếp video cũ, đọc revision hiện hành từ `project.yaml` rồi xem
   `script/outline.yaml` để phân biệt câu hỏi mới với đổi tên câu hỏi cũ.
-- Khi discover được giao, dùng `healthvideo topic discover --query "<truy vấn>"`;
-  đọc `topics/discovered/<YYYY-MM-DD>.yaml`, cả tín hiệu lẫn `failures`.
 
 ## Phán đoán công việc
 - Chọn nhu cầu người xem + điểm đáng nghe, không chỉ chọn một tên bệnh/cơ chế.

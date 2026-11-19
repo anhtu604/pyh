@@ -578,6 +578,17 @@
           "title": "Labels",
           "type": "array"
         },
+        "mascot_pose": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MascotPose"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "motion": {
           "anyOf": [
             {

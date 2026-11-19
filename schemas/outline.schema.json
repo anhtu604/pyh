@@ -63,9 +63,18 @@
         "$ref": "#/$defs/OutlineChapter"
       },
       "maxItems": 8,
-      "minItems": 4,
+      "minItems": 1,
       "title": "Chapters",
       "type": "array"
+    },
+    "format_profile": {
+      "default": "youtube_long",
+      "enum": [
+        "youtube_long",
+        "flexible_v1"
+      ],
+      "title": "Format Profile",
+      "type": "string"
     },
     "mood": {
       "anyOf": [

@@ -37,6 +37,7 @@ description: Use when the PYH research step needs verified evidence or answers t
   `evidence/ledger.yaml` hợp lệ qua lệnh search/screen/ingest/build-ledger
   đã nêu trong prompt; không tự tạo schema hay trạng thái.
 - `evidence/expert-brief.md` và `explainer/explainer.yaml` của đúng revision.
+- Với mỗi claim quyết định lời khuyên, ghi rõ mức đã đọc (`Fulltext`/`Abstract`) và phần chưa xác minh trong `expert-brief.md`; không tự gán GRADE khi nguồn chưa đánh giá hoặc chưa thực hiện đầy đủ phương pháp.
 - Ở `draft_ready` chỉ xử lý câu hỏi: bổ sung bằng chứng cần thiết, giữ id claim
   đang dùng, build-ledger lại và ghi `answer`, `claim_ids` trong `script/questions.yaml`.
   Không sửa kịch bản hay tự duyệt cổng.

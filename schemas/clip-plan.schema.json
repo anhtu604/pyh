@@ -19,6 +19,20 @@
           "default": null,
           "title": "Hook Scene Id"
         },
+        "hook_window_seconds": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 2.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hook Window Seconds"
+        },
         "id": {
           "pattern": "^CL\\d{2}$",
           "title": "Id",
@@ -27,6 +41,20 @@
         "last_scene_id": {
           "title": "Last Scene Id",
           "type": "string"
+        },
+        "mascot_max_width_percent": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 28.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mascot Max Width Percent"
         },
         "outro_scene_id": {
           "anyOf": [
@@ -39,6 +67,19 @@
           ],
           "default": null,
           "title": "Outro Scene Id"
+        },
+        "subtitle_position": {
+          "anyOf": [
+            {
+              "const": "bottom_center",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subtitle Position"
         },
         "title": {
           "maxLength": 100,

@@ -53,21 +53,18 @@ description: Use when writing or revising a PYH script at draft or revise_medica
   nguồn ở source_card/chữ nhỏ/bài đăng, giữ nguyên mức chắc chắn của claim.
 - Nối ý từ hệ quả; callback gần cuối chỉ khi trả lời mở đầu, không lặp đoạn trước.
   CTA theo intent: gợi nghĩ/thử quan sát/lưu/theo dõi, hoặc thực hành/khám khi phù hợp.
-- Giữ câu kết chuẩn cũ nguyên văn trong `slug: chung` nếu chưa được thay;
-  không tự thêm nhắc thuốc. Không bịa quan điểm/trải nghiệm cá nhân bác sĩ.
+- Câu kết dùng nguyên văn trong `profiles/doctor-feedback.yaml` mục `slug: chung` hiện hành,
+  không mặc định bản cũ; không tự thêm nhắc thuốc. Không bịa quan điểm/trải nghiệm cá nhân bác sĩ.
 
 ## Đầu ra
-- `script/script.yaml`, `script/outline.yaml`, `script/clip-plan.yaml`,
-  `storyboard/storyboard.yaml`, `assets/asset-manifest.yaml` đúng schema hiện hành.
-- Đồng bộ lời/claim với storyboard; giữ `delivery` bỏ thẻ bằng đúng `text`.
-  SVG mới nếu prompt cho phép: component + test, đăng ký thư viện đúng repo.
+- `writer` sở hữu `script/script.yaml` và `script/outline.yaml` (cùng `script/questions.yaml` khi cần chuyên gia bổ sung); `storyboard_director` chịu trách nhiệm thiết kế hình, sơ đồ dần, `mascot_pose`, nhịp `beats` và SVG ở bước `storyboard_design`.
+- Nộp `script.yaml` + `outline.yaml` qua `healthvideo step draft-script`, hoặc chỉ tạo khung `storyboard/storyboard.yaml`, `assets/asset-manifest.yaml` (và `script/clip-plan.yaml` nếu `youtube_long`) tối thiểu để qua validator `step draft`; không tự thiết kế SVG mới, FLUX prompt hay `mascot_pose`.
+- Đồng bộ lời/claim với khung storyboard nếu dùng `step draft`; giữ `delivery` bỏ thẻ bằng đúng `text`.
 - Giữ giới hạn runtime hiện hành: explain-first, 10–25 phút, 4–8 chương,
-  1–6 clip 60–180 giây cắt từ cảnh sẵn đủ caveat; không tự coi đã bỏ validator.
-- Cân `chart_crop` quanh 16–24%; beats trong thời lượng lời ước tính;
-  whiteboard tách ý bằng `;`, tránh dồn entrance đầu cảnh. Hình phục vụ câu đọc.
-- Dùng `youtube-scriptwriting` cho hook/mạch, bỏ tự tìm nguồn và Binge Loop;
-  bỏ lời khuyên lặp ý. `short-form-video` chỉ cho clip sẵn, không tạo project/render riêng.
-- Chỉ dùng lệnh của prompt bước: `step draft`, status, và resume đúng đích
+  khung clip tối thiểu cắt từ cảnh sẵn đủ caveat; không tự coi đã bỏ validator.
+- Dùng `youtube-scriptwriting` cho hook/through-line/payoff; bỏ tự research, Binge Loop,
+  lời khuyên lặp ý và không dừng hỏi duyệt checkpoint. `short-form-video` chỉ dùng khi xử lý clip sẵn, không tạo composition hay tự render riêng.
+- Chỉ dùng lệnh của prompt bước: `step draft-script`, `step draft`, status, và resume đúng đích
   của `revise_medical`; không tự submit-medical, approve, TTS hay render.
 
 ## Xong khi

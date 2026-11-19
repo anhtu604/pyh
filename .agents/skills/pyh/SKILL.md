@@ -5,6 +5,7 @@ description: Operate the preventive-health video factory through its public CLI 
 
 # /pyh
 
+Agent chạy một bước chỉ đọc prompt bước và skill vai; phần vận hành dưới đây dành cho phiên điều hành.
 Run `healthvideo` from the repo root using the installed local executable; if missing, use `install/install.ps1`.
 Read `AGENTS.md` and the required design/plan before changing workflow or schema.
 Never invent a source, DOI, PMID, medical number, result, or doctor's experience.
@@ -13,8 +14,7 @@ Start with `healthvideo status`; for a known project use `healthvideo status <pr
 Resolve the project from the user's request or current context; ask only if ambiguous.
 Use `healthvideo topic discover --query <query> [--title <title> --question <question> --layers a,b]` for discovery.
 Show recorded signals and source failures; never call a topic hot when heat is absent.
-Use `healthvideo topic list` to inspect the queue.
-For “làm video” or a selected discovery card, use `healthvideo topic add --slug <slug> --title <title> --question <question> [--note <doctor-note>]`.
+Use `healthvideo topic list` to inspect the queue. For “làm video” or a selected discovery card, use `healthvideo topic add --slug <slug> --title <title> --question <question> [--note <doctor-note>]`.
 If chưa có project, queue the topic; do not fabricate a question, trend, or doctor's position.
 Use a neutral copy of the user's topic as the question if none was supplied.
 Do not overwrite slug collisions.

@@ -14,7 +14,11 @@ from healthvideo.domain.brand import (
     MascotPose,
     load_brand_profile,
 )
-from healthvideo.domain.clip_plan import ClipPlan, validate_clip_plan
+from healthvideo.domain.clip_plan import (
+    CLIP_MIN_FRAMES,
+    ClipPlan,
+    validate_clip_plan,
+)
 from healthvideo.domain.evidence import EvidenceClaim
 from healthvideo.domain.license_ledger import LicenseEntry, LicenseLedger
 from healthvideo.domain.outline import Outline, validate_outline
@@ -31,29 +35,64 @@ from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.tts.audio_checks import inspect_wav
 from healthvideo.visuals.brand import render_pyh_logo
 from healthvideo.visuals.mascot import mascot_asset
+from healthvideo.workflows.shorts_plan import (
+    SHORTS_CLIP_MAX_FRAMES,
+    SHORTS_PLAN_ARTIFACT,
+    resolve_revision_root,
+    sync_shorts_plan_to_clip_plan,
+)
 from healthvideo.workflows.visual_assets import BRAND_PROFILE_PATH
 
 OUTLINE_ARTIFACT = "script/outline.yaml"
 CLIP_PLAN_ARTIFACT = "script/clip-plan.yaml"
 
 
+def load_effective_clip_specs(
+    revision_root: Path,
+    *,
+    require_medical_approval: bool = True,
+) -> ClipPlan:
+    """Return effective vertical ClipPlan: synced ``posts/shorts-plan.yaml`` if present, else ``script/clip-plan.yaml``."""
+    revision = resolve_revision_root(revision_root)
+    if (revision / SHORTS_PLAN_ARTIFACT).is_file():
+        return sync_shorts_plan_to_clip_plan(
+            revision, require_medical_approval=require_medical_approval
+        )
+    clip_plan_path = revision / CLIP_PLAN_ARTIFACT
+    if not clip_plan_path.is_file():
+        raise FileNotFoundError(f"youtube_long needs {CLIP_PLAN_ARTIFACT}")
+    return ClipPlan.model_validate(read_yaml(clip_plan_path))
+
+
 def load_clip_scenes(
     revision_root: Path, storyboard: Storyboard
 ) -> dict[str, tuple[Scene, ...]]:
-    """Validate outline + clip plan against storyboard and ledger; return each clip's scenes."""
-    for name in (OUTLINE_ARTIFACT, CLIP_PLAN_ARTIFACT):
-        if not (revision_root / name).is_file():
-            raise FileNotFoundError(f"youtube_long needs {name}")
-    ledger = read_yaml(revision_root / "evidence" / "ledger.yaml")
+    """Validate outline + effective clip plan against storyboard and ledger; return each clip's scenes."""
+    revision = resolve_revision_root(revision_root)
+    if not (revision / OUTLINE_ARTIFACT).is_file():
+        raise FileNotFoundError(f"youtube_long needs {OUTLINE_ARTIFACT}")
+    has_shorts_plan = (revision / SHORTS_PLAN_ARTIFACT).is_file()
+    if not has_shorts_plan and not (revision / CLIP_PLAN_ARTIFACT).is_file():
+        raise FileNotFoundError(f"youtube_long needs {CLIP_PLAN_ARTIFACT}")
+    ledger = read_yaml(revision / "evidence" / "ledger.yaml")
     claims = {
         claim.id: claim
         for claim in (
             EvidenceClaim.model_validate(item) for item in ledger.get("claims", [])
         )
     }
-    outline = Outline.model_validate(read_yaml(revision_root / OUTLINE_ARTIFACT))
+    outline = Outline.model_validate(read_yaml(revision / OUTLINE_ARTIFACT))
     validate_outline(outline, storyboard, claims.keys())
-    plan = ClipPlan.model_validate(read_yaml(revision_root / CLIP_PLAN_ARTIFACT))
+    plan = load_effective_clip_specs(revision)
+    if has_shorts_plan:
+        return validate_clip_plan(
+            plan,
+            storyboard,
+            claims,
+            min_frames=CLIP_MIN_FRAMES,
+            max_frames=SHORTS_CLIP_MAX_FRAMES,
+            require_style_a=True,
+        )
     return validate_clip_plan(plan, storyboard, claims)
 
 

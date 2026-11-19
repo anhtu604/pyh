@@ -35,5 +35,5 @@ description: Use when a doctor sends a chat message to the PYH Team Lead coordin
   lượt chưa rõ kết quả cần đối soát, không tự đăng lại.
 
 ## Đầu ra bắt buộc
-- Chỉ ghi file YAML `{report}` theo schema `CoordinatorReply`: `reply`, `action`, `brief`, `options`, `topic`, `escalate`, `assignments`.
+- Theo `CoordinatorReply` hiện hành và các trường được nêu trong prompt (`coordinator.md`); `publish_video` chỉ tạo preview chờ bác sĩ xác nhận trong app.
 - Không gọi trực tiếp CLI làm đổi state/queue/approval/PIN trong lượt chat này; Python sẽ thực thi theo đúng phiếu phân việc.

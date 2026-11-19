@@ -28,8 +28,7 @@ description: Use when PYH chat_deep receives an escalated question requiring cod
 - Đề xuất sửa nêu tệp, cảnh/dòng, kết quả cần đạt và phép kiểm tương ứng.
 
 ## Đầu ra
-- Chỉ ghi `{report}` được prompt giao, cùng schema coordinator:
-  `reply`, `action`, `brief`, `options`, `topic`, `escalate`.
+- `chat_deep` dùng `CoordinatorReply` theo prompt; `repair_diagnose` / `repair_accept` dùng đúng schema JSON được truyền (`Diagnosis` / `Acceptance`), không pha trường chat.
 - Không escalate tiếp ở vòng này; điểm chưa rõ dùng `ask` với 2–3 lựa chọn
   có `label`, `effect`, hoặc ghi giới hạn trong câu trả lời.
 - Chỉ đọc project/code/log và viết báo cáo; không sửa code, project, queue,

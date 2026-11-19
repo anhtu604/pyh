@@ -53,7 +53,6 @@ description: Use when PYH revise_production or revise_product needs permitted SV
   `revise_product` không tự đổi trạng thái. Python dựng và critic chấm lại.
 
 ## Thiếu dữ liệu hoặc lỗi
-- Cần sửa file khóa: `revise_production` dừng và liệt kê file/thay đổi cần bác sĩ
-  mở lại cổng y khoa như prompt; `revise_product` để lại mục đó cho bác sĩ quyết.
+- Cần sửa file khóa / lỗi ngoài quyền (`script`, `storyboard`, `manifest`, `clip-plan`, `ledger`, `explainer`, `profiles`, prompt FLUX, phát âm): trả rõ file/cảnh và vai cần nhận cho Leader; `revise_production` giữ `blocked` hoặc mở cổng theo quy trình hiện hành, `revise_product` để lại mục đó cho bác sĩ quyết — tuyệt đối không lặp dựng lại bản không đổi.
 - Công cụ lỗi: báo lệnh/log và phần chưa xong; chỉ retry trong budget bước,
   không sửa claim/hash/approval để vượt lỗi, không giả render đã thành công.

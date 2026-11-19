@@ -31,6 +31,21 @@
       "title": "ClipCaptions",
       "type": "object"
     },
+    "MascotPose": {
+      "enum": [
+        "welcome",
+        "explain",
+        "caution",
+        "point_up",
+        "thinking",
+        "surprised",
+        "thumbs_up",
+        "blank_board",
+        "myth_bust"
+      ],
+      "title": "MascotPose",
+      "type": "string"
+    },
     "ThumbnailSpec": {
       "additionalProperties": false,
       "properties": {
@@ -40,11 +55,78 @@
           "title": "Background Prompt",
           "type": "string"
         },
+        "background_theme": {
+          "anyOf": [
+            {
+              "enum": [
+                "off_white",
+                "night"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Background Theme"
+        },
+        "font_family": {
+          "anyOf": [
+            {
+              "const": "Be Vietnam Pro",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Font Family"
+        },
+        "font_weight": {
+          "anyOf": [
+            {
+              "const": 800,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Font Weight"
+        },
         "headline": {
           "maxLength": 60,
           "minLength": 1,
           "title": "Headline",
           "type": "string"
+        },
+        "mascot_pose": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MascotPose"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "mechanism_visual": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mechanism Visual"
         },
         "seed": {
           "exclusiveMaximum": 9223372036854775808,

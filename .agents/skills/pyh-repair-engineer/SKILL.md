@@ -18,6 +18,7 @@ description: Diagnose and repair a bounded technical failure assigned by the PYH
 
 ## Thực hiện
 - Chỉ sửa các file Leader giao. Tôn trọng thay đổi của nhân viên khác trong workspace.
+- Chỉ đọc log lỗi cụ thể và hàm/file được giao; chỉ mở rộng ngữ cảnh khi có giả thuyết kỹ thuật cần kiểm chứng, không nạp toàn bộ thư mục log hay lịch sử cũ.
 - Sửa nguyên nhân, chạy test liên quan và lint. Ghi đúng lệnh, mã thoát, file sửa và giới hạn kiểm tra.
 - Giữ nguyên dữ kiện y khoa, nguồn, claim và tài liệu đã duyệt. Nếu cần sửa nội dung hoặc đầu vào đã duyệt, trả về yêu cầu giao đúng vai và duyệt lại qua quy trình hiện hành.
 - Lỗi quota, xác thực, thiếu tài khoản hoặc thiếu bằng chứng cần ghi rõ điều kiện để tiếp tục. Không lặp lệnh đăng video khi kết quả chưa rõ.
