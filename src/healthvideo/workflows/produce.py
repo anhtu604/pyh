@@ -3,6 +3,7 @@ import os
 import re
 import shutil
 from collections.abc import Callable, Mapping
+from contextlib import ExitStack, nullcontext
 from pathlib import Path, PurePosixPath
 from tempfile import mkdtemp
 from typing import Any
@@ -78,6 +79,7 @@ from healthvideo.storage.files import (
     write_yaml_atomic,
 )
 from healthvideo.storage.project_layout import ProjectLayout, resolve_project_layout
+from healthvideo.telemetry import station_span
 from healthvideo.tts import pronunciation as pronunciation_module
 from healthvideo.tts.audio_checks import inspect_wav
 from healthvideo.tts.base import TTSProvider, TTSRequest, provider_identity
@@ -125,6 +127,10 @@ AUTHOR_PROFILE_PATH = (
 V2_RENDER_MANIFEST_NAME = "render-manifest.json"
 V2_VIDEO_QA_ARTIFACT = "reviews/video-qa.json"
 CHAPTER_CACHE_DIRECTORY = "renders-cache"
+
+
+def _telemetry_root(project_dir: Path) -> Path:
+    return project_dir.parent.parent if project_dir.parent.name == "projects" else project_dir.parent
 
 
 def _synthesize_cached_line(
@@ -261,6 +267,43 @@ def _produce_v2(
             "Production requires v2 project state medically_approved"
         )
 
+    telemetry_root = _telemetry_root(layout.project_dir)
+    with ExitStack() as telemetry_stack:
+        if not dry_run:
+            telemetry_stack.enter_context(
+                station_span(
+                    telemetry_root,
+                    project.slug,
+                    "produce",
+                    revision=project.active_revision,
+                    gpu=False,
+                )
+            )
+        return _produce_v2_inner(
+            layout,
+            project,
+            renderer,
+            telemetry_root,
+            tts,
+            runner,
+            dry_run=dry_run,
+            music=music,
+            hold=hold,
+        )
+
+
+def _produce_v2_inner(
+    layout: ProjectLayout,
+    project: ProjectManifestV2,
+    renderer: Any,
+    telemetry_root: Path,
+    tts: TTSProvider,
+    runner: Runner,
+    *,
+    dry_run: bool,
+    music: bool,
+    hold: bool = False,
+) -> Path:
     recover_chart_asset_binding(layout.project_dir)
     _ensure_v2_medical_approval_current(layout.artifact_root)
     # Repeated direct `produce` calls cannot skip or implicitly accept visual review.
@@ -309,10 +352,31 @@ def _produce_v2(
     # Validate pending declarations before any model invocation. All GPU subprocesses
     # finish synchronously: FLUX first, then VieNeu, then ACE-Step.
     referenced_storyboard_assets(layout.artifact_root, storyboard, asset_manifest)
-    illustration_rights = _prepare_illustrations(
-        layout.artifact_root, storyboard, asset_manifest,
-        generate=not dry_run and project.state is not WorkflowState.AWAITING_VIDEO_REVIEW,
+    flux_references = {
+        PurePosixPath(ref.path).as_posix()
+        for scene in storyboard.scenes
+        for ref in scene.visual_assets
+    }
+    has_illustrations = any(
+        asset.kind is AssetKind.ILLUSTRATION and asset.path in flux_references
+        for asset in asset_manifest.assets
     )
+    should_generate_flux = not dry_run and project.state is not WorkflowState.AWAITING_VIDEO_REVIEW
+    with (
+        station_span(
+            telemetry_root,
+            project.slug,
+            "flux",
+            revision=project.active_revision,
+            gpu=True,
+        )
+        if (has_illustrations and should_generate_flux)
+        else nullcontext()
+    ):
+        illustration_rights = _prepare_illustrations(
+            layout.artifact_root, storyboard, asset_manifest,
+            generate=should_generate_flux,
+        )
     asset_hashes = evidence_asset_hashes(layout.artifact_root, storyboard)
     visual_paths = referenced_storyboard_assets(
         layout.artifact_root,
@@ -466,50 +530,64 @@ def _produce_v2(
             usage_provider.usage_path = layout.artifact_root / "audio/tts-usage.json"
         if len({line.id for line in script.lines}) != len(script.lines):
             raise ValueError("Script line IDs must be unique for production timing")
-        for line in script.lines:
-            # IDs are reviewed identifiers, but must also be safe filenames.
-            if Path(line.id).name != line.id or any(c in line.id for c in "/\\:") or line.id in {".", ".."}:
-                raise ValueError(f"Unsafe script line id: {line.id}")
-            line_audio = staging_dir / "audio" / "lines" / f"{line.id}.wav"
-            line_audio.parent.mkdir(parents=True, exist_ok=True)
-            sent_text = apply_pronunciation(
-                line.tts_text(expressive=False), pronunciation,
+        with station_span(
+            telemetry_root,
+            project.slug,
+            "tts",
+            revision=project.active_revision,
+            gpu=provider_name not in {"silent", "vibi_minimax"},
+        ):
+            for line in script.lines:
+                # IDs are reviewed identifiers, but must also be safe filenames.
+                if Path(line.id).name != line.id or any(c in line.id for c in "/\\:") or line.id in {".", ".."}:
+                    raise ValueError(f"Unsafe script line id: {line.id}")
+                line_audio = staging_dir / "audio" / "lines" / f"{line.id}.wav"
+                line_audio.parent.mkdir(parents=True, exist_ok=True)
+                sent_text = apply_pronunciation(
+                    line.tts_text(expressive=False), pronunciation,
+                )
+                # Lexicon hyphens mark syllables, whereas Whisper returns separate
+                # words (u-rát -> u / rát). They are not omitted or extra speech.
+                spoken_scripts[line.id] = " ".join(
+                    re.sub(r"\[[^\]]*\]", "", sent_text).replace("-", " ").split()
+                )
+                _synthesize_cached_line(
+                    tts, TTSRequest(text=sent_text, language=script.language,
+                                    delivery_beats=line.delivery_beats()),
+                    line_audio, cache_dir=layout.project_dir / "cache/tts",
+                )
+                line_wavs[line.id] = line_audio
+                line_ms[line.id] = inspect_wav(
+                    line_audio, require_signal=getattr(tts, "require_signal", False)
+                ).duration_ms
+            usage_path = layout.artifact_root / "audio/tts-usage.json"
+            if provider_name in {"vibi_minimax"} and usage_path.is_file():
+                shutil.copyfile(usage_path, staging_dir / "audio/tts-usage.json")
+        with station_span(
+            telemetry_root,
+            project.slug,
+            "qa",
+            revision=project.active_revision,
+            gpu=True,
+        ):
+            alignment = align_lines(
+                line_wavs, {line.id: line.text for line in script.lines},
+                out_dir=staging_dir / "audio/alignment",
             )
-            # Lexicon hyphens mark syllables, whereas Whisper returns separate
-            # words (u-rát -> u / rát). They are not omitted or extra speech.
-            spoken_scripts[line.id] = " ".join(
-                re.sub(r"\[[^\]]*\]", "", sent_text).replace("-", " ").split()
+            # Caption anchors remain canonical. QA compares the actual spoken forms;
+            # align_lines reuses raw Whisper transcripts for the same WAV bytes.
+            qa_alignment = alignment
+            if spoken_scripts != {line.id: line.text for line in script.lines}:
+                qa_alignment = align_lines(
+                    line_wavs, spoken_scripts,
+                    out_dir=staging_dir / "audio/pronunciation-alignment",
+                )
+            pronunciation_report = pronunciation_qa(
+                qa_alignment, terms=[term for entry in pronunciation.entries
+                                     for term in (entry.written, entry.spoken.replace("-", " "))],
             )
-            _synthesize_cached_line(
-                tts, TTSRequest(text=sent_text, language=script.language,
-                                delivery_beats=line.delivery_beats()),
-                line_audio, cache_dir=layout.project_dir / "cache/tts",
-            )
-            line_wavs[line.id] = line_audio
-            line_ms[line.id] = inspect_wav(
-                line_audio, require_signal=getattr(tts, "require_signal", False)
-            ).duration_ms
-        usage_path = layout.artifact_root / "audio/tts-usage.json"
-        if provider_name in {"vibi_minimax"} and usage_path.is_file():
-            shutil.copyfile(usage_path, staging_dir / "audio/tts-usage.json")
-        alignment = align_lines(
-            line_wavs, {line.id: line.text for line in script.lines},
-            out_dir=staging_dir / "audio/alignment",
-        )
-        # Caption anchors remain canonical. QA compares the actual spoken forms;
-        # align_lines reuses raw Whisper transcripts for the same WAV bytes.
-        qa_alignment = alignment
-        if spoken_scripts != {line.id: line.text for line in script.lines}:
-            qa_alignment = align_lines(
-                line_wavs, spoken_scripts,
-                out_dir=staging_dir / "audio/pronunciation-alignment",
-            )
-        pronunciation_report = pronunciation_qa(
-            qa_alignment, terms=[term for entry in pronunciation.entries
-                                 for term in (entry.written, entry.spoken.replace("-", " "))],
-        )
-        pronunciation_report["input_hash"] = input_hash
-        _write_json_atomic(staging_dir / "pronunciation-qa.json", pronunciation_report)
+            pronunciation_report["input_hash"] = input_hash
+            _write_json_atomic(staging_dir / "pronunciation-qa.json", pronunciation_report)
         storyboard, timing_record = retime_storyboard(approved_storyboard, line_ms)
         storyboard = apply_alignment(storyboard, alignment)
         storyboard = storyboard.model_copy(update={"scenes": tuple(
@@ -590,47 +668,54 @@ def _produce_v2(
         staged_output = staging_dir / OUTPUT_NAME
         chapter_parts: tuple[str, ...] = ()
         clip_outputs: dict[str, str] = {}
-        if renderer.__name__.endswith('.openmontage'):
-            if render_input.format_profile == 'youtube_long' and load_clip_scenes(layout.artifact_root, storyboard):
-                raise ValueError('OpenMontage chưa hỗ trợ gói clip 9:16; dùng PYH_RENDERER=remotion.')
-            renderer.render(
-                staged_render_input, staged_output, staging_dir,
-                runner=runner,
-                assets=[{**asset.model_dump(mode='json'),
-                         'sha256': asset_hashes.get(asset.path, asset.sha256)}
-                        for asset in asset_manifest.assets],
-            )
-        elif render_input.format_profile == "youtube_long":
-            clip_outputs = render_clips(
-                load_clip_scenes(layout.artifact_root, storyboard),
-                storyboard,
-                staging_dir,
-                line_wavs=line_wavs,
-                runner=runner,
-                brand=clip_brand,
-                revision=project.active_revision,
-                sfx_events=sfx_events,
-            )
-            chapter_parts = render_long_form(
-                render_input_path=staged_render_input,
-                render_input=render_input,
-                public_dir=staging_dir,
-                audio=staged_audio,
-                output=staged_output,
-                cache_dir=layout.project_dir / CHAPTER_CACHE_DIRECTORY,
-                asset_hashes=asset_hashes,
-                renderer_identity=renderer_identity_data,
-                runner=runner,
-            )
-        else:
-            argv = build_render_argv(staged_render_input, staged_output, staging_dir)
-            exit_code = runner(argv)
-            if exit_code != 0:
-                raise RuntimeError(f"Remotion render failed with exit code {exit_code}")
-            if not staged_output.is_file():
-                raise FileNotFoundError(
-                    f"Remotion render did not create output: {staged_output}"
+        with station_span(
+            telemetry_root,
+            project.slug,
+            "render",
+            revision=project.active_revision,
+            gpu=True,
+        ):
+            if renderer.__name__.endswith('.openmontage'):
+                if render_input.format_profile == 'youtube_long' and load_clip_scenes(layout.artifact_root, storyboard):
+                    raise ValueError('OpenMontage chưa hỗ trợ gói clip 9:16; dùng PYH_RENDERER=remotion.')
+                renderer.render(
+                    staged_render_input, staged_output, staging_dir,
+                    runner=runner,
+                    assets=[{**asset.model_dump(mode='json'),
+                             'sha256': asset_hashes.get(asset.path, asset.sha256)}
+                            for asset in asset_manifest.assets],
                 )
+            elif render_input.format_profile == "youtube_long":
+                clip_outputs = render_clips(
+                    load_clip_scenes(layout.artifact_root, storyboard),
+                    storyboard,
+                    staging_dir,
+                    line_wavs=line_wavs,
+                    runner=runner,
+                    brand=clip_brand,
+                    revision=project.active_revision,
+                    sfx_events=sfx_events,
+                )
+                chapter_parts = render_long_form(
+                    render_input_path=staged_render_input,
+                    render_input=render_input,
+                    public_dir=staging_dir,
+                    audio=staged_audio,
+                    output=staged_output,
+                    cache_dir=layout.project_dir / CHAPTER_CACHE_DIRECTORY,
+                    asset_hashes=asset_hashes,
+                    renderer_identity=renderer_identity_data,
+                    runner=runner,
+                )
+            else:
+                argv = build_render_argv(staged_render_input, staged_output, staging_dir)
+                exit_code = runner(argv)
+                if exit_code != 0:
+                    raise RuntimeError(f"Remotion render failed with exit code {exit_code}")
+                if not staged_output.is_file():
+                    raise FileNotFoundError(
+                        f"Remotion render did not create output: {staged_output}"
+                    )
         _write_json_atomic(
             staging_dir / V2_RENDER_MANIFEST_NAME,
             {
@@ -674,37 +759,44 @@ def _produce_v2(
                 }} if clip_outputs else {}),
             },
         )
-        _write_json_atomic(
-            staging_dir / "video-qa.json",
-            {
-                "schema_version": "2.0",
-                "status": "failed" if pronunciation_report.get("blocked") else "render_complete",
-                "input_hash": input_hash,
-                "checks": {"output_exists": True},
-                "pronunciation": {
-                    "passed": not pronunciation_report.get("blocked", False),
-                    "blocking_count": sum(flag.get("severity") == "block"
-                                          for flag in pronunciation_report["flags"]),
-                    "report_sha256": sha256_file(staging_dir / "pronunciation-qa.json"),
+        with station_span(
+            telemetry_root,
+            project.slug,
+            "qa",
+            revision=project.active_revision,
+            gpu=False,
+        ):
+            _write_json_atomic(
+                staging_dir / "video-qa.json",
+                {
+                    "schema_version": "2.0",
+                    "status": "failed" if pronunciation_report.get("blocked") else "render_complete",
+                    "input_hash": input_hash,
+                    "checks": {"output_exists": True},
+                    "pronunciation": {
+                        "passed": not pronunciation_report.get("blocked", False),
+                        "blocking_count": sum(flag.get("severity") == "block"
+                                              for flag in pronunciation_report["flags"]),
+                        "report_sha256": sha256_file(staging_dir / "pronunciation-qa.json"),
+                    },
+                    **timing_qa,
+                    **(
+                        {"visual_budget": visual_budget_qa}
+                        if visual_budget_qa is not None
+                        else {}
+                    ),
                 },
-                **timing_qa,
-                **(
-                    {"visual_budget": visual_budget_qa}
-                    if visual_budget_qa is not None
-                    else {}
-                ),
-            },
-        )
-        _validate_v2_staged_run(
-            staging_dir, input_hash, provider_name, asset_hashes,
-            pronunciation_sha256=pronunciation_sha256,
-            provider_identity=provider_identity_data,
-            renderer_identity=renderer_identity_data,
-            music_settings=music_settings,
-            require_timing=require_timing,
-            final_frame=final_frame,
-            expected_visual_budget=visual_budget_qa,
-        )
+            )
+            _validate_v2_staged_run(
+                staging_dir, input_hash, provider_name, asset_hashes,
+                pronunciation_sha256=pronunciation_sha256,
+                provider_identity=provider_identity_data,
+                renderer_identity=renderer_identity_data,
+                music_settings=music_settings,
+                require_timing=require_timing,
+                final_frame=final_frame,
+                expected_visual_budget=visual_budget_qa,
+            )
         _promote_run(staging_dir, renders_dir)
         if not review_complete(layout.artifact_root):
             prepare_contact_sheet(layout.artifact_root)

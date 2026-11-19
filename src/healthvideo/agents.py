@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import subprocess
+import time
 import uuid
 from collections.abc import Callable, Sequence
 from contextlib import contextmanager
@@ -12,6 +13,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from time import sleep
+from typing import Any
 
 from healthvideo.company import REPO_ROOT, ModelSlot
 from healthvideo.env import child_env
@@ -147,6 +149,8 @@ class AgentResult:
     log_path: Path
     model: str = ""
     failure_kind: str | None = None
+    used_local: bool = False
+    local_data: Any = None
 
 
 class AllAgentsExhausted(RuntimeError):
@@ -444,11 +448,16 @@ def invoke_with_failover(
     activity: Path | None = None,
     timeout: float | None = None,
     exclude_slots: Sequence[ModelSlot] = (),
+    local_task: str | None = None,
+    local_schema: Any = None,
+    local_config: Any = None,
 ) -> AgentResult:
     """Try each non-resting slot once on quota, overload or transient tool failures.
 
     ``quota`` and ``activity`` default to ``cache/`` and ``topics/logs/`` under ``cwd``.
     """
+    from healthvideo.telemetry import extract_cli_usage_from_log
+
     quota = quota or QuotaBook(cwd / QUOTA_FILE)
     activity = activity or cwd / ACTIVITY_FILE
     deadline = timeout if timeout is not None else STEP_TIMEOUTS.get(step, AGENT_TIMEOUT)
@@ -461,21 +470,75 @@ def invoke_with_failover(
     job_id = ''
     caller_token = process_token(os.getpid())
 
-    def log(slot: ModelSlot, event: str, ok: bool | None) -> None:
-        row = {"at": now().isoformat(timespec="seconds"), "role": role, "cli": slot.cli,
-               "model": slot.model, "slug": slug, "step": step, "event": event, "ok": ok,
-               "pid": os.getpid(), "job_id": job_id, "process_token": caller_token}
+    def log(cli_name: str, model_name: str, event: str, ok: bool | None, **extra: Any) -> None:
+        row = {"at": now().isoformat(timespec="seconds"), "role": role, "cli": cli_name,
+               "model": model_name, "slug": slug, "step": step, "event": event, "ok": ok,
+               "pid": os.getpid(), "job_id": job_id, "process_token": caller_token, **extra}
         activity.parent.mkdir(parents=True, exist_ok=True)
         with activity.open("a", encoding="utf-8") as stream:
             stream.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+    if local_task is not None:
+        from healthvideo.local_llm import NEVER_LOCAL_ROLES, try_local_task
+
+        if role in NEVER_LOCAL_ROLES:
+            raise ValueError(f"Vai {role!r} bị cấm tuyệt đối chạy local LLM.")
+        local_attempt = try_local_task(
+            root=cwd,
+            task=local_task,
+            prompt=prompt,
+            role=role,
+            schema=local_schema,
+            config=local_config,
+        )
+        if local_attempt.ok and local_attempt.data is not None:
+            log_dir.mkdir(parents=True, exist_ok=True)
+            job_id = uuid.uuid4().hex
+            ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%f")
+            local_log = log_dir / f"{ts}-ollama.log"
+            local_payload = {
+                "model": local_attempt.model,
+                "task": local_task,
+                "data": local_attempt.data.model_dump(mode="json"),
+                "prompt_eval_count": local_attempt.prompt_eval_count,
+                "eval_count": local_attempt.eval_count,
+                "eval_tok_per_s": local_attempt.eval_tok_per_s,
+            }
+            local_log.write_text(json.dumps(local_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            log("ollama", local_attempt.model, "start", None, used_local=True)
+            local_tokens = local_attempt.total_tokens
+            local_extra: dict[str, Any] = {
+                "duration_s": local_attempt.total_duration_s,
+                "usage_available": local_tokens is not None,
+                "cli_total_tokens": local_tokens,
+                "failure_kind": None,
+                "used_local": True,
+            }
+            if local_attempt.prompt_eval_count is not None:
+                local_extra["input_tokens"] = local_attempt.prompt_eval_count
+            if local_attempt.eval_count is not None:
+                local_extra["output_tokens"] = local_attempt.eval_count
+            log("ollama", local_attempt.model, "end", True, **local_extra)
+            return AgentResult(
+                agent="ollama",
+                ok=True,
+                quota_exhausted=False,
+                log_path=local_log,
+                model=local_attempt.model,
+                failure_kind=None,
+                used_local=True,
+                local_data=local_attempt.data,
+            )
 
     for slot in candidate_slots:
         if quota.resting(slot, now()):
             continue
         cli, argv = argv_for(slot)
         job_id = uuid.uuid4().hex
-        log(slot, "start", None)
+        log(slot.cli, slot.model, "start", None)
+        started_mono = time.monotonic()
         result = None
+        exc_failure_kind: str | None = None
         try:
             result = invoke(
                 replace(cli, argv=tuple(argv)),
@@ -488,21 +551,51 @@ def invoke_with_failover(
                 meta={"role": role, "slug": slug, "step": step},
             )
             result = replace(result, model=slot.model)
+        except KeyboardInterrupt:
+            exc_failure_kind = "interrupted"
+            raise
+        except BaseException:
+            exc_failure_kind = "agent_error"
+            raise
         finally:
-            log(slot, "end", result.ok if result is not None else False)
+            duration_s = round(max(0.0, time.monotonic() - started_mono), 3)
+            if result is not None:
+                usage = extract_cli_usage_from_log(result.log_path)
+                end_extra: dict[str, Any] = {
+                    "duration_s": duration_s,
+                    "usage_available": usage.usage_available,
+                    "cli_total_tokens": usage.cli_total_tokens,
+                    "failure_kind": result.failure_kind,
+                }
+                for key_name, val in (
+                    ("input_tokens", usage.input_tokens),
+                    ("output_tokens", usage.output_tokens),
+                    ("cached_tokens", usage.cached_tokens),
+                    ("reasoning_tokens", usage.reasoning_tokens),
+                ):
+                    if val is not None:
+                        end_extra[key_name] = val
+            else:
+                end_extra = {
+                    "duration_s": duration_s,
+                    "usage_available": False,
+                    "cli_total_tokens": None,
+                    "failure_kind": exc_failure_kind or "agent_error",
+                }
+            log(slot.cli, slot.model, "end", result.ok if result is not None else False, **end_extra)
         if result.failure_kind == 'cancelled':
             return result
         if not result.ok:
             output = result.log_path.read_text(encoding="utf-8", errors="replace").lower()
             if MODEL_UNAVAILABLE.search(output[-8000:]):
-                log(slot, 'model_unavailable', False)
+                log(slot.cli, slot.model, 'model_unavailable', False)
                 quota.rest(slot, now() + BUSY_REST, 'model chưa khả dụng; đã chuyển model kế tiếp')
                 last_transient = replace(result, failure_kind='configuration')
                 continue
         if not result.ok and not result.quota_exhausted:
             if any(pattern in output for pattern in BUSY_PATTERNS):
                 # Server overload is not our quota: rest briefly and try the next model.
-                log(slot, "busy", False)
+                log(slot.cli, slot.model, "busy", False)
                 quota.rest(slot, now() + BUSY_REST, "máy chủ quá tải")
                 last_transient = result
                 continue
@@ -516,7 +609,7 @@ def invoke_with_failover(
                 continue
         if result.ok or not result.quota_exhausted:
             return result
-        log(slot, "quota", False)
+        log(slot.cli, slot.model, "quota", False)
         output = result.log_path.read_text(encoding="utf-8", errors="replace")
         moment = now()
         until = parse_reset(output, moment) or moment + DEFAULT_REST

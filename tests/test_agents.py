@@ -714,3 +714,127 @@ def test_empty_nonzero_cli_exit_fails_over_as_transient(tmp_path: Path) -> None:
     )
     assert all_empty.ok is False
     assert all_empty.failure_kind == "transient"
+
+
+def test_activity_end_event_records_monotonic_duration_usage_and_failure_kind(tmp_path: Path) -> None:
+    _failover(
+        tmp_path,
+        [CODEX_SLOT],
+        lambda *a, **kw: _completed(returncode=0, stdout="Done\ntokens used\n12,345\n"),
+    )
+    _failover(
+        tmp_path,
+        [CODEX_SLOT],
+        lambda *a, **kw: _completed(
+            returncode=0,
+            stdout=json.dumps({"usage": {"input_tokens": 100, "output_tokens": 50, "cached_tokens": 40, "reasoning_tokens": 10}}),
+        ),
+    )
+    _failover(
+        tmp_path,
+        [CODEX_SLOT],
+        lambda *a, **kw: _completed(returncode=1, stderr="permission denied"),
+    )
+
+    ends = [
+        json.loads(line)
+        for line in (tmp_path / "topics/logs/activity.jsonl").read_text(encoding="utf-8").splitlines()
+        if json.loads(line)["event"] == "end"
+    ]
+    assert len(ends) == 3
+
+    assert ends[0]["usage_available"] is True
+    assert ends[0]["cli_total_tokens"] == 12345
+    assert ends[0]["failure_kind"] is None
+    assert isinstance(ends[0]["duration_s"], (int, float)) and ends[0]["duration_s"] >= 0
+
+    assert ends[1]["usage_available"] is True
+    assert ends[1]["cli_total_tokens"] == 150
+    assert ends[1]["input_tokens"] == 100
+    assert ends[1]["output_tokens"] == 50
+    assert ends[1]["cached_tokens"] == 40
+    assert ends[1]["reasoning_tokens"] == 10
+
+    assert ends[2]["ok"] is False
+    assert ends[2]["usage_available"] is False
+    assert ends[2]["cli_total_tokens"] is None
+    assert ends[2]["failure_kind"] == "configuration"
+
+
+def test_invoke_with_failover_optional_local_llm_hook_and_single_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from healthvideo import local_llm
+
+    with pytest.raises(ValueError, match="cấm"):
+        invoke_with_failover(
+            [CODEX_SLOT],
+            "prompt",
+            cwd=tmp_path,
+            log_dir=tmp_path / "logs",
+            role="writer",
+            slug="gout",
+            step="draft",
+            runner=lambda *a, **kw: pytest.fail("CLI must not run for forbidden local role"),
+            local_task="feedback_inbox",
+        )
+
+    # Local succeeds -> bypasses CLI runner and logs ollama activity.
+    sample_data = local_llm.ChatStatusSummary(reply="Đang chờ bác sĩ duyệt.", action="status")
+    monkeypatch.setattr(
+        local_llm,
+        "try_local_task",
+        lambda **kwargs: local_llm.LocalAttempt(
+            ok=True,
+            used_local=True,
+            model="qwen3:4b",
+            data=sample_data,
+            prompt_eval_count=80,
+            eval_count=20,
+            total_duration_s=0.45,
+            eval_tok_per_s=44.4,
+        ),
+    )
+    local_res = invoke_with_failover(
+        [CODEX_SLOT],
+        "status?",
+        cwd=tmp_path,
+        log_dir=tmp_path / "logs",
+        role="coordinator",
+        slug="chung",
+        step="chat",
+        runner=lambda *a, **kw: pytest.fail("CLI runner must not run when local succeeds"),
+        local_task="chat_status_summary",
+    )
+    assert local_res.ok is True
+    assert local_res.agent == "ollama"
+    assert local_res.used_local is True
+    assert local_res.local_data == sample_data
+
+    # Local disabled/fails -> falls back once to CLI slot.
+    monkeypatch.setattr(
+        local_llm,
+        "try_local_task",
+        lambda **kwargs: local_llm.LocalAttempt(ok=False, used_local=False, reason="local_llm_disabled"),
+    )
+    cli_calls: list[str] = []
+
+    def fallback_runner(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        cli_calls.append(argv[0])
+        return _completed(returncode=0, stdout="fallback ok")
+
+    fb_res = invoke_with_failover(
+        [CODEX_SLOT],
+        "status?",
+        cwd=tmp_path,
+        log_dir=tmp_path / "logs",
+        role="coordinator",
+        slug="chung",
+        step="chat",
+        runner=fallback_runner,
+        local_task="chat_status_summary",
+    )
+    assert fb_res.ok is True
+    assert fb_res.agent == "codex"
+    assert fb_res.used_local is False
+    assert cli_calls == ["codex"]
