@@ -19,6 +19,119 @@ class QAIssue(BaseModel):
     severity: Literal["error", "warning"] = "error"
 
 
+_NUM = r"\d+(?:[.,]\d+)*"
+_NUM_EXPR = rf"{_NUM}(?:\s*(?:[-–—/]|đến|tới)\s*{_NUM})?"
+
+# Medical dose, lab concentration, blood-pressure, and pill-count units (BLOCK when unlinked).
+# Longest / compound units come first so `mg/dL`, `mmol/L`, or `U/L` match as one span.
+# Bare `g` is intentionally omitted to avoid false-blocking Vietnamese clock shorthand (`8g sáng`);
+# Vietnamese TTS scripts spell out `gam`, `miligam`, `microgam`, `mililit`.
+_DOSE_UNITS = (
+    r"mg/dL|mg/L|mg/kg|mg/ngày|mcg/kg|mcg/ngày|"
+    r"[µμ]g/dL|[µμ]g/L|[µμ]g/kg|"
+    r"g/dL|g/L|mmol/L|[µμ]mol/L|mEq/L|"
+    r"mIU/L|mIU/mL|IU/L|IU/mL|IU/ngày|U/L|"
+    r"mL/kg|ml/kg|mmHg|"
+    r"miligam|microgam|mililit|gam|"
+    r"mg|mcg|[µμ]g|mL|ml|IU|UI|"
+    r"đơn\s+vị|"
+    r"viên(?!\s+(?:sỏi|đá|gạch|kẹo))"
+)
+
+_DOSE_RE = re.compile(
+    rf"(?<!\w){_NUM_EXPR}\s*(?:{_DOSE_UNITS})(?![^\W\d_])",
+    re.IGNORECASE,
+)
+
+# Non-statistical natural expressions masked before checking `number_without_claim`:
+# - Spelled-out words (`một`, `hai bước`, `mỗi ngày`) contain no Arabic digits and are never matched.
+# - Citation brackets (`[1]`, `[1, 2]`), clock times (`22:00`, `7h30`, `8 giờ sáng`),
+#   hyphenated medical names (`omega-3`, `COVID-19`), ordinals/classifications (`thứ 2`, `týp 2`, `bước 1`),
+#   and natural structural counts (`3 bước`, `2 cách`, `1 lượt like`) are masked to prevent false positives.
+_IGNORED_NUMBER_RE = re.compile(
+    r"\[\d+(?:\s*,\s*\d+)*\]"
+    r"|(?<!\w)\d{1,2}:\d{2}(?!\w)"
+    r"|(?<!\w)\d{1,2}\s*(?:h\d{0,2}|giờ(?:\s+(?:sáng|trưa|chiều|tối|đêm))?)(?![^\W\d_])"
+    r"|\b(?:omega|covid|type|týp|tuýp)\s*[-–]?\s*\d+(?![^\W\d_])"
+    r"|\b(?:thứ|số|bước|phần|mục|chương|độ|giai\s+đoạn|loại)\s+\d+(?![^\W\d_])"
+    r"|(?<!\w)\d+(?:\s*(?:[-–—]|đến|tới)\s*\d+)?\s+"
+    r"(?:bước|điều|điểm|cách|ý|phần(?!\s+trăm)|mục|loại|lý\s+do|dấu\s+hiệu|sai\s+lầm|câu\s+hỏi|ví\s+dụ|lượt|video|tập|chương)(?![^\W\d_])",
+    re.IGNORECASE,
+)
+
+# Meaningful statistical / numeric expressions (WARN when unlinked):
+# - Percentages: `20%`, `40–60%`, `20 phần trăm`, `40 đến 60 phần trăm`
+# - Years: `19xx` / `20xx`
+# - Multipliers: `2 lần`, `6 lần`, `3,5 lần`
+# - Ratios: `1/3`, `1:10`, `3 trong 10`, `1 trên 5`
+# - Quantified study/clinical/duration counts: `6 ngày`, `2 tuần`, `3 tháng`, `100 người`, `2 lít`, `38 độ`, ...
+# - Decimal numerals (`1,5`, `2.5`) or multi-digit numerals (`>= 10`) not already masked
+# Bare single-digit indices (`1`..`9` without unit/ratio/decimal, e.g. `TERM 1`, `nhóm 2`) are ignored.
+_STAT_UNITS = (
+    r"người|bệnh\s+nhân|ca|trường\s+hợp|"
+    r"ngày|tuần|tháng|năm|phút|tiếng|"
+    r"lít|kg|cm|mm|độ|°C|kcal|calo"
+)
+_MEANINGFUL_NUMBER_RE = re.compile(
+    rf"(?<!\w){_NUM_EXPR}\s*(?:%|phần\s+trăm)(?![^\W\d_])"
+    rf"|(?<!\w)(?:19|20)\d{{2}}(?!\d)"
+    rf"|(?<!\w){_NUM_EXPR}\s+lần(?![^\W\d_])"
+    rf"|(?<!\w){_NUM}\s*(?:/|:|trong|trên)\s*{_NUM}(?!\w)"
+    rf"|(?<!\w){_NUM_EXPR}\s+(?:{_STAT_UNITS})(?![^\W\d_])"
+    rf"|(?<!\w)\d+[.,]\d+(?!\w)"
+    rf"|(?<!\w)\d{{2,}}(?!\w)",
+    re.IGNORECASE,
+)
+
+
+def _check_unclaimed_numbers(line_id: str, text: str) -> list[QAIssue]:
+    """Flag unlinked spoken lines that state medical doses (error/BLOCK) or meaningful numbers (warning/WARN).
+
+    Rules:
+    - `dose_without_claim` (severity="error"): Arabic number/range paired with a dose, lab,
+      blood-pressure, or pill unit (`mg`, `mcg`, `µg`, `ml`, `IU`, `đơn vị`, `viên`, `g/dL`,
+      `mmol/L`, `mmHg`, `U/L`, `miligam`, `gam`, etc.).
+    - `number_without_claim` (severity="warning"): percentages (`%`, `phần trăm`), years
+      (`19xx`/`20xx`), multipliers (`x lần`), ratios (`1/3`, `3 trong 10`), quantified
+      clinical/duration/population counts (`6 ngày`, `2 lít`, `100 người`), or unmasked
+      decimal/multi-digit numerals after removing matched dose spans.
+
+    False-positive avoidance:
+    - Natural Vietnamese prose without digits (`một`, `hai bước`, `mỗi ngày`) is never matched.
+    - Bare single-digit labels/indices (`TERM 1`, `nhóm 2`) without units/ratios are ignored.
+    - Alphanumeric compound names (`B12`, `D3`, `omega-3`, `COVID-19`), clock times
+      (`7 giờ sáng`, `8h30`, `22:00`), ordinals/types (`thứ 2`, `týp 2`, `bước 1`),
+      citation brackets (`[1]`), and structural counts (`3 bước`, `1 lượt like`) are ignored.
+    """
+    issues: list[QAIssue] = []
+    dose_matches = list(_DOSE_RE.finditer(text))
+    if dose_matches:
+        unique_doses = list(dict.fromkeys(m.group(0).strip() for m in dose_matches))
+        issues.append(
+            QAIssue(
+                code="dose_without_claim",
+                line_id=line_id,
+                message=f"liều/chỉ số không có claim_id: {', '.join(unique_doses)}",
+                severity="error",
+            )
+        )
+    # Mask matched dose spans and natural non-statistical expressions before scanning for numbers.
+    masked = _DOSE_RE.sub(lambda m: " " * len(m.group(0)), text)
+    masked = _IGNORED_NUMBER_RE.sub(lambda m: " " * len(m.group(0)), masked)
+    number_matches = list(_MEANINGFUL_NUMBER_RE.finditer(masked))
+    if number_matches:
+        unique_numbers = list(dict.fromkeys(m.group(0).strip() for m in number_matches))
+        issues.append(
+            QAIssue(
+                code="number_without_claim",
+                line_id=line_id,
+                message=f"số liệu không có claim_id: {', '.join(unique_numbers)}",
+                severity="warning",
+            )
+        )
+    return issues
+
+
 def review_script(
     script: Script,
     claims: list[EvidenceClaim],
@@ -41,6 +154,8 @@ def review_script(
             issues.append(
                 QAIssue(code="unknown_claim", line_id=line.id, message=line.claim_id)
             )
+        if line.claim_id is None:
+            issues.extend(_check_unclaimed_numbers(line.id, line.text))
         spoken_sentences = re.split(r"[.?!…]+", line.text)
         if any(
             len(sentence.split()) > 32

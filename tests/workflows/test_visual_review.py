@@ -266,7 +266,7 @@ def test_visual_review_accepts_valid_style_codes_and_mascot_pose(tmp_path):
         'style_palette', 'style_stroke', 'style_caption',
     ]
     assert {'style_palette', 'style_typography', 'style_mascot_pose', 'style_stroke',
-            'style_medical_art', 'style_caption', 'style_zoom', 'style_hands'} <= set(STYLE_ERROR_CODES)
+            'style_medical_art', 'style_caption', 'style_zoom', 'style_hands', 'style_rights'} <= set(STYLE_ERROR_CODES)
     ensure_candidates(tmp_path, _board(), manifest, generate=_generate)
     assert review_complete(tmp_path)
 
@@ -339,6 +339,83 @@ def test_visual_review_prompt_requires_hand_anatomy_check():
     for token in ('style_hands', '5 ngón', 'ngón cái', 'cổ tay', 'reject', 'new_prompt'):
         assert token in vr_prompt
     assert 'hands partially out of frame / hidden' in sb_prompt
+
+
+def test_visual_review_accepts_style_rights_on_reject(tmp_path):
+    from healthvideo.workflows.visual_review import (
+        REPORT,
+        STYLE_ERROR_CODES,
+        ensure_candidates,
+        review_complete,
+        validate_style_issues,
+    )
+
+    assert 'style_rights' in STYLE_ERROR_CODES
+    assert STYLE_ERROR_CODES['style_rights']
+    assert validate_style_issues({
+        'decision': 'reject',
+        'style_issues': [
+            'style_rights: chai thuốc có logo và nhãn thương hiệu',
+            {'code': 'style_rights', 'detail': 'khuôn mặt người thật dễ nhận ra'},
+        ],
+    }) == ['style_rights']
+
+    manifest = AssetManifest.model_validate({'assets': [illustration_record()]})
+    board = _board()
+    ensure_candidates(tmp_path, board, manifest, generate=_generate)
+    submit(tmp_path, reject=True)
+    report = read_yaml(tmp_path / REPORT)
+    report['scenes'][0].update(
+        style_issues=['style_rights: lọ thuốc in nhãn thương hiệu rõ nét'],
+        new_prompt='Plain medicine bottle with blank unbranded label on wooden desk, no text',
+    )
+    write_yaml_atomic(tmp_path / REPORT, report)
+    index = ensure_candidates(tmp_path, board, manifest, generate=_generate)
+    assert index['assets'][0]['round'] == 1
+    assert index['assets'][0]['prompt'] == (
+        'Plain medicine bottle with blank unbranded label on wooden desk, no text'
+    )
+    assert not review_complete(tmp_path)
+
+
+@pytest.mark.parametrize('patch', [
+    {'style_issues': ['style_rights: có logo thương hiệu trên hộp thuốc']},
+    {'style_issues': [{'code': 'style_rights', 'detail': 'nhân vật hoạt hình có bản quyền'}]},
+    {'layout_issues': ['style_rights: khuôn mặt người thật dễ nhận ra']},
+])
+def test_visual_review_rejects_select_with_style_rights(tmp_path, patch):
+    from healthvideo.workflows.visual_review import (
+        REPORT,
+        ensure_candidates,
+        review_complete,
+    )
+
+    manifest = AssetManifest.model_validate({'assets': [illustration_record()]})
+    board = _board()
+    ensure_candidates(tmp_path, board, manifest, generate=_generate)
+    submit(tmp_path)
+    report = read_yaml(tmp_path / REPORT)
+    report['scenes'][0].update(patch)
+    write_yaml_atomic(tmp_path / REPORT, report)
+    with pytest.raises(ValueError, match='style_rights'):
+        ensure_candidates(tmp_path, board, manifest, generate=_generate)
+    assert not review_complete(tmp_path)
+
+
+def test_visual_review_prompt_requires_rights_and_brand_check():
+    repo_root = Path(__file__).resolve().parents[2]
+    vr_prompt = (repo_root / 'src/healthvideo/prompts/visual_review.md').read_text(encoding='utf-8')
+    for token in (
+        'style_rights',
+        'logo',
+        'nhãn hiệu',
+        'thương hiệu',
+        'khuôn mặt người thật',
+        'bản quyền',
+        'reject',
+        'new_prompt',
+    ):
+        assert token in vr_prompt
 
 
 def test_image_prompting_guide_follows_style_a_and_affirmative_flux_rules():
