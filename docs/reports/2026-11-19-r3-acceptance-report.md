@@ -36,3 +36,11 @@ Hai lần chạy pytest đầu có 3 test lỗi: `test_pyh_skill` (SKILL.md 42 d
 3. Z-Anatomy 3D giữ khóa: CC BY-SA 4.0 và có phần NC (`docs/reference/z-anatomy-license-check.md`).
 4. Khi nào mở lại xưởng.
 5. `projects/`, `topics/*.yaml`, `uv.lock` chưa commit: ignore hay commit.
+
+## 4. Bổ sung 2026-11-19: kiểm chéo PMID bằng connector PubMed
+
+Bác sĩ cho phép dev lead dùng connector PubMed để kiểm chéo (không đi từ IP máy này). Đối chiếu 20 PMID trong `library/medanim/*/animation.yaml`:
+
+- **15/20 khớp hoàn toàn** metadata PubMed: DOI, năm xuất bản và tên tác giả đầu đều đúng với `citation`.
+- **5/20 là chương StatPearls** (`powers2023`, `patel2023`, `doyle2023`, `vernon2022`, `moriles2024`): endpoint metadata không trả bản ghi Bookshelf nên không đối chiếu được tác giả/năm. Tìm theo tiêu đề trong PubMed trả đúng PMID đã ghi, nên PMID tồn tại và đúng tiêu đề; tác giả và năm các chương này **chưa kiểm**.
+- Không PMID nào bịa hay sai. Còn lại: quote nguyên văn (≤25 từ) của 3 hoạt cảnh mới vẫn cần đối chiếu với toàn văn khi Europe PMC vào được. Nên thay các chương StatPearls bằng bài gốc khi có.
