@@ -3,7 +3,6 @@
 import inspect
 import json
 import os
-import subprocess
 import threading
 import time
 from collections.abc import Callable, Iterator, Mapping
@@ -37,6 +36,7 @@ from healthvideo.domain.project_v2 import WorkflowState
 from healthvideo.domain.queue import QueueEntry
 from healthvideo.domain.script import Script
 from healthvideo.domain.script_style import lint_script_style
+from healthvideo.failures import classify_failure, is_file_contention
 from healthvideo.process import process_token
 from healthvideo.qa.script import review_script
 from healthvideo.storage.explainer import read_explainer
@@ -798,13 +798,7 @@ def _run_agent_invocation(
             restore_repair()
         if is_project_paused(root, entry.slug):
             return "paused", None, None, None
-        kind = (
-            "transient"
-            if isinstance(exc, (TimeoutError, ConnectionError, subprocess.TimeoutExpired))
-            else "configuration"
-            if isinstance(exc, (FileNotFoundError, PermissionError))
-            else "agent_error"
-        )
+        kind = classify_failure(exc)
         with _topic_lock(entry.slug):
             record_agent_failure(
                 root,
@@ -824,6 +818,17 @@ def _run_agent_invocation(
     if not result.ok:
         if is_project_paused(root, entry.slug):
             return "paused", result.log_path, None, None
+        failure = RuntimeError(
+            f"agent {result.agent} thất bại ở bước {step}; log_path: {result.log_path}"
+        )
+        try:
+            detail = result.log_path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            detail = ""
+        if is_file_contention(detail):
+            # Log filenames change on every invocation. Persist the actual lock
+            # diagnostic so identical consecutive failures share the same count.
+            failure = RuntimeError(f"agent {result.agent} thất bại ở bước {step}: {detail}")
         with _topic_lock(entry.slug):
             record_agent_failure(
                 root,
@@ -831,9 +836,7 @@ def _run_agent_invocation(
                 step,
                 fingerprint,
                 getattr(result, "failure_kind", None),
-                RuntimeError(
-                    f"agent {result.agent} thất bại ở bước {step}; log_path: {result.log_path}"
-                ),
+                failure,
                 observed_fingerprint=agent_fingerprint(root, project_dir, step, brief_context),
             )
         _record_code_changes(root, entry.slug, deps, report, before)

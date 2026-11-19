@@ -909,3 +909,24 @@ def test_main_updates_parent_identity_and_survives_maintenance_restart(tmp_path,
     assert state['calls'] == 2
     assert sleeps['count'] >= 1
     assert not (tmp_path / repair.RESTARTING_STATE).exists()
+
+
+@pytest.mark.parametrize('error', [ConnectionError('offline'), TimeoutError('late'),
+                                 PermissionError('sharing violation')])
+def test_temporary_infrastructure_failure_refunds_repair_with_total_cap(job, monkeypatch, error):
+    root, project, logs, source, released, _ = job
+
+    def fail(*args):
+        raise error
+
+    monkeypatch.setattr(repair, '_ask', fail)
+    for index in range(repair.MAX_TRANSIENT_FAILURES):
+        assert repair.repair_once(root, project.name) == 'cooldown'
+        record = read_yaml(logs / repair.REPORT)
+        assert record['attempts'] == 0
+        assert record['transient_failures'] == index + 1
+        record['retry_after'] = (datetime.now(UTC) - timedelta(seconds=1)).isoformat()
+        write_yaml_atomic(logs / repair.REPORT, record)
+    assert repair.repair_once(root, project.name) == 'exhausted'
+    assert not released
+    assert source.read_text(encoding='utf-8') == 'broken = True\n'

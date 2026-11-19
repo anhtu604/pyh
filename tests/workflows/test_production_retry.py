@@ -341,3 +341,67 @@ def test_clear_retry_retries_windows_sharing_violation(
     clear_retry(tmp_path, "gout-test")
     assert attempts == 3
     assert not retry_file.exists()
+
+
+@pytest.mark.parametrize('reader', ['_read_retry_record', '_agent_records'])
+def test_retry_metadata_file_lock_recovers_without_corruption_hold(tmp_path, monkeypatch, reader):
+    project = _setup_project(tmp_path)
+    if reader == '_read_retry_record':
+        record_failure(tmp_path, project, WorkflowState.MEDICALLY_APPROVED, TimeoutError('late'))
+        path = production_retry._retry_path(tmp_path, project.name)
+    else:
+        production_retry.record_agent_failure(tmp_path, project, 'draft', 'fp', 'transient', TimeoutError('late'))
+        path = production_retry._agent_path(tmp_path, project.name)
+    original = production_retry.read_yaml
+    calls = 0
+
+    def locked(path):
+        nonlocal calls
+        calls += 1
+        if calls < 3:
+            error = PermissionError('sharing violation')
+            error.winerror = 33
+            raise error
+        return original(path)
+
+    monkeypatch.setattr(production_retry, 'read_yaml', locked)
+    monkeypatch.setattr(production_retry.time, 'sleep', lambda _: None)
+    assert getattr(production_retry, reader)(path)
+    assert calls == 3
+
+
+@pytest.mark.parametrize('reader', ['_read_retry_record', '_agent_records'])
+def test_persistent_retry_read_lock_preserves_oserror_and_record(tmp_path, monkeypatch, reader):
+    path = tmp_path / 'retry.yaml'
+    path.write_text('version: 1', encoding='utf-8')
+    before = path.read_bytes()
+    error = PermissionError('sharing violation')
+    error.winerror = 32
+
+    def locked(path):
+        raise error
+
+    monkeypatch.setattr(production_retry, 'read_yaml', locked)
+    monkeypatch.setattr(production_retry.time, 'sleep', lambda _: None)
+    with pytest.raises(PermissionError):
+        getattr(production_retry, reader)(path)
+    assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize('message', ['sharing violation', 'being used by another process', 'HTTP 429'])
+def test_production_validation_wrapper_retries_temporary_errors(message):
+    assert production_retry._is_transient_production_error(ValueError(message))
+
+
+def test_identical_file_lock_escalates_per_agent_task_and_resets(tmp_path):
+    project = _setup_project(tmp_path)
+    for attempt in range(1, 6):
+        production_retry.record_agent_failure(tmp_path, project, 'draft', 'fp', 'transient',
+                                              PermissionError('sharing violation'))
+        record = read_yaml(production_retry._agent_path(tmp_path, project.name))['steps']['draft']
+        assert record['kind'] == ('configuration' if attempt == 5 else 'transient')
+    production_retry.record_agent_failure(tmp_path, project, 'draft', 'fp', 'transient',
+                                          PermissionError('being used by another process'))
+    record = read_yaml(production_retry._agent_path(tmp_path, project.name))['steps']['draft']
+    assert record['kind'] == 'transient'
+    assert record['consecutive_failures'] == 1

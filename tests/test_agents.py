@@ -964,3 +964,23 @@ def test_child_env_sets_utf8_defaults_and_preserves_vietnamese_over_windows_pipe
         check=True,
     )
     assert proc.stdout.strip() == sample
+
+
+@pytest.mark.parametrize('message', ['HTTP 429', 'HTTP 503', 'sharing violation',
+                                    'Access is denied while renaming temporary file'])
+def test_cli_transient_error_precedes_configuration_wording(tmp_path, message):
+    from healthvideo.agents import AgentCli, invoke
+
+    result = invoke(AgentCli('codex', ('codex',), 'arg'), 'prompt', cwd=tmp_path,
+                    log_dir=tmp_path / 'logs',
+                    runner=lambda *args, **kwargs: _completed(1, stderr=message))
+    assert result.failure_kind == 'transient'
+
+
+@pytest.mark.parametrize('code', [5, 32, 33])
+def test_cli_exception_windows_file_lock_is_transient(tmp_path, code):
+    def locked(*args, **kwargs):
+        error = PermissionError('locked')
+        error.winerror = code
+        raise error
+    assert _failover(tmp_path, [CODEX_SLOT], locked).failure_kind == 'transient'

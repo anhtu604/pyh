@@ -447,6 +447,12 @@ def _check_video_qa(revision_root: Path, *, accept_pronunciation: bool,
     qa_path = revision_root / 'reviews/video-qa.json'
     report_path = revision_root / 'reviews/pronunciation-qa.json'
     qa = read_yaml(qa_path) if qa_path.is_file() else {}
+    if qa_path.is_file():
+        status = qa.get('status')
+        # 'failed' is emitted for pronunciation blocks, whose existing doctor/PIN
+        # exception remains below. Every unknown or absent state fails closed.
+        if not isinstance(status, str) or status not in {'render_complete', 'passed', 'failed', 'error'}:
+            raise ValueError('video gate refuses missing or unknown video QA status')
     pronunciation = read_yaml(report_path) if report_path.is_file() else {}
     manifest_path = revision_root / 'renders/render-manifest.json'
     manifest = read_yaml(manifest_path) if manifest_path.is_file() else {}
@@ -467,7 +473,8 @@ def _check_video_qa(revision_root: Path, *, accept_pronunciation: bool,
         other_failed = any(isinstance(value, dict) and value.get('passed') is False
                            for key, value in qa.items() if key != 'pronunciation')
         if (failed_checks or other_failed or qa.get('errors')
-                or (qa.get('status') in {'failed', 'error'} and not blocked)):
+                or qa.get('status') == 'error'
+                or (qa.get('status') == 'failed' and not blocked)):
             raise ValueError('video gate refuses failed video QA')
         expected = pronunciation_qa.get('report_sha256')
         if expected and (not report_path.is_file() or sha256_file(report_path) != expected):

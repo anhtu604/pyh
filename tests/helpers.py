@@ -447,7 +447,7 @@ def advance_v2_project_to_video_review(project_dir: Path, *, now: datetime) -> N
     (revision_root / "reviews").mkdir(parents=True, exist_ok=True)
     _write_json(
         revision_root / "reviews" / "video-qa.json",
-        {"codec": "h264", "issues": []},
+        {"status": "render_complete", "codec": "h264", "issues": []},
     )
     context = TransitionContext(
         active_revision="001",

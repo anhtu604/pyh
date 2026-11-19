@@ -12,6 +12,7 @@ from typing import Any, Literal
 import yaml
 
 from healthvideo.domain.project_v2 import WorkflowState
+from healthvideo.failures import classify_failure, is_file_contention
 from healthvideo.storage.files import (
     canonical_json_hash,
     read_yaml,
@@ -49,7 +50,7 @@ _TRANSIENT_ERROR_PATTERNS = (
     "http 503",
     "http 504",
 )
-_WINDOWS_TRANSIENT_UNLINK_ERRORS = frozenset({5, 32})
+_WINDOWS_TRANSIENT_UNLINK_ERRORS = frozenset({5, 32, 33})
 _CODE_HASH_CACHE: dict[tuple[str, int, int], str] = {}
 
 
@@ -57,7 +58,8 @@ def _is_transient_production_error(error: Exception) -> bool:
     if not isinstance(error, ValueError):
         return True
     detail = str(error).lower()
-    return any(pattern in detail for pattern in _TRANSIENT_ERROR_PATTERNS)
+    return (classify_failure(error) == "transient"
+            or any(pattern in detail for pattern in _TRANSIENT_ERROR_PATTERNS))
 
 
 def _unlink_with_retry(path: Path) -> None:
@@ -142,15 +144,36 @@ def _sanitize_reason(error: Exception) -> str:
     return text or type(error).__name__
 
 
+def _read_retry_yaml(path: Path) -> dict[str, Any]:
+    """Retry short file locks, preserving OSError if still unavailable.
+
+    Never mistake unreadable metadata for corrupt metadata, or reset its budget.
+    The runner can try again on its next scan; no paid work runs without a read.
+    """
+    for attempt, delay in enumerate((0.0, 0.01, 0.03, 0.08, 0.15)):
+        if delay:
+            time.sleep(delay)
+        try:
+            return read_yaml(path)
+        except OSError as error:
+            if classify_failure(error) != 'transient' or attempt == 4:
+                raise
+    raise AssertionError('unreachable')
+
+
 def _read_retry_record(path: Path) -> dict[str, Any]:
     try:
-        data = read_yaml(path)
+        data = _read_retry_yaml(path)
         fingerprint = data.get("fingerprint")
         kind = data.get("kind")
         attempts = data.get("attempts")
         reason = data.get("reason")
         retry_after = data.get("retry_after")
-    except (OSError, ValueError, TypeError, AttributeError, yaml.YAMLError) as error:
+    except OSError as error:
+        if classify_failure(error) == "transient":
+            raise
+        raise ValueError(f"Invalid production retry record in {path}") from error
+    except (ValueError, TypeError, AttributeError, yaml.YAMLError) as error:
         raise ValueError(
             f"Invalid production retry record in {path}; restore or remove it before retrying"
         ) from error
@@ -360,7 +383,7 @@ def _agent_records(path: Path) -> dict[str, dict[str, Any]]:
     if not path.exists():
         return {}
     try:
-        data = read_yaml(path)
+        data = _read_retry_yaml(path)
         steps = data["steps"]
         if data.get("version") != 1 or not isinstance(steps, dict):
             raise ValueError("invalid agent retry schema")
@@ -372,6 +395,9 @@ def _agent_records(path: Path) -> dict[str, dict[str, Any]]:
                     or type(record.get("attempts")) is not int or record["attempts"] < 1
                     or not isinstance(record.get("reason"), str) or not record["reason"]):
                 raise ValueError("invalid agent retry record")
+            consecutive = record.get("consecutive_failures", 1)
+            if type(consecutive) is not int or consecutive < 1:
+                raise ValueError("invalid consecutive failure count")
             deadline = record.get("retry_after")
             if deadline is not None and (not isinstance(deadline, str)
                                          or datetime.fromisoformat(deadline).tzinfo is None):
@@ -380,7 +406,11 @@ def _agent_records(path: Path) -> dict[str, dict[str, Any]]:
                     and deadline is None):
                 raise ValueError("missing agent retry deadline")
         return steps
-    except (OSError, ValueError, TypeError, KeyError, yaml.YAMLError) as exc:
+    except OSError as exc:
+        if classify_failure(exc) == "transient":
+            raise
+        raise ValueError(f"Invalid retry record in {path}") from exc
+    except (ValueError, TypeError, KeyError, yaml.YAMLError) as exc:
         raise ValueError(f"Invalid agent retry record in {path}; restore or remove it before retrying") from exc
 
 
@@ -404,12 +434,18 @@ def record_agent_failure(root: Path, project_dir: Path, step: str, fingerprint: 
     records = _agent_records(path)
     previous = records.get(step)
     attempts = (previous["attempts"] if previous and previous["fingerprint"] == fingerprint else 0) + 1
+    reason = _sanitize_reason(error)
+    consecutive = (previous.get("consecutive_failures", 1)
+                   if previous and previous["fingerprint"] == fingerprint
+                   and previous["reason"] == reason else 0) + 1
     kind = kind if kind in _AGENT_FAILURE_KINDS else "agent_error"
+    if is_file_contention(error):
+        kind = classify_failure(error, consecutive_failures=consecutive)
     deadline = None
     if kind == "transient" and attempts < MAX_TRANSIENT_ATTEMPTS:
         deadline = (_now() + timedelta(seconds=TRANSIENT_BACKOFF_SECONDS[attempts])).isoformat()
     records[step] = {"fingerprint": observed_fingerprint or fingerprint, "kind": kind, "attempts": attempts,
-                     "reason": _sanitize_reason(error), "retry_after": deadline}
+                     "reason": reason, "retry_after": deadline, "consecutive_failures": consecutive}
     write_yaml_atomic(path, {"version": 1, "steps": records})
 
 
@@ -434,12 +470,16 @@ def model_resume_step(root: Path, project_dir: Path, brief_context: str) -> str 
     if not path.exists():
         return None
     try:
-        data = read_yaml(path)
+        data = _read_retry_yaml(path)
         step, fingerprint = data["step"], data["fingerprint"]
         if (data.get("version") != 1 or step not in _AGENT_INPUTS
                 or not isinstance(fingerprint, str) or not fingerprint):
             raise ValueError("invalid model resumption")
-    except (OSError, ValueError, TypeError, KeyError, yaml.YAMLError) as exc:
+    except OSError as exc:
+        if classify_failure(exc) == "transient":
+            raise
+        raise ValueError(f"Invalid retry record in {path}") from exc
+    except (ValueError, TypeError, KeyError, yaml.YAMLError) as exc:
         raise ValueError(f"Invalid model resume record in {path}; restore or remove it before retrying") from exc
     if agent_fingerprint(root, project_dir, step, brief_context) != fingerprint:
         _unlink_with_retry(path)
@@ -483,5 +523,7 @@ def retry_deadlines(root: Path, slug: str) -> list[datetime]:
             records.append(_read_retry_record(production))
         return [moment for record in records if record.get("retry_after")
                 and (moment := datetime.fromisoformat(record["retry_after"])) > _now()]
+    except OSError:
+        return []
     except ValueError:
         return []

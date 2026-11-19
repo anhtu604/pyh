@@ -694,3 +694,29 @@ def test_telegram_bot_gates_match_station_07_and_12_without_revoking_approvals(
     state_vid = telegram_bot.load_state(vid_root)
     telegram_bot._send_gate_review(vid_root, state_vid, vid.name, "1", send_fn=capture_send)
     assert "Trạm 07/12" in sent[-1]
+
+
+@pytest.mark.parametrize('status', [None, 'skipped', 'unknown', [], {}])
+def test_video_qa_refuses_missing_or_unknown_status(tmp_path, status):
+    import json
+
+    from healthvideo.workflows.gate_review import _check_video_qa
+
+    revision = tmp_path
+    (revision / 'reviews').mkdir()
+    data = {} if status is None else {'status': status}
+    (revision / 'reviews/video-qa.json').write_text(json.dumps(data), encoding='utf-8')
+    with pytest.raises(ValueError, match='QA'):
+        _check_video_qa(revision, accept_pronunciation=False, pronunciation_pin=None, pin_file=None)
+
+
+@pytest.mark.parametrize('status', ['render_complete', 'passed'])
+def test_video_qa_accepts_known_success_status(tmp_path, status):
+    import json
+
+    from healthvideo.workflows.gate_review import _check_video_qa
+
+    (tmp_path / 'reviews').mkdir()
+    (tmp_path / 'reviews/video-qa.json').write_text(json.dumps({'status': status}), encoding='utf-8')
+    assert _check_video_qa(tmp_path, accept_pronunciation=False,
+                           pronunciation_pin=None, pin_file=None) is None

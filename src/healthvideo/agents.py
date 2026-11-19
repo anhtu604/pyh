@@ -17,6 +17,7 @@ from typing import Any
 
 from healthvideo.company import REPO_ROOT, ModelSlot
 from healthvideo.env import child_env
+from healthvideo.failures import classify_failure
 from healthvideo.process import (
     UnsafeBatchLauncherError,
     is_same_process,
@@ -376,10 +377,9 @@ def invoke(
         was_cancelled = cancel_file.is_file()
         _remove_job_marker(cancel_file)
         kind = ('cancelled' if was_cancelled
-                else 'transient' if isinstance(exc, (subprocess.TimeoutExpired, ConnectionError, TimeoutError))
-                else 'configuration' if isinstance(exc, (FileNotFoundError, PermissionError, UnsafeBatchLauncherError))
+                else 'configuration' if isinstance(exc, UnsafeBatchLauncherError)
                 or (agent.name == 'omniroute' and isinstance(exc, ValueError))
-                else 'agent_error')
+                else classify_failure(exc))
         return AgentResult(
             agent=agent.name,
             ok=False,
@@ -413,16 +413,9 @@ def invoke(
     quota_exhausted = (not ok) and any(
         pattern.lower() in lower_output for pattern in QUOTA_PATTERNS
     )
-    configuration = ('auto-denied', 'permission denied', 'access is denied', 'unauthorized',
-                     'authentication failed', 'not logged in', 'invalid api key')
-    transient = (*BUSY_PATTERNS, 'connection reset', 'connection refused', 'connection timed out',
-                 'network error', 'network is unreachable', 'temporary failure',
-                 'timed out', 'econnreset', 'enotfound', 'http 502', 'http 504')
     failure_kind = (
-        None if ok
-        else 'configuration' if any(p in lower_output for p in configuration)
-        else 'transient' if (not lower_output.strip() or any(p in lower_output for p in transient))
-        else 'agent_error'
+        None if ok else 'transient' if not lower_output.strip()
+        else classify_failure(lower_output)
     )
     return AgentResult(
         agent=agent.name,

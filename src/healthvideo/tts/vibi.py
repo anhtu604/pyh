@@ -20,6 +20,8 @@ from healthvideo.storage.files import read_yaml
 from healthvideo.tts.audio_checks import inspect_wav
 from healthvideo.tts.base import TTSRequest, TTSResult
 
+FFMPEG_TIMEOUT_SECONDS = 120
+
 API_ROOT = "https://api.vibi.pro"
 # Cloudflare rejects requests without a User-Agent (error 1010).
 USER_AGENT = "healthvideo/1.0"
@@ -185,8 +187,10 @@ class VibiTTS:
                 result = self.runner(
                     ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
                      "-i", str(source), "-ar", "48000", "-ac", "1", "-c:a", "pcm_s16le", str(output)],
-                    capture_output=True, check=False,
+                    capture_output=True, check=False, timeout=FFMPEG_TIMEOUT_SECONDS,
                 )
+            except subprocess.TimeoutExpired:
+                raise TimeoutError(f"ffmpeg decode timed out after {FFMPEG_TIMEOUT_SECONDS}s") from None
             except OSError:
                 raise VibiError("ffmpeg is required to decode vibi audio.") from None
             if result.returncode:

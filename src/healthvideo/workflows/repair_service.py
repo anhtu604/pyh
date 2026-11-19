@@ -21,6 +21,7 @@ from healthvideo.agents import AllAgentsExhausted, invoke_with_failover
 from healthvideo.company import load_company, role_skill_block
 from healthvideo.domain.project_v2 import WorkflowState
 from healthvideo.env import background_popen_kwargs, background_python, child_env
+from healthvideo.failures import classify_failure
 from healthvideo.process import is_same_process, process_token
 from healthvideo.storage.files import (
     canonical_json_hash,
@@ -1000,19 +1001,18 @@ def repair_once(
             _release(root, slug)
             record['retry_requested_at'] = datetime.now(UTC).isoformat()
             record['phase'] = 'retry_requested'
-    except (AllAgentsExhausted, subprocess.TimeoutExpired) as error:
+    except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired, AllAgentsExhausted) as error:
         if before_bytes or before_paths:
             _restore_workspace(root, before_bytes, before_paths)
-        record['attempts'] = max(0, record['attempts'] - 1)
-        record['transient_failures'] = record.get('transient_failures', 0) + 1
-        record['phase'] = 'cooldown'
-        record['retry_after'] = (datetime.now(UTC) + timedelta(seconds=QUOTA_COOLDOWN_SECONDS)).isoformat()
-        record['error'] = _sanitize_reason(error)
-    except (OSError, ValueError, RuntimeError) as error:
-        if before_bytes or before_paths:
-            _restore_workspace(root, before_bytes, before_paths)
-        record['phase'] = 'repair_failed'
-        record['retry_after'] = (datetime.now(UTC) + timedelta(seconds=REPAIR_COOLDOWN_SECONDS)).isoformat()
+        if isinstance(error, AllAgentsExhausted) or classify_failure(error) == 'transient':
+            record['attempts'] = max(0, record['attempts'] - 1)
+            record['transient_failures'] = record.get('transient_failures', 0) + 1
+            record['phase'] = 'cooldown'
+            delay = QUOTA_COOLDOWN_SECONDS
+        else:
+            record['phase'] = 'repair_failed'
+            delay = REPAIR_COOLDOWN_SECONDS
+        record['retry_after'] = (datetime.now(UTC) + timedelta(seconds=delay)).isoformat()
         record['error'] = _sanitize_reason(error)
     finally:
         write_yaml_atomic(record_path, record)

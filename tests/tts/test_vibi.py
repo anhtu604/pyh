@@ -173,3 +173,20 @@ def test_http_errors_redact_provider_response_and_key(status):
                      retries=0)
     assert str(status) in str(caught.value)
     assert "secret-key" not in str(caught.value)
+
+
+def test_ffmpeg_decode_has_bounded_transient_timeout(tmp_path):
+    from healthvideo.failures import classify_failure
+    from healthvideo.tts.vibi import FFMPEG_TIMEOUT_SECONDS
+
+    opener, _ = _opener(['completed'])
+
+    def timeout(argv, **kwargs):
+        assert kwargs['timeout'] == FFMPEG_TIMEOUT_SECONDS
+        raise subprocess.TimeoutExpired(argv, kwargs['timeout'])
+
+    tts = VibiTTS(PROFILE, api_key='secret-key', opener=opener, runner=timeout)
+    with pytest.raises(TimeoutError, match='ffmpeg') as caught:
+        tts.synthesize(TTSRequest(text='Gút', language='vi'), tmp_path / 'voice.wav')
+    assert classify_failure(caught.value) == 'transient'
+    assert 'secret-key' not in str(caught.value)
