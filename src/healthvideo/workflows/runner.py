@@ -604,8 +604,13 @@ def _build_step_prompt(
         prepare_stale_review(resolve_project_layout(project_dir).artifact_root)
         if step == 'visual_review' and (project_dir / 'project.yaml').is_file() else ''
     )
+    shorts_plan_note = ''
+    if step == 'shorts_plan':
+        problem = _shorts_plan_validation_problem(project_dir)
+        if problem:
+            shorts_plan_note = f'Lỗi kế hoạch short cần sửa trong phạm vi bước này: {problem}'
     extra_blocks = "\n\n".join(
-        part for part in (style_note, standards_block.rstrip(), stale_visual_note) if part
+        part for part in (style_note, standards_block.rstrip(), stale_visual_note, shorts_plan_note) if part
     )
     if extra_blocks:
         body, heading, rules = prompt.rpartition("## Quy tắc cứng")
@@ -1335,6 +1340,14 @@ def _run_topic(
 
                 if step == "produce" and not retrying_production and deps.visual_review_pending(project_dir):
                     step = "visual_review"
+                    # An existing invalid plan blocks clip rendering inside visual_review.
+                    # Missing plans keep the original visual-first order for new projects.
+                    if not forced_step:
+                        revision_root, _ = _revision_root_or_error(project_dir)
+                        if (revision_root is not None
+                                and (revision_root / SHORTS_PLAN_ARTIFACT).is_file()
+                                and not deps.shorts_plan_ready(project_dir)):
+                            step = "shorts_plan"
                 elif step == "produce" and not retrying_production and not forced_step:
                     need_posts = not deps.posts_ready(project_dir)
                     need_shorts = not deps.shorts_plan_ready(project_dir)
