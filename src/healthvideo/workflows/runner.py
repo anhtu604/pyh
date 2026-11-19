@@ -1002,6 +1002,14 @@ def _diagnose_shorts_plan_error(project_dir: Path) -> str:
     return _shorts_plan_validation_problem(project_dir) or f"{SHORTS_PLAN_ARTIFACT} chưa hợp lệ"
 
 
+def _existing_invalid_shorts_plan(deps: RunDeps, project_dir: Path) -> bool:
+    """Missing plans keep the original visual-first order for new projects."""
+    revision_root, _ = _revision_root_or_error(project_dir)
+    return (revision_root is not None
+            and (revision_root / SHORTS_PLAN_ARTIFACT).is_file()
+            and not deps.shorts_plan_ready(project_dir))
+
+
 def _diagnose_script_error(revision_root: Path) -> str | None:
     script_path = revision_root / "script" / "script.yaml"
     if not script_path.is_file():
@@ -1329,25 +1337,29 @@ def _run_topic(
                         _mark_blocked(root, entry.slug, str(exc), report)
                         break
                     if not status["allowed"]:
-                        _mark_blocked(
-                            root,
-                            entry.slug,
-                            f"bước produce lỗi: {status['reason']}",
-                            report,
-                        )
-                        break
+                        if (status['kind'] == 'validation' and not forced_step
+                                and _existing_invalid_shorts_plan(deps, project_dir)):
+                            # Only the repair station may run, never production. Its existing
+                            # agent-retry validation hold caps repair at ONE attempt per input
+                            # fingerprint, including subsequent queue scans (output edits do
+                            # not reset that budget). Failed repairs retain their diagnosis.
+                            step = "shorts_plan"
+                        else:
+                            _mark_blocked(
+                                root,
+                                entry.slug,
+                                f"bước produce lỗi: {status['reason']}",
+                                report,
+                            )
+                            break
                     retrying_production = status["attempts"] > 0
 
                 if step == "produce" and not retrying_production and deps.visual_review_pending(project_dir):
                     step = "visual_review"
                     # An existing invalid plan blocks clip rendering inside visual_review.
                     # Missing plans keep the original visual-first order for new projects.
-                    if not forced_step:
-                        revision_root, _ = _revision_root_or_error(project_dir)
-                        if (revision_root is not None
-                                and (revision_root / SHORTS_PLAN_ARTIFACT).is_file()
-                                and not deps.shorts_plan_ready(project_dir)):
-                            step = "shorts_plan"
+                    if not forced_step and _existing_invalid_shorts_plan(deps, project_dir):
+                        step = "shorts_plan"
                 elif step == "produce" and not retrying_production and not forced_step:
                     need_posts = not deps.posts_ready(project_dir)
                     need_shorts = not deps.shorts_plan_ready(project_dir)

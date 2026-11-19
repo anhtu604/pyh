@@ -150,6 +150,87 @@ def test_shorts_repair_preserves_runner_controls(tmp_path, monkeypatch, control,
     assert report.blocked == ([project.name] if control == 'step_limit' else [])
 
 
+@pytest.mark.parametrize('parallel', [False, True])
+@pytest.mark.parametrize('plan_status', ['missing', 'valid', 'invalid'])
+@pytest.mark.parametrize('repaired', [False, True])
+def test_production_validation_hold_allows_only_invalid_shorts_repair(
+    tmp_path, monkeypatch, parallel, plan_status, repaired,
+):
+    from datetime import UTC, datetime
+
+    from healthvideo.agents import AgentResult
+    from healthvideo.domain.gate_review import GateKind
+    from healthvideo.domain.queue import QueueEntry
+    from healthvideo.storage.files import read_yaml
+    from healthvideo.workflows import runner
+    from healthvideo.workflows.gate_review import approve_gate
+    from healthvideo.workflows.production_retry import record_failure, retry_status
+    from tests.helpers import create_v2_project_fixture
+
+    project = create_v2_project_fixture(
+        tmp_path / 'projects', state=WorkflowState.AWAITING_MEDICAL_REVIEW,
+    )
+    approve_gate(project, GateKind.MEDICAL, reviewer='Fixture', now=datetime.now(UTC))
+    state = WorkflowState.MEDICALLY_APPROVED
+    plan = project / 'revisions/001/posts/shorts-plan.yaml'
+    if plan_status != 'missing':
+        plan.parent.mkdir(parents=True, exist_ok=True)
+        plan.write_text('clips: []\n', encoding='utf-8')
+    ready = plan_status == 'valid'
+    problem = 'CL02: clip dọc cần ít nhất 2 anatomy.subject khác nhau'
+    monkeypatch.setattr(runner, '_shorts_plan_validation_problem', lambda _: problem)
+    record_failure(tmp_path, project, state, ValueError(problem))
+    assert not retry_status(tmp_path, project, state)['allowed']
+    retry_path = tmp_path / 'topics/logs' / project.name / 'production-retry.yaml'
+    original_retry = retry_path.read_bytes()
+    steps = []
+    prompts = []
+
+    def invoke(slots, prompt, **kwargs):
+        nonlocal ready
+        steps.append(kwargs['step'])
+        prompts.append(prompt)
+        if repaired:
+            ready = True
+            plan.write_text('clips: [repaired]\n', encoding='utf-8')
+        return AgentResult('fixture', True, False, kwargs['log_dir'] / 'agent.log')
+
+    deps = runner.RunDeps(
+        create_project=lambda *a: project,
+        read_state=lambda _: state,
+        reject_note=lambda _: None,
+        python_steps={'produce': lambda _: pytest.fail('production must remain held')},
+        invoke=invoke,
+        changed_code_paths=lambda _: [],
+        shorts_plan_ready=lambda _: ready,
+        visual_review_pending=lambda _: True,
+        parallel_branches=parallel,
+    )
+    entry = QueueEntry(slug=project.name, title='Test', question='Test?', added='2026-11-19')
+    report = runner.RunReport()
+    runner._run_topic(tmp_path, deps, entry, report, once=True)
+    assert steps == (['shorts_plan'] if plan_status == 'invalid' else [])
+    assert retry_path.read_bytes() == original_retry
+    if plan_status == 'invalid':
+        assert problem in prompts[0]
+        assert report.blocked == ([] if repaired else [project.name])
+        assert retry_status(tmp_path, project, state)['allowed'] == repaired
+        if not repaired:
+            # One validation attempt per agent input fingerprint, persisted across scans.
+            log_dir = retry_path.parent
+            record = read_yaml(log_dir / 'agent-retry.yaml')['steps']['shorts_plan']
+            assert record['kind'] == 'validation'
+            assert record['attempts'] == 1
+            for _ in range(3):
+                again = runner.RunReport()
+                runner._run_topic(tmp_path, deps, entry, again, once=True)
+                assert again.blocked == [project.name]
+            assert steps == ['shorts_plan']
+            assert problem in (log_dir / 'blocked.txt').read_text(encoding='utf-8')
+    else:
+        assert report.blocked == [project.name]
+
+
 @pytest.mark.parametrize('returned_result', [False, True])
 @pytest.mark.parametrize('error,kind', [
     (ConnectionError('offline'), 'transient'),
