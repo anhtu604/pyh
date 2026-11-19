@@ -65,7 +65,10 @@ def load_effective_clip_specs(
 
 
 def load_clip_scenes(
-    revision_root: Path, storyboard: Storyboard
+    revision_root: Path,
+    storyboard: Storyboard,
+    *,
+    require_medical_approval: bool = True,
 ) -> dict[str, tuple[Scene, ...]]:
     """Validate outline + effective clip plan against storyboard and ledger; return each clip's scenes."""
     revision = resolve_revision_root(revision_root)
@@ -83,7 +86,9 @@ def load_clip_scenes(
     }
     outline = Outline.model_validate(read_yaml(revision / OUTLINE_ARTIFACT))
     validate_outline(outline, storyboard, claims.keys())
-    plan = load_effective_clip_specs(revision)
+    plan = load_effective_clip_specs(
+        revision, require_medical_approval=require_medical_approval
+    )
     if has_shorts_plan:
         return validate_clip_plan(
             plan,

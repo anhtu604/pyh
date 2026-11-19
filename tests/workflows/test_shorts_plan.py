@@ -133,6 +133,30 @@ def test_sync_shorts_plan_requires_medical_approval(tmp_path: Path) -> None:
         sync_shorts_plan_to_clip_plan(revision)
 
 
+def test_medical_gate_can_be_approved_when_shorts_plan_already_exists(tmp_path: Path) -> None:
+    project = create_long_form_project_fixture(tmp_path)
+    _write_shorts(
+        project,
+        tmp_path,
+        [
+            {
+                "id": "CL01",
+                "title": "Shorts có trước cổng y khoa",
+                "hook_text": "Hook ngắn",
+                "start_scene_id": "S01",
+                "end_scene_id": "S02",
+                "target_seconds": 70,
+                "caption": "Caption [claim:C01].",
+                "safety_caveat": "Caveat [claim:C02].",
+                "safe_zone_checked": True,
+            }
+        ],
+    )
+    approve_gate(project, GateKind.MEDICAL, reviewer=REVIEWER, now=NOW)
+    assert read_yaml(project / "project.yaml")["state"] == "medically_approved"
+    assert sync_shorts_plan_to_clip_plan(project / "revisions/001").clips
+
+
 def test_sync_shorts_plan_blocks_missing_caveat_and_bad_duration(tmp_path: Path) -> None:
     project = _approved_long_form(tmp_path, claim_on_s03=True)
     revision = project / "revisions/001"

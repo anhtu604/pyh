@@ -327,7 +327,8 @@ def approve_gate(
         script = Script.model_validate(read_yaml(revision_root / "script/script.yaml"))
         validate_hook_outro(script, storyboard, require_brand=True, allow_line_references=True)
         if storyboard.format_profile == "youtube_long":
-            load_clip_scenes(revision_root, storyboard)
+            # The medical approval record does not exist yet while this gate is being approved.
+            load_clip_scenes(revision_root, storyboard, require_medical_approval=False)
         referenced_storyboard_assets(revision_root, storyboard, manifest)
         if script.format_profile == "hook_outro_v1" or any(
             scene.source_card is not None or scene.on_screen_text is not None
