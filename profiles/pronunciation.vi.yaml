@@ -44,3 +44,39 @@ entries:
     spoken: en-xết
     needs_doctor_review: false
     note: Bác sĩ đã duyệt 2026-11-15.
+  - written: ALT
+    spoken: ây-eo-ti
+    needs_doctor_review: false
+    note: Bác sĩ chọn đọc chữ cái tiếng Anh 2026-11-20.
+  - written: AST
+    spoken: ây-ét-ti
+    needs_doctor_review: false
+    note: Bác sĩ chọn đọc chữ cái tiếng Anh 2026-11-20.
+  - written: INR
+    spoken: ai-en-a
+    needs_doctor_review: false
+    note: Chữ cái tiếng Anh theo lựa chọn của bác sĩ 2026-11-20.
+  - written: enzyme
+    spoken: en-zim
+    needs_doctor_review: true
+    note: Đề xuất, cần bác sĩ xác nhận.
+  - written: albumin
+    spoken: an-bu-min
+    needs_doctor_review: true
+    note: Đề xuất, cần bác sĩ xác nhận.
+  - written: silymarin
+    spoken: xi-li-ma-rin
+    needs_doctor_review: true
+    note: Đề xuất, cần bác sĩ xác nhận.
+  - written: statin
+    spoken: xta-tin
+    needs_doctor_review: true
+    note: Đề xuất, cần bác sĩ xác nhận.
+  - written: like
+    spoken: lai
+    needs_doctor_review: true
+    note: Đề xuất, cần bác sĩ xác nhận.
+  - written: subscribe
+    spoken: xáp-xcrai
+    needs_doctor_review: true
+    note: Đề xuất, cần bác sĩ xác nhận.
