@@ -36,7 +36,7 @@ export const HealthVideo: React.FC<RenderInput> = (rawInput) => {
       {scenes.map((scene, index) => (
         <Sequence key={scene.id} from={scene.start_frame} durationInFrames={scene.duration_frames}>
           {scene.visual_assets.filter((asset) => asset.role === 'whiteboard').map((asset) => (
-            <VisualAsset asset={asset} outro={scene.visual === 'brand_outro'} key={asset.path} />
+            <VisualAsset asset={asset} outro={scene.visual === 'brand_outro'} durationFrames={scene.duration_frames} key={asset.path} />
           ))}
           {scene.visual === 'anatomy_animation' ? <MechanismCameraContext.Provider value={cameraFramings[index]}><AnatomyScene scene={scene} /></MechanismCameraContext.Provider>
           : scene.visual === 'process_animation' ? <MechanismCameraContext.Provider value={cameraFramings[index]}><ProcessScene scene={scene} /></MechanismCameraContext.Provider>

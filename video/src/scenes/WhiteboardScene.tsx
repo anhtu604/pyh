@@ -3,6 +3,7 @@ import React from 'react';
 import {interpolate, useCurrentFrame} from 'remotion';
 import {Captions} from '../components/Captions';
 import {textEntrances} from '../components/entrances';
+import {slowDriftTransform} from '../components/slowDrift';
 import {useLayout} from '../layout';
 import type {Scene} from '../types';
 
@@ -30,12 +31,14 @@ export const WhiteboardScene: React.FC<WhiteboardSceneProps> = ({scene}) => {
   const hasIllustration = visualAssets.some(asset => asset.role === 'whiteboard');
   const textBox = hasIllustration ? layout.illustrationText : layout.whiteboardText;
   const pieces = textEntrances(scene);
+  const drift = slowDriftTransform(frame, scene.duration_frames);
 
   return (
     <>
-      {!visualAssets.some(asset => asset.role === 'whiteboard') ? <svg
+      {!hasIllustration ? <svg
         aria-label="Nét vẽ whiteboard"
-        style={{height: '100%', left: 0, position: 'absolute', top: 0, width: '100%'}}
+        data-slow-drift={drift.active ? 'true' : undefined}
+        style={{height: '100%', left: 0, position: 'absolute', top: 0, width: '100%', overflow: 'hidden'}}
         viewBox={`0 0 ${layout.frame.width} ${layout.frame.height}`}
       >
         <path
@@ -45,7 +48,13 @@ export const WhiteboardScene: React.FC<WhiteboardSceneProps> = ({scene}) => {
           stroke="#202124"
           strokeLinecap="round"
           strokeWidth="20"
-          style={{strokeDasharray: 1, strokeDashoffset: dashOffset}}
+          style={{
+            strokeDasharray: 1,
+            strokeDashoffset: dashOffset,
+            transform: drift.transform,
+            transformOrigin: 'center',
+            transformBox: 'fill-box',
+          }}
         />
       </svg> : null}
       {scene.on_screen_text ? <div

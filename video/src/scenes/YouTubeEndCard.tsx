@@ -2,6 +2,7 @@ import {FONT_FAMILY} from '../fonts';
 import React from 'react';
 import {AbsoluteFill, Img, staticFile, spring, useCurrentFrame, useVideoConfig} from 'remotion';
 import {brand} from '../anatomy/palette';
+import {isReverseLogoPath, logoBadgeSpec} from '../components/logoContrast';
 import {useLayout} from '../layout';
 
 export const endCardGeometry = (width: number, height: number) => {
@@ -24,6 +25,10 @@ export const YouTubeEndCard: React.FC<{text: string; mascotPath: string; logoPat
   const {width, height} = useLayout().frame;
   const {group, mascot, logo} = endCardGeometry(width, height);
   const entrance = spring({frame, fps, config: {damping: 18, stiffness: 140, mass: 0.8}});
+  const reverse = isReverseLogoPath(logoPath, true);
+  const logoBadge = logoBadgeSpec({reverse, onDark: true});
+  const padX = 14;
+  const padY = 6;
   return <AbsoluteFill style={{backgroundColor: brand.night, color: brand.off_white}}>
     <div data-end-card-group="true" style={{...group, position: 'absolute', opacity: entrance,
       transform: `translateY(${(1 - entrance) * 40}px)`}}>
@@ -35,7 +40,32 @@ export const YouTubeEndCard: React.FC<{text: string; mascotPath: string; logoPat
         </React.Fragment>)}</span>
       </div>
       <Img aria-label="PYH mascot welcome" src={staticFile(mascotPath)} style={{...mascot, position: 'absolute', objectFit: 'contain'}} />
-      <Img aria-label="PYH logo" src={staticFile(logoPath)} style={{...logo, position: 'absolute', objectFit: 'contain'}} />
+      <div
+        data-end-card-logo-badge="true"
+        data-brand-variant={reverse ? 'reverse' : 'primary'}
+        style={{
+          left: logo.left - padX,
+          top: logo.top - padY,
+          width: logo.width + padX * 2,
+          height: logo.height + padY * 2,
+          position: 'absolute',
+          boxSizing: 'border-box',
+          padding: `${padY}px ${padX}px`,
+          borderRadius: 14,
+          backgroundColor: logoBadge.backgroundColor,
+          border: `2px solid ${logoBadge.borderColor}`,
+          boxShadow: logoBadge.boxShadow,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Img
+          aria-label="PYH logo"
+          src={staticFile(logoPath)}
+          style={{width: '100%', height: '100%', objectFit: 'contain', filter: logoBadge.imageFilter}}
+        />
+      </div>
     </div>
   </AbsoluteFill>;
 };
