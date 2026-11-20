@@ -1,10 +1,11 @@
 """Serialized coordinator conversations; Python alone executes confirmed actions."""
 
 import json
+import os
 import re
 import threading
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 from uuid import uuid4
@@ -23,8 +24,8 @@ from healthvideo.domain.gate_review import GateKind
 from healthvideo.domain.project_v2 import WorkflowState
 from healthvideo.domain.queue import QueueEntry
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
-from healthvideo.process import is_same_process
-from healthvideo.storage.files import read_yaml, write_yaml_atomic
+from healthvideo.process import is_same_process, process_token
+from healthvideo.storage.files import read_yaml, write_text_atomic, write_yaml_atomic
 from healthvideo.storage.queue import add_to_queue, load_queue
 from healthvideo.workflows import change_request
 
@@ -729,7 +730,14 @@ def step_boundary(root: Path, slug: str):
             except ValueError as exc:
                 _append(root, slug, {**row, 'status': 'failed', 'error': str(exc)})
         marker.parent.mkdir(parents=True, exist_ok=True)
-        marker.touch()
+        write_text_atomic(
+            marker,
+            json.dumps({
+                'pid': os.getpid(),
+                'process_token': process_token(os.getpid()),
+                'started_at': datetime.now(UTC).isoformat(),
+            }),
+        )
     try:
         yield
     finally:

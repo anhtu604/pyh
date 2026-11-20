@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import stat
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -52,6 +53,19 @@ _TRANSIENT_ERROR_PATTERNS = (
 )
 _WINDOWS_TRANSIENT_UNLINK_ERRORS = frozenset({5, 32, 33})
 _CODE_HASH_CACHE: dict[tuple[str, int, int], str] = {}
+_STATIC_CODE_FILES_CACHE: dict[tuple[str, bool], list[tuple[str, Path]]] = {}
+_SKIP_CODE_WALK_DIRS = frozenset({
+    "__pycache__",
+    ".git",
+    "node_modules",
+    ".venv",
+    "venv",
+    "dist",
+    "build",
+    "out",
+    ".pytest_cache",
+    ".ruff_cache",
+})
 
 
 def _is_transient_production_error(error: Exception) -> bool:
@@ -86,13 +100,111 @@ def _retry_path(root: Path, slug: str) -> Path:
 def _hash_path(path: Path, *, cacheable: bool) -> str:
     if not cacheable:
         return sha256_file(path)
-    stat = path.stat()
-    key = (str(path), stat.st_mtime_ns, stat.st_size)
+    st = path.stat()
+    key = (str(path), st.st_mtime_ns, st.st_size)
     cached = _CODE_HASH_CACHE.get(key)
     if cached is None:
         cached = sha256_file(path)
         _CODE_HASH_CACHE[key] = cached
     return cached
+
+
+def _hash_cached_entry(path: Path) -> str | None:
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    if not stat.S_ISREG(st.st_mode):
+        return None
+    key = (str(path), st.st_mtime_ns, st.st_size)
+    cached = _CODE_HASH_CACHE.get(key)
+    if cached is None:
+        try:
+            cached = sha256_file(path)
+        except OSError:
+            return None
+        _CODE_HASH_CACHE[key] = cached
+    return cached
+
+
+_CODE_SUFFIXES: dict[str, tuple[str, ...]] = {
+    "profiles": (".yaml",),
+    "tools": (".py",),
+    "video/src": (".ts", ".tsx"),
+}
+
+
+def _walk_code_files(base: Path, *, include_agent_inputs: bool) -> list[Path]:
+    found: list[Path] = []
+    prompts_dir = (base / "src/healthvideo/prompts").resolve()
+    folders: tuple[str, ...] = (
+        ("profiles", "src/healthvideo", ".agents/skills", "tools", "video/src")
+        if include_agent_inputs
+        else ("profiles", "src/healthvideo", "tools", "video/src")
+    )
+    for folder in folders:
+        start = base / folder
+        if not start.is_dir():
+            continue
+        suffixes = _CODE_SUFFIXES.get(folder)
+        for dirpath, dirnames, filenames in os.walk(start):
+            dirnames[:] = [d for d in dirnames if d not in _SKIP_CODE_WALK_DIRS]
+            dir_path = Path(dirpath)
+            if suffixes is not None:
+                found.extend(dir_path / name for name in filenames if name.endswith(suffixes))
+            elif folder == ".agents/skills":
+                found.extend(dir_path / name for name in filenames if name == "SKILL.md")
+            elif folder == "src/healthvideo":
+                in_prompts = include_agent_inputs and (
+                    dir_path == prompts_dir or dir_path.resolve().is_relative_to(prompts_dir)
+                )
+                for name in filenames:
+                    if name.endswith(".py") or (in_prompts and name.endswith(".md")):
+                        found.append(dir_path / name)
+    return found
+
+
+def _collect_code_hashes(
+    files: dict[str, Any],
+    root: Path,
+    project_dir: Path,
+    *,
+    include_agent_inputs: bool,
+) -> None:
+    code_root = Path(__file__).resolve().parents[3]
+    root_resolved = root.resolve()
+    project_resolved = project_dir.resolve()
+    for base in dict.fromkeys((root_resolved, code_root)):
+        in_work_root = base.is_relative_to(root_resolved) or base.is_relative_to(
+            project_resolved
+        )
+        if in_work_root:
+            for path in _walk_code_files(base, include_agent_inputs=include_agent_inputs):
+                try:
+                    resolved = path.resolve()
+                    if not resolved.is_file():
+                        continue
+                    files[str(resolved)] = _hash_path(resolved, cacheable=False)
+                except OSError:
+                    continue
+        else:
+            cache_key = (str(base), include_agent_inputs)
+            entries = _STATIC_CODE_FILES_CACHE.get(cache_key)
+            if entries is None:
+                scanned: list[tuple[str, Path]] = []
+                for path in _walk_code_files(base, include_agent_inputs=include_agent_inputs):
+                    try:
+                        resolved = path.resolve()
+                        if resolved.is_file():
+                            scanned.append((str(resolved), resolved))
+                    except OSError:
+                        continue
+                entries = scanned
+                _STATIC_CODE_FILES_CACHE[cache_key] = entries
+            for resolved_str, resolved in entries:
+                digest = _hash_cached_entry(resolved)
+                if digest is not None:
+                    files[resolved_str] = digest
 
 
 def production_fingerprint(root: Path, project_dir: Path, state: WorkflowState) -> str:
@@ -105,28 +217,20 @@ def production_fingerprint(root: Path, project_dir: Path, state: WorkflowState) 
         "reviews/visual-review.yaml",
         "reviews/visual/candidates.yaml",
         "reviews/medical-approval.yaml",
+        "reviews/changes/*requested.yaml",
     ):
         paths.update((project_dir / "revisions").glob(f"*/{relative}"))
-    code_root = Path(__file__).resolve().parents[3]
-    root_resolved = root.resolve()
-    project_resolved = project_dir.resolve()
-    for base in {root, code_root}:
-        for folder, patterns in (
-            ("profiles", ("*.yaml",)),
-            ("src/healthvideo", ("*.py",)),
-            ("video/src", ("*.ts", "*.tsx")),
-        ):
-            for pattern in patterns:
-                paths.update((base / folder).rglob(pattern))
     files: dict[str, str] = {}
     for path in sorted(paths):
         if not path.is_file():
             continue
         resolved = path.resolve()
-        in_work_root = resolved.is_relative_to(root_resolved) or resolved.is_relative_to(
-            project_resolved
-        )
-        files[str(resolved)] = _hash_path(resolved, cacheable=not in_work_root)
+        files[str(resolved)] = _hash_path(resolved, cacheable=False)
+    _collect_code_hashes(files, root, project_dir, include_agent_inputs=False)
+    guidance = root / "topics/logs" / project_dir.name / "leader-guidance.yaml"
+    if guidance.is_file():
+        resolved = guidance.resolve()
+        files[str(resolved)] = _hash_path(resolved, cacheable=False)
     return canonical_json_hash({"state": state.value, "files": files})
 
 
@@ -339,11 +443,6 @@ def agent_fingerprint(root: Path, project_dir: Path, step: str, prompt: str) -> 
     for pattern in ("reviews/**/*rejected*.yaml", "reviews/**/*reopened*.yaml",
                     "reviews/changes/*requested.yaml", "workflow.yaml"):
         paths.update(revision_dir.glob(pattern))
-    code_root = Path(__file__).resolve().parents[3]
-    for base in {root, code_root}:
-        for folder, pattern in (("profiles", "*.yaml"), ("src/healthvideo/prompts", "*.md"),
-                                (".agents/skills", "SKILL.md")):
-            paths.update((base / folder).rglob(pattern))
     files: dict[str, Any] = {}
     for path in sorted(paths):
         if not path.is_file():
@@ -375,6 +474,11 @@ def agent_fingerprint(root: Path, project_dir: Path, step: str, prompt: str) -> 
                                              if key != "fix_attempted"}
         else:
             files[str(path.resolve())] = _hash_path(path, cacheable=False)
+    _collect_code_hashes(files, root, project_dir, include_agent_inputs=True)
+    guidance = root / "topics/logs" / project_dir.name / "leader-guidance.yaml"
+    if guidance.is_file():
+        resolved = guidance.resolve()
+        files[str(resolved)] = _hash_path(resolved, cacheable=False)
     return canonical_json_hash({"step": step, "revision": revision, "prompt": prompt, "files": files})
 
 

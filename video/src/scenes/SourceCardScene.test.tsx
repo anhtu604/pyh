@@ -66,6 +66,46 @@ describe('SourceCardScene sentence splitting and timing', () => {
     expect(splitInterpretationSentences(single)).toEqual([single]);
   });
 
+  it('splits long semicolon-separated clauses losslessly while preserving decimals and DOIs', () => {
+    const semicolonText =
+      'Phân tích tổng hợp ghi nhận tỷ lệ tổn thương gan do thảo dược không rõ nguồn gốc lên tới 27,7% trong nhóm nhập viện; '
+      + 'bài tổng quan (DOI 10.3748/wjg.v23.i27.5004) cảnh báo men gan có thể tăng âm thầm trước khi vàng da xuất hiện; '
+      + 'người bệnh tuyệt đối không tự mua thuốc bổ gan khi chưa xác định nguyên nhân.';
+    const clauses = splitInterpretationSentences(semicolonText);
+    expect(clauses).toHaveLength(3);
+    expect(clauses.join('')).toBe(semicolonText);
+    expect(clauses[0]).toContain('27,7%');
+    expect(clauses[1]).toContain('10.3748/wjg.v23.i27.5004');
+    expect(clauses[2]).toContain('người bệnh tuyệt đối');
+  });
+
+  it('splits colon-separated clauses only when both sides are >= 24 chars and ignores short labels or ratios', () => {
+    const longColon =
+      'Phân tích theo dõi dài hạn chỉ ra một kết quả đáng lưu ý: '
+      + 'nhóm tự dùng thảo dược không rõ nguồn gốc có tỷ lệ tăng men gan cao hơn.';
+    const colonClauses = splitInterpretationSentences(longColon);
+    expect(colonClauses).toHaveLength(2);
+    expect(colonClauses.join('')).toBe(longColon);
+    expect(colonClauses[0]).toBe('Phân tích theo dõi dài hạn chỉ ra một kết quả đáng lưu ý: ');
+    expect(colonClauses[1]).toBe('nhóm tự dùng thảo dược không rõ nguồn gốc có tỷ lệ tăng men gan cao hơn.');
+
+    const shortPrefixColon = 'Kết luận: người bệnh cần xét nghiệm men gan định kỳ và mang theo toàn bộ đơn thuốc khi tái khám.';
+    expect(splitInterpretationSentences(shortPrefixColon)).toEqual([shortPrefixColon]);
+
+    const shortSuffixColon = 'Nghiên cứu ghi nhận một phát hiện quan trọng sau theo dõi: tăng nhẹ.';
+    expect(splitInterpretationSentences(shortSuffixColon)).toEqual([shortSuffixColon]);
+
+    const ratioText = 'Tỷ lệ nguy cơ giữa hai nhóm là 10:2 theo báo cáo theo dõi sau 12 tháng điều trị.';
+    expect(splitInterpretationSentences(ratioText)).toEqual([ratioText]);
+
+    const mixedOrder =
+      'Kết luận: tỷ lệ biến cố đạt 27,7% ở nhóm tự dùng thuốc bổ gan; '
+      + 'cần tái khám chuyên khoa gan mật ngay khi men gan tăng kéo dài.';
+    const mixedClauses = splitInterpretationSentences(mixedOrder);
+    expect(mixedClauses).toHaveLength(2);
+    expect(mixedClauses.join('')).toBe(mixedOrder);
+  });
+
   it('activates progressive mode only when >= 2 sentences AND duration >= 8s', () => {
     const two = ['Câu một. ', 'Câu hai.'];
     const one = ['Một câu duy nhất.'];
@@ -159,6 +199,46 @@ describe('SourceCardScene progressive rendering & larger typography', () => {
     if (midHtml.includes('data-previous-sentence="true"')) {
       expect(midHtml).toContain('opacity:0.45');
     }
+  });
+
+  it('progressively advances semicolon-separated clauses in a long single-sentence scene (>= 8s)', () => {
+    const semicolonParagraph =
+      'Tổn thương gan do thảo dược chiếm 27,7% số ca nhập viện trong chuỗi theo dõi lâm sàng; '
+      + 'tài liệu đối chiếu với DOI 10.3748/wjg.v23.i27.5004 cho thấy nhiều ca không có triệu chứng sớm; '
+      + 'bác sĩ cần kiểm tra toàn bộ thuốc bổ gan người bệnh đang tự uống.';
+    expect(splitInterpretationSentences(semicolonParagraph).join('')).toBe(semicolonParagraph);
+
+    const scene = makeScene({
+      duration_frames: 360, // 12s (>= 8s)
+      narration: semicolonParagraph,
+      source_card: {
+        ...makeScene().source_card!,
+        doi: '10.3748/wjg.v23.i27.5004',
+        interpretation: semicolonParagraph,
+      },
+    });
+
+    clock.frame = 0;
+    const earlyHtml = renderCard(scene, 'youtube_long');
+    expect(earlyHtml).toContain('data-source-card-progressive="true"');
+    expect(earlyHtml).toContain('data-sentence-index="0"');
+    expect(earlyHtml).toContain('data-sentence-count="3"');
+    expect(earlyHtml).toContain('1/3');
+    expect(earlyHtml).toContain('27,7%');
+
+    clock.frame = 150;
+    const midHtml = renderCard(scene, 'youtube_long');
+    expect(midHtml).toContain('data-source-card-progressive="true"');
+    expect(midHtml).toContain('data-sentence-index="1"');
+    expect(midHtml).toContain('2/3');
+    expect(midHtml).toContain('nhiều ca không có triệu chứng sớm');
+
+    clock.frame = 300;
+    const lateHtml = renderCard(scene, 'youtube_long');
+    expect(lateHtml).toContain('data-source-card-progressive="true"');
+    expect(lateHtml).toContain('data-sentence-index="2"');
+    expect(lateHtml).toContain('3/3');
+    expect(lateHtml).toContain('bác sĩ cần kiểm tra toàn bộ thuốc bổ gan');
   });
 
   it('keeps legacy single-block rendering for short scenes (< 8s) or single-sentence interpretations', () => {

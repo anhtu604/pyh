@@ -97,23 +97,36 @@ def _cycle(root: Path) -> list[dict]:
     return list(log.get('rounds', []))[start:]
 
 
-def reset_for_doctor_guidance(project: Path, request_id: str) -> None:
+def reset_for_doctor_guidance(
+    project: Path,
+    request_id: str,
+    *,
+    require_script_rewrite: bool = True,
+) -> None:
     """A new confirmed chat request grants three fresh cycles, once per request."""
     root = _root(project)
     log = _log(root)
     if log.get('doctor_guidance_id') == request_id:
+        if not require_script_rewrite and 'rewrite_pending_hash' in log:
+            updated = dict(log)
+            updated.pop('rewrite_pending_hash', None)
+            write_yaml_atomic(root / LOG, updated)
         return
     count = len(log.get('rounds', []))
     baseline = (dict(log['rounds'][-1]) if count else None)
     if baseline:
         baseline['issues'] = [scoped_review.identify(item, 'line') for item in baseline['issues']]
         baseline['snapshot'] = {'script/script.yaml': script_path(project).read_bytes().decode('utf-8')}
-    write_yaml_atomic(root / LOG, {
+    updated = {
         **log, 'version': 1, 'cycles': 1, 'cycle_start': count,
         'guidance_start': count, 'doctor_guidance_id': request_id,
-        'rewrite_pending_hash': script_hash(project),
         'guidance_baseline': baseline,
-    })
+    }
+    if require_script_rewrite:
+        updated['rewrite_pending_hash'] = script_hash(project)
+    else:
+        updated.pop('rewrite_pending_hash', None)
+    write_yaml_atomic(root / LOG, updated)
 
 
 def in_rewrite_loop(project: Path) -> bool:

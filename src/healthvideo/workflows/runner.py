@@ -11,7 +11,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 from uuid import uuid4
 
 import yaml
@@ -48,7 +48,7 @@ from healthvideo.storage.files import (
 )
 from healthvideo.storage.project_layout import resolve_project_layout
 from healthvideo.storage.queue import load_queue
-from healthvideo.workflows import change_request, chat, expert, product_review
+from healthvideo.workflows import change_request, chat, expert, product_review, rework
 from healthvideo.workflows.factory_standards import style_a_active
 from healthvideo.workflows.gate_review import (
     MEDICAL_APPROVAL_ARTIFACT,
@@ -132,6 +132,80 @@ _STEP_BY_STATE: dict[WorkflowState, StepKind] = {
     WorkflowState.NEEDS_MEDICAL_REVISION: "revise_medical",
     WorkflowState.NEEDS_PRODUCTION_REVISION: "revise_production",
 }
+
+_GUIDANCE_STEPS_BY_STATE: dict[WorkflowState, frozenset[str]] = {
+    WorkflowState.TOPIC_SELECTED: frozenset({"research"}),
+    WorkflowState.RESEARCH_IN_PROGRESS: frozenset({"research"}),
+    WorkflowState.EVIDENCE_READY: frozenset({"draft", "research"}),
+    WorkflowState.DRAFT_READY: frozenset({"draft", "storyboard_design", "voice_prep", "research"}),
+    WorkflowState.NEEDS_MEDICAL_REVISION: frozenset({"revise_medical", "research"}),
+    WorkflowState.MEDICALLY_APPROVED: frozenset({"shorts_plan", "posts", "visual_review"}),
+    WorkflowState.PRODUCTION_IN_PROGRESS: frozenset({"shorts_plan", "posts", "visual_review"}),
+    WorkflowState.NEEDS_PRODUCTION_REVISION: frozenset({"revise_production", "shorts_plan"}),
+}
+
+
+def _leader_guidance_path(root: Path, slug: str) -> Path:
+    return root / "topics" / "logs" / slug / "leader-guidance.yaml"
+
+
+def _active_leader_guidance(root: Path, project_dir: Path) -> dict[str, Any] | None:
+    path = _leader_guidance_path(root, project_dir.name)
+    if not path.is_file():
+        return None
+    try:
+        data = read_yaml(path)
+        if not isinstance(data, dict):
+            return None
+        active_revision = resolve_project_layout(project_dir).manifest.active_revision
+    except (OSError, ValueError, TypeError, yaml.YAMLError):
+        return None
+    if data.get("revision") != active_revision:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return None
+    return data
+
+
+def _change_touches_script(project_dir: Path, note: str) -> bool:
+    """Return False only when the change request targets non-script IDs exclusively."""
+    plan_file: Path | None = None
+    prior_bytes: bytes | None = None
+    try:
+        if (project_dir / "project.yaml").is_file():
+            plan_file = resolve_project_layout(project_dir).artifact_root / rework.PLAN
+            if plan_file.is_file():
+                prior_bytes = plan_file.read_bytes()
+    except (OSError, TypeError, ValueError, yaml.YAMLError):
+        plan_file = None
+    try:
+        plan = rework.prepare(project_dir, note)
+    except (OSError, TypeError, ValueError, yaml.YAMLError):
+        return True
+    finally:
+        if plan_file is not None:
+            try:
+                if prior_bytes is None:
+                    plan_file.unlink(missing_ok=True)
+                elif not plan_file.is_file() or plan_file.read_bytes() != prior_bytes:
+                    plan_file.write_bytes(prior_bytes)
+            except OSError:
+                pass
+    scope = plan.get("scope") if isinstance(plan, Mapping) else None
+    if not isinstance(scope, Mapping):
+        return True
+    return not (any(scope.values()) and not scope.get("script/script.yaml"))
+
+
+def _has_open_questions(project_dir: Path) -> bool:
+    if not (project_dir / "project.yaml").is_file():
+        return False
+    try:
+        return bool(expert.open_questions(project_dir))
+    except (OSError, TypeError, ValueError, yaml.YAMLError):
+        return False
 
 
 def next_step(state: WorkflowState | None) -> StepKind | None:
@@ -432,6 +506,14 @@ def _expert_unfinished(project_dir: Path, deps: RunDeps, state: WorkflowState) -
         return None
     if not deps.expert_brief_ready(project_dir):
         return f"chưa có {expert.EXPERT_BRIEF}: bước research chưa xong"
+    if state in {WorkflowState.EVIDENCE_READY, WorkflowState.NEEDS_MEDICAL_REVISION} and (
+        project_dir / "project.yaml"
+    ).is_file():
+        try:
+            if expert.open_questions(project_dir):
+                return f"chuyên gia chưa trả lời hết câu hỏi trong {expert.QUESTIONS}"
+        except (OSError, TypeError, ValueError) as exc:
+            return f"câu hỏi của biên kịch lỗi: {exc}"
     return None
 
 
@@ -611,8 +693,16 @@ def _build_step_prompt(
         problem = _shorts_plan_validation_problem(project_dir)
         if problem:
             shorts_plan_note = f'Lỗi kế hoạch short cần sửa trong phạm vi bước này: {problem}'
+    guidance = _active_leader_guidance(root, project_dir)
+    guidance_note = (
+        "## Hướng dẫn xử lý lỗi từ Điều phối viên trưởng\n" + str(guidance["brief"]).strip()
+        if guidance and str(guidance.get("brief") or "").strip()
+        else ""
+    )
     extra_blocks = "\n\n".join(
-        part for part in (style_note, standards_block.rstrip(), stale_visual_note, shorts_plan_note) if part
+        part
+        for part in (style_note, standards_block.rstrip(), stale_visual_note, shorts_plan_note, guidance_note)
+        if part
     )
     if extra_blocks:
         body, heading, rules = prompt.rpartition("## Quy tắc cứng")
@@ -646,8 +736,8 @@ def _run_agent_invocation(
     prompt = _build_step_prompt(
         root, deps, entry, project_dir, step, rewriting=rewriting, answering=answering
     )
+    fingerprint = agent_fingerprint(root, project_dir, step, brief_context)
     with _topic_lock(entry.slug):
-        fingerprint = agent_fingerprint(root, project_dir, step, brief_context)
         status = agent_retry_status(root, project_dir, step, fingerprint)
         if not status["allowed"]:
             waiting = (
@@ -812,6 +902,7 @@ def _run_agent_invocation(
         if is_project_paused(root, entry.slug):
             return "paused", None, None, None
         kind = classify_failure(exc)
+        observed_fp = agent_fingerprint(root, project_dir, step, brief_context)
         with _topic_lock(entry.slug):
             record_agent_failure(
                 root,
@@ -820,7 +911,7 @@ def _run_agent_invocation(
                 fingerprint,
                 kind,
                 exc,
-                observed_fingerprint=agent_fingerprint(root, project_dir, step, brief_context),
+                observed_fingerprint=observed_fp,
             )
         _record_code_changes(root, entry.slug, deps, report, before)
         blocked_reason = f"bước {step} lỗi: {_sanitize_reason(exc)}"
@@ -842,6 +933,7 @@ def _run_agent_invocation(
             # Log filenames change on every invocation. Persist the actual lock
             # diagnostic so identical consecutive failures share the same count.
             failure = RuntimeError(f"agent {result.agent} thất bại ở bước {step}: {detail}")
+        observed_fp = agent_fingerprint(root, project_dir, step, brief_context)
         with _topic_lock(entry.slug):
             record_agent_failure(
                 root,
@@ -850,7 +942,7 @@ def _run_agent_invocation(
                 fingerprint,
                 getattr(result, "failure_kind", None),
                 failure,
-                observed_fingerprint=agent_fingerprint(root, project_dir, step, brief_context),
+                observed_fingerprint=observed_fp,
             )
         _record_code_changes(root, entry.slug, deps, report, before)
         blocked_reason = f"agent {result.agent} thất bại ở bước {step}"
@@ -865,6 +957,7 @@ def _run_agent_invocation(
         return "blocked", result.log_path, None, {"error": blocked_reason}
 
     if not defer_validation_record:
+        observed_fp = agent_fingerprint(root, project_dir, step, brief_context)
         with _topic_lock(entry.slug):
             record_agent_failure(
                 root,
@@ -873,7 +966,7 @@ def _run_agent_invocation(
                 fingerprint,
                 "validation",
                 ValueError(f"bước {step}: đầu ra hoặc trạng thái chưa hợp lệ"),
-                observed_fingerprint=agent_fingerprint(root, project_dir, step, brief_context),
+                observed_fingerprint=observed_fp,
             )
     _record_code_changes(root, entry.slug, deps, report, before)
     return "ok", result.log_path, reviewed_hash, {"fingerprint": fingerprint}
@@ -889,9 +982,9 @@ def _record_agent_validation_failure(
     reason: str,
 ) -> None:
     """Record a concrete post-step validation error in agent-retry.yaml once."""
+    observed = agent_fingerprint(root, project_dir, step, brief_context)
+    fingerprint = pre_fingerprint or observed
     with _topic_lock(slug):
-        observed = agent_fingerprint(root, project_dir, step, brief_context)
-        fingerprint = pre_fingerprint or observed
         record_agent_failure(
             root,
             project_dir,
@@ -1301,16 +1394,31 @@ def _run_topic(
                     break
                 state = deps.read_state(project_dir)
                 pending_change = change_request.pending_note(project_dir)
+                touches_script: bool | None = None
                 if pending_change and state in {
                     WorkflowState.DRAFT_READY, WorkflowState.NEEDS_MEDICAL_REVISION,
                 }:
                     requests = change_request.pending(project_dir)
                     if requests and requests[-1][1].get('kind') == 'edit_script':
-                        reset_for_doctor_guidance(project_dir, str(requests[-1][0]))
+                        touches_script = _change_touches_script(project_dir, pending_change)
+                        reset_for_doctor_guidance(
+                            project_dir,
+                            str(requests[-1][0]),
+                            require_script_rewrite=touches_script,
+                        )
                 with _topic_lock(entry.slug):
                     quota_step = model_resume_step(root, project_dir, brief_context)
                     outstanding = outstanding_agent_retry(root, project_dir, brief_context)
                 forced_step = outstanding[0] if outstanding else quota_step
+                if forced_step is None:
+                    guidance = _active_leader_guidance(root, project_dir)
+                    if guidance is not None:
+                        guidance_step = guidance.get("step")
+                        if (
+                            isinstance(guidance_step, str)
+                            and guidance_step in _GUIDANCE_STEPS_BY_STATE.get(state, ())
+                        ):
+                            forced_step = guidance_step
                 repair_shorts = (
                     outstanding is not None
                     and outstanding[0] in {"visual_review", "produce"}
@@ -1431,7 +1539,17 @@ def _run_topic(
                         break
                 if step == "script_review":
                     try:
-                        step = ('draft' if pending_change else next_script_action(project_dir))
+                        if pending_change:
+                            if touches_script is None:
+                                touches_script = _change_touches_script(project_dir, pending_change)
+                            if touches_script:
+                                step = "draft"
+                            elif state == WorkflowState.DRAFT_READY:
+                                step = "storyboard_design"
+                            else:
+                                step = next_script_action(project_dir)
+                        else:
+                            step = next_script_action(project_dir)
                     except (OSError, ValueError) as exc:
                         _mark_blocked(root, entry.slug, f"chấm kịch bản lỗi: {exc}", report)
                         break
@@ -1464,9 +1582,12 @@ def _run_topic(
                         step = "storyboard_design"
                     elif need_vp:
                         step = "voice_prep"
-                if (step == "draft" and state == WorkflowState.EVIDENCE_READY
-                        and not deps.expert_brief_ready(project_dir)):
-                    step = "research"  # no expert brief yet: the research step is not finished
+                if (
+                    step == "draft"
+                    and state == WorkflowState.EVIDENCE_READY
+                    and (not deps.expert_brief_ready(project_dir) or _has_open_questions(project_dir))
+                ):
+                    step = "research"  # no expert brief yet or open questions: research is not finished
                 if forced_step:
                     step = forced_step
                 rewriting = step == "draft" and state == WorkflowState.DRAFT_READY
@@ -1682,7 +1803,12 @@ def _run_topic(
                         break
                     _mark_advanced(root, entry.slug, report)
                 elif step == "research" and (
-                    state == WorkflowState.DRAFT_READY or new_state == WorkflowState.EVIDENCE_READY
+                    state in {
+                        WorkflowState.DRAFT_READY,
+                        WorkflowState.EVIDENCE_READY,
+                        WorkflowState.NEEDS_MEDICAL_REVISION,
+                    }
+                    or new_state == WorkflowState.EVIDENCE_READY
                 ):
                     problem = _expert_unfinished(project_dir, deps, state)
                     if problem:
@@ -1709,12 +1835,20 @@ def _run_topic(
                     if new_state != state:
                         _mark_advanced(root, entry.slug, report)
 
-                if (pending_change and step in {'draft', 'revise_medical', 'revise_production'}
-                        and new_state != WorkflowState.RESEARCH_IN_PROGRESS
-                        and (new_state != state or rewriting)):
+                if (
+                    pending_change
+                    and step in {'draft', 'storyboard_design', 'revise_medical', 'revise_production'}
+                    and new_state != WorkflowState.RESEARCH_IN_PROGRESS
+                    and (new_state != state or rewriting or step == 'storyboard_design')
+                ):
                     chat.completed(root, entry.slug, project_dir)
 
                 if step in AGENT_STEPS:
+                    guidance_path = _leader_guidance_path(root, entry.slug)
+                    if guidance_path.is_file():
+                        active_guidance = _active_leader_guidance(root, project_dir)
+                        if active_guidance is None or active_guidance.get("step") == step or new_state != state:
+                            guidance_path.unlink(missing_ok=True)
                     with _topic_lock(entry.slug):
                         clear_agent_retry(root, entry.slug, step)
                         clear_model_resume(root, entry.slug)

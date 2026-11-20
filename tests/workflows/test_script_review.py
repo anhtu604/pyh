@@ -499,3 +499,167 @@ def test_station_07_cycle_cap_formats_score_and_missing_report_names_file(tmp_pa
     with pytest.raises(ValueError, match=r'3 chu kỳ \(6 vòng\).*đúng nghĩa claim \(6/10\).*Bác sĩ.*chat') as exc_info:
         next_script_action(project)
     assert 'claim 6.' not in str(exc_info.value)
+
+
+def test_reset_for_doctor_guidance_without_script_rewrite_clears_pending_hash(tmp_path):
+    from healthvideo.workflows.script_review import reset_for_doctor_guidance
+
+    project = _project(tmp_path)
+    _legacy_review(project, 6)
+    log_path = project / 'revisions/001' / LOG
+
+    reset_for_doctor_guidance(project, 'req-storyboard-only', require_script_rewrite=False)
+    assert 'rewrite_pending_hash' not in read_yaml(log_path)
+    assert next_script_action(project) == 'script_review'
+
+    reset_for_doctor_guidance(project, 'req-script-touch')
+    assert 'rewrite_pending_hash' in read_yaml(log_path)
+    assert next_script_action(project) == 'draft'
+
+    reset_for_doctor_guidance(project, 'req-script-touch', require_script_rewrite=False)
+    assert 'rewrite_pending_hash' not in read_yaml(log_path)
+    assert next_script_action(project) == 'script_review'
+
+
+def test_change_touches_script_and_storyboard_only_chat_flow(tmp_path):
+    from healthvideo.workflows import change_request
+    from healthvideo.workflows.runner import _change_touches_script
+
+    project = _queue(tmp_path)
+    board_path = project / 'revisions/001/storyboard/storyboard.yaml'
+    board = read_yaml(board_path)
+    template = dict(board['scenes'][0])
+    board['scenes'] = [
+        {**template, 'id': 'S08', 'start_frame': 0, 'duration_frames': 120},
+        {**template, 'id': 'S24', 'start_frame': 120, 'duration_frames': 120},
+    ]
+    write_yaml_atomic(board_path, board)
+
+    assert _change_touches_script(project, 'Chỉnh cảnh S08, S24 cho gọn') is False
+    assert _change_touches_script(project, 'Sửa dòng N01 và cảnh S08') is True
+    assert _change_touches_script(project, 'Rút gọn phần cơ chế') is True
+
+    _legacy_review(project, 6)
+    script_before = (project / 'revisions/001/script/script.yaml').read_bytes()
+    change_path = project / 'revisions/001/reviews/changes/20261120T010000-requested.yaml'
+    write_yaml_atomic(
+        change_path,
+        {
+            'kind': 'edit_script',
+            'brief': 'Chỉnh nhịp cảnh S08, S24',
+            'context': {'scene': 'S08'},
+            'applied': False,
+        },
+    )
+    state = {'value': WorkflowState.DRAFT_READY}
+    steps: list[str] = []
+
+    def invoke(agents, prompt, *, log_dir, step, **_):
+        steps.append(step)
+        log_dir.mkdir(parents=True, exist_ok=True)
+        if step == 'storyboard_design':
+            assert 'S08, S24' in prompt
+        elif step == 'script_review':
+            _report(project, 8)
+        else:
+            raise AssertionError(f'unexpected step: {step}')
+        return AgentResult(agents[0].cli, True, False, log_dir / 'fake.log')
+
+    report = run_queue(
+        tmp_path,
+        replace(_deps(state, invoke), reject_note=change_request.pending_note),
+    )
+    assert report.blocked == []
+    assert report.at_gate == [SLUG]
+    assert steps == ['storyboard_design', 'script_review']
+    assert state.get('submitted') is True
+    assert (project / 'revisions/001/script/script.yaml').read_bytes() == script_before
+    assert change_request.pending(project) == []
+
+
+def test_leader_guidance_injects_brief_routes_step_and_cleans_up(tmp_path):
+    from healthvideo.workflows.runner import _active_leader_guidance, _build_step_prompt
+
+    project = _queue(tmp_path)
+    guidance_path = tmp_path / 'topics/logs' / SLUG / 'leader-guidance.yaml'
+    write_yaml_atomic(
+        guidance_path,
+        {
+            'revision': '999',
+            'role': 'storyboard_director',
+            'step': 'storyboard_design',
+            'brief': 'Hướng dẫn cũ của revision khác.',
+            'at': '2026-11-20T09:00:00+07:00',
+        },
+    )
+    assert _active_leader_guidance(tmp_path, project) is None
+    assert not guidance_path.exists()
+
+    brief_text = 'Tách cảnh S08 thành 2 cảnh và giữ nguyên lời thoại.'
+    write_yaml_atomic(
+        guidance_path,
+        {
+            'revision': '001',
+            'role': 'storyboard_director',
+            'step': 'storyboard_design',
+            'brief': brief_text,
+            'at': '2026-11-20T09:05:00+07:00',
+        },
+    )
+    entry = QueueEntry(slug=SLUG, title='Muối', question='Vì sao?', added=date(2026, 11, 6))
+    prompt = _build_step_prompt(tmp_path, _deps({}, None), entry, project, 'storyboard_design')
+    heading = '## Hướng dẫn xử lý lỗi từ Điều phối viên trưởng'
+    assert f'{heading}\n{brief_text}' in prompt
+    assert prompt.index(heading) < prompt.index('## Quy tắc cứng')
+
+    state = {'value': WorkflowState.DRAFT_READY}
+    seen_steps: list[str] = []
+
+    def invoke(agents, step_prompt, *, log_dir, step, **_):
+        seen_steps.append(step)
+        assert brief_text in step_prompt
+        log_dir.mkdir(parents=True, exist_ok=True)
+        return AgentResult(agents[0].cli, True, False, log_dir / 'fake.log')
+
+    report = run_queue(tmp_path, _deps(state, invoke), once=True)
+    assert report.blocked == []
+    assert seen_steps == ['storyboard_design']
+    assert not guidance_path.exists()
+
+    # EVIDENCE_READY with open writer questions routes back to research.
+    questions_path = project / 'revisions/001/script/questions.yaml'
+    write_yaml_atomic(questions_path, {'questions': [{'id': 'Q1', 'ask': 'Cần thêm nguồn?'}]})
+    state_ev = {'value': WorkflowState.EVIDENCE_READY}
+    ev_steps: list[str] = []
+
+    def invoke_research(agents, step_prompt, *, log_dir, step, **_):
+        del step_prompt
+        ev_steps.append(step)
+        write_yaml_atomic(
+            questions_path,
+            {'questions': [{'id': 'Q1', 'ask': 'Cần thêm nguồn?', 'answer': 'Đã bổ sung.'}]},
+        )
+        log_dir.mkdir(parents=True, exist_ok=True)
+        return AgentResult(agents[0].cli, True, False, log_dir / 'fake.log')
+
+    ev_report = run_queue(tmp_path, _deps(state_ev, invoke_research), once=True)
+    assert ev_report.blocked == []
+    assert ev_steps == ['research']
+
+
+def test_chat_step_boundary_writes_and_cleans_pid_token_marker(tmp_path):
+    import json
+    import os
+
+    from healthvideo.process import process_token
+    from healthvideo.workflows import chat
+
+    marker = tmp_path / 'topics/logs' / SLUG / chat.STEP_MARKER
+    assert not marker.exists()
+    with chat.step_boundary(tmp_path, SLUG):
+        assert marker.is_file()
+        payload = json.loads(marker.read_text(encoding='utf-8'))
+        assert payload['pid'] == os.getpid()
+        assert payload['process_token'] == process_token(os.getpid())
+        assert isinstance(payload['started_at'], str) and payload['started_at']
+    assert not marker.exists()

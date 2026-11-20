@@ -37,6 +37,7 @@ from healthvideo.workflows import (
     dashboard,
     decision_card,
     factory,
+    repair_service,
     researcher,
     telegram,
 )
@@ -1210,6 +1211,7 @@ def _handle_command(
     elif cmd == "xuong_start":
         try:
             pid = factory.start_background(root)
+            repair_service.ensure_background(root)
             send_fn(f"▶️ Xưởng sản xuất đang chạy nền (PID {pid}).", chat_id=chat_id)
         except (OSError, RuntimeError, ValueError, factory.FactoryAlreadyRunning) as exc:
             send_fn(f"⚠️ Không bật được xưởng: {exc}", chat_id=chat_id)

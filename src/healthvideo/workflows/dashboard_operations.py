@@ -427,12 +427,44 @@ def _editable(root: Path, slug: str, expected_revision: str):
     return layout
 
 
-def retry_project(root: Path, slug: str, *, expected_revision: str) -> dict:
+def _step_marker_orphaned(marker: Path) -> bool:
+    try:
+        raw = marker.read_text(encoding='utf-8', errors='replace').strip()
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+    if not raw:
+        return False
+    try:
+        meta = json.loads(raw)
+    except ValueError:
+        return False
+    if not isinstance(meta, dict):
+        return False
+    pid = meta.get('pid')
+    token = meta.get('process_token')
+    if isinstance(pid, int) and not isinstance(pid, bool) and pid > 0 and isinstance(token, str) and token:
+        return not is_same_process(pid, token)
+    return False
+
+
+def retry_project(
+    root: Path,
+    slug: str,
+    *,
+    expected_revision: str,
+    allow_repair_release: bool = False,
+) -> dict:
     with _MUTATION_LOCK, chat.locked(root):
         layout = _editable(root, slug, expected_revision)
         log_dir = root / 'topics/logs' / slug
-        if inside(root, log_dir / chat.STEP_MARKER).exists():
-            raise ValueError('Bước đang chạy. Tải lại sau khi bước kết thúc.')
+        step_marker = inside(root, log_dir / chat.STEP_MARKER)
+        if step_marker.exists():
+            if _step_marker_orphaned(step_marker):
+                step_marker.unlink(missing_ok=True)
+            else:
+                raise ValueError('Bước đang chạy. Tải lại sau khi bước kết thúc.')
         if next_step(layout.manifest.state) is None:
             raise ValueError('Project không có bước có thể thử lại; giữ nguyên cổng duyệt.')
         # Validate local inputs before releasing the hold. No provider calls here.
@@ -462,7 +494,7 @@ def retry_project(root: Path, slug: str, *, expected_revision: str) -> dict:
         inside(root, agent_hold)
         inside(root, blocked_note)
         retry = api.retry_status(root, layout.project_dir, layout.manifest.state)
-        if retry.get('kind') == 'validation' and not retry.get('allowed'):
+        if not allow_repair_release and retry.get('kind') == 'validation' and not retry.get('allowed'):
             raise ValueError(retry.get('reason') or 'Sửa đầu vào trước khi thử lại.')
         api.clear_retry(root, slug)
         agent_hold.unlink(missing_ok=True)

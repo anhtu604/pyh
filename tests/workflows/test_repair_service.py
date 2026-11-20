@@ -930,3 +930,410 @@ def test_temporary_infrastructure_failure_refunds_repair_with_total_cap(job, mon
     assert repair.repair_once(root, project.name) == 'exhausted'
     assert not released
     assert source.read_text(encoding='utf-8') == 'broken = True\n'
+
+
+def _make_v2_project_in_state(projects_root, state: WorkflowState):
+    from healthvideo.domain.gate_review import GateKind
+    from healthvideo.workflows.gate_review import approve_gate, reject_gate
+    from tests.helpers import advance_v2_project_to_video_review
+
+    now = datetime.now(UTC)
+    if state in {WorkflowState.DRAFT_READY, WorkflowState.AWAITING_MEDICAL_REVIEW}:
+        return create_v2_project_fixture(projects_root, state=state)
+    if state == WorkflowState.NEEDS_MEDICAL_REVISION:
+        proj = create_v2_project_fixture(projects_root, state=WorkflowState.AWAITING_MEDICAL_REVIEW)
+        reject_gate(
+            proj, GateKind.MEDICAL, reviewer='Doc', reason='Fix storyboard',
+            resume_state=WorkflowState.DRAFT_READY, now=now,
+        )
+        return proj
+    if state in {WorkflowState.MEDICALLY_APPROVED, WorkflowState.PRODUCTION_IN_PROGRESS}:
+        proj = create_v2_project_fixture(projects_root, state=WorkflowState.AWAITING_MEDICAL_REVIEW)
+        approve_gate(proj, GateKind.MEDICAL, reviewer='Doc', now=now)
+        if state == WorkflowState.PRODUCTION_IN_PROGRESS:
+            manifest = read_yaml(proj / 'project.yaml')
+            manifest['state'] = WorkflowState.PRODUCTION_IN_PROGRESS.value
+            write_yaml_atomic(proj / 'project.yaml', manifest)
+        return proj
+    proj = create_v2_project_fixture(projects_root, state=WorkflowState.DRAFT_READY)
+    advance_v2_project_to_video_review(proj, now=now)
+    if state == WorkflowState.AWAITING_VIDEO_REVIEW:
+        return proj
+    if state == WorkflowState.NEEDS_PRODUCTION_REVISION:
+        reject_gate(
+            proj, GateKind.VIDEO, reviewer='Doc', reason='Fix clip',
+            resume_state=WorkflowState.PRODUCTION_IN_PROGRESS, now=now,
+        )
+        return proj
+    if state == WorkflowState.VIDEO_APPROVED:
+        approve_gate(proj, GateKind.VIDEO, reviewer='Doc', now=now)
+        return proj
+    raise AssertionError(f'Unsupported helper state: {state}')
+
+
+def test_normalize_incident_reason_preserves_cooldown_and_max_repairs(job):
+    root, project, logs, _source, released, stages = job
+    blocked = logs / 'blocked.txt'
+    base_reason = 'agent không làm đổi trạng thái (revise_medical, trạng thái needs_medical_revision): giữ nguyên'
+    variants = [
+        f'{base_reason}\nlog_path: attempt-1.log\n',
+        f'bước revise_medical: cần sửa đầu vào hoặc cấu hình; ValueError: {base_reason}',
+        f'Bước produce: đang chờ thử lại lúc 2026-11-20T08:00:00Z; RuntimeError: {base_reason}',
+        f'visual_review lỗi: ValueError: {base_reason}',
+    ]
+    assert {repair._normalize_incident_reason(text) for text in variants} == {base_reason}
+
+    run_fail = lambda argv, **kwargs: CompletedProcess(argv, 1, '', 'still failing')
+    blocked.write_text(variants[0], encoding='utf-8')
+    assert repair.repair_once(root, project.name, run=run_fail, respect_cooldown=True) == 'repair_failed'
+
+    # Runner ticks wrap the same reason with a hold prefix and drop log_path: cooldown & budget stay intact.
+    blocked.write_text(variants[1], encoding='utf-8')
+    assert repair.repair_once(root, project.name, run=run_fail, respect_cooldown=True) == 'cooldown'
+    assert repair.repair_once(root, project.name, run=run_fail, respect_cooldown=False) == 'repair_failed'
+    assert repair.repair_once(root, project.name, run=run_fail, respect_cooldown=False) == 'exhausted'
+    assert stages.count(('coordinator_senior', 'repair_diagnose')) == repair.MAX_REPAIRS
+    assert not released
+
+
+def test_paths_and_repair_once_support_video_tests_vitest_and_typecheck(tmp_path, monkeypatch):
+    project = create_v2_project_fixture(tmp_path / 'projects')
+    logs = tmp_path / 'topics/logs' / project.name
+    logs.mkdir(parents=True)
+    (logs / 'blocked.txt').write_text('SourceCardScene semicolon split bug', encoding='utf-8')
+
+    tsx = tmp_path / 'video/src/scenes/SourceCardScene.tsx'
+    tsx.parent.mkdir(parents=True)
+    tsx.write_text('export const ok = false;\n', encoding='utf-8')
+    tsx_test = tmp_path / 'video/src/scenes/SourceCardScene.test.tsx'
+    tsx_test.write_text('test("ok", () => {});\n', encoding='utf-8')
+    non_test = tmp_path / 'video/src/scenes/Helper.ts'
+    non_test.write_text('export const x = 1;\n', encoding='utf-8')
+    bad_test = tmp_path / 'tests/notes.txt'
+    bad_test.parent.mkdir(parents=True)
+    bad_test.write_text('not python\n', encoding='utf-8')
+    (tmp_path / 'profiles').mkdir()
+    (tmp_path / 'profiles/company.yaml').write_text('tiers: {}\n', encoding='utf-8')
+
+    assert repair._paths(tmp_path, ['video/src/scenes/SourceCardScene.test.tsx'], tests=True) == [tsx_test.resolve()]
+    for invalid in (
+        'video/src/scenes/Helper.ts',
+        'tests/notes.txt',
+        'pnpm --dir video test',
+        'profiles/company.yaml',
+        f'projects/{project.name}/project.yaml',
+    ):
+        with pytest.raises(ValueError):
+            repair._paths(tmp_path, [invalid], tests=True)
+
+    monkeypatch.setattr(repair, '_active', lambda *args: False)
+    monkeypatch.setattr(repair, '_maintenance', lambda *args, **kwargs: nullcontext((
+        {'video/src/scenes/SourceCardScene.tsx': tsx.read_bytes()},
+        repair._workspace_paths(tmp_path),
+    )))
+    released = []
+    monkeypatch.setattr(repair, '_release', lambda *args: released.append(args))
+    monkeypatch.setattr(repair, 'resolve_pnpm_argv', lambda args: ['pnpm', *args])
+
+    def ask(root, slug, role, step, *args):
+        if step == 'repair_diagnose':
+            return repair.Diagnosis(
+                action='repair',
+                cause='Semicolon boundary',
+                evidence=['blocked.txt'],
+                files=['video/src/scenes/SourceCardScene.tsx'],
+                tests=['video/src/scenes/SourceCardScene.test.tsx'],
+                brief='Split on semicolon.',
+            )
+        if step == 'repair':
+            tsx.write_text('export const ok = true;\n', encoding='utf-8')
+            return repair.RepairResult(status='ready', summary='Fixed TSX')
+        return repair.Acceptance(passed=True, reason='Vitest and typecheck passed')
+
+    monkeypatch.setattr(repair, '_ask', ask)
+    commands = []
+
+    def run_ok(argv, **kwargs):
+        assert kwargs['shell'] is False
+        commands.append(argv)
+        return CompletedProcess(argv, 0, f'ok {argv[-1]}\n', '')
+
+    assert repair.repair_once(tmp_path, project.name, run=run_ok) == 'retry_requested'
+    assert commands[0][1:3] == ['-m', 'pytest']
+    assert commands[1] == [
+        'pnpm', '--dir', str(tmp_path / 'video'), 'exec', 'vitest', 'run', 'src/scenes/SourceCardScene.test.tsx',
+    ]
+    assert commands[2] == ['pnpm', '--dir', str(tmp_path / 'video'), 'typecheck']
+    assert len(commands) == 3
+    assert released == [(tmp_path, project.name)]
+
+    # Failing typecheck rolls back TSX changes and raises repair_failed without releasing.
+    released.clear()
+    tsx.write_text('export const ok = false;\n', encoding='utf-8')
+    write_yaml_atomic(logs / repair.REPORT, {'revision': '001', 'attempts': 0})
+
+    def run_fail_typecheck(argv, **kwargs):
+        code = 1 if 'typecheck' in argv else 0
+        return CompletedProcess(argv, code, 'vitest out\n', 'typecheck err\n')
+
+    assert repair.repair_once(tmp_path, project.name, run=run_fail_typecheck) == 'repair_failed'
+    assert tsx.read_text(encoding='utf-8') == 'export const ok = false;\n'
+    assert not released
+    assert 'Test/typecheck video chưa đạt' in read_yaml(logs / repair.REPORT)['error']
+
+
+def test_delegate_content_fix_routes_new_roles_writes_leader_guidance_and_respects_gates(tmp_path, monkeypatch):
+    monkeypatch.setattr(repair, '_active', lambda *args: False)
+    released = []
+    monkeypatch.setattr(repair, '_release', lambda root, slug: released.append((root, slug)))
+
+    # 1. editor and storyboard_director at NEEDS_MEDICAL_REVISION -> leader-guidance.yaml (revise_medical), keep state
+    for role in ('editor', 'storyboard_director'):
+        root = tmp_path / f'med_rev_{role}'
+        proj = _make_v2_project_in_state(root / 'projects', WorkflowState.NEEDS_MEDICAL_REVISION)
+        logs = root / 'topics/logs' / proj.name
+        logs.mkdir(parents=True)
+        (logs / 'blocked.txt').write_text('agent không làm đổi trạng thái', encoding='utf-8')
+        monkeypatch.setattr(
+            repair, '_ask',
+            lambda *args, _role=role: repair.Diagnosis(
+                action='delegate', delegate_role=_role, cause='Need storyboard fix',
+                evidence=['log'], brief=f'Fix storyboard as {_role}',
+            ),
+        )
+        assert repair.repair_once(root, proj.name) == 'retry_requested'
+        assert read_yaml(proj / 'project.yaml')['state'] == WorkflowState.NEEDS_MEDICAL_REVISION.value
+        guidance = read_yaml(logs / 'leader-guidance.yaml')
+        assert guidance['revision'] == '001'
+        assert guidance['role'] == role
+        assert guidance['step'] == 'revise_medical'
+        assert guidance['brief'] == f'Fix storyboard as {role}'
+        assert guidance['at']
+        assert (root, proj.name) in released
+
+    # 2. DRAFT_READY routes storyboard_director -> storyboard_design and voice_director -> voice_prep
+    for role, expected_step in (('storyboard_director', 'storyboard_design'), ('voice_director', 'voice_prep')):
+        root = tmp_path / f'draft_{role}'
+        proj = _make_v2_project_in_state(root / 'projects', WorkflowState.DRAFT_READY)
+        logs = root / 'topics/logs' / proj.name
+        logs.mkdir(parents=True)
+        (logs / 'blocked.txt').write_text('Draft artifact invalid', encoding='utf-8')
+        monkeypatch.setattr(
+            repair, '_ask',
+            lambda *args, _role=role, _step=expected_step: repair.Diagnosis(
+                action='delegate', delegate_role=_role, cause='Artifact issue',
+                evidence=['log'], brief=f'Fix {_step}',
+            ),
+        )
+        assert repair.repair_once(root, proj.name) == 'retry_requested'
+        assert read_yaml(logs / 'leader-guidance.yaml')['step'] == expected_step
+
+    # 3. PRODUCTION_IN_PROGRESS with shorts_producer -> leader-guidance.yaml (shorts_plan)
+    root_s = tmp_path / 'prod_shorts'
+    proj_s = _make_v2_project_in_state(root_s / 'projects', WorkflowState.PRODUCTION_IN_PROGRESS)
+    logs_s = root_s / 'topics/logs' / proj_s.name
+    logs_s.mkdir(parents=True)
+    (logs_s / 'blocked.txt').write_text('Invalid shorts-plan.yaml', encoding='utf-8')
+    monkeypatch.setattr(
+        repair, '_ask',
+        lambda *args: repair.Diagnosis(
+            action='delegate', delegate_role='shorts_producer', cause='Clip bounds mismatch',
+            evidence=['log'], brief='Rebuild shorts-plan within bounds',
+        ),
+    )
+    assert repair.repair_once(root_s, proj_s.name) == 'retry_requested'
+    assert read_yaml(logs_s / 'leader-guidance.yaml')['step'] == 'shorts_plan'
+    assert read_yaml(proj_s / 'project.yaml')['state'] == WorkflowState.PRODUCTION_IN_PROGRESS.value
+
+    # 4. Post-gate block for writer/storyboard_director/voice_director after medical approval and shorts_producer at video gate
+    for role, state in (
+        ('writer', WorkflowState.MEDICALLY_APPROVED),
+        ('storyboard_director', WorkflowState.PRODUCTION_IN_PROGRESS),
+        ('voice_director', WorkflowState.NEEDS_PRODUCTION_REVISION),
+        ('shorts_producer', WorkflowState.AWAITING_VIDEO_REVIEW),
+    ):
+        root_g = tmp_path / f'gate_{role}_{state.value}'
+        proj_g = _make_v2_project_in_state(root_g / 'projects', state)
+        logs_g = root_g / 'topics/logs' / proj_g.name
+        logs_g.mkdir(parents=True)
+        (logs_g / 'blocked.txt').write_text('Post-gate issue', encoding='utf-8')
+        monkeypatch.setattr(
+            repair, '_ask',
+            lambda *args, _role=role: repair.Diagnosis(
+                action='delegate', delegate_role=_role, cause='Requires doctor',
+                evidence=['log'], brief='Needs reopen',
+            ),
+        )
+        assert repair.repair_once(root_g, proj_g.name) == 'needs_attention'
+        assert read_yaml(logs_g / repair.REPORT)['delegation']['requires_doctor_reopen'] is True
+        assert not (logs_g / 'leader-guidance.yaml').exists()
+
+    # 5. If _release raises, newly created leader-guidance.yaml is cleaned up
+    root_r = tmp_path / 'release_fail'
+    proj_r = _make_v2_project_in_state(root_r / 'projects', WorkflowState.NEEDS_MEDICAL_REVISION)
+    logs_r = root_r / 'topics/logs' / proj_r.name
+    logs_r.mkdir(parents=True)
+    (logs_r / 'blocked.txt').write_text('Release check error', encoding='utf-8')
+    monkeypatch.setattr(repair, '_release', lambda *args: (_ for _ in ()).throw(ValueError('release blocked')))
+    monkeypatch.setattr(
+        repair, '_ask',
+        lambda *args: repair.Diagnosis(
+            action='delegate', delegate_role='editor', cause='Storyboard issue',
+            evidence=['log'], brief='Fix storyboard',
+        ),
+    )
+    assert repair.repair_once(root_r, proj_r.name) == 'repair_failed'
+    assert not (logs_r / 'leader-guidance.yaml').exists()
+
+
+def test_retry_project_allow_repair_release_and_orphaned_chat_step_marker(tmp_path, monkeypatch):
+    from healthvideo.workflows import chat, dashboard_operations, production_retry
+
+    project = _make_v2_project_in_state(tmp_path / 'projects', WorkflowState.MEDICALLY_APPROVED)
+    logs = tmp_path / 'topics/logs' / project.name
+    logs.mkdir(parents=True)
+    monkeypatch.setattr(dashboard_operations.factory, 'running_pid', lambda _: None)
+    monkeypatch.setattr(dashboard_operations, '_retry_api', lambda: production_retry)
+    production_retry.record_failure(
+        tmp_path, project, WorkflowState.MEDICALLY_APPROVED, ValueError('visual budget failed'),
+    )
+    (logs / 'blocked.txt').write_text('visual budget failed', encoding='utf-8')
+
+    # Without allow_repair_release, unchanged validation failure stays held.
+    with pytest.raises(ValueError, match='visual budget failed'):
+        dashboard_operations.retry_project(tmp_path, project.name, expected_revision='001')
+
+    # Empty .chat-step-running marker still blocks retry.
+    step_marker = logs / chat.STEP_MARKER
+    step_marker.touch()
+    with pytest.raises(ValueError, match='Bước đang chạy'):
+        dashboard_operations.retry_project(
+            tmp_path, project.name, expected_revision='001', allow_repair_release=True,
+        )
+
+    # Live .chat-step-running marker still blocks retry.
+    live_token = process_token(os.getpid())
+    assert live_token
+    step_marker.write_text(
+        json.dumps({'pid': os.getpid(), 'process_token': live_token}), encoding='utf-8',
+    )
+    with pytest.raises(ValueError, match='Bước đang chạy'):
+        dashboard_operations.retry_project(
+            tmp_path, project.name, expected_revision='001', allow_repair_release=True,
+        )
+
+    # Orphaned .chat-step-running with dead PID is cleaned up and allow_repair_release releases the hold.
+    step_marker.write_text(
+        json.dumps({'pid': 999999, 'process_token': 'dead-token'}), encoding='utf-8',
+    )
+    result = dashboard_operations.retry_project(
+        tmp_path, project.name, expected_revision='001', allow_repair_release=True,
+    )
+    assert not step_marker.exists()
+    assert not (logs / 'blocked.txt').exists()
+    assert not (logs / 'production-retry.yaml').exists()
+    assert result['retry_status']['allowed'] is True
+
+
+def test_station12_stop_video_qa_error_yaml_resilience_and_fingerprints(tmp_path, monkeypatch):
+    from healthvideo.workflows import dashboard, production_retry, telegram_bot
+
+    project = _make_v2_project_in_state(tmp_path / 'projects', WorkflowState.PRODUCTION_IN_PROGRESS)
+    logs = tmp_path / 'topics/logs' / project.name
+    logs.mkdir(parents=True)
+
+    # 1. 'Trạm 12 chưa đạt' stops immediately without calling Leader
+    called = []
+    monkeypatch.setattr(repair, '_ask', lambda *args: called.append(args))
+    (logs / 'blocked.txt').write_text('Trạm 12 chưa đạt sau các vòng sửa; cần xử lý nhận xét.', encoding='utf-8')
+    assert repair.repair_once(tmp_path, project.name) == 'needs_attention'
+    assert called == []
+
+    # 2. _verify_retry_validated rejects video-qa.json with status == 'error'
+    (logs / 'blocked.txt').unlink()
+    qa_path = project / 'revisions/001/renders/video-qa.json'
+    qa_path.parent.mkdir(parents=True, exist_ok=True)
+    qa_path.write_text(json.dumps({'status': 'error'}), encoding='utf-8')
+    layout = repair.resolve_project_layout(project)
+    monkeypatch.setattr(repair, '_has_post_retry_activity', lambda *args: True)
+    monkeypatch.setattr(repair.script_review, 'require_passed_review', lambda *args: None)
+    monkeypatch.setattr(repair.product_review, 'require_passed_review', lambda *args: None)
+    ok, err, _ = repair._verify_retry_validated(tmp_path, project.name, layout, logs, {'state_before': 'draft_ready'})
+    assert not ok
+    assert 'video-qa.json báo lỗi' in err
+
+    # 3. Corrupt YAML in leader-repair.yaml does not crash repair_once
+    (logs / repair.REPORT).write_text('bad: [yaml', encoding='utf-8')
+    assert repair.repair_once(tmp_path, project.name) == 'repair_failed'
+
+    # 4. production_fingerprint & agent_fingerprint track tools/*.py and leader-guidance.yaml
+    tool_file = tmp_path / 'tools/helper.py'
+    tool_file.parent.mkdir(parents=True)
+    tool_file.write_text('x = 1\n', encoding='utf-8')
+    prod_fp0 = production_retry.production_fingerprint(tmp_path, project, WorkflowState.PRODUCTION_IN_PROGRESS)
+    agent_fp0 = production_retry.agent_fingerprint(tmp_path, project, 'revise_production', 'brief')
+    tool_file.write_text('x = 2\n', encoding='utf-8')
+    assert production_retry.production_fingerprint(tmp_path, project, WorkflowState.PRODUCTION_IN_PROGRESS) != prod_fp0
+    assert production_retry.agent_fingerprint(tmp_path, project, 'revise_production', 'brief') != agent_fp0
+    prod_fp1 = production_retry.production_fingerprint(tmp_path, project, WorkflowState.PRODUCTION_IN_PROGRESS)
+    agent_fp1 = production_retry.agent_fingerprint(tmp_path, project, 'revise_production', 'brief')
+    (logs / 'leader-guidance.yaml').write_text("revision: '001'\nstep: revise_production\n", encoding='utf-8')
+    assert production_retry.production_fingerprint(tmp_path, project, WorkflowState.PRODUCTION_IN_PROGRESS) != prod_fp1
+    assert production_retry.agent_fingerprint(tmp_path, project, 'revise_production', 'brief') != agent_fp1
+
+    # 5. dashboard default_actions.start and telegram /xuong_start ensure repair_service
+    ensured = []
+    monkeypatch.setattr(factory, 'start_background', lambda root: 4242)
+    monkeypatch.setattr(repair, 'ensure_background', lambda root: ensured.append(root) or 5252)
+    srv = dashboard.DashboardServer(tmp_path, 0, token='tok', agents=list)
+    try:
+        actions = dashboard.default_actions(srv)
+        assert '4242' in actions['factory/start']()
+        assert ensured == [tmp_path]
+    finally:
+        srv.server_close()
+
+    sent = []
+    monkeypatch.setenv('TELEGRAM_BOT_TOKEN', 'tok')
+    monkeypatch.setenv('TELEGRAM_CHAT_ID', '555001')
+    state = telegram_bot.load_state(tmp_path)
+    telegram_bot.handle_update(
+        tmp_path,
+        state,
+        {'update_id': 1, 'message': {'message_id': 1, 'chat': {'id': 555001}, 'text': '/xuong_start'}},
+        send_fn=lambda text, **kw: sent.append(text),
+        typing=False,
+    )
+    assert ensured == [tmp_path, tmp_path]
+    assert '4242' in sent[-1]
+
+
+def test_factory_package_writes_and_clears_blocked_and_resists_yaml_errors(tmp_path, monkeypatch):
+    import sys
+    from types import SimpleNamespace
+
+    project = _make_v2_project_in_state(tmp_path / 'projects', WorkflowState.VIDEO_APPROVED)
+    bad_proj = tmp_path / 'projects/corrupt-topic'
+    bad_proj.mkdir(parents=True)
+    (bad_proj / 'project.yaml').write_text('bad: [yaml', encoding='utf-8')
+    assert [p.name for p, _ in factory.projects(tmp_path)] == [project.name]
+
+    logs = tmp_path / 'topics/logs' / project.name
+    logs.mkdir(parents=True)
+    monkeypatch.setattr(factory, 'run_queue', lambda *a, **kw: SimpleNamespace(waiting_model=[], blocked=[]))
+    monkeypatch.setattr(factory, 'notify', lambda *a, **kw: True)
+    monkeypatch.setattr(factory, 'package_project', lambda p: (_ for _ in ()).throw(ValueError('missing mp4')))
+    factory.run_factory(tmp_path, SimpleNamespace(), once=True, echo=lambda *_: None)
+    assert 'bị chặn đóng gói: missing mp4' in (logs / 'blocked.txt').read_text(encoding='utf-8')
+
+    monkeypatch.setattr(factory, 'package_project', lambda p: p)
+    factory.run_factory(tmp_path, SimpleNamespace(), once=True, echo=lambda *_: None)
+    assert not (logs / 'blocked.txt').exists()
+
+    # repair_service.main() catches yaml.YAMLError from factory.projects(root) without crashing.
+    pids = iter([1111, 1111, None])
+    monkeypatch.setattr(factory, 'running_pid', lambda root: next(pids, None))
+    monkeypatch.setattr(repair.time, 'sleep', lambda s: None)
+    (tmp_path / 'topics/queue.yaml').write_text('bad: [yaml', encoding='utf-8')
+    monkeypatch.setattr(sys, 'argv', ['repair_service', '--root', str(tmp_path)])
+    repair.main()

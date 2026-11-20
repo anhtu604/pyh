@@ -14,6 +14,8 @@ from datetime import UTC, datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+import yaml
+
 from healthvideo.domain.gate_review import GateKind, GateRejectionRecord
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.env import (
@@ -22,7 +24,7 @@ from healthvideo.env import (
     child_env,
     hide_child_consoles,
 )
-from healthvideo.storage.files import read_yaml, write_yaml_atomic
+from healthvideo.storage.files import read_yaml, write_text_atomic, write_yaml_atomic
 from healthvideo.storage.queue import load_queue
 from healthvideo.storage.revisions import create_revision
 from healthvideo.workflows.gate_review import resume_gate
@@ -61,7 +63,7 @@ def projects(root: Path):
             continue
         try:
             project = ProjectManifestV2.model_validate(read_yaml(path / 'project.yaml'))
-        except ValueError as error:  # one stale project must not stop the whole factory
+        except (TypeError, ValueError, yaml.YAMLError) as error:  # one stale project must not stop the whole factory
             print(f'Bỏ qua {path.name}: project.yaml không hợp lệ ({type(error).__name__})', file=sys.stderr)
             continue
         yield path, project
@@ -93,7 +95,6 @@ def write_review_packet(root: Path, project_dir: Path, project: ProjectManifestV
     """Render the current gate's review packet into cache/review and return its path."""
     from html import escape
 
-    from healthvideo.storage.files import write_text_atomic
     from healthvideo.workflows.review_html import (
         render_medical_packet,
         render_video_packet,
@@ -377,9 +378,11 @@ def run_factory(root: Path, deps: RunDeps, *, interval: float = 120, once: bool 
                             try:
                                 package_project(path)
                                 clear_retry(root, path.name)
+                                (logs / path.name / 'blocked.txt').unlink(missing_ok=True)
                                 event = 'đã đóng gói'
                             except (OSError, TypeError, ValueError) as error:
                                 event = f'bị chặn đóng gói: {error}'
+                                write_text_atomic(logs / path.name / 'blocked.txt', f'{event}\n')
                         elif project.state == WorkflowState.PACKAGED:
                             event = 'đã đóng gói'
                         elif project.state == WorkflowState.BLOCKED or path.name in report.blocked:
@@ -394,7 +397,7 @@ def run_factory(root: Path, deps: RunDeps, *, interval: float = 120, once: bool 
                             announce(path.name, project_title(path, project), event, (event, signature), current,
                                      gate=event is not None and event == gate_for_project(path, project))
                     previous = current
-                except (OSError, TypeError, ValueError, RuntimeError) as error:
+                except (OSError, TypeError, ValueError, RuntimeError, yaml.YAMLError) as error:
                     announce('__factory__', 'Xưởng', f'bị chặn: {error}', str(error), current)
                     previous = current
                     logger.exception('Vòng xưởng thất bại; sẽ thử lại')

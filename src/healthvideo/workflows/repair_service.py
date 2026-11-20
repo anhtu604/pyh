@@ -6,6 +6,7 @@ import argparse
 import contextlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -15,6 +16,7 @@ from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
+import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from healthvideo.agents import AllAgentsExhausted, invoke_with_failover
@@ -22,7 +24,7 @@ from healthvideo.company import load_company, role_skill_block
 from healthvideo.domain.project_v2 import WorkflowState
 from healthvideo.env import background_popen_kwargs, background_python, child_env
 from healthvideo.failures import classify_failure
-from healthvideo.process import is_same_process, process_token
+from healthvideo.process import is_same_process, process_token, resolve_pnpm_argv
 from healthvideo.storage.files import (
     canonical_json_hash,
     read_yaml,
@@ -48,7 +50,7 @@ REPORT = 'leader-repair.yaml'
 MAINTENANCE_STATE = 'cache/repair-worker/maintenance.json'
 RESTARTING_STATE = 'cache/repair-worker/restarting.json'
 _MAINTENANCE_LOCK_RETRY_DELAYS = (0.02, 0.05, 0.1, 0.2, 0.35, 0.5)
-_RESTART_GRACE_SECONDS = 15.0
+_RESTART_GRACE_SECONDS = 75.0
 
 _IGNORED_SNAPSHOT_DIRS = frozenset({
     '.git',
@@ -107,13 +109,23 @@ class Diagnosis(BaseModel):
     evidence: list[str] = Field(min_length=1)
     files: list[str] = Field(default_factory=list)
     tests: list[str] = Field(default_factory=list)
-    delegate_role: Literal['writer', 'medical_expert', 'editor'] | None = None
+    delegate_role: Literal[
+        'writer',
+        'medical_expert',
+        'editor',
+        'storyboard_director',
+        'shorts_producer',
+        'voice_director',
+    ] | None = None
     brief: str = Field(min_length=1)
 
     @model_validator(mode='after')
     def _validate_action_fields(self) -> Diagnosis:
         if self.action == 'delegate' and self.delegate_role is None:
-            raise ValueError('action=delegate yêu cầu delegate_role là writer, medical_expert hoặc editor.')
+            raise ValueError(
+                'action=delegate yêu cầu delegate_role là writer, medical_expert, editor, '
+                'storyboard_director, shorts_producer hoặc voice_director.'
+            )
         if self.action == 'repair' and self.delegate_role is not None:
             raise ValueError('action=repair không được đặt delegate_role.')
         return self
@@ -202,17 +214,33 @@ def _active(root: Path, slug: str | None = None) -> bool:
     return False
 
 
+def _is_video_test_path(relative: Path) -> bool:
+    return (
+        len(relative.parts) >= 3
+        and relative.parts[0] == 'video'
+        and relative.parts[1] == 'src'
+        and (relative.name.endswith('.test.ts') or relative.name.endswith('.test.tsx'))
+    )
+
+
 def _paths(root: Path, names: list[str], *, tests: bool = False) -> list[Path]:
     paths = []
     root_resolved = root.resolve()
     for name in names:
         path = (root / name).resolve()
         relative = path.relative_to(root_resolved)
-        prefixes = {'tests'} if tests else {'src', 'tools', 'video'}
-        if not relative.parts or relative.parts[0] not in prefixes or not path.is_file():
+        if not relative.parts or not path.is_file():
             raise ValueError(f'File sửa/test không hợp lệ: {name}')
-        if tests and path.suffix != '.py':
-            raise ValueError('Test nghiệm thu phải là file pytest hiện có.')
+        if tests:
+            if relative.parts[0] == 'tests':
+                if path.suffix != '.py':
+                    raise ValueError('Test nghiệm thu phải là file pytest hiện có.')
+            elif not _is_video_test_path(relative):
+                raise ValueError(
+                    'Test nghiệm thu phải là file .py dưới tests/ hoặc .test.ts/.test.tsx dưới video/src/.'
+                )
+        elif relative.parts[0] not in {'src', 'tools', 'video'}:
+            raise ValueError(f'File sửa/test không hợp lệ: {name}')
         paths.append(path)
     return paths
 
@@ -412,12 +440,15 @@ def _recover_interrupted_diagnoses(root: Path) -> bool:
     for record_path in sorted(logs_root.glob(f'*/{REPORT}')):
         try:
             record = read_yaml(record_path)
-        except (OSError, ValueError):
+        except (OSError, TypeError, ValueError, yaml.YAMLError):
             continue
         if not isinstance(record, dict) or record.get('phase') != 'diagnosing':
             continue
         slug = record_path.parent.name
-        attempt = int(record.get('attempts') or 0)
+        try:
+            attempt = int(record.get('attempts') or 0)
+        except (TypeError, ValueError):
+            attempt = 0
         if _repair_attempt_live(root, slug, attempt):
             continue
         attempt_dir = root / 'topics/logs/repair' / slug / str(attempt)
@@ -512,7 +543,10 @@ def recover_interrupted_repairs(root: Path) -> bool:
         if isinstance(slug, str) and slug:
             record_path = root / 'topics/logs' / slug / REPORT
             if record_path.is_file():
-                record = read_yaml(record_path)
+                try:
+                    record = read_yaml(record_path)
+                except (OSError, TypeError, ValueError, yaml.YAMLError):
+                    record = None
                 if isinstance(record, dict) and record.get('phase') in {'diagnosing', 'repairing'}:
                     record['phase'] = 'repair_failed'
                     record['error'] = 'Tiến trình sửa lỗi bị gián đoạn giữa chừng; đã khôi phục mã nguồn.'
@@ -625,7 +659,7 @@ def _release(root: Path, slug: str) -> None:
     from healthvideo.workflows.dashboard_operations import retry_project
 
     revision = resolve_project_layout(root / 'projects' / slug).manifest.active_revision
-    retry_project(root, slug, expected_revision=revision)
+    retry_project(root, slug, expected_revision=revision, allow_repair_release=True)
 
 
 def _append_expert_question(project_dir: Path, ask: str, attempt: int) -> None:
@@ -643,6 +677,27 @@ def _append_expert_question(project_dir: Path, ask: str, attempt: int) -> None:
     write_yaml_atomic(questions_path, {'questions': items})
 
 
+_PRODUCTION_STATES = frozenset({
+    WorkflowState.MEDICALLY_APPROVED,
+    WorkflowState.PRODUCTION_IN_PROGRESS,
+    WorkflowState.NEEDS_PRODUCTION_REVISION,
+})
+_DELEGATION_STEPS: dict[tuple[str, WorkflowState], str] = {
+    ('writer', WorkflowState.EVIDENCE_READY): 'draft',
+    ('writer', WorkflowState.DRAFT_READY): 'draft',
+    ('writer', WorkflowState.NEEDS_MEDICAL_REVISION): 'revise_medical',
+    ('editor', WorkflowState.NEEDS_MEDICAL_REVISION): 'revise_medical',
+    ('storyboard_director', WorkflowState.NEEDS_MEDICAL_REVISION): 'revise_medical',
+    ('storyboard_director', WorkflowState.DRAFT_READY): 'storyboard_design',
+    ('editor', WorkflowState.DRAFT_READY): 'storyboard_design',
+    ('voice_director', WorkflowState.DRAFT_READY): 'voice_prep',
+    **{('medical_expert', state): 'research' for state in _PRE_MEDICAL_GATE_STATES},
+    **{('shorts_producer', state): 'shorts_plan' for state in _PRODUCTION_STATES},
+    ('editor', WorkflowState.PRODUCTION_IN_PROGRESS): 'revise_production',
+    ('editor', WorkflowState.NEEDS_PRODUCTION_REVISION): 'revise_production',
+}
+
+
 def _delegate_content_fix(
     root: Path,
     slug: str,
@@ -658,7 +713,7 @@ def _delegate_content_fix(
     project_dir = layout.project_dir
     now = datetime.now(UTC)
 
-    if role in {'writer', 'medical_expert'} and state not in _PRE_MEDICAL_GATE_STATES:
+    if state in _POST_VIDEO_GATE_STATES or state == WorkflowState.AWAITING_MEDICAL_REVIEW:
         return 'needs_attention', {
             'role': role,
             'status': 'awaiting_doctor_reopen',
@@ -666,7 +721,12 @@ def _delegate_content_fix(
             'brief': plan.brief,
             'cause': plan.cause,
         }
-    if role == 'editor' and state in _POST_VIDEO_GATE_STATES:
+    if state in _PRODUCTION_STATES and role in {
+        'writer',
+        'medical_expert',
+        'storyboard_director',
+        'voice_director',
+    }:
         return 'needs_attention', {
             'role': role,
             'status': 'awaiting_doctor_reopen',
@@ -674,37 +734,48 @@ def _delegate_content_fix(
             'brief': plan.brief,
             'cause': plan.cause,
         }
-    if role == 'editor' and state not in {WorkflowState.PRODUCTION_IN_PROGRESS, WorkflowState.NEEDS_PRODUCTION_REVISION}:
+
+    target_step = _DELEGATION_STEPS.get((role, state))
+    if target_step is None:
+        status = 'unsupported_state_for_editor' if role == 'editor' else f'unsupported_state_for_{role}'
         return 'needs_attention', {
             'role': role,
-            'status': 'unsupported_state_for_editor',
+            'status': status,
             'requires_doctor_reopen': False,
             'brief': plan.brief,
             'cause': plan.cause,
         }
 
-    if role == 'writer':
-        if state != WorkflowState.NEEDS_MEDICAL_REVISION:
-            change_request.request_change(
-                project_dir,
-                'edit_script',
-                plan.brief,
-                {'source': 'leader-repair', 'cause': plan.cause, 'revision': layout.manifest.active_revision},
-                now=now,
-            )
-    elif role == 'medical_expert':
-        if state in {WorkflowState.DRAFT_READY, WorkflowState.NEEDS_MEDICAL_REVISION, WorkflowState.EVIDENCE_READY}:
-            _append_expert_question(project_dir, plan.brief, attempt)
+    context = {'source': 'leader-repair', 'cause': plan.cause, 'revision': layout.manifest.active_revision}
+    if role == 'writer' and state == WorkflowState.DRAFT_READY:
+        change_request.request_change(project_dir, 'edit_script', plan.brief, context, now=now)
     elif role == 'editor' and state == WorkflowState.PRODUCTION_IN_PROGRESS:
-        change_request.request_change(
-            project_dir,
-            'edit_production',
-            plan.brief,
-            {'source': 'leader-repair', 'cause': plan.cause, 'revision': layout.manifest.active_revision},
-            now=now,
-        )
+        change_request.request_change(project_dir, 'edit_production', plan.brief, context, now=now)
+    elif role == 'medical_expert' and state in {
+        WorkflowState.DRAFT_READY,
+        WorkflowState.NEEDS_MEDICAL_REVISION,
+        WorkflowState.EVIDENCE_READY,
+    }:
+        _append_expert_question(project_dir, plan.brief, attempt)
 
-    _release(root, slug)
+    guidance_path = root / 'topics/logs' / slug / 'leader-guidance.yaml'
+    previous_guidance = guidance_path.read_bytes() if guidance_path.is_file() else None
+    write_yaml_atomic(guidance_path, {
+        'revision': layout.manifest.active_revision,
+        'role': role,
+        'step': target_step,
+        'brief': plan.brief,
+        'at': now.isoformat(),
+    })
+    try:
+        _release(root, slug)
+    except Exception:
+        if previous_guidance is None:
+            guidance_path.unlink(missing_ok=True)
+        else:
+            guidance_path.write_bytes(previous_guidance)
+        raise
+
     return 'retry_requested', {
         'role': role,
         'status': 'delegated',
@@ -772,10 +843,15 @@ def _verify_retry_validated(root: Path, slug: str, layout, logs: Path, record: d
             validate_asset_manifest(rev, load_asset_manifest(manifest_path))
             checked_validators.append('asset_manifest')
         role = (record.get('delegation') or {}).get('role')
-        if state in _POST_MEDICAL_GATE_STATES or role in {'writer', 'medical_expert'}:
+        pre_medical = _PRE_MEDICAL_GATE_STATES | {WorkflowState.AWAITING_MEDICAL_REVIEW}
+        if (
+            state in _POST_MEDICAL_GATE_STATES
+            or role in {'writer', 'medical_expert', 'storyboard_director', 'voice_director'}
+            or (role == 'editor' and state in pre_medical)
+        ):
             script_review.require_passed_review(layout.project_dir)
             checked_validators.append('script_review')
-        if state in _POST_VIDEO_GATE_STATES or role == 'editor':
+        if state in _POST_VIDEO_GATE_STATES or (role == 'editor' and state not in pre_medical):
             product_review.require_passed_review(layout.project_dir)
             checked_validators.append('product_review')
         qa_path = rev / 'renders/video-qa.json'
@@ -783,6 +859,8 @@ def _verify_retry_validated(root: Path, slug: str, layout, logs: Path, record: d
             qa = json.loads(qa_path.read_text(encoding='utf-8'))
             if isinstance(qa, dict) and 'passed' in qa and qa['passed'] is not True:
                 raise ValueError('video-qa.json chưa đạt.')
+            if isinstance(qa, dict) and qa.get('status') == 'error':
+                raise ValueError('video-qa.json báo lỗi.')
             checked_validators.append('video_qa')
     except Exception as exc:  # noqa: BLE001 — surface exact validator reason
         return False, _sanitize_reason(exc), {}
@@ -806,6 +884,32 @@ def _in_cooldown(record: dict, now: datetime) -> bool:
         return False
 
 
+_INCIDENT_PREFIX_PATTERNS = (
+    re.compile(r'^bước\s+\S+:\s+(?:đang chờ thử lại lúc \S+|cần sửa đầu vào hoặc cấu hình);\s*', re.IGNORECASE),
+    re.compile(r'^bước\s+\S+\s+lỗi:\s*', re.IGNORECASE),
+    re.compile(r'^visual_review\s+lỗi:\s*', re.IGNORECASE),
+    re.compile(r'^(?:ValueError|RuntimeError):\s*', re.IGNORECASE),
+)
+
+
+def _normalize_incident_reason(detail: str) -> str:
+    collapsed = ' '.join(
+        ' '.join(
+            line for line in detail.splitlines()
+            if not line.lstrip().startswith('log_path:')
+        ).split()
+    )
+    text = collapsed
+    while text:
+        updated = text
+        for pattern in _INCIDENT_PREFIX_PATTERNS:
+            updated = pattern.sub('', updated, count=1).lstrip()
+        if updated == text:
+            break
+        text = updated
+    return text or collapsed
+
+
 def repair_once(
     root: Path,
     slug: str,
@@ -820,8 +924,11 @@ def repair_once(
         return 'paused'
     record_path = logs / REPORT
     project = root / 'projects' / slug
-    layout = resolve_project_layout(project)
-    record = read_yaml(record_path) if record_path.exists() else {}
+    try:
+        layout = resolve_project_layout(project)
+        record = read_yaml(record_path) if record_path.exists() else {}
+    except (OSError, TypeError, ValueError, yaml.YAMLError):
+        return 'repair_failed'
     if record.get('revision') != layout.manifest.active_revision:
         record = {'revision': layout.manifest.active_revision, 'attempts': 0}
     if record.get('phase') == 'diagnosing' and _repair_attempt_live(root, slug, int(record.get('attempts') or 0)):
@@ -847,12 +954,12 @@ def repair_once(
     detail = blocked.read_text(encoding='utf-8', errors='replace')
     if (script_review.CYCLE_LIMIT_REASON in detail
             or 'Trạm 07 cần hướng dẫn:' in detail or 'Trạm 12 cần hướng dẫn:' in detail
+            or 'Trạm 12 chưa đạt' in detail
             or 'Storyboard cần hướng dẫn:' in detail or 'Góp ý y khoa chưa có vị trí:' in detail):
         # This is an editorial stop awaiting doctor guidance, not a repair incident.
         return 'needs_attention'
     # Each retry gets a new log path. It is evidence, not a new failure.
-    reason = '\n'.join(line for line in detail.splitlines()
-                       if not line.startswith('log_path:')).strip()
+    reason = _normalize_incident_reason(detail)
     incident = {'state': layout.manifest.state.value, 'reason': reason}
     if record.get('incident') != incident or record.get('phase') == 'validated':
         # Keep attempt numbers monotonic so old diagnosis files remain available.
@@ -890,16 +997,22 @@ def repair_once(
     work = root / 'topics/logs/repair' / slug / str(record['attempts'])
     work.mkdir(parents=True, exist_ok=True)
     error = _sanitize_reason(RuntimeError(detail))
-    context = (f'Phiếu lỗi tự động. Project {project}; revision {layout.manifest.active_revision}. '
-               f'Lỗi: {error}. Đọc log trong {logs}. Phân tích nguyên nhân thật. '
-               'Giao Kỹ sư sửa lỗi các file kỹ thuật và test hiện có để xác nhận (action=repair). '
-               'File được sửa nằm dưới src/, tools/, video/. '
-               'Kỹ sư sửa lỗi tuyệt đối không sửa claim, bằng chứng y khoa, kịch bản hay tự tạo báo cáo critic. '
-               'Nếu lỗi nằm ở nội dung, kịch bản, bằng chứng y khoa hoặc dựng hình/storyboard thì dùng action=delegate '
-               'và chọn delegate_role là writer, medical_expert hoặc editor. '
-               'Nếu cần tài khoản, PIN hoặc thiếu dữ kiện để kết luận thì action=hold. '
-               'action=retry chỉ khi đã có bằng chứng lỗi tạm thời được khắc phục. '
-               'Trong vòng này chỉ đọc và ghi báo cáo.')
+    context = (
+        f'Phiếu lỗi tự động. Project {project}; revision {layout.manifest.active_revision}. '
+        f'Lỗi: {error}. Đọc log trong {logs}. Phân tích nguyên nhân thật. '
+        'Giao Kỹ sư sửa lỗi các file kỹ thuật và test hiện có để xác nhận (action=repair). '
+        'Trường `files` chỉ chứa đường dẫn file tương đối hiện có dưới `src/`, `tools/`, `video/src/`. '
+        'Trường `tests` chỉ chứa đường dẫn file test tương đối hiện có dưới `tests/` (`.py`) '
+        'hoặc `video/src/` (`.test.ts`/`.test.tsx`) — tuyệt đối KHÔNG ghi câu lệnh shell '
+        '(`pytest`, `pnpm`, `ruff`, `git`) vào `tests`. '
+        'Kỹ sư sửa lỗi tuyệt đối không sửa claim, bằng chứng y khoa, kịch bản hay tự tạo báo cáo critic. '
+        'Nếu lỗi nằm ở nội dung, kịch bản, bằng chứng y khoa, phát âm, shorts hoặc dựng hình/storyboard thì dùng '
+        'action=delegate và chọn delegate_role là writer, medical_expert, editor, '
+        'storyboard_director, shorts_producer hoặc voice_director. '
+        'Nếu cần tài khoản, PIN hoặc thiếu dữ kiện để kết luận thì action=hold. '
+        'action=retry chỉ khi đã có bằng chứng lỗi tạm thời được khắc phục. '
+        'Trong vòng này chỉ đọc và ghi báo cáo.'
+    )
     issue_id = 'repair-' + canonical_json_hash(incident)[:16]
     context += f'\nIssue ổn định: {issue_id}. Chỉ chẩn đoán lỗi đang mở trên phiếu này.'
     maintenance = contextlib.ExitStack()
@@ -958,15 +1071,53 @@ def repair_once(
                 if outcome.status != 'ready':
                     raise ValueError(outcome.summary)
                 changed = _check_scope(root, files, before_bytes, before_paths)
+                py_tests = [p for p in tests if p.suffix == '.py']
+                ts_tests = [p for p in tests if p not in py_tests]
                 gate_tests = [root / 'tests/workflows' / f'test_{name}.py'
                               for name in ('script_review', 'product_review')]
-                checked = run([sys.executable, '-m', 'pytest', *map(str, [*tests, *gate_tests]), '-q'],
+                checked = run([sys.executable, '-m', 'pytest', *map(str, [*py_tests, *gate_tests]), '-q'],
                               cwd=root, capture_output=True, text=True, encoding='utf-8',
                               errors='replace', timeout=300, shell=False)
                 record['test_exit_code'] = checked.returncode
-                (work / 'tests.log').write_text(checked.stdout + checked.stderr, encoding='utf-8')
+                tests_log = (checked.stdout or '') + (checked.stderr or '')
+                (work / 'tests.log').write_text(tests_log, encoding='utf-8')
                 if checked.returncode:
                     raise ValueError('Test nghiệm thu chưa đạt; xem tests.log.')
+                root_resolved = root.resolve()
+                has_video_files = any(
+                    p.resolve().relative_to(root_resolved).parts[0] == 'video'
+                    for p in files
+                )
+                if ts_tests or has_video_files:
+                    video_dir = root / 'video'
+                    video_resolved = video_dir.resolve()
+                    vitest_args = (
+                        ['--dir', str(video_dir), 'exec', 'vitest', 'run',
+                         *[p.resolve().relative_to(video_resolved).as_posix() for p in ts_tests]]
+                        if ts_tests
+                        else ['--dir', str(video_dir), 'test']
+                    )
+                    for argv in (
+                        resolve_pnpm_argv(vitest_args),
+                        resolve_pnpm_argv(['--dir', str(video_dir), 'typecheck']),
+                    ):
+                        video_checked = run(
+                            argv,
+                            cwd=root,
+                            capture_output=True,
+                            text=True,
+                            encoding='utf-8',
+                            errors='replace',
+                            timeout=300,
+                            shell=False,
+                        )
+                        if tests_log and not tests_log.endswith('\n'):
+                            tests_log += '\n'
+                        tests_log += (video_checked.stdout or '') + (video_checked.stderr or '')
+                        (work / 'tests.log').write_text(tests_log, encoding='utf-8')
+                        record['test_exit_code'] = video_checked.returncode
+                        if video_checked.returncode:
+                            raise ValueError('Test/typecheck video chưa đạt; xem tests.log.')
                 python_files = [str(p) for p in files if p.suffix == '.py']
                 if python_files:
                     lint = run([sys.executable, '-m', 'ruff', 'check', *python_files],
@@ -1001,7 +1152,15 @@ def repair_once(
             _release(root, slug)
             record['retry_requested_at'] = datetime.now(UTC).isoformat()
             record['phase'] = 'retry_requested'
-    except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired, AllAgentsExhausted) as error:
+    except (
+        OSError,
+        TypeError,
+        ValueError,
+        RuntimeError,
+        yaml.YAMLError,
+        subprocess.TimeoutExpired,
+        AllAgentsExhausted,
+    ) as error:
         if before_bytes or before_paths:
             _restore_workspace(root, before_bytes, before_paths)
         if isinstance(error, AllAgentsExhausted) or classify_failure(error) == 'transient':
@@ -1092,14 +1251,19 @@ def main() -> None:
                     return
                 try:
                     recover_interrupted_repairs(root)
-                except (OSError, ValueError, RuntimeError) as error:
+                except (OSError, TypeError, ValueError, RuntimeError, yaml.YAMLError) as error:
                     print(_sanitize_reason(error), flush=True)
                 pid = factory.running_pid(root)
                 if pid is not None:
                     seen_factory = True
                     parent_pid, parent_token = _sync_parent(pid, parent_pid, parent_token)
                     _clear_factory_restarting(root)
-                    for project, _ in factory.projects(root):
+                    try:
+                        project_entries = list(factory.projects(root))
+                    except (OSError, TypeError, ValueError, RuntimeError, yaml.YAMLError) as error:
+                        print(_sanitize_reason(error), flush=True)
+                        project_entries = []
+                    for project, _ in project_entries:
                         pid = factory.running_pid(root)
                         if pid is None:
                             if _maintenance_or_restarting(root):
@@ -1108,7 +1272,7 @@ def main() -> None:
                         parent_pid, parent_token = _sync_parent(pid, parent_pid, parent_token)
                         try:
                             repair_once(root, project.name, respect_cooldown=True)
-                        except (OSError, ValueError, RuntimeError) as error:
+                        except (OSError, TypeError, ValueError, RuntimeError, yaml.YAMLError) as error:
                             print(_sanitize_reason(error), flush=True)
                         pid = factory.running_pid(root)
                         if pid is not None:

@@ -48,6 +48,7 @@ from healthvideo.workflows import (
     medanim_library,
     product_review,
     production_retry,
+    repair_service,
     researcher,
     standards,
 )
@@ -2291,7 +2292,9 @@ def default_actions(server: DashboardServer) -> dict[str, Callable[..., str]]:
     root = server.root
 
     def start() -> str:
-        return f'Xưởng đang chạy (PID {factory.start_background(root)}).'
+        pid = factory.start_background(root)
+        repair_service.ensure_background(root)
+        return f'Xưởng đang chạy (PID {pid}).'
 
     def stop() -> str:
         pid = factory.stop_background(root)

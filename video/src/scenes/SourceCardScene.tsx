@@ -12,6 +12,7 @@ const LINE = 1.35;
 const DEFAULT_FPS = 30;
 const PREVIOUS_SENTENCE_OPACITY = 0.45;
 const PREVIOUS_SENTENCE_RATIO = 0.72;
+const COLON_CLAUSE_MIN_CHARS = 24;
 
 export type SentenceTiming = {
   text: string;
@@ -23,17 +24,26 @@ const normalizeToken = (text: string): string =>
   text.normalize('NFC').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 
 /**
- * Splits an interpretation into sentences while preserving the exact original
- * string when joined back together (`splitInterpretationSentences(t).join('') === t`).
+ * Splits an interpretation into sentences or long clauses (`;` and long `:`) while
+ * preserving the exact original string (`splitInterpretationSentences(t).join('') === t`).
  */
 export const splitInterpretationSentences = (text: string): string[] => {
   if (!text) return [];
   const parts: string[] = [];
-  const boundary = /([.!?…]+["”’')»]*)(\s+)/g;
+  const boundary = /([.!?…;]+["”’')»]*|:)(\s+)/g;
   let start = 0;
   let match: RegExpExecArray | null;
   while ((match = boundary.exec(text)) !== null) {
     const end = match.index + match[1].length + match[2].length;
+    if (
+      match[1] === ':'
+      && (
+        text.slice(start, match.index).trim().length < COLON_CLAUSE_MIN_CHARS
+        || text.slice(end).trim().length < COLON_CLAUSE_MIN_CHARS
+      )
+    ) {
+      continue;
+    }
     parts.push(text.slice(start, end));
     start = end;
   }
