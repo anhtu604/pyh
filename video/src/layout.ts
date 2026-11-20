@@ -15,7 +15,7 @@ export type FrameLayout = {
   whiteboardText: Box;
   illustrationText: Box;
   chart: {image: Box};
-  outroText: {left: number; top: number; width: number; fontSize: number};
+  outroText: Box & {fontSize: number};
   quote: {bottom: number; inset: number; fontSize: number};
   assets: {brand: Box; outroBrand: Box; outroMascot: Box; whiteboard: Box; explain: Box; standard: Box};
 };
@@ -56,11 +56,11 @@ export const LAYOUTS: Record<FormatProfile, FrameLayout> = {
     illustrationText: {left: 96, top: 760, width: 888, height: 240},
     whiteboardPath: 'M180 1050 C 420 1010, 680 1090, 900 1040',
     chart: {image: {left: 40, top: 210, width: 1000, height: 1368}},
-    outroText: {left: 90, top: 850, width: 900, fontSize: 54},
+    outroText: {left: 90, top: 480, width: 900, height: 520, fontSize: 54},
     quote: {bottom: 390, inset: 72, fontSize: 46},
     assets: {
       brand: {left: 210, top: 250, width: 660, height: 480},
-      outroBrand: {left: 130, top: 250, width: 520, height: 340},
+      outroBrand: {left: 280, top: 180, width: 520, height: 260},
       outroMascot: {left: 48, top: 1034, width: 660, height: 576},
       whiteboard: {left: 90, top: 180, width: 900, height: 550},
       explain: {left: 48, top: 1034, width: 660, height: 576},
@@ -82,11 +82,11 @@ export const LAYOUTS: Record<FormatProfile, FrameLayout> = {
     illustrationText: {left: 500, top: 650, width: 1200, height: 210},
     whiteboardPath: 'M620 640 C 900 600, 1300 680, 1580 630',
     chart: {image: {left: 70, top: 60, width: 1780, height: 808}},
-    outroText: {left: 360, top: 420, width: 1200, fontSize: 54},
+    outroText: {left: 500, top: 344, width: 1200, height: 512, fontSize: 54},
     quote: {bottom: 200, inset: 160, fontSize: 40},
     assets: {
       brand: {left: 1320, top: 60, width: 520, height: 300},
-      outroBrand: {left: 200, top: 200, width: 520, height: 340},
+      outroBrand: {left: 840, top: 80, width: 520, height: 220},
       outroMascot: {left: 0, top: 669.6, width: 470, height: 410.4},
       whiteboard: {left: 500, top: 80, width: 1200, height: 540},
       explain: {left: 0, top: 669.6, width: 470, height: 410.4},
