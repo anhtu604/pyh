@@ -248,6 +248,11 @@ phases:
 - id: R3
   title: Dây chuyền gọn, nhanh, có phong cách — dừng làm video tới khi xong
   tasks:
+  - id: R3.21
+    title: Hiện lỗi Trạm 12 (kẹt issue hai vòng) trong app kèm hai nút chọn hướng
+    status: doing
+    owner: agy (gemini-4-neon-medium)
+    note: 'Chỉ sửa dashboard.html (và test UI nếu có mẫu). Không đụng video/src (codex đang giữ ở R3.20). Brief scratchpad brief-r3-21.md.'
   - id: R3.20
     title: Sửa PR-01, PR-02, PR-04 của PYH-003 (vòng duyệt sản phẩm 11, Trạm 12)
     status: doing
