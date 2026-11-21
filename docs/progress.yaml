@@ -248,6 +248,11 @@ phases:
 - id: R3
   title: Dây chuyền gọn, nhanh, có phong cách — dừng làm video tới khi xong
   tasks:
+  - id: R3.29
+    title: S5 — chuẩn hóa thư viện hình giải phẫu (màu thực thể, tầng phân tử thật, bố cục, sổ chủ thể)
+    status: doing
+    owner: agy (gemini-4-neon-medium)
+    note: 'Bác sĩ 2026-11-21: làm S5 trước S7. Chỉ video/**, không đổi nghĩa y khoa, ảnh kiểm ở cache/r3.29. Brief scratchpad brief-r3-29.md.'
   - id: R3.28
     title: S4 — Trạm 09 sinh motion-report.json (đoạn hình tĩnh), chuyển visual_style vào render-input
     status: doing
