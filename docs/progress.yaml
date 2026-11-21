@@ -248,6 +248,11 @@ phases:
 - id: R3
   title: Dây chuyền gọn, nhanh, có phong cách — dừng làm video tới khi xong
   tasks:
+  - id: R3.30
+    title: S5 vòng sửa — tế bào, phân bố ALT/AST (cơ tim), nhãn organ, khung phân tử, ảnh chuyển tầng
+    status: doing
+    owner: agy (gemini-4-neon-medium)
+    note: 'Bác sĩ 2026-11-21 đồng ý vòng sửa sau tự chấm S5 (~6/10). Chỉ video/**; hình cơ tim/cơ vân đổi cần bác sĩ duyệt. Brief scratchpad brief-r3-30.md.'
   - id: R3.29
     title: S5 — chuẩn hóa thư viện hình giải phẫu (màu thực thể, tầng phân tử thật, bố cục, sổ chủ thể)
     status: doing
