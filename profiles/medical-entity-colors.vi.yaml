@@ -1,0 +1,45 @@
+schema_version: "1.0"
+status: proposed   # chờ bác sĩ duyệt; đổi thành approved khi bác sĩ xác nhận
+source: docs/superpowers/specs/2026-11-21-visual-style-set-design.md (mục 4.3)
+rule: Mỗi loại thực thể một màu cố định giữa các video; tối đa 3 màu nổi trên một khung; chỉ dùng màu trong profiles/brand.vi.yaml.
+entities:
+  tissue_normal:
+    color: teal
+    opacity: 0.30
+    note: Mô/cơ quan bình thường (nền mô gan, thành mạch).
+  tissue_injured:
+    color: yellow
+    opacity: 0.85
+    note: Tế bào/mô đang bị tổn thương hoặc quá tải; chỉ dùng khi lời đọc nói tới tổn thương.
+  enzyme_marker:
+    color: navy
+    opacity: 1.0
+    note: Hạt men ALT/AST; khi thoát ra máu thêm vòng yellow, không đổi màu hạt.
+  blood_flow:
+    color: teal
+    opacity: 1.0
+    note: Dòng máu và mũi tên đi theo dòng máu (nét, không tô khối).
+  bile_flow:
+    color: yellow
+    opacity: 0.40
+    note: Mật và đường mật.
+  drug_or_supplement:
+    color: charcoal
+    opacity: 1.0
+    note: Viên thuốc/chế phẩm: thân off_white, viền charcoal; vòng yellow chỉ khi lời đọc nói tới nguy cơ.
+  scar_fibrosis:
+    color: charcoal
+    opacity: 0.50
+    note: Mô xơ/sẹo, vẽ bằng nét gạch chéo, không tô đặc.
+  lab_value:
+    color: navy
+    opacity: 1.0
+    note: Con số xét nghiệm trên thẻ off_white; điểm được nhấn dùng teal.
+  warning_threshold:
+    color: yellow
+    opacity: 1.0
+    note: Mốc cảnh báo, giới hạn trên bình thường, khi nào đi khám.
+  label_text:
+    color: navy
+    opacity: 1.0
+    note: Nhãn và đường dẫn; trên nền night đổi thành off_white.

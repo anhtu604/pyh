@@ -248,6 +248,16 @@ phases:
 - id: R3
   title: Dây chuyền gọn, nhanh, có phong cách — dừng làm video tới khi xong
   tasks:
+  - id: R3.28
+    title: S4 — Trạm 09 sinh motion-report.json (đoạn hình tĩnh), chuyển visual_style vào render-input
+    status: doing
+    owner: codex (gpt-6.1-sol)
+    note: 'Đo khách quan trên video đã dựng, làm bằng chứng cho Trạm 12; chưa chặn produce. Brief scratchpad brief-r3-28.md.'
+  - id: R3.27
+    title: S3 — bộ cảnh Scale Zoom (zoom log nhiều tầng, nhãn đơn, thanh tỷ lệ, màu thực thể)
+    status: doing
+    owner: agy (gemini-4-neon-medium)
+    note: 'Dùng profiles/medical-entity-colors.vi.yaml (proposed, chờ bác sĩ duyệt). Không đụng Python. Brief scratchpad brief-r3-27.md.'
   - id: R3.26
     title: S2 — trường visual_style và visual_takeaway ở schema storyboard, kèm kiểm và test
     status: doing
