@@ -248,6 +248,11 @@ phases:
 - id: R3
   title: Dây chuyền gọn, nhanh, có phong cách — dừng làm video tới khi xong
   tasks:
+  - id: R3.20
+    title: Sửa PR-01, PR-02, PR-04 của PYH-003 (vòng duyệt sản phẩm 11, Trạm 12)
+    status: doing
+    owner: codex (gpt-6.1-sol)
+    note: 'S42 phiếu giả định, S40 dòng thời gian thuốc, nhịp hình S03/S08/S20/S24. Chỉ sửa storyboard/component trong phạm vi revise_product; không đụng lời, y khoa, cổng. Brief scratchpad brief-r3-20.md.'
   - id: R3.0
     title: Dừng xưởng, chỉ test nhẹ cho tới khi dây chuyền hoàn thiện
     status: done
