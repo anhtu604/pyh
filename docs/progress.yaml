@@ -248,6 +248,11 @@ phases:
 - id: R3
   title: Dây chuyền gọn, nhanh, có phong cách — dừng làm video tới khi xong
   tasks:
+  - id: R3.34
+    title: Lỗi mất dấu tiếng Việt (chữ thành ?) trong kết quả chấm của critic — tìm đường đi, sửa gốc, chặn tái phạm
+    status: doing
+    owner: codex (gpt-6.1-sol)
+    note: 'Bác sĩ báo 2026-11-21 qua ảnh chụp (Biên tập viên, lần chấm 23 trong script-review-log.yaml); việc agy giao trước đó chưa thấy trong repo nên giao lại. Không sửa tay dòng ? đã ghi. Brief scratchpad brief-r3-34.md.'
   - id: R3.32
     title: S7 — bản nháp storyboard PYH-003 theo scale_zoom (chỉ nháp ở cache/r3.32, chưa mở cổng y khoa)
     status: doing
