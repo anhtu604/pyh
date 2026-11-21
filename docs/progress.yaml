@@ -248,11 +248,16 @@ phases:
 - id: R3
   title: Dây chuyền gọn, nhanh, có phong cách — dừng làm video tới khi xong
   tasks:
+  - id: R3.26
+    title: S2 — trường visual_style và visual_takeaway ở schema storyboard, kèm kiểm và test
+    status: doing
+    owner: codex (gpt-6.1-sol)
+    note: 'Bác sĩ duyệt thiết kế 2026-11-21. Storyboard cũ không có hai trường phải giữ nguyên byte/hash. Không đụng video/**. Brief scratchpad brief-r3-26.md.'
   - id: R3.25
     title: Bộ style hình (scale_zoom, iso_infographic, whiteboard), chuẩn hình y khoa, nâng Trạm 09
     status: doing
     owner: Claude (thiết kế); codex/agy theo giai đoạn S2–S6
-    note: 'Bác sĩ 2026-11-21 chọn bộ ba style từ lemo-opuscar, giữ mascot nhỏ. Thiết kế docs/superpowers/specs/2026-11-21-visual-style-set-design.md; chờ bác sĩ duyệt thiết kế trước khi giao S2.'
+    note: 'Bác sĩ 2026-11-21 chọn bộ ba style từ lemo-opuscar, giữ mascot nhỏ và duyệt thiết kế docs/superpowers/specs/2026-11-21-visual-style-set-design.md. S2 đang giao codex (R3.26); S3 chờ R3.23 xong; còn bảng màu thực thể y khoa (S1) chờ Claude viết và bác sĩ duyệt.'
   - id: R3.24
     title: Xuất phụ đề .srt kèm gói đăng cho video dài (thay phụ đề cháy cứng)
     status: doing
