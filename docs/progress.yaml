@@ -248,6 +248,11 @@ phases:
 - id: R3
   title: Dây chuyền gọn, nhanh, có phong cách — dừng làm video tới khi xong
   tasks:
+  - id: R3.25
+    title: Bộ style hình (scale_zoom, iso_infographic, whiteboard), chuẩn hình y khoa, nâng Trạm 09
+    status: doing
+    owner: Claude (thiết kế); codex/agy theo giai đoạn S2–S6
+    note: 'Bác sĩ 2026-11-21 chọn bộ ba style từ lemo-opuscar, giữ mascot nhỏ. Thiết kế docs/superpowers/specs/2026-11-21-visual-style-set-design.md; chờ bác sĩ duyệt thiết kế trước khi giao S2.'
   - id: R3.24
     title: Xuất phụ đề .srt kèm gói đăng cho video dài (thay phụ đề cháy cứng)
     status: doing
