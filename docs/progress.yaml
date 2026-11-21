@@ -248,6 +248,16 @@ phases:
 - id: R3
   title: Dây chuyền gọn, nhanh, có phong cách — dừng làm video tới khi xong
   tasks:
+  - id: R3.24
+    title: Xuất phụ đề .srt kèm gói đăng cho video dài (thay phụ đề cháy cứng)
+    status: doing
+    owner: codex (gpt-6.1-sol)
+    note: 'Bác sĩ 2026-11-21 bỏ phụ đề cháy cứng ở video 16:9, giữ ở Shorts 9:16. Thêm publish/subtitles.vi.srt vào gói đăng, cập nhật chuẩn/prompt. Brief scratchpad brief-r3-24.md.'
+  - id: R3.23
+    title: Bỏ phụ đề cháy cứng ở 16:9 và sửa bôi vàng che chữ
+    status: doing
+    owner: agy (gemini-4-neon-medium)
+    note: 'Giữ phụ đề ở 9:16; bỏ chữ like/subscribe trên màn đoạn kết 16:9; sửa gạch/bôi vàng che nửa dòng chữ. Brief scratchpad brief-r3-23.md.'
   - id: R3.22
     title: Cổng hỏi ý kiến bác sĩ ngoài duyệt sản phẩm (thay các chỗ chặn kiểu "cần bác sĩ quyết định")
     status: doing
