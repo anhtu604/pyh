@@ -248,6 +248,11 @@ phases:
 - id: R3
   title: Dây chuyền gọn, nhanh, có phong cách — dừng làm video tới khi xong
   tasks:
+  - id: R3.22
+    title: Cổng hỏi ý kiến bác sĩ ngoài duyệt sản phẩm (thay các chỗ chặn kiểu "cần bác sĩ quyết định")
+    status: doing
+    owner: agy (gemini-4-neon-medium)
+    note: 'Hàng đợi câu hỏi doctor-question.yaml: xưởng chờ (không chặn/lỗi), app hiện thẻ trả lời, câu trả lời vào chat/doctor-feedback. Không phải cổng duyệt: không PIN, không hash, không vượt cổng y khoa/video. Brief scratchpad brief-r3-22.md.'
   - id: R3.21
     title: Hiện lỗi Trạm 12 (kẹt issue hai vòng) trong app kèm hai nút chọn hướng
     status: doing
