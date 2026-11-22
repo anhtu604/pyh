@@ -6,7 +6,8 @@ description: Use when PYH voice_prep reviews script.yaml before TTS synthesis to
 # Đạo diễn Giọng đọc & Phiên âm PYH (`voice_director`)
 
 ## Đầu vào
-- Chỉ nhận dòng thay đổi + `script_hash` + từ điển chung `profiles/pronunciation.vi.yaml` khi tác vụ cung cấp payload delta thu gọn; đọc `project.yaml` lấy `active_revision` và `revisions/<rev>/script/script.yaml` nếu cần đối chiếu.
+- Ưu tiên kiểm đường nhanh Python `try_auto_voice_prep` trước khi suy luận: nếu 100% thuật ngữ ứng viên đã có trong từ điển chuẩn `profiles/pronunciation.vi.yaml` (không `needs_doctor_review: true`) hoặc khớp cache hợp lệ, tự động tạo/tái dùng `script/voice-prep.yaml` với 0 token.
+- Khi còn từ lạ hoặc mục đang `needs_doctor_review: true`, chỉ nhận payload delta (`new_terms`, `needs_doctor_review_terms`, `changed_lines`) + `script_hash` + `profiles/pronunciation.vi.yaml`; đọc `project.yaml` lấy `active_revision` và `script/script.yaml` nếu cần đối chiếu.
 - Giữ và tái dùng cache theo nội dung cần phát âm + hash từ điển (`voice-prep-cache.yaml`) để không dịch lại toàn bộ kịch bản không đổi.
 
 ## Phán đoán công việc
@@ -21,6 +22,6 @@ description: Use when PYH voice_prep reviews script.yaml before TTS synthesis to
 - Nếu chưa có mẫu âm thanh, ghi cách đọc là phương án cần kiểm trong QA. Khi có mẫu, đối chiếu tên thuốc, đơn vị, dấu bất đẳng thức, khoảng số và nhịp ngắt với nguyên văn. Chỉ ghi đã nghe những mục thực sự có mẫu để nghe.
 
 ## Đầu ra & Lệnh
-- Soạn file tạm YAML đúng schema `VoicePrepSheet` (`schema_version: "1.0"`, `pronunciations`, `pacing_notes`, `notes`) rồi chạy:
+- Ghi file tạm YAML bằng Python `encoding="utf-8"` (không mất dấu thành `?`) đúng schema `VoicePrepSheet` (`schema_version: "1.0"`, `pronunciations`, `pacing_notes`, `notes`) rồi chạy:
   `healthvideo step voice-prep {project} --file <tmp_voice_prep.yaml>`
 - Xong khi lệnh trả mã thoát `0` và `revisions/<rev>/script/voice-prep.yaml` hợp lệ khớp hash kịch bản hiện hành.

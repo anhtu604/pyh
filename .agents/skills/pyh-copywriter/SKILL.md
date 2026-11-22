@@ -30,9 +30,9 @@ description: Use when the PYH posts step needs titles, descriptions, clip captio
   bình luận/nhắn tin B2B, không tự publish.
 
 ## Đầu ra
-- Chỉ `revisions/<rev>/posts/posts.yaml` theo `PostSet`:
+- Chỉ ghi `revisions/<rev>/posts/posts.yaml` bằng Python `encoding="utf-8"` (không mất dấu thành `?`) theo `PostSet`:
   `youtube_titles`, `youtube_description`, `youtube_tags`, `clip_captions`
-  (`tiktok`, `shorts`, `reels` từng clip), `facebook_post`, `youtube_community`, `thumbnail`.
+  (`tiktok`, `shorts`, `reels` từng clip, khớp đúng danh sách clip thực xuất trong `clip-plan.yaml`), `facebook_post`, `youtube_community`, `thumbnail`.
 - Chương đúng giờ/tên từ outline, nguồn đúng title record trong ledger;
   câu có chữ số gắn `[claim:<id>]` trừ mốc giờ đầu dòng chương như prompt.
 - Thumbnail theo **Chuẩn phong cách PYH — Hướng A** (`docs/superpowers/specs/2026-11-17-pyh-style-a-mascot-host.md` mục 6, Trạm 14):

@@ -11,9 +11,9 @@ Bạn là Đạo diễn Giọng đọc & Phiên âm: chuẩn hóa cách đọc t
 - Yêu cầu sửa liên quan (nếu có): `{reject_note}`
 
 ## Tối ưu ngữ cảnh & tái dùng cache (bắt buộc)
-1. Kiểm `topics/logs/{slug}/voice-prep-cache.yaml` và đối chiếu `profiles/pronunciation.vi.yaml` (SHA-256).
-2. Chỉ kiểm các dòng có thuật ngữ ứng viên mới hoặc dòng thay đổi (tách qua `extract_pronunciation_candidates` / `build_voice_prep_delta_context`); **không** nạp lại toàn bộ lịch sử log hay đọc lại các câu thuần tiếng Việt không đổi.
-3. Nếu 100% thuật ngữ ứng viên không đổi và SHA-256 `profiles/pronunciation.vi.yaml` khớp cache, tái dùng ngay danh mục đã chuẩn hóa để đóng dấu `script_hash` mới qua `try_reuse_cached_voice_prep` mà không sửa `pronunciations` cũ.
+1. Kiểm đường nhanh Python `try_auto_voice_prep` và cache `topics/logs/{slug}/voice-prep-cache.yaml` (đối chiếu SHA-256 `profiles/pronunciation.vi.yaml`); nếu 100% thuật ngữ ứng viên đã được từ điển chuẩn (không `needs_doctor_review`) hoặc cache hợp lệ bao phủ, sinh/tái dùng ngay `script/voice-prep.yaml` không cần suy luận lại.
+2. Khi còn từ lạ hoặc mục `needs_doctor_review: true`, chỉ đọc payload thu gọn (`new_terms` + đúng các dòng chứa từ lạ từ `extract_pronunciation_candidates` / `build_voice_prep_delta_context`); **không** nạp toàn bộ lịch sử log hay đọc lại các câu thuần tiếng Việt không đổi.
+3. Ghi tệp YAML bằng UTF-8 sạch (`encoding="utf-8"`, tuyệt đối không mất dấu thành `?`) rồi nộp qua `healthvideo step voice-prep`.
 
 ## Việc cần làm
 1. Đọc `active_revision` trong `{project}/project.yaml`, `revisions/<rev>/script/script.yaml` (hoặc payload delta chỉ gồm dòng thay đổi + từ mới) và `profiles/pronunciation.vi.yaml`.

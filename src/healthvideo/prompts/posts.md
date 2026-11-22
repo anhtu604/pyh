@@ -24,7 +24,7 @@ bằng cắt bỏ điều kiện áp dụng. Không thêm trường schema hay t
 2. Giữ đúng giọng kênh như kịch bản (người thường kể chuyện dễ hiểu, dí dỏm vừa phải); không thêm khẳng định y khoa mới ngoài các claim đã duyệt và không thêm quan điểm hay trải nghiệm cá nhân của bác sĩ ngoài `{doctor_note}`.
 3. Mọi câu có chữ số (trừ mốc giờ đầu dòng chương trong `youtube_description`) bắt buộc phải gắn `[claim:<id>]` trỏ tới `claim_id` đã duyệt y khoa trong `evidence/ledger.yaml`.
 4. Trong `youtube_description`, ghi đầy đủ mốc giờ chương kèm đúng tiêu đề chương từ `outline.yaml` và danh sách nguồn tham khảo dùng đúng nhãn nguồn (`title` của từng bản ghi trong `evidence/ledger.yaml`).
-5. Chạy `healthvideo step posts-check {project}` và sửa `revisions/<rev>/posts/posts.yaml` cho tới khi không còn lỗi.
+5. Ghi `revisions/<rev>/posts/posts.yaml` bằng Python `encoding="utf-8"` (không mất dấu thành `?`), chạy `healthvideo step posts-check {project}` và sửa tới khi không còn lỗi; `clip_captions` khớp danh sách clip sẽ xuất.
 6. Thêm khối `thumbnail` theo **Chuẩn phong cách PYH — Hướng A** (`docs/superpowers/specs/2026-11-17-pyh-style-a-mascot-host.md` mục 6, Trạm 14):
    - `headline`: tối đa **4 từ hiển thị** (không tính thẻ `[claim:<id>]`), 1–60 ký tự, dùng chữ **Be Vietnam Pro 800** (`font_family: "Be Vietnam Pro"`, `font_weight: 800`). Ngắn, gây tò mò đúng nội dung đã duyệt; không giật tít sai sự thật, không hứa chữa bệnh; có chữ số phải gắn `[claim:<id>]` đã duyệt (renderer sẽ bỏ dấu claim khi vẽ chữ).
    - `mascot_pose`: bắt buộc một trong 9 tư thế hợp lệ trong `profiles/brand.vi.yaml` (`welcome`, `explain`, `caution`, `point_up`, `thinking`, `surprised`, `thumbs_up`, `blank_board`, `myth_bust`), khớp sắc thái tiêu đề.

@@ -45,8 +45,9 @@ description: Use when PYH product_review independently evaluates the final video
 - `dung_phong_cach_pyh`: chấm theo spec `2026-11-17-pyh-style-a-mascot-host.md` trên contact sheet
   định kỳ + `hook-transitions/` (hook 0–3 s và chuyển cảnh): màu `off_white/navy/teal/yellow/night`
   ≤ 3 màu nổi không đỏ báo động; chữ Be Vietnam Pro đọc rõ 720p; mascot đúng 9 tư thế và đúng nghĩa;
-  sơ đồ dựng dần từng beat và zoom kính lúp (không cross-fade chồng mờ); phụ đề tĩnh theo trang
-  không highlight từng chữ và không đè nhãn/mascot/nguồn.
+  sơ đồ dựng dần từng beat và zoom kính lúp (không cross-fade chồng mờ); 16:9 không cháy cứng phụ đề;
+  9:16 giữ phụ đề trong vùng an toàn (tránh 15% đỉnh, 22% đáy, cột nút phải) và không đè nhãn/mascot/nguồn.
+  Kiểm contact sheet clip xuất thực để xác nhận bố cục 9:16, không nhận `safe_zone_checked: true` là bằng chứng.
 
 ## Đầu ra
 - Chỉ ghi `revisions/<rev>/reviews/product-review.yaml`, không sửa/render.
@@ -56,7 +57,8 @@ description: Use when PYH product_review independently evaluates the final video
   hoặc `posts/posts.yaml`; phải đổi lời/cảnh/thời lượng/FLUX/profiles là false.
 - `decisions` đúng loại và schema prompt: một `keep: true`, tối đa một
   `recommended: true`, mọi phương án bám ledger; lỗi thường ở `issues`.
-- `checked` chỉ ghi phép kiểm đã thực hiện; nêu giới hạn âm thanh trong summary.
+- `checked` chỉ ghi phép kiểm đã thực hiện; trong `summary` tách rõ quan sát từ contact sheet,
+  dữ liệu QA (`video-qa.json`/`pronunciation-qa.json`) và nhận định chưa nghe âm thanh.
 
 ## Xong khi / Thiếu dữ liệu hoặc lỗi
 - Báo cáo đủ bảy tiêu chí với vị trí và hướng sửa cụ thể, không tự duyệt cổng.

@@ -12,10 +12,12 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from healthvideo.domain.pronunciation import PronunciationEntry, PronunciationLexicon
 from healthvideo.domain.script import Script
 from healthvideo.storage.files import (
+    AgentEncodingError,
     canonical_json_hash,
     read_agent_yaml,
     read_yaml,
     sha256_file,
+    validate_agent_text,
     write_yaml_atomic,
 )
 from healthvideo.storage.revision_lock import revision_lock
@@ -33,17 +35,25 @@ _VI_DIACRITICS = frozenset(
     "ÀÁẢÃẠẰẮẲẴẶẦẤẨẪẬÈÉẺẼẸỀẾỂỄỆÌÍỈĨỊ"
     "ÒÓỎÕỌỒỐỔỖỘỜỚỞỠỢÙÚỦŨỤỪỨỬỮỰỲÝỶỸỴ"
 )
+_VI_RHYME = (
+    r"(?:ieu|yeu|uoi|uou|oai|oay|uay|uya|uye|oeo|"
+    r"ia|ie|iu|oa|oe|oi|oo|ua|ue|ui|uo|uu|uy|ai|ao|au|ay|eo|eu|ye|[aeiouy])"
+)
+_VI_CODA = r"(?:ch|ng|nh|[cmnpt])?"
 _VI_PLAIN_SYLLABLE_RE = re.compile(
-    r"^(?:ngh|ng|nh|ch|gh|gi|kh|ph|qu|th|tr|[bcdghklmnpqrstvx])?"
-    r"(?:ieu|yeu|uoi|uou|oai|oay|uay|uya|uye|ia|ie|iu|oa|oe|oi|oo|ua|ue|ui|uo|uu|uy|ai|ao|au|ay|eo|eu|ye|[aeiouy])"
-    r"(?:ch|ng|nh|[cmnpt])?$"
+    rf"^(?:(?:ngh|gh)[eiy]{_VI_CODA}"
+    rf"|k[eiy]{_VI_CODA}"
+    rf"|qu[aeioy][a-z]*{_VI_CODA}"
+    rf"|gi(?:[aeouy][a-z]*{_VI_CODA}|{_VI_CODA})"
+    rf"|(?:ng|g|c)[aou][a-z]*{_VI_CODA}"
+    rf"|(?:nh|ch|kh|ph|th|tr|[bdhlmnprstvx])?{_VI_RHYME}{_VI_CODA})$"
 )
 _UNIT_OR_NUMERIC_RE = re.compile(
     r"(?:<=|>=|≤|≥|<|>)\s*\d+(?:[.,]\d+)?(?:\s*[%°]|[A-Za-zµμ/]+)?"
-    r"|\b\d+(?:[.,]\d+)?\s*[–-]\s*\d+(?:[.,]\d+)?(?:\s*%)?"
-    r"|\b\d+(?:[.,]\d+)?\s*/\s*\d+(?:[.,]\d+)?"
-    r"|\b\d+(?:[.,]\d+)?\s*(?:%|°[CF]?)\b"
-    r"|\b[A-Za-zµμ]+(?:/[A-Za-zµμ]+)+\b"
+    r"|(?<!\w)\d+(?:[.,]\d+)?\s*[–-]\s*\d+(?:[.,]\d+)?(?:\s*%)?"
+    r"|(?<!\w)\d+(?:[.,]\d+)?\s*/\s*\d+(?:[.,]\d+)?"
+    r"|(?<!\w)\d+(?:[.,]\d+)?\s*(?:%|°[CF]?)(?!\w)"
+    r"|(?<!\w)[A-Za-zµμ]+(?:/[A-Za-zµμ]+)+(?!\w)"
 )
 _HYPHEN_TECH_RE = re.compile(
     r"(?<!\w)[A-Za-z0-9α-ωΑ-Ωµμ]+(?:-[A-Za-z0-9α-ωΑ-Ωβµμ]+)+(?!\w)"
@@ -140,7 +150,20 @@ def _looks_like_candidate_word(token: str) -> bool:
     lowered = token.lower()
     if any(ch in {"f", "j", "w", "z"} for ch in lowered):
         return True
-    return not bool(_VI_PLAIN_SYLLABLE_RE.match(lowered))
+    # Strict Vietnamese orthography check prevents multi-vowel non-VI words from slipping past.
+    if not _VI_PLAIN_SYLLABLE_RE.match(lowered):
+        return True
+    # Disallow invalid `qu`/`gi`/`c`/`g`/`ng` internal clusters caught by `[a-z]*` above.
+    rhyme_part = lowered
+    for onset in ("ngh", "qu", "gi", "ng", "c", "g"):
+        if lowered.startswith(onset):
+            rhyme_part = lowered[len(onset):]
+            break
+    if lowered.startswith(("qu", "gi", "ng", "c", "g")) and rhyme_part:
+        if lowered.startswith("gi"):
+            return not bool(re.fullmatch(rf"(?:{_VI_RHYME})?{_VI_CODA}", rhyme_part))
+        return not bool(re.fullmatch(rf"{_VI_RHYME}{_VI_CODA}", rhyme_part))
+    return False
 
 
 def _scan_line_candidates(text: str, base_pattern: re.Pattern[str] | None) -> list[str]:
@@ -193,13 +216,20 @@ def extract_pronunciation_candidates(
     script: Script | Mapping[str, Any],
     base_lexicon: PronunciationLexicon | None = None,
 ) -> dict[str, Any]:
-    """Extract pronunciation-sensitive terms and candidate lines absent from ``base_lexicon``."""
+    """Extract pronunciation-sensitive terms and candidate lines absent from confirmed ``base_lexicon``."""
     validated_script = script if isinstance(script, Script) else Script.model_validate(dict(script))
     lexicon, lexicon_sha256 = _resolve_lexicon_and_hash(base_lexicon)
 
+    confirmed_entries = [entry for entry in lexicon.entries if not entry.needs_doctor_review]
+    review_pending_by_cf = {
+        entry.written.strip().casefold(): entry
+        for entry in lexicon.entries
+        if entry.needs_doctor_review
+    }
+
     base_pattern: re.Pattern[str] | None = None
-    if lexicon.entries:
-        choices = sorted(lexicon.entries, key=lambda entry: -len(entry.written))
+    if confirmed_entries:
+        choices = sorted(confirmed_entries, key=lambda entry: -len(entry.written))
         base_pattern = re.compile(
             r"(?<!\w)(?:" + "|".join(re.escape(e.written) for e in choices) + r")(?!\w)",
             flags=re.IGNORECASE | re.UNICODE,
@@ -235,6 +265,15 @@ def extract_pronunciation_candidates(
 
     sorted_terms = sorted(canonical_by_cf.values(), key=str.casefold)
     sorted_by_term = {term: by_term_lines[term] for term in sorted_terms}
+    needs_doctor_review_terms = [
+        {
+            "written": review_pending_by_cf[term.casefold()].written,
+            "spoken": review_pending_by_cf[term.casefold()].spoken,
+            "note": review_pending_by_cf[term.casefold()].note,
+        }
+        for term in sorted_terms
+        if term.casefold() in review_pending_by_cf
+    ]
     term_set_hash = canonical_json_hash([term.casefold() for term in sorted_terms])
     candidates_hash = canonical_json_hash({
         "terms": [term.casefold() for term in sorted_terms],
@@ -248,6 +287,7 @@ def extract_pronunciation_candidates(
         "by_term": sorted_by_term,
         "lines": candidate_lines,
         "all_lines": all_lines,
+        "needs_doctor_review_terms": needs_doctor_review_terms,
         "term_set_hash": term_set_hash,
         "candidates_hash": candidates_hash,
         "base_lexicon_sha256": lexicon_sha256,
@@ -289,8 +329,9 @@ def _read_valid_cache(cache_path: Path) -> tuple[dict[str, Any], VoicePrepSheet]
         data = read_yaml(cache_path)
         if data.get("version") != 1:
             return None
+        validate_agent_text(data, cache_path.name)
         sheet = VoicePrepSheet.model_validate(data.get("sheet"))
-    except (OSError, TypeError, ValueError):
+    except (AgentEncodingError, OSError, TypeError, ValueError):
         return None
     return data, sheet
 
@@ -380,6 +421,60 @@ def try_reuse_cached_voice_prep(
         return target
 
 
+def try_auto_voice_prep(
+    project_dir: Path,
+    *,
+    root: Path | None = None,
+    base_lexicon: PronunciationLexicon | None = None,
+    base_lexicon_path: Path | None = None,
+) -> Path | None:
+    """Zero-token Python fast-path for ``voice_prep``.
+
+    Reuses a valid cache when 100% of candidate terms are covered, or directly generates
+    ``script/voice-prep.yaml`` when 100% of suspicious terms are already confirmed in
+    ``profiles/pronunciation.vi.yaml`` (``needs_doctor_review=False``). Returns ``None``
+    only when unknown or unconfirmed terms require LLM/agent review.
+    """
+    reused = try_reuse_cached_voice_prep(
+        project_dir,
+        root=root,
+        base_lexicon=base_lexicon,
+        base_lexicon_path=base_lexicon_path,
+    )
+    if reused is not None:
+        return reused
+
+    project = _project(project_dir)
+    revision = project_dir / "revisions" / project.active_revision
+    lexicon, lexicon_sha256 = _resolve_lexicon_and_hash(base_lexicon, base_lexicon_path)
+    with revision_lock(revision):
+        script, script_hash = _load_script(revision)
+        current_candidates = extract_pronunciation_candidates(script, lexicon)
+        if current_candidates["terms"]:
+            return None
+
+        sheet = VoicePrepSheet(
+            schema_version="1.0",
+            script_hash=script_hash,
+            pronunciations=(),
+            pacing_notes=(),
+            notes="0-token Python fast-path: 100% thuật ngữ đã có trong từ điển chuẩn.",
+        )
+        target = revision / VOICE_PREP_ARTIFACT
+        target.parent.mkdir(parents=True, exist_ok=True)
+        write_yaml_atomic(target, sheet.model_dump(mode="json"))
+        cache_path = _cache_file_path(project_dir, project.slug, root=root)
+        _write_voice_prep_cache(
+            cache_path,
+            slug=project.slug,
+            script_hash=script_hash,
+            base_lexicon_sha256=lexicon_sha256,
+            candidates=current_candidates,
+            sheet=sheet,
+        )
+        return target
+
+
 def build_voice_prep_delta_context(
     project_dir: Path,
     *,
@@ -442,11 +537,21 @@ def build_voice_prep_delta_context(
         f"- {entry['written']} -> {entry['spoken']}"
         for entry in cached_pronunciations
     ) or "(chưa có mục cache)"
+    new_terms_cf = {term.strip().casefold() for term in new_terms}
+    pending_review = [
+        item for item in current.get("needs_doctor_review_terms", [])
+        if item["written"].strip().casefold() in new_terms_cf
+    ]
+    pending_block = "\n".join(
+        f"- {item['written']} -> {item['spoken']} ({item['note'] or 'needs_doctor_review'})"
+        for item in pending_review
+    ) or "(không có)"
     prompt_context = (
         f"mode: {mode}\n"
         f"script_hash: {script_hash}\n"
         f"base_lexicon_sha256: {lexicon_sha256}\n"
         f"new_terms: {new_terms}\n"
+        f"needs_doctor_review_terms:\n{pending_block}\n"
         f"changed_lines:\n{lines_block}\n"
         f"cached_pronunciations:\n{cached_block}\n"
     )
@@ -456,6 +561,7 @@ def build_voice_prep_delta_context(
         "script_hash": script_hash,
         "base_lexicon_sha256": lexicon_sha256,
         "new_terms": new_terms,
+        "needs_doctor_review_terms": pending_review,
         "changed_lines": changed_lines,
         "cached_pronunciations": cached_pronunciations,
         "total_script_lines": len(script.lines),

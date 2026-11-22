@@ -20,7 +20,7 @@ description: Use when PYH visual_review must inspect generated image candidates 
 - Đọc `docs/reference/image-prompting.md` khi cần viết prompt thay thế.
 
 ## Phán đoán công việc
-- Đối chiếu chuẩn phong cách PYH (`docs/superpowers/specs/2026-11-17-pyh-style-a-mascot-host.md`, mục 1–3b):
+- Đối chiếu chuẩn phong cách PYH đã ghim (`docs/superpowers/specs/2026-11-17-pyh-style-a-mascot-host.md`, mục 1–3b) cho cả SVG và FLUX ở 16:9/9:16 khi có mẫu; thiếu mẫu ghi rõ chưa kiểm:
   - Kiểm ảnh/FLUX theo mục 1: nền `off_white #F7F4EC`, nét/chữ `navy #12304A` 6 px phẳng 2D matte,
     nhấn `teal #18A6A6`, chốt `yellow #F4B942`, tối đa 3 màu nổi, không đỏ báo động, không gradient,
     không bóng đổ/nhựa 3D, không grain, không ảnh stock, loại chữ/số AI và vật thể lạ.

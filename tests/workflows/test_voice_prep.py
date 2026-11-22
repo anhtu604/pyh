@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from healthvideo.domain.pronunciation import PronunciationEntry, PronunciationLexicon
@@ -12,6 +13,7 @@ from healthvideo.workflows.voice_prep import (
     extract_pronunciation_candidates,
     load_voice_prep_lexicon,
     save_voice_prep,
+    try_auto_voice_prep,
     try_reuse_cached_voice_prep,
     voice_prep_ready,
 )
@@ -176,3 +178,89 @@ def test_load_voice_prep_lexicon_merges_over_base(tmp_path: Path) -> None:
     )
     merged = load_voice_prep_lexicon(rev, base)
     assert apply_pronunciation("HbA1c và gout", merged) == "hát-bê-a-một-xê và gút"
+
+
+def test_scanner_catches_percentages_and_non_vi_orthography_but_skips_plain_vi() -> None:
+    base = PronunciationLexicon(
+        schema_version="1.0",
+        language="vi",
+        version="3",
+        entries=(
+            PronunciationEntry(written="gout", spoken="gút", needs_doctor_review=False),
+            PronunciationEntry(written="enzyme", spoken="en-zim", needs_doctor_review=True),
+        ),
+    )
+    script = {
+        "schema_version": "1.0",
+        "title": "Test",
+        "lines": [
+            {
+                "id": "L01",
+                "text": "Gan, men, giêng, giường, quốc, quyết, nghiêng, chuyển, khuya, khoeo 2024.",
+            },
+            {
+                "id": "L02",
+                "text": "Nguy cơ liên quan gen, gout, enzyme, giảm 20% và sốt 37°C.",
+            },
+        ],
+    }
+    res = extract_pronunciation_candidates(script, base)
+    terms_cf = {t.casefold() for t in res["terms"]}
+    assert {"gen", "enzyme", "20%", "37°c"} <= terms_cf
+    # Confirmed dictionary entry is excluded; pending needs_doctor_review entry stays candidate.
+    assert "gout" not in terms_cf
+    assert [row["written"] for row in res["needs_doctor_review_terms"]] == ["enzyme"]
+    assert [row["id"] for row in res["lines"]] == ["L02"]
+
+
+def test_try_auto_voice_prep_zero_token_fast_path_and_delta_fallback(tmp_path: Path) -> None:
+    project_dir = create_v2_project_fixture(tmp_path / "projects")
+    rev = project_dir / "revisions/001"
+    lex_path = _lexicon_file(
+        tmp_path,
+        entries=[
+            {"written": "gout", "spoken": "gút", "needs_doctor_review": False},
+            {"written": "ALT", "spoken": "a-lờ-tê", "needs_doctor_review": False},
+            {"written": "enzyme", "spoken": "en-zim", "needs_doctor_review": True},
+        ],
+    )
+
+    # Case 1: 100% terms covered by confirmed lexicon entries + plain Vietnamese -> 0-token auto-gen!
+    script_path = rev / "script/script.yaml"
+    script_data = read_yaml(script_path)
+    script_data["lines"] = [
+        {"id": "L01", "text": "Chỉ số ALT tăng nhẹ khi gan quá tải và dễ gặp ở người bị gout."},
+        {"id": "L02", "text": "Uống đủ nước mỗi ngày 2 lần để hỗ trợ chuyển hóa tự nhiên."},
+    ]
+    write_yaml_atomic(script_path, script_data)
+    assert not voice_prep_ready(project_dir)
+
+    t0 = time.perf_counter()
+    auto_path = try_auto_voice_prep(project_dir, base_lexicon_path=lex_path)
+    elapsed_ms = (time.perf_counter() - t0) * 1000
+    assert auto_path == rev / "script/voice-prep.yaml"
+    assert elapsed_ms < 250  # deterministic fast-path well under budget
+    assert voice_prep_ready(project_dir)
+    saved_vp = read_yaml(auto_path)
+    assert saved_vp["pronunciations"] == []
+    assert "0-token" in saved_vp["notes"]
+
+    # Case 2: needs_doctor_review=True term -> fast-path returns None and builds compact delta context.
+    script_data["lines"].append({"id": "L03", "text": "Cơ thể cần enzyme để tiêu hóa thức ăn."})
+    write_yaml_atomic(script_path, script_data)
+    assert try_auto_voice_prep(project_dir, base_lexicon_path=lex_path) is None
+
+    delta = build_voice_prep_delta_context(project_dir, base_lexicon_path=lex_path)
+    assert delta["new_terms"] == ["enzyme"]
+    assert [row["id"] for row in delta["changed_lines"]] == ["L03"]
+    assert [row["written"] for row in delta["needs_doctor_review_terms"]] == ["enzyme"]
+    assert "L01" not in delta["prompt_context"]
+    assert "L02" not in delta["prompt_context"]
+    assert "L03" in delta["prompt_context"]
+
+    # Case 3: Corrupt '?' lossy cache is rejected safely.
+    cache_path = tmp_path / "topics/logs/muoi-va-huyet-ap/voice-prep-cache.yaml"
+    cache_data = read_yaml(cache_path)
+    cache_data["sheet"]["notes"] = "Ti?ng Vi?t m?t d?u"
+    write_yaml_atomic(cache_path, cache_data)
+    assert try_reuse_cached_voice_prep(project_dir, base_lexicon_path=lex_path) is None
