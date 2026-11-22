@@ -41,6 +41,7 @@ from healthvideo.domain.storyboard import Storyboard
 from healthvideo.domain.visual_budget import validate_visual_budget
 from healthvideo.storage.files import (
     canonical_json_hash,
+    read_agent_yaml,
     read_yaml,
     sha256_file,
     write_yaml_atomic,
@@ -94,7 +95,7 @@ def check_revision_posts(
         return [f"{POSTS_ARTIFACT}: thiếu file bài đăng"]
 
     try:
-        raw_posts = read_yaml(posts_path)
+        raw_posts = read_agent_yaml(posts_path)
         posts = PostSet.model_validate(raw_posts)
     except Exception as exc:  # noqa: BLE001
         return [f"{POSTS_ARTIFACT}: {exc}"]

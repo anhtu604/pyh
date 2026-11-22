@@ -27,6 +27,7 @@ from healthvideo.failures import classify_failure
 from healthvideo.process import is_same_process, process_token, resolve_pnpm_argv
 from healthvideo.storage.files import (
     canonical_json_hash,
+    read_agent_yaml,
     read_yaml,
     write_text_atomic,
     write_yaml_atomic,
@@ -651,7 +652,7 @@ def _ask(root, slug, role, step, prompt, report, model, invoke):
                     role=role, slug=slug, step=step, timeout=600)
     if not result.ok:
         raise RuntimeError(f'{role} thất bại; log: {result.log_path}')
-    return model.model_validate(read_yaml(report))
+    return model.model_validate(read_agent_yaml(report))
 
 
 def _release(root: Path, slug: str) -> None:

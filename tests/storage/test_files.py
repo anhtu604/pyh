@@ -209,3 +209,63 @@ def test_write_text_atomic_concurrent_readers_and_writers_on_same_file(tmp_path:
 
     assert errors == []
     assert files.read_yaml(path)["step"].startswith(("1-", "2-"))
+
+
+def test_read_yaml_closes_file_handle_before_safe_load(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "sample.yaml"
+    path.write_text("key: value\n", encoding="utf-8")
+    opened_streams = []
+    closed_during_parse: list[bool] = []
+    real_open = Path.open
+    real_safe_load = files.yaml.safe_load
+
+    def tracking_open(self: Path, *args, **kwargs):
+        stream = real_open(self, *args, **kwargs)
+        if self == path:
+            opened_streams.append(stream)
+        return stream
+
+    def tracking_safe_load(payload):
+        assert isinstance(payload, str)
+        assert opened_streams
+        closed_during_parse.append(opened_streams[-1].closed)
+        return real_safe_load(payload)
+
+    monkeypatch.setattr(Path, "open", tracking_open)
+    monkeypatch.setattr(files.yaml, "safe_load", tracking_safe_load)
+
+    assert files.read_yaml(path) == {"key": "value"}
+    assert closed_during_parse == [True]
+
+
+@pytest.mark.parametrize("winerror", [5, 32])
+def test_replace_with_retry_survives_eight_transient_windows_locks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, winerror: int
+) -> None:
+    source = tmp_path / "source.tmp"
+    destination = tmp_path / "dest.yaml"
+    source.write_text("new\n", encoding="utf-8")
+    destination.write_text("old\n", encoding="utf-8")
+    real_replace = files.os.replace
+    attempts = 0
+    sleeps: list[float] = []
+
+    def flaky_replace(old: Path, new: Path) -> None:
+        nonlocal attempts
+        attempts += 1
+        if attempts <= 8:
+            error = PermissionError("Access is denied" if winerror == 5 else "Sharing violation")
+            error.winerror = winerror
+            raise error
+        real_replace(old, new)
+
+    monkeypatch.setattr(files.os, "replace", flaky_replace)
+    monkeypatch.setattr(files.time, "sleep", lambda seconds: sleeps.append(seconds))
+
+    files._replace_with_retry(source, destination)
+
+    assert attempts == 9
+    assert sleeps == list(files._REPLACE_RETRY_DELAYS[1:9])
+    assert destination.read_text(encoding="utf-8") == "new\n"

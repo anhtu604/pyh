@@ -21,7 +21,12 @@ from healthvideo.domain.explainer import validate_claim_refs
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
 from healthvideo.storage.explainer import read_explainer
-from healthvideo.storage.files import canonical_json_hash, read_yaml, write_yaml_atomic
+from healthvideo.storage.files import (
+    canonical_json_hash,
+    read_yaml,
+    validate_agent_text,
+    write_yaml_atomic,
+)
 
 
 def _provider_name(client: Any, index: int) -> str:
@@ -41,6 +46,7 @@ def record_question(
     now: datetime | None = None,
 ) -> tuple[Path, ProjectManifestV2]:
     """Record PICO research question and advance state to research_in_progress if at topic_selected."""
+    validate_agent_text(question.model_dump(mode='json'), 'question')
     manifest = ProjectManifestV2.model_validate(read_yaml(project_dir / "project.yaml"))
     ev_dir = project_dir / "revisions" / manifest.active_revision / "evidence"
     ev_dir.mkdir(parents=True, exist_ok=True)
@@ -153,6 +159,7 @@ def record_source_selections(
 
     included = [s.model_dump(mode="json") for s in selections if s.decision == "included"]
     excluded = [s.model_dump(mode="json") for s in selections if s.decision == "excluded"]
+    validate_agent_text([included, excluded], 'source_selections')
 
     inc_path = ev_dir / "included-sources.yaml"
     exc_path = ev_dir / "excluded-sources.yaml"
@@ -192,6 +199,7 @@ def build_evidence_ledger(
         "records": [s.model_dump(mode="json") for s in sources],
         "claims": [c.model_dump(mode="json") for c in claims],
     }
+    validate_agent_text(ledger_data, 'evidence/ledger.yaml')
 
     manifest = ProjectManifestV2.model_validate(read_yaml(project_dir / "project.yaml"))
     validated_artifacts = {"evidence/ledger.yaml"}

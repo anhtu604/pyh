@@ -66,6 +66,42 @@ def submit(root, *, reject=False):
     })
 
 
+@pytest.mark.parametrize('field', ['reason', 'layout_issues', 'style_issues', 'summary', 'overall', 'checked'])
+def test_corrupt_visual_review_is_not_consumed(tmp_path, field):
+    from healthvideo.workflows.visual_review import (
+        CANDIDATES,
+        REPORT,
+        ensure_candidates,
+    )
+
+    manifest = AssetManifest.model_validate({'assets': [illustration_record()]})
+    ensure_candidates(tmp_path, _board(), manifest, generate=_generate)
+    submit(tmp_path)
+    report = read_yaml(tmp_path / REPORT)
+    bad = 'Kh?ng c? issue m? c?n x? l? trong v?ng n?y.'
+    target = report['scenes'][0] if field in {'reason', 'layout_issues', 'style_issues'} else report
+    target[field] = [bad] if field.endswith('issues') or field == 'checked' else bad
+    write_yaml_atomic(tmp_path / REPORT, report)
+    before = (tmp_path / CANDIDATES).read_bytes()
+    with pytest.raises(ValueError, match=r'văn bản bị mất dấu \(mã hóa\)'):
+        ensure_candidates(tmp_path, _board(), manifest, generate=_generate)
+    assert (tmp_path / CANDIDATES).read_bytes() == before
+    assert not (tmp_path / 'reviews/visual/review-00.yaml').exists()
+
+
+def test_visual_review_preserves_utf8_and_real_question(tmp_path):
+    from healthvideo.workflows.visual_review import REPORT, ensure_candidates
+
+    manifest = AssetManifest.model_validate({'assets': [illustration_record()]})
+    ensure_candidates(tmp_path, _board(), manifest, generate=_generate)
+    submit(tmp_path)
+    report = read_yaml(tmp_path / REPORT)
+    report['scenes'][0]['reason'] = 'Vì sao? Hình khớp lời đọc. Xem https://example.org/a?b=c'
+    write_yaml_atomic(tmp_path / REPORT, report)
+    ensure_candidates(tmp_path, _board(), manifest, generate=_generate)
+    assert read_yaml(tmp_path / 'reviews/visual/review-00.yaml') == report
+
+
 def test_visual_review_reject_regenerates_then_falls_back(tmp_path):
     from healthvideo.workflows.visual_review import (
         apply_visual_fallbacks,

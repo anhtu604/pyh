@@ -9,7 +9,7 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from healthvideo.storage.files import read_yaml
+from healthvideo.storage.files import read_agent_text, read_agent_yaml
 from healthvideo.storage.project_layout import resolve_project_layout
 
 EXPERT_BRIEF = 'evidence/expert-brief.md'
@@ -40,7 +40,7 @@ def expert_brief_ready(project: Path) -> bool:
     """True when the active revision has a non-empty expert brief."""
     try:
         path = resolve_project_layout(project).artifact_root / EXPERT_BRIEF
-        return path.is_file() and bool(path.read_text(encoding='utf-8').strip())
+        return path.is_file() and bool(read_agent_text(path).strip())
     except (OSError, ValueError):
         return False
 
@@ -50,7 +50,7 @@ def _questions(project: Path) -> list[WriterQuestion]:
     if not path.is_file():
         return []
     try:
-        return WriterQuestions.model_validate(read_yaml(path)).questions
+        return WriterQuestions.model_validate(read_agent_yaml(path)).questions
     except (TypeError, yaml.YAMLError, ValidationError) as exc:
         raise ValueError(f'{QUESTIONS} không hợp lệ: {exc}') from exc
 

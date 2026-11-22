@@ -15,6 +15,7 @@ _CONFIGURATION = (
     "authentication failed", "not logged in", "invalid api key",
 )
 _TRANSIENT = (
+    'văn bản bị mất dấu (mã hóa)',
     "no capacity available", "high traffic", "code 503", "overloaded",
     "connection reset", "connection refused", "connection timed out",
     "network error", "network is unreachable", "temporary failure", "timed out",

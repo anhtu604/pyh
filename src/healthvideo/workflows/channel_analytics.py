@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from healthvideo.agents import invoke_with_failover
 from healthvideo.company import load_company, role_skill_block
 from healthvideo.domain.topic import RubricScore100, TopicDossier
-from healthvideo.storage.files import read_yaml, write_yaml_atomic
+from healthvideo.storage.files import read_agent_yaml, read_yaml, write_yaml_atomic
 from healthvideo.storage.project_layout import resolve_project_layout
 from healthvideo.workflows.researcher import (
     DEFAULT_SHEET_ID,
@@ -503,7 +503,7 @@ def analyze_channel_performance(
         raise RuntimeError("Researcher chưa hoàn thành phân tích kênh.")
     if not report_path.is_file():
         raise ValueError("Researcher không ghi báo cáo phân tích kênh.")
-    raw = read_yaml(report_path)
+    raw = read_agent_yaml(report_path)
     if not isinstance(raw, dict) or not str(raw.get("summary") or "").strip():
         raise ValueError("Báo cáo phân tích kênh thiếu summary.")
     parsed = ChannelInsights.model_validate(

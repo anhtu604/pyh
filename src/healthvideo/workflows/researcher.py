@@ -20,7 +20,7 @@ from healthvideo.agents import invoke_with_failover
 from healthvideo.company import load_company, role_skill_block
 from healthvideo.domain.queue import QueueEntry
 from healthvideo.domain.topic import RubricScore100, TopicCard, TopicDossier
-from healthvideo.storage.files import read_yaml, write_yaml_atomic
+from healthvideo.storage.files import read_agent_yaml, read_yaml, write_yaml_atomic
 from healthvideo.storage.queue import add_to_queue, load_queue
 
 DEFAULT_SHEET_ID = "1e-WrbZP062LSlNTF8rmpYuHYECgXI10n6HUtiOBfOXg"
@@ -511,7 +511,7 @@ def discover_topics_with_agent(
     )
     if not result.ok:
         raise RuntimeError("Researcher chưa hoàn thành tìm kiếm đề tài.")
-    raw = read_yaml(report_path) if report_path.is_file() else {}
+    raw = read_agent_yaml(report_path) if report_path.is_file() else {}
     entries = raw.get("topics", []) if isinstance(raw, dict) else []
     if not isinstance(entries, list):
         raise TypeError("Researcher trả về topics không hợp lệ.")

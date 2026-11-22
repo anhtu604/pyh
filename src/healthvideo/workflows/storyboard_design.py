@@ -18,6 +18,7 @@ from healthvideo.domain.state_graph import TransitionContext, transition_v2
 from healthvideo.domain.storyboard import Storyboard, validate_style_a_mascot_poses
 from healthvideo.storage.files import (
     canonical_json_hash,
+    read_agent_yaml,
     read_yaml,
     replace_directory_atomic,
     write_text_atomic,
@@ -148,10 +149,10 @@ def _submit_storyboard_design(
         raise ValueError("storyboard submission requires script/script.yaml first")
     script_data = read_yaml(script_path)
     script = Script.model_validate(script_data)
-    storyboard = Storyboard.model_validate(read_yaml(storyboard_file))
-    assets = AssetManifest.model_validate(read_yaml(assets_file))
-    clip_plan = ClipPlan.model_validate(read_yaml(clip_plan_file)) if clip_plan_file else None
-    outline = Outline.model_validate(read_yaml(outline_file)) if outline_file else None
+    storyboard = Storyboard.model_validate(read_agent_yaml(storyboard_file))
+    assets = AssetManifest.model_validate(read_agent_yaml(assets_file))
+    clip_plan = ClipPlan.model_validate(read_agent_yaml(clip_plan_file)) if clip_plan_file else None
+    outline = Outline.model_validate(read_agent_yaml(outline_file)) if outline_file else None
 
     staging = Path(mkdtemp(prefix=f".{revision.name}.storyboard-", dir=revision.parent))
     promoted = False

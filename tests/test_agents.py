@@ -257,7 +257,7 @@ def test_prompt_sent_via_stdin_for_codex(tmp_path: Path) -> None:
     invoke(codex, prompt, cwd=tmp_path, log_dir=tmp_path / "logs", runner=fake_runner)
 
     assert captured["argv"] == list(codex.argv)
-    assert captured["kwargs"]["input"] == prompt
+    assert captured["kwargs"]["input"].startswith(prompt + '\n')
     assert captured["kwargs"]["encoding"] == "utf-8"
     assert captured["kwargs"]["text"] is True
 
@@ -275,8 +275,7 @@ def test_prompt_substituted_for_agy(tmp_path: Path) -> None:
     invoke(agy, prompt, cwd=tmp_path, log_dir=tmp_path / "logs", runner=fake_runner)
 
     assert "{prompt}" not in captured["argv"]
-    assert prompt in captured["argv"]
-    assert captured["argv"][captured["argv"].index("-p") + 1] == prompt
+    assert captured["argv"][captured["argv"].index("-p") + 1].startswith(prompt + '\n')
     assert captured["kwargs"]["input"] is None
 
 
@@ -622,8 +621,8 @@ def test_long_argv_prompt_goes_through_file(tmp_path, monkeypatch):
     assert len(passed) < agents.MAX_ARGV_PROMPT
     (prompt_file,) = (tmp_path / 'logs').glob('*-agy-prompt.md')
     assert str(prompt_file) in passed
-    assert prompt_file.read_text(encoding='utf-8') == long_prompt
-    assert calls[1][calls[1].index('-p') + 1] == 'ngắn'
+    assert prompt_file.read_text(encoding='utf-8').startswith(long_prompt + '\n')
+    assert calls[1][calls[1].index('-p') + 1].startswith('ngắn\n')
 
 
 def test_exclude_slots_avoids_excluded_slots(tmp_path):

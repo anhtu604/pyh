@@ -15,6 +15,7 @@ from healthvideo.domain.storyboard import SceneAnatomy, SceneBeat, Storyboard
 from healthvideo.process import run_with_deadline, timeout_diagnostic
 from healthvideo.storage.files import (
     canonical_json_hash,
+    read_agent_yaml,
     read_yaml,
     sha256_file,
     write_yaml_atomic,
@@ -232,7 +233,7 @@ def _consume_report(root: Path, data: dict, board: Storyboard) -> None:
     report_path = root / REPORT
     if not report_path.is_file() or data.get('review_sha256') == sha256_file(report_path):
         return
-    report = read_yaml(report_path)
+    report = read_agent_yaml(report_path)
     if report.get('candidate_index_sha256') != sha256_file(root / CANDIDATES):
         raise ValueError('Visual review does not match current candidate index')
     sheets = data.get('contact_sheets') or [data.get('contact_sheet')]

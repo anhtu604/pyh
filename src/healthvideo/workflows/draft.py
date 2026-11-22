@@ -27,6 +27,7 @@ from healthvideo.qa.script import review_script
 from healthvideo.storage.explainer import read_explainer
 from healthvideo.storage.files import (
     canonical_json_hash,
+    read_agent_yaml,
     read_yaml,
     replace_directory_atomic,
     write_text_atomic,
@@ -172,7 +173,7 @@ def submit_script_draft(
         raise ValueError(
             "script draft submission requires evidence_ready, draft_ready, or needs_medical_revision"
         )
-    script = Script.model_validate(read_yaml(script_file))
+    script = Script.model_validate(read_agent_yaml(script_file))
     if not script.lines:
         raise ValueError("draft requires nonempty script lines")
     if script.format_profile != "explain_first_v1":
@@ -182,7 +183,7 @@ def submit_script_draft(
     revision = project_dir / "revisions" / project.active_revision
     if not (revision / "explainer/explainer.yaml").is_file():
         raise ValueError("explain_first_v1 requires explainer/explainer.yaml")
-    outline = Outline.model_validate(read_yaml(outline_file)) if outline_file else None
+    outline = Outline.model_validate(read_agent_yaml(outline_file)) if outline_file else None
     staging = Path(mkdtemp(prefix=f".{revision.name}.script-", dir=revision.parent))
     promoted = False
     try:
@@ -258,9 +259,9 @@ def submit_draft(
     project = _project(project_dir)
     if project.state not in {WorkflowState.EVIDENCE_READY, WorkflowState.DRAFT_READY}:
         raise ValueError("draft submission requires evidence_ready or draft_ready")
-    script = Script.model_validate(read_yaml(script_file))
-    storyboard = Storyboard.model_validate(read_yaml(storyboard_file))
-    assets = AssetManifest.model_validate(read_yaml(assets_file))
+    script = Script.model_validate(read_agent_yaml(script_file))
+    storyboard = Storyboard.model_validate(read_agent_yaml(storyboard_file))
+    assets = AssetManifest.model_validate(read_agent_yaml(assets_file))
     revision = project_dir / "revisions" / project.active_revision
     staging = Path(mkdtemp(prefix=f".{revision.name}.draft-", dir=revision.parent))
     promoted = False

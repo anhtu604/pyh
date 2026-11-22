@@ -13,6 +13,7 @@ from healthvideo.domain.pronunciation import PronunciationEntry, PronunciationLe
 from healthvideo.domain.script import Script
 from healthvideo.storage.files import (
     canonical_json_hash,
+    read_agent_yaml,
     read_yaml,
     sha256_file,
     write_yaml_atomic,
@@ -307,7 +308,7 @@ def save_voice_prep(
     revision = project_dir / "revisions" / project.active_revision
     with revision_lock(revision):
         script, script_hash = _load_script(revision)
-        sheet = VoicePrepSheet.model_validate(read_yaml(file_path)).model_copy(
+        sheet = VoicePrepSheet.model_validate(read_agent_yaml(file_path)).model_copy(
             update={"script_hash": script_hash}
         )
         target = revision / VOICE_PREP_ARTIFACT

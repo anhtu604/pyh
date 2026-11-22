@@ -2,6 +2,7 @@ import datetime
 import hashlib
 import json
 import os
+import re
 import shutil
 import sys
 import time
@@ -11,6 +12,72 @@ from tempfile import NamedTemporaryFile, mkdtemp
 from typing import Any
 
 import yaml
+
+AGENT_UTF8_RULE = (
+    "Mọi tệp kết quả phải giữ nguyên tiếng Việt UTF-8. Dùng công cụ Write/Edit/apply_patch "
+    "hoặc tệp Python UTF-8 chạy trực tiếp với open(..., encoding='utf-8'). "
+    "Cấm Set-Content, Out-File, shell redirect > và here-string/pipe chứa tiếng Việt "
+    "đưa vào Python hay CLI; encoding='utf-8' ở đầu ra không cứu được pipe đã mất dấu. "
+    "Không truyền nội dung tiếng Việt qua tham số CLI; nộp bằng tệp. "
+    "Nếu buộc dùng PowerShell pipe cho mã Python, chỉ dùng mã ASCII và Unicode escapes. "
+    "Đọc lại và kiểm nội dung tiếng Việt trước khi nộp."
+)
+
+
+class AgentEncodingError(ValueError):
+    """An agent must resubmit its output without lossy text conversion."""
+
+
+_URL_RE = re.compile(r'https?://[^\s<>]+')
+_LOSSY_WORD_RE = re.compile(r'[A-Za-zÀ-ỹ]+(?:\?+[A-Za-zÀ-ỹ]+)+')
+
+
+def validate_agent_text(value: Any, location: str = 'result') -> None:
+    """Check incoming content only, never rewrite or revalidate historical logs.
+
+    A damaged syllable of at least three characters indicates loss.
+    URLs, sentence-final questions and A?B choices remain legal.
+    This is a conservative heuristic, not a Vietnamese language detector.
+    """
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            validate_agent_text(item, f'{location}.{key}')
+    elif isinstance(value, (list, tuple)):
+        for index, item in enumerate(value):
+            validate_agent_text(item, f'{location}[{index}]')
+    elif isinstance(value, str):
+        cleaned = _URL_RE.sub('', value)
+        words = [word for word in _LOSSY_WORD_RE.findall(cleaned)
+                 if not re.fullmatch(r'[A-Z]\?[A-Z]', word)]
+        if '\ufffd' in cleaned or any(len(word) >= 3 for word in words):
+            raise AgentEncodingError(
+                f'Đầu ra agent: văn bản bị mất dấu (mã hóa) tại {location}. '
+                "Hãy nộp lại tệp bằng Write/Edit/apply_patch hoặc tệp Python encoding='utf-8'; "
+                'không đưa tiếng Việt qua PowerShell pipe/redirect.'
+            )
+
+
+def read_agent_text(path: Path) -> str:
+    try:
+        text = path.read_text(encoding='utf-8-sig')
+    except UnicodeError as exc:
+        raise AgentEncodingError(
+            f'Đầu ra agent: văn bản bị mất dấu (mã hóa) tại {path.name}; hãy nộp lại UTF-8.'
+        ) from exc
+    validate_agent_text(text, path.name)
+    return text
+
+
+def read_agent_yaml(path: Path) -> dict[str, Any]:
+    """Read a fresh agent submission, rejecting loss before it can be persisted."""
+    try:
+        data = read_yaml(path)
+    except UnicodeError as exc:
+        raise AgentEncodingError(
+            f'Đầu ra agent: văn bản bị mất dấu (mã hóa) tại {path.name}; hãy nộp lại UTF-8.'
+        ) from exc
+    validate_agent_text(data, path.name)
+    return data
 
 
 class DirectoryPromotionError(OSError):
@@ -33,23 +100,25 @@ class DirectoryPromotionError(OSError):
 
 
 def read_yaml(path: Path) -> dict[str, Any]:
+    raw = ""
     for index, delay in enumerate((0.0, 0.005, 0.015, 0.03)):
         if delay:
             time.sleep(delay)
         try:
             with path.open(encoding="utf-8") as stream:
-                data = yaml.safe_load(stream)
+                raw = stream.read()
             break
         except PermissionError:
             if sys.platform != "win32" or index == 3:
                 raise
+    data = yaml.safe_load(raw)
     if not isinstance(data, Mapping):
         raise TypeError(f"YAML root must be a mapping: {path}")
     return dict(data)
 
 
 _WINDOWS_TRANSIENT_REPLACE_ERRORS = frozenset({5, 32})
-_REPLACE_RETRY_DELAYS = (0.0, 0.005, 0.015, 0.03, 0.06, 0.15)
+_REPLACE_RETRY_DELAYS = (0.0, 0.005, 0.015, 0.03, 0.06, 0.15, 0.25, 0.35, 0.5, 0.5)
 
 
 def _replace_with_retry(source: Path, destination: Path) -> None:

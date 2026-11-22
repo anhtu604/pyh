@@ -22,7 +22,12 @@ from healthvideo.domain.evidence import EvidenceClaim
 from healthvideo.domain.explainer import Nonblank
 from healthvideo.domain.script import Script
 from healthvideo.domain.storyboard import Storyboard
-from healthvideo.storage.files import canonical_json_hash, read_yaml, write_yaml_atomic
+from healthvideo.storage.files import (
+    canonical_json_hash,
+    read_agent_yaml,
+    read_yaml,
+    write_yaml_atomic,
+)
 from healthvideo.storage.revision_lock import revision_lock
 from healthvideo.workflows.draft import _project
 
@@ -293,7 +298,7 @@ def save_shorts_plan(project_dir: Path, file_path: Path) -> Path:
         script = Script.model_validate(read_yaml(revision / "script/script.yaml"))
         storyboard = Storyboard.model_validate(read_yaml(revision / "storyboard/storyboard.yaml"))
         claims = _load_ledger_claims(revision)
-        plan = ShortsPlan.model_validate(read_yaml(file_path))
+        plan = ShortsPlan.model_validate(read_agent_yaml(file_path))
         for clip in plan.clips:
             if not 60 <= clip.target_seconds <= 90:
                 raise ValueError(

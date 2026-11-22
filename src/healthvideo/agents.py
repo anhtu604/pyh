@@ -27,7 +27,12 @@ from healthvideo.process import (
     terminate_process_tree,
     timeout_diagnostic,
 )
-from healthvideo.storage.files import read_yaml, write_text_atomic, write_yaml_atomic
+from healthvideo.storage.files import (
+    AGENT_UTF8_RULE,
+    read_yaml,
+    write_text_atomic,
+    write_yaml_atomic,
+)
 
 RUNNING_MARKER = ".agent-running"
 _LOG = logging.getLogger(__name__)
@@ -311,6 +316,8 @@ def invoke(
     meta: dict | None = None,
 ) -> AgentResult:
     """Invoke a single agent CLI and capture its output to a UTF-8 log file."""
+    if AGENT_UTF8_RULE not in prompt:
+        prompt += '\n\n## Ghi tệp kết quả UTF-8\n' + AGENT_UTF8_RULE + '\n'
     log_dir.mkdir(parents=True, exist_ok=True)
     actual_job_id = job_id or uuid.uuid4().hex
     timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%f")
@@ -328,6 +335,11 @@ def invoke(
         stdin_input = None
 
     env = child_env()
+    # Override inherited opt-outs for every agent and its Python descendants.
+    for key in list(env):
+        if key.upper() in {'PYTHONUTF8', 'PYTHONIOENCODING'}:
+            del env[key]
+    env.update(PYTHONUTF8='1', PYTHONIOENCODING='utf-8')
     credentials: dict[str, str] = {}
     marker = log_dir / RUNNING_MARKER
     job_file = log_dir / f".job-{actual_job_id}.json"

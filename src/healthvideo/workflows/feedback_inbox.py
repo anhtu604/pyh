@@ -20,7 +20,7 @@ from healthvideo.agents import (
     invoke_with_failover,
 )
 from healthvideo.company import Company, load_company, role_skill_block
-from healthvideo.storage.files import read_yaml, write_yaml_atomic
+from healthvideo.storage.files import read_agent_yaml, read_yaml, write_yaml_atomic
 from healthvideo.workflows.factory_deps import changed_code_paths, code_snapshot
 from healthvideo.workflows.runner import PROMPTS_DIR
 
@@ -168,7 +168,7 @@ def analyze(
                                    + ', '.join(path.as_posix() for path in leaked))
             if not report.is_file():
                 raise RuntimeError('Agent chưa ghi báo cáo phân tích.')
-            analysis = FeedbackAnalysis.model_validate(read_yaml(report))
+            analysis = FeedbackAnalysis.model_validate(read_agent_yaml(report))
     except (AllAgentsExhausted, OSError, RuntimeError, ValueError, yaml.YAMLError) as exc:
         _update(root, entry_id, status='failed', error=str(exc))
     else:

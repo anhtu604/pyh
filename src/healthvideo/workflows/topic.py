@@ -8,7 +8,12 @@ from pathlib import Path
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
 from healthvideo.domain.topic import TopicCard, TopicScores, calculate_triage_rank
-from healthvideo.storage.files import canonical_json_hash, read_yaml, write_yaml_atomic
+from healthvideo.storage.files import (
+    canonical_json_hash,
+    read_agent_yaml,
+    read_yaml,
+    write_yaml_atomic,
+)
 
 
 def list_topics(inbox_dir: Path, status: str | None = None) -> list[TopicCard]:
@@ -19,7 +24,7 @@ def list_topics(inbox_dir: Path, status: str | None = None) -> list[TopicCard]:
     cards: list[TopicCard] = []
     for file_path in inbox_dir.glob("*.yaml"):
         try:
-            data = read_yaml(file_path)
+            data = read_agent_yaml(file_path)
             card = TopicCard.model_validate(data)
             if status is None or card.status == status:
                 cards.append(card)
