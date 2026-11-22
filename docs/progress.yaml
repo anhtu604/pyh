@@ -1,5 +1,5 @@
 version: 1
-updated: '2026-11-19'
+updated: '2026-11-22'
 phases:
 - id: R1
   title: Hoàn thiện xưởng trước khi làm video mới
@@ -250,69 +250,69 @@ phases:
   tasks:
   - id: R3.34
     title: Lỗi mất dấu tiếng Việt (chữ thành ?) ở mọi kênh agent ghi tệp (chấm, chat Điều phối, v.v.) — sửa gốc, chặn tái phạm
-    status: doing
+    status: done
     owner: codex (gpt-6.1-sol)
-    note: 'Bác sĩ báo 2026-11-21 qua ảnh chụp (Biên tập viên, lần chấm 23 trong script-review-log.yaml); việc agy giao trước đó chưa thấy trong repo nên giao lại. Không sửa tay dòng ? đã ghi. Brief scratchpad brief-r3-34.md.'
+    note: 'Commit d528958: read_agent_yaml/read_agent_text + AGENT_UTF8_RULE + ép PYTHONUTF8=1/PYTHONIOENCODING=utf-8; không sửa tay log cũ. ruff sạch, test_agent_encoding/test_files/test_agents/test_visual_review đạt.'
   - id: R3.32
     title: S7 — bản nháp storyboard PYH-003 theo scale_zoom (chỉ nháp ở cache/r3.32, chưa mở cổng y khoa)
-    status: doing
+    status: done
     owner: codex (gpt-6.1-sol)
-    note: 'Bác sĩ 2026-11-21: Bắt đầu S7. Nháp thêm visual_style + visual_takeaway, đổi whiteboard còn một chương; không ghi vào projects/**. Mở lại cổng y khoa cần PIN bác sĩ. Brief scratchpad brief-r3-32.md.'
+    note: 'Commit 0292484: hoàn tất S7 scale_zoom cho PYH-003 và đã được bác sĩ duyệt lại cổng y khoa 2026-11-21T23:49:54 (9/9 SHA256 medical-approval.yaml khớp 100%).'
   - id: R3.30
     title: S5 vòng sửa — tế bào, phân bố ALT/AST (cơ tim), nhãn organ, khung phân tử, ảnh chuyển tầng
-    status: doing
+    status: done
     owner: agy (gemini-4-neon-medium)
-    note: 'Bác sĩ 2026-11-21 đồng ý vòng sửa sau tự chấm S5 (~6/10). Chỉ video/**; hình cơ tim/cơ vân đổi cần bác sĩ duyệt. Brief scratchpad brief-r3-30.md.'
+    note: 'Commit 0292484: hoàn tất vòng sửa giải phẫu S5 + vá S01/S08 scale_zoom (bỏ marker-underline-title đè nhãn, sửa chú thích normal); vitest 51 files / 414 tests & typecheck đạt; ảnh mẫu ở cache/visual-review-2026-11-22/.'
   - id: R3.29
     title: S5 — chuẩn hóa thư viện hình giải phẫu (màu thực thể, tầng phân tử thật, bố cục, sổ chủ thể)
-    status: doing
+    status: done
     owner: agy (gemini-4-neon-medium)
-    note: 'Bác sĩ 2026-11-21: làm S5 trước S7. Chỉ video/**, không đổi nghĩa y khoa, ảnh kiểm ở cache/r3.29. Brief scratchpad brief-r3-29.md.'
+    note: 'Commit 0292484: chuẩn hóa màu thực thể S1 (entityColors.ts) và 6 hình giải phẫu gan/men gan; vitest 51 files / 414 tests & typecheck đạt; ảnh mẫu ở cache/visual-review-2026-11-22/.'
   - id: R3.28
     title: S4 — Trạm 09 sinh motion-report.json (đoạn hình tĩnh), chuyển visual_style vào render-input
-    status: doing
+    status: done
     owner: codex (gpt-6.1-sol)
-    note: 'Đo khách quan trên video đã dựng, làm bằng chứng cho Trạm 12; chưa chặn produce. Brief scratchpad brief-r3-28.md.'
+    note: 'Commit 0292484 + ee7511c: thêm motion_report.py, truyền visual_style vào render-input và gắn bằng chứng motion-report.json cho Trạm 12; test_motion_report & test_motion_evidence đạt.'
   - id: R3.27
     title: S3 — bộ cảnh Scale Zoom (zoom log nhiều tầng, nhãn đơn, thanh tỷ lệ, màu thực thể)
-    status: doing
+    status: done
     owner: agy (gemini-4-neon-medium)
-    note: 'Dùng profiles/medical-entity-colors.vi.yaml (proposed, chờ bác sĩ duyệt). Không đụng Python. Brief scratchpad brief-r3-27.md.'
+    note: 'Commit 0292484: thêm bộ cảnh ScaleZoomStage, ScaleBar, SingleLabel, MembraneMolecularCloseup; vitest 51 files / 414 tests & typecheck đạt; ảnh mẫu S01/S08/S42 ở cache/visual-review-2026-11-22/.'
   - id: R3.26
     title: S2 — trường visual_style và visual_takeaway ở schema storyboard, kèm kiểm và test
-    status: doing
+    status: done
     owner: codex (gpt-6.1-sol)
-    note: 'Bác sĩ duyệt thiết kế 2026-11-21. Storyboard cũ không có hai trường phải giữ nguyên byte/hash. Không đụng video/**. Brief scratchpad brief-r3-26.md.'
+    note: 'Commit 0292484: thêm visual_style & visual_takeaway vào storyboard/render-input schema + validator; test_storyboard_visual_style & test_input_visual_style đạt.'
   - id: R3.25
     title: Bộ style hình (scale_zoom, iso_infographic, whiteboard), chuẩn hình y khoa, nâng Trạm 09
     status: doing
     owner: Claude (thiết kế); codex/agy theo giai đoạn S2–S6
-    note: 'Bác sĩ 2026-11-21 chọn bộ ba style từ lemo-opuscar, giữ mascot nhỏ và duyệt thiết kế docs/superpowers/specs/2026-11-21-visual-style-set-design.md. S2 đang giao codex (R3.26); S3 chờ R3.23 xong; còn bảng màu thực thể y khoa (S1) chờ Claude viết và bác sĩ duyệt.'
+    note: 'Đã hoàn thành S2–S5 & S7 (0292484); đã xuất đầy đủ bộ ảnh mẫu S1 (s1-medical-entity-colors.png), 6 hình giải phẫu S5 và khung hình PYH-003 scale_zoom (S01/S08/S42) tại cache/visual-review-2026-11-22/ (vitest 51 files / 414 tests đạt) chờ bác sĩ duyệt mắt.'
   - id: R3.24
     title: Xuất phụ đề .srt kèm gói đăng cho video dài (thay phụ đề cháy cứng)
-    status: doing
+    status: done
     owner: codex (gpt-6.1-sol)
-    note: 'Bác sĩ 2026-11-21 bỏ phụ đề cháy cứng ở video 16:9, giữ ở Shorts 9:16. Thêm publish/subtitles.vi.srt vào gói đăng, cập nhật chuẩn/prompt. Brief scratchpad brief-r3-24.md.'
+    note: 'Commit 7304999: xuất publish/subtitles.vi.srt cho youtube_long từ lời đọc đã duyệt và scene-timing.json, băm vào manifest.json; test_subtitles & test_package đạt.'
   - id: R3.23
     title: Bỏ phụ đề cháy cứng ở 16:9 và sửa bôi vàng che chữ
-    status: doing
+    status: done
     owner: agy (gemini-4-neon-medium)
-    note: 'Giữ phụ đề ở 9:16; bỏ chữ like/subscribe trên màn đoạn kết 16:9; sửa gạch/bôi vàng che nửa dòng chữ. Brief scratchpad brief-r3-23.md.'
+    note: 'Commit 7304999: bỏ phụ đề cháy cứng và chữ CTA cuối màn trên 16:9, giữ phụ đề 9:16, sửa MarkerUnderlineTitle không che chữ; vitest 51 files / 414 tests & typecheck đạt.'
   - id: R3.22
     title: Cổng hỏi ý kiến bác sĩ ngoài duyệt sản phẩm (thay các chỗ chặn kiểu "cần bác sĩ quyết định")
-    status: doing
+    status: done
     owner: agy (gemini-4-neon-medium)
-    note: 'Hàng đợi câu hỏi doctor-question.yaml: xưởng chờ (không chặn/lỗi), app hiện thẻ trả lời, câu trả lời vào chat/doctor-feedback. Không phải cổng duyệt: không PIN, không hash, không vượt cổng y khoa/video. Brief scratchpad brief-r3-22.md.'
+    note: 'Commit ee7511c: hàng đợi doctor-question.yaml, chống lặp câu hỏi theo fingerprint/lịch sử, kiểm render cũ (render_is_stale) & rebuild_requested, né cổng 8765 khi bận; test_doctor_questions & test_factory_recovery đạt.'
   - id: R3.21
     title: Hiện lỗi Trạm 12 (kẹt issue hai vòng) trong app kèm hai nút chọn hướng
-    status: doing
+    status: done
     owner: agy (gemini-4-neon-medium)
-    note: 'Chỉ sửa dashboard.html (và test UI nếu có mẫu). Không đụng video/src (codex đang giữ ở R3.20). Brief scratchpad brief-r3-21.md.'
+    note: 'Commit ee7511c: giao diện dashboard.html/dashboard.py hiển thị câu hỏi Trạm 07/12 kèm phương án chọn hướng + trả lời tự do và company_summary; test_dashboard & test_factory_app đạt.'
   - id: R3.20
     title: Sửa PR-01, PR-02, PR-04 của PYH-003 (vòng duyệt sản phẩm 11, Trạm 12)
-    status: doing
+    status: done
     owner: codex (gpt-6.1-sol)
-    note: 'S42 phiếu giả định, S40 dòng thời gian thuốc, nhịp hình S03/S08/S20/S24. Chỉ sửa storyboard/component trong phạm vi revise_product; không đụng lời, y khoa, cổng. Brief scratchpad brief-r3-20.md.'
+    note: 'Commit 0292484: bổ sung AuthoredPanels (phiếu giả định S42, dòng thời gian thuốc S40) và kiểm phạm vi sửa Trạm 12; vitest AuthoredPanels.test.tsx & typecheck đạt.'
   - id: R3.0
     title: Dừng xưởng, chỉ test nhẹ cho tới khi dây chuyền hoàn thiện
     status: done
