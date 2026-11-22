@@ -2336,3 +2336,71 @@ def test_serve_falls_back_from_busy_default_port_and_persists_server_state(tmp_p
         assert not dashboard.server_state_path(tmp_path).exists()
     finally:
         blocker.close()
+
+
+def test_dashboard_server_does_not_shadow_existing_http_server_on_windows(tmp_path, monkeypatch):
+    import time
+    import urllib.request
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    class ForeignHttpHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(501)
+            self.end_headers()
+
+        def log_message(self, *args):
+            pass
+
+    # HTTPServer has allow_reuse_address=True by default (like recv.py).
+    foreign = HTTPServer(('127.0.0.1', 0), ForeignHttpHandler)
+    base_port = foreign.server_address[1]
+    ft = threading.Thread(target=foreign.serve_forever, daemon=True)
+    ft.start()
+
+    monkeypatch.setattr(dashboard, 'DEFAULT_PORT', base_port)
+    monkeypatch.setattr(dashboard, 'FALLBACK_PORT_END', base_port + 5)
+    from healthvideo.workflows import telegram_bot
+    monkeypatch.setattr(telegram_bot, 'ensure_background', lambda root: None)
+
+    recorded = {}
+    orig_write = dashboard.write_server_state
+
+    def capture_state(root, port, url):
+        path = orig_write(root, port, url)
+        recorded['state'] = json.loads(path.read_text(encoding='utf-8'))
+        return path
+
+    monkeypatch.setattr(dashboard, 'write_server_state', capture_state)
+
+    try:
+        t = threading.Thread(
+            target=lambda: dashboard.serve(tmp_path, port=base_port, open_browser=False, echo=lambda _: None),
+            daemon=True,
+        )
+        t.start()
+        deadline = time.monotonic() + 10
+        while 'state' not in recorded and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert 'state' in recorded
+        bound_port = recorded['state']['port']
+        assert bound_port > base_port
+
+        # Verify /api/state works on the fallback port while the foreign server keeps answering 501.
+        with urllib.request.urlopen(f'http://127.0.0.1:{bound_port}/api/state', timeout=2) as resp:
+            assert resp.status == 200
+            assert isinstance(json.loads(resp.read().decode('utf-8'))['projects'], list)
+
+        html = urllib.request.urlopen(f'http://127.0.0.1:{bound_port}/', timeout=2).read().decode('utf-8')
+        token = html.split("TOKEN = '", 1)[1].split("'", 1)[0]
+        req = urllib.request.Request(
+            f'http://127.0.0.1:{bound_port}/api/app/quit',
+            data=b'{}',
+            headers={'Content-Type': 'application/json', 'X-Dashboard-Token': token},
+            method='POST',
+        )
+        with urllib.request.urlopen(req, timeout=2) as resp:
+            assert resp.status == 200
+        t.join(timeout=5)
+    finally:
+        foreign.shutdown()
+        foreign.server_close()

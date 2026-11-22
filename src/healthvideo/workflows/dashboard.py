@@ -11,6 +11,7 @@ import json
 import os
 import re
 import secrets
+import socket
 import subprocess
 import sys
 import threading
@@ -2705,6 +2706,14 @@ class DashboardServer(ThreadingHTTPServer):
     """HTTP server bound to loopback; actions never touch approval records."""
 
     daemon_threads = True
+    # On Windows, SO_REUSEADDR lets a second bind shadow an active listener (e.g. recv.py)
+    # instead of failing with WinError 10048/10013 so port fallback triggers reliably.
+    allow_reuse_address = sys.platform != 'win32'
+
+    def server_bind(self) -> None:
+        if sys.platform == 'win32' and hasattr(socket, 'SO_EXCLUSIVEADDRUSE'):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
 
     def __init__(self, root: Path, port: int, *, token: str | None = None,
                  agents: Callable[[], list[str]] | None = None,
