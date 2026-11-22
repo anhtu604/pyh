@@ -56,6 +56,33 @@ class VibiError(RuntimeError):
     """A deliberately sanitized provider error."""
 
 
+def _sanitize_error_detail(body: bytes, *, api_key: str) -> str:
+    """Extract a short, credential-free error message from a JSON HTTPError body."""
+    if not body:
+        return ""
+    try:
+        parsed = json.loads(body.decode("utf-8", errors="replace"))
+    except (ValueError, TypeError):
+        return ""
+    if not isinstance(parsed, dict):
+        return ""
+    raw_detail: object = None
+    for key in ("error", "detail_error", "detail", "message"):
+        val = parsed.get(key)
+        if isinstance(val, dict):
+            val = val.get("message") or val.get("error") or val.get("detail")
+        if isinstance(val, str) and val.strip():
+            raw_detail = val
+            break
+    if not isinstance(raw_detail, str):
+        return ""
+    cleaned = " ".join(raw_detail.split())
+    if api_key.strip():
+        cleaned = cleaned.replace(api_key.strip(), "[redacted]")
+    cleaned = re.sub(r"(?i)(?:xi-api-key|bearer)\s*[:=]?\s*\S+", "[redacted]", cleaned)
+    return cleaned[:200].rstrip()
+
+
 def vibi_request(
     url: str, *, api_key: str, payload: dict[str, Any] | None = None,
     opener=None, timeout: float = 60, retries: int = 3, sleep=time.sleep,
@@ -76,6 +103,10 @@ def vibi_request(
                 return response.read()
         except urllib.error.HTTPError as error:
             status = error.code
+            try:
+                body = error.read(4096)
+            except OSError:
+                body = b""
             error.close()
             if (status == 429 or 500 <= status < 600) and attempt < retries:
                 sleep(min(2**attempt, 8))
@@ -87,6 +118,9 @@ def vibi_request(
                 unauthorized += 1
                 sleep(1)
                 continue
+            detail = _sanitize_error_detail(body, api_key=api_key)
+            if detail:
+                raise VibiError(f"vibi HTTP {status}: {detail}; check credit, voice and API key.") from None
             raise VibiError(f"vibi HTTP {status}; check credit, voice and API key.") from None
         except (OSError, ValueError):
             raise VibiError("vibi connection failed; check network and API configuration.") from None
@@ -97,6 +131,28 @@ def account(*, api_key: str, opener=None) -> dict[str, Any]:
         return json.loads(vibi_request("/v1/auth/me", api_key=api_key, opener=opener))
     except (ValueError, TypeError):
         raise VibiError("vibi returned invalid account information.") from None
+
+
+def voices(*, api_key: str, opener=None) -> list[dict[str, Any]]:
+    """Return available MiniMax voices on the vibi account without exposing credentials."""
+    try:
+        payload = json.loads(vibi_request("/v1/minimax/voices", api_key=api_key, opener=opener))
+    except (ValueError, TypeError):
+        raise VibiError("vibi returned invalid voices information.") from None
+    rows = payload.get("voices") if isinstance(payload, dict) else None
+    if not isinstance(rows, list):
+        raise VibiError("vibi returned invalid voices information.") from None
+    return [
+        {
+            "id": str(row.get("id") or ""),
+            "voice_name": str(row.get("voice_name") or ""),
+            "status": str(row.get("status") or ""),
+            "language_tag": str(row.get("language_tag") or ""),
+            "gender": str(row.get("gender") or ""),
+        }
+        for row in rows
+        if isinstance(row, dict)
+    ]
 
 
 class VibiTTS:

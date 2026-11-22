@@ -69,3 +69,201 @@ def test_render_argv_stages_fonts_for_vertical_render_and_refreshes_them(tmp_pat
         return 0
 
     assert runner(build_render_argv(tmp_path / "i.json", tmp_path / "o.mp4", tmp_path)) == 0
+
+
+def test_remotion_bundle_reuse_syncs_public_and_supports_gl_fallback(tmp_path: Path) -> None:
+    from healthvideo.render.remotion import (
+        active_bundle,
+        build_bundle_argv,
+        create_bundle,
+        render_gl_fallback_argv,
+    )
+
+    pub = tmp_path / "public"
+    pub.mkdir()
+    (pub / "audio").mkdir()
+    (pub / "audio/narration.wav").write_bytes(b"wav1")
+
+    bundle_dir = tmp_path / ".remotion-bundle"
+    bundle_calls: list[list[str]] = []
+
+    def fake_bundler(argv: list[str]) -> int:
+        bundle_calls.append(argv)
+        out_dir = Path(argv[argv.index("--out-dir") + 1])
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "index.html").write_text("<html></html>", encoding="utf-8")
+        (out_dir / "public").mkdir(exist_ok=True)
+        return 0
+
+    assert build_bundle_argv(pub, bundle_dir)[3:6] == ["exec", "remotion", "bundle"]
+    created = create_bundle(pub, bundle_dir, runner=fake_bundler)
+    assert created == bundle_dir and len(bundle_calls) == 1
+
+    # New clip audio added after bundling is synced into bundle/public on render.
+    (pub / "audio/clips").mkdir()
+    (pub / "audio/clips/CL01.wav").write_bytes(b"clip-wav")
+    with active_bundle(bundle_dir, gl="angle", hardware_acceleration="if-possible"):
+        argv = build_render_argv(tmp_path / "i.json", tmp_path / "o.mp4", pub)
+    assert argv[3:7] == ["exec", "remotion", "render", str(bundle_dir.resolve())]
+    assert argv[7] == "HealthVideo"
+    assert "--gl=angle" in argv and "--hardware-acceleration=if-possible" in argv
+    assert (bundle_dir / "public/audio/clips/CL01.wav").read_bytes() == b"clip-wav"
+
+    fallback = render_gl_fallback_argv(argv)
+    assert fallback is not None
+    assert "--gl=swiftshader" in fallback and "--hardware-acceleration=disable" in fallback
+    assert render_gl_fallback_argv(fallback) is None
+
+
+def test_probe_video_streams_validates_streams_and_duration(tmp_path: Path) -> None:
+    import json
+    import shutil
+    import subprocess
+
+    import pytest
+
+    from healthvideo.render.run import is_mp4_container, probe_video_streams
+
+    mp4 = tmp_path / "sample.mp4"
+    mp4.write_bytes(b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 32)
+    assert is_mp4_container(mp4) is True
+
+    def fake_probe(payload: dict, returncode: int = 0):
+        def _run(argv, **kwargs):
+            return subprocess.CompletedProcess(argv, returncode, stdout=json.dumps(payload), stderr="bad")
+        return _run
+
+    ok = probe_video_streams(
+        mp4,
+        expected_duration_ms=2000,
+        runner=fake_probe({
+            "format": {"duration": "2.02"},
+            "streams": [
+                {"codec_type": "video", "codec_name": "h264", "width": 1920, "height": 1080},
+                {"codec_type": "audio", "codec_name": "aac"},
+            ],
+        }),
+    )
+    assert ok["passed"] is True and ok["duration_ms"] == 2020 and ok["has_audio"] is True
+
+    with pytest.raises(RuntimeError, match="no audio stream"):
+        probe_video_streams(
+            mp4,
+            runner=fake_probe({
+                "format": {"duration": "2.0"},
+                "streams": [{"codec_type": "video", "codec_name": "h264"}],
+            }),
+        )
+
+    with pytest.raises(RuntimeError, match="differs from expected"):
+        probe_video_streams(
+            mp4,
+            expected_duration_ms=5000,
+            runner=fake_probe({
+                "format": {"duration": "2.0"},
+                "streams": [
+                    {"codec_type": "video", "codec_name": "h264"},
+                    {"codec_type": "audio", "codec_name": "aac"},
+                ],
+            }),
+        )
+
+    if shutil.which("ffmpeg") and shutil.which("ffprobe"):
+        real_mp4 = tmp_path / "real.mp4"
+        res = subprocess.run([
+            "ffmpeg", "-y", "-v", "error",
+            "-f", "lavfi", "-i", "color=c=black:s=320x240:d=1",
+            "-f", "lavfi", "-i", "sine=frequency=440:duration=1",
+            "-c:v", "libx264", "-c:a", "aac", "-shortest", str(real_mp4),
+        ], capture_output=True, check=False)
+        if res.returncode == 0 and real_mp4.is_file():
+            probed = probe_video_streams(real_mp4, expected_duration_ms=1000)
+            assert probed["has_video"] and probed["has_audio"]
+            assert 800 <= probed["duration_ms"] <= 1200
+
+
+def test_produce_prebundle_gpu_fallback_and_media_probe(tmp_path: Path, monkeypatch) -> None:
+    import json
+
+    from healthvideo.domain.gate_review import GateKind
+    from healthvideo.domain.project_v2 import WorkflowState
+    from healthvideo.tts.silent import SilentTTS
+    from healthvideo.workflows import produce
+    from healthvideo.workflows.gate_review import approve_gate
+    from tests.helpers import create_v2_project_fixture
+
+    project = create_v2_project_fixture(tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW)
+    approve_gate(project, GateKind.MEDICAL, reviewer="doctor", now="2026-11-22T23:54:00+07:00")
+
+    bundle_calls: list[Path] = []
+    render_calls: list[list[str]] = []
+
+    def fake_create_bundle(public_dir: Path, out_dir: Path, **kwargs) -> Path:
+        bundle_calls.append(out_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "index.html").write_text("<html></html>", encoding="utf-8")
+        (out_dir / "public").mkdir(exist_ok=True)
+        return out_dir
+
+    def fake_probe(path: Path, *, expected_duration_ms: int | None = None, **kwargs) -> dict:
+        return {
+            "passed": True,
+            "path": path.name,
+            "has_video": True,
+            "has_audio": True,
+            "duration_ms": expected_duration_ms or 1000,
+            "expected_duration_ms": expected_duration_ms,
+            "drift_ms": 0,
+        }
+
+    def runner(argv: list[str]) -> int:
+        render_calls.append(argv)
+        if "--gl=angle" in argv:
+            return 1
+        out = Path(argv[argv.index("--output") + 1])
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 16)
+        return 0
+
+    monkeypatch.setenv("PYH_REMOTION_PREBUNDLE", "1")
+    monkeypatch.setattr(produce.remotion_module, "create_bundle", fake_create_bundle)
+    monkeypatch.setattr(produce, "probe_video_streams", fake_probe)
+
+    result = produce.produce_project(project, tts=SilentTTS(), runner=runner)
+    assert len(bundle_calls) == 1
+    assert not bundle_calls[0].exists()
+    assert len(render_calls) == 2
+    assert "--gl=angle" in render_calls[0]
+    assert "--gl=swiftshader" in render_calls[1]
+    assert str(bundle_calls[0].resolve()) in render_calls[1]
+    qa = json.loads((project / "revisions/001/reviews/video-qa.json").read_text(encoding="utf-8"))
+    assert qa["media_probe"]["passed"] is True
+    assert result.is_file()
+
+
+def test_flux_style_a_suffix_is_affirmative() -> None:
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("flux_generate", Path("tools/flux/generate.py"))
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    suffix = mod.AFFIRMATIVE_STYLE_A_SUFFIX.lower()
+    for banned in ("no text", "no letters", "no watermark", "without "):
+        assert banned not in suffix
+    assert "flat 2d vector" in suffix
+
+
+def test_is_real_render_runner_detects_mocked_cli_or_factory_deps(monkeypatch) -> None:
+    from healthvideo import cli
+    from healthvideo.workflows import factory_deps, produce
+
+    monkeypatch.delenv("PYH_REMOTION_PREBUNDLE", raising=False)
+    assert produce._is_real_render_runner(cli.run_render_argv) is True
+    assert produce._is_real_render_runner(factory_deps._run_render_argv) is True
+
+    monkeypatch.setattr(cli, "resolve_pnpm_argv", lambda args: ["mock", *args])
+    assert produce._is_real_render_runner(cli.run_render_argv) is False
+
+    monkeypatch.setattr(factory_deps, "resolve_pnpm_argv", lambda args: ["mock", *args])
+    assert produce._is_real_render_runner(factory_deps._run_render_argv) is False

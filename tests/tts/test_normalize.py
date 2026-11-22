@@ -95,3 +95,48 @@ def test_normalized_real_ffmpeg_outputs_48k_mono_pcm16(tmp_path: Path) -> None:
     report = inspect_wav(output, require_signal=True)
     assert (report.sample_rate, report.channels, report.sample_width) == (48_000, 1, 2)
     assert 900 <= report.duration_ms <= 1200
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not installed")
+def test_master_loudnorm_targets_14_lufs_long_and_16_lufs_shorts(tmp_path: Path) -> None:
+    import math
+    import struct
+
+    from healthvideo.tts.normalize import (
+        master_loudness_target,
+        measure_loudness,
+        normalize_master_wav,
+    )
+
+    assert master_loudness_target("youtube_long") == (-14.0, -1.0, 11.0)
+    assert master_loudness_target("youtube_shorts") == (-16.0, -1.5, 11.0)
+
+    src = tmp_path / "voice.wav"
+    frames = b"".join(
+        struct.pack(
+            "<hh",
+            int(4000 * math.sin(2 * math.pi * 1000 * i / 48_000)),
+            int(4000 * math.sin(2 * math.pi * 1000 * i / 48_000)),
+        )
+        for i in range(72_000)
+    )
+    with wave.open(str(src), "wb") as audio:
+        audio.setnchannels(2)
+        audio.setsampwidth(2)
+        audio.setframerate(48_000)
+        # 1.5s 1 kHz stereo sine wave so integrated LUFS is well-defined.
+        audio.writeframes(frames)
+
+    out_long = tmp_path / "master-long.wav"
+    rep = normalize_master_wav(src, out_long, format_profile="youtube_long")
+    assert rep.duration_ms == 1500
+    assert rep.channels == 2
+    stats_long = measure_loudness(out_long, format_profile="youtube_long")
+    assert -15.0 <= stats_long["input_i"] <= -13.0
+    assert stats_long["input_tp"] <= -0.5
+
+    out_shorts = tmp_path / "master-shorts.wav"
+    normalize_master_wav(src, out_shorts, format_profile="youtube_shorts")
+    stats_shorts = measure_loudness(out_shorts, format_profile="youtube_shorts")
+    assert -17.0 <= stats_shorts["input_i"] <= -15.0
+    assert stats_shorts["input_tp"] <= -1.0

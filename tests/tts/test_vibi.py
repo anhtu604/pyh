@@ -190,3 +190,26 @@ def test_ffmpeg_decode_has_bounded_transient_timeout(tmp_path):
         tts.synthesize(TTSRequest(text='Gút', language='vi'), tmp_path / 'voice.wav')
     assert classify_failure(caught.value) == 'transient'
     assert 'secret-key' not in str(caught.value)
+
+
+def test_http_400_extracts_sanitized_json_error_and_lists_voices():
+    from healthvideo.tts.vibi import vibi_request, voices
+
+    def opener_deleted(request, **kwargs):
+        body = json.dumps({"error": "voice is not ready (status: deleted) secret-key"}).encode("utf-8")
+        raise urllib.error.HTTPError(request.full_url, 400, "Bad Request", {}, io.BytesIO(body))
+
+    with pytest.raises(VibiError) as caught:
+        vibi_request("/v1/text-to-speech/old", api_key="secret-key", opener=opener_deleted, retries=0)
+    assert "400" in str(caught.value)
+    assert "voice is not ready (status: deleted)" in str(caught.value)
+    assert "secret-key" not in str(caught.value)
+
+    def opener_voices(request, **kwargs):
+        assert request.full_url.endswith("/v1/minimax/voices")
+        return io.BytesIO(json.dumps({
+            "voices": [{"id": "v1", "voice_name": "Tú", "status": "done", "language_tag": "Vietnamese", "gender": "Male"}],
+        }).encode("utf-8"))
+
+    rows = voices(api_key="secret-key", opener=opener_voices)
+    assert rows == [{"id": "v1", "voice_name": "Tú", "status": "done", "language_tag": "Vietnamese", "gender": "Male"}]

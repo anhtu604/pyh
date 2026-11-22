@@ -4,6 +4,7 @@ import json
 import os
 import re
 import shutil
+import sys
 from collections.abc import Callable, Mapping
 from contextlib import ExitStack, contextmanager
 from pathlib import Path, PurePosixPath
@@ -54,15 +55,24 @@ from healthvideo.domain.storyboard import (
     validate_style_a_mascot_poses,
 )
 from healthvideo.domain.visual_budget import validate_visual_budget
+from healthvideo.render import remotion as remotion_module
 from healthvideo.render.beats import resolve_scene_beats
 from healthvideo.render.chapters import render_long_form
 from healthvideo.render.input import audio_timing_qa, build_render_input
 from healthvideo.render.openmontage import require_preview_renderer, selected_renderer
-from healthvideo.render.remotion import build_render_argv, renderer_identity
+from healthvideo.render.remotion import (
+    active_bundle,
+    build_render_argv,
+    default_windows_gl_options,
+    render_gl_fallback_argv,
+    renderer_identity,
+)
 from healthvideo.render.run import (
     OUTPUT_NAME,
     PRODUCTION_ARTIFACT,
     RENDER_INPUT_NAME,
+    is_mp4_container,
+    probe_video_streams,
 )
 from healthvideo.render.thumbnail import render_optional_thumbnail
 from healthvideo.render.timing import (
@@ -85,6 +95,7 @@ from healthvideo.telemetry import station_span
 from healthvideo.tts import pronunciation as pronunciation_module
 from healthvideo.tts.audio_checks import inspect_wav
 from healthvideo.tts.base import TTSProvider, TTSRequest, provider_identity
+from healthvideo.tts.normalize import normalize_master_wav
 from healthvideo.tts.pronunciation import (
     apply_pronunciation,
     load_pronunciation_lexicon,
@@ -147,6 +158,36 @@ def _accepts_asr_lexicon(fn: Callable[..., Any]) -> bool:
         or param.kind is inspect.Parameter.VAR_KEYWORD
         for param in parameters
     )
+
+
+def _is_real_render_runner(runner: Any) -> bool:
+    if os.environ.get("PYH_REMOTION_PREBUNDLE") == "1":
+        return True
+    mod_name = getattr(runner, "__module__", "")
+    if mod_name not in {"healthvideo.cli", "healthvideo.workflows.factory_deps"}:
+        return False
+    mod = sys.modules.get(mod_name)
+    if mod is None:
+        return True
+    mod_run = getattr(getattr(mod, "subprocess", None), "run", None)
+    mod_pnpm = getattr(mod, "resolve_pnpm_argv", None)
+    return (
+        getattr(mod_run, "__module__", "") == "subprocess"
+        and getattr(mod_run, "__name__", "") == "run"
+        and getattr(mod_pnpm, "__module__", "") == "healthvideo.process"
+        and getattr(mod_pnpm, "__name__", "") == "resolve_pnpm_argv"
+    )
+
+
+def _gpu_fallback_runner(base_runner: Runner) -> Runner:
+    def run(argv: list[str]) -> int:
+        code = base_runner(argv)
+        if code != 0:
+            fallback = render_gl_fallback_argv(argv)
+            if fallback is not None:
+                return base_runner(fallback)
+        return code
+    return run
 
 
 def _telemetry_root(project_dir: Path) -> Path:
@@ -766,6 +807,16 @@ def _produce_v2_inner(
                 generated_rights.append(entry)
             _write_json_atomic(staging_dir / "sfx.json", sfx_events)
             generated_audio_hashes["sfx.json"] = sha256_file(staging_dir / "sfx.json")
+        if (
+            provider_name != "silent"
+            and inspect_wav(staged_audio).has_signal
+            and shutil.which("ffmpeg") is not None
+        ):
+            normalize_master_wav(
+                staged_audio, staged_audio, format_profile=storyboard.format_profile,
+            )
+            if "audio/narration.wav" in generated_audio_hashes:
+                generated_audio_hashes["audio/narration.wav"] = sha256_file(staged_audio)
         if generated_rights:
             rights = LicenseLedger(entries=tuple(generated_rights))
             ledger_path = staging_dir / "license-ledger.yaml"
@@ -817,6 +868,8 @@ def _produce_v2_inner(
                 pronunciation_report["input_hash"] = input_hash
                 _write_json_atomic(staging_dir / "pronunciation-qa.json", pronunciation_report)
         gc.collect()
+        media_probe: dict[str, Any] | None = None
+        clip_probes: dict[str, dict[str, Any]] = {}
         with (
             _gpu_mutex(telemetry_root),
             station_span(
@@ -837,36 +890,68 @@ def _produce_v2_inner(
                              'sha256': asset_hashes.get(asset.path, asset.sha256)}
                             for asset in asset_manifest.assets],
                 )
-            elif render_input.format_profile == "youtube_long":
-                clip_outputs = render_clips(
-                    load_clip_scenes(layout.artifact_root, storyboard),
-                    storyboard,
-                    staging_dir,
-                    line_wavs=line_wavs,
-                    runner=runner,
-                    brand=clip_brand,
-                    revision=project.active_revision,
-                    sfx_events=sfx_events,
-                )
-                chapter_parts = render_long_form(
-                    render_input_path=staged_render_input,
-                    render_input=render_input,
-                    public_dir=staging_dir,
-                    audio=staged_audio,
-                    output=staged_output,
-                    cache_dir=layout.project_dir / CHAPTER_CACHE_DIRECTORY,
-                    asset_hashes=asset_hashes,
-                    renderer_identity=renderer_identity_data,
-                    runner=runner,
-                )
             else:
-                argv = build_render_argv(staged_render_input, staged_output, staging_dir)
-                exit_code = runner(argv)
-                if exit_code != 0:
-                    raise RuntimeError(f"Remotion render failed with exit code {exit_code}")
-                if not staged_output.is_file():
-                    raise FileNotFoundError(
-                        f"Remotion render did not create output: {staged_output}"
+                use_real_remotion = _is_real_render_runner(runner)
+                bundle_dir: Path | None = None
+                if use_real_remotion:
+                    bundle_dir = remotion_module.create_bundle(
+                        staging_dir, staging_dir / ".remotion-bundle",
+                    )
+                gl, hwaccel = default_windows_gl_options()
+                use_gpu_flags = use_real_remotion or bool(os.environ.get("PYH_REMOTION_GL"))
+                render_runner = _gpu_fallback_runner(runner)
+                try:
+                    with active_bundle(
+                        bundle_dir,
+                        gl=gl if use_gpu_flags else None,
+                        hardware_acceleration=hwaccel if use_gpu_flags else None,
+                    ):
+                        if render_input.format_profile == "youtube_long":
+                            clip_outputs = render_clips(
+                                load_clip_scenes(layout.artifact_root, storyboard),
+                                storyboard,
+                                staging_dir,
+                                line_wavs=line_wavs,
+                                runner=render_runner,
+                                brand=clip_brand,
+                                revision=project.active_revision,
+                                sfx_events=sfx_events,
+                            )
+                            chapter_parts = render_long_form(
+                                render_input_path=staged_render_input,
+                                render_input=render_input,
+                                public_dir=staging_dir,
+                                audio=staged_audio,
+                                output=staged_output,
+                                cache_dir=layout.project_dir / CHAPTER_CACHE_DIRECTORY,
+                                asset_hashes=asset_hashes,
+                                renderer_identity=renderer_identity_data,
+                                runner=render_runner,
+                            )
+                        else:
+                            argv = build_render_argv(staged_render_input, staged_output, staging_dir)
+                            exit_code = render_runner(argv)
+                            if exit_code != 0:
+                                raise RuntimeError(f"Remotion render failed with exit code {exit_code}")
+                            if not staged_output.is_file():
+                                raise FileNotFoundError(
+                                    f"Remotion render did not create output: {staged_output}"
+                                )
+                finally:
+                    if bundle_dir is not None or (staging_dir / ".remotion-bundle").exists():
+                        shutil.rmtree(staging_dir / ".remotion-bundle", ignore_errors=True)
+        if is_mp4_container(staged_output) or (_is_real_render_runner(runner) and shutil.which("ffprobe") is not None):
+            media_probe = probe_video_streams(
+                staged_output,
+                expected_duration_ms=timing_qa["composition_duration_ms"],
+            )
+            for clip_id, rel in clip_outputs.items():
+                clip_path = staging_dir / rel
+                if is_mp4_container(clip_path) or (_is_real_render_runner(runner) and shutil.which("ffprobe") is not None):
+                    clip_qa = json.loads((staging_dir / f"clips/{clip_id}.video-qa.json").read_text(encoding="utf-8"))
+                    clip_probes[clip_id] = probe_video_streams(
+                        clip_path,
+                        expected_duration_ms=clip_qa["composition_duration_ms"],
                     )
         gc.collect()
         _write_json_atomic(
@@ -938,6 +1023,8 @@ def _produce_v2_inner(
                         if visual_budget_qa is not None
                         else {}
                     ),
+                    **({"media_probe": media_probe} if media_probe is not None else {}),
+                    **({"clip_media_probes": clip_probes} if clip_probes else {}),
                 },
             )
             _record_motion_qa(staging_dir, {scene.id: scene.visual for scene in render_input.scenes})

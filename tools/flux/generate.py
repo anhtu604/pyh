@@ -13,6 +13,10 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 from healthvideo.visuals.flux import flux_weights, validate_flux_weights
 
 MAX_REFS = 2
+AFFIRMATIVE_STYLE_A_SUFFIX = (
+    "Flat 2D vector editorial illustration, solid flat color fills, "
+    "flat even lighting, empty blank paper surfaces and plain unmarked containers."
+)
 
 
 def _load_ref_image(path: Path, image_module, max_side: int = 512):
@@ -50,44 +54,55 @@ def generate(
     if not torch.cuda.is_available():
         raise RuntimeError("FLUX requires a CUDA GPU; install CUDA torch in flux-venv")
     ref_images = [_load_ref_image(r, Image) for r in refs] if refs else None
-    full_prompt = prompt + "\nUnlabeled illustration only. No text, letters, numbers, anatomical labels or captions."
-    tokenizer = Qwen2TokenizerFast.from_pretrained(weights / "tokenizer", local_files_only=True)
-    text_encoder = Qwen3ForCausalLM.from_pretrained(
-        weights / "text_encoder", dtype=torch.bfloat16, low_cpu_mem_usage=True, local_files_only=True,
-        device_map="auto",
-    )
-    with torch.inference_mode():
-        prompt_embeds = Flux2KleinPipeline._get_qwen3_prompt_embeds(
-            text_encoder=text_encoder, tokenizer=tokenizer, prompt=full_prompt,
-            dtype=torch.bfloat16, device=torch.device("cpu"),
-        ).detach().clone()
-    del text_encoder, tokenizer
-    gc.collect()
-    torch.cuda.empty_cache()
+    full_prompt = f"{prompt.rstrip()}\n{AFFIRMATIVE_STYLE_A_SUFFIX}"
+    tokenizer = None
+    text_encoder = None
+    prompt_embeds = None
+    pipe = None
+    image = None
+    try:
+        tokenizer = Qwen2TokenizerFast.from_pretrained(weights / "tokenizer", local_files_only=True)
+        text_encoder = Qwen3ForCausalLM.from_pretrained(
+            weights / "text_encoder", dtype=torch.bfloat16, low_cpu_mem_usage=True, local_files_only=True,
+            device_map="auto",
+        )
+        with torch.inference_mode():
+            prompt_embeds = Flux2KleinPipeline._get_qwen3_prompt_embeds(
+                text_encoder=text_encoder, tokenizer=tokenizer, prompt=full_prompt,
+                dtype=torch.bfloat16, device=torch.device("cpu"),
+            ).detach().clone()
+    finally:
+        del text_encoder, tokenizer
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
-    pipe = Flux2KleinPipeline.from_pretrained(
-        weights, text_encoder=None, tokenizer=None, dtype=torch.bfloat16,
-        low_cpu_mem_usage=True, local_files_only=True,
-    )
-    pipe.enable_sequential_cpu_offload()
-    pipe.vae.enable_tiling()
-    multiple = pipe.vae_scale_factor * 2
-    native_width = max(multiple, round(width / multiple) * multiple)
-    native_height = max(multiple, round(height / multiple) * multiple)
-    call_kwargs = {
-        "prompt": None,
-        "prompt_embeds": prompt_embeds.to("cuda"),
-        "width": native_width, "height": native_height, "num_inference_steps": 4,
-        "guidance_scale": 1.0, "generator": torch.Generator(device="cpu").manual_seed(seed),
-    }
-    if ref_images:
-        call_kwargs["image"] = ref_images
-    image = pipe(**call_kwargs).images[0]
-    out.parent.mkdir(parents=True, exist_ok=True)
-    image.resize((width, height), Image.Resampling.LANCZOS).save(out, format="PNG")
-    del pipe, image, prompt_embeds
-    gc.collect()
-    torch.cuda.empty_cache()
+    try:
+        pipe = Flux2KleinPipeline.from_pretrained(
+            weights, text_encoder=None, tokenizer=None, dtype=torch.bfloat16,
+            low_cpu_mem_usage=True, local_files_only=True,
+        )
+        pipe.enable_sequential_cpu_offload()
+        pipe.vae.enable_tiling()
+        multiple = pipe.vae_scale_factor * 2
+        native_width = max(multiple, round(width / multiple) * multiple)
+        native_height = max(multiple, round(height / multiple) * multiple)
+        call_kwargs = {
+            "prompt": None,
+            "prompt_embeds": prompt_embeds.to("cuda"),
+            "width": native_width, "height": native_height, "num_inference_steps": 4,
+            "guidance_scale": 1.0, "generator": torch.Generator(device="cpu").manual_seed(seed),
+        }
+        if ref_images:
+            call_kwargs["image"] = ref_images
+        image = pipe(**call_kwargs).images[0]
+        out.parent.mkdir(parents=True, exist_ok=True)
+        image.resize((width, height), Image.Resampling.LANCZOS).save(out, format="PNG")
+    finally:
+        del pipe, image, prompt_embeds
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
     return {"width": width, "height": height, "seed": seed, "refs": [str(r) for r in refs]}
 
 
