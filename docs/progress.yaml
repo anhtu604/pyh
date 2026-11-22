@@ -1,5 +1,5 @@
 version: 1
-updated: '2026-11-22'
+updated: '2026-11-23'
 phases:
 - id: R1
   title: Hoàn thiện xưởng trước khi làm video mới
@@ -388,3 +388,31 @@ phases:
     status: done
     owner: agy
     note: 'Merged 60e1744: ScopusProvider nối vào get_default_clients, chỉ bật khi có ELSEVIER_API_KEY (bác sĩ cần dán khoá vào .env; chưa thử với khoá thật). Luật 1.7 sửa; kiểm chéo 20 PMID bằng PubMed: 15 khớp hoàn toàn, 5 chương StatPearls chỉ khớp PMID+tiêu đề. Quote ≤25 từ của 3 hoạt cảnh mới vẫn chờ đối chiếu toàn văn.'
+- id: R4
+  title: Tối ưu chuẩn MXH, pipeline 0-token, S6, Remotion 1-bundle & hạ tầng Vibi/QA
+  tasks:
+  - id: R4.1
+    title: Nghiên cứu sản phẩm mẫu MXH & đánh giá thực chứng từng lõi công nghệ; đồng bộ README
+    status: done
+    owner: agy (mxh-architect)
+    note: 'Commit a4687b0: docs/reference/2026-11-22-exemplar-and-stack-optimization.md và README.md; chốt giữ & nâng cấp Remotion 4, Vibi MiniMax, FLUX.2 klein 4B, faster-whisper, ACE-Step 1.5 và Company 2.0 (16 vai).'
+  - id: R4.2
+    title: Hoàn thiện S6 (IsoInfographicStage, Whiteboard progressive) và phụ đề highlight 9:16 đúng vùng an toàn
+    status: done
+    owner: agy (visual-sampler)
+    note: 'Commit 634bbe7: thêm IsoInfographicStage.tsx, nâng cấp WhiteboardScene.tsx, phụ đề highlight theo từ Whisper trong shortsCaptionSafeBox 9:16 (giữ 16:9 không cháy cứng). typecheck exit 0; vitest 52 files / 422 tests passed; 3 ảnh mẫu mới ở cache/visual-review-2026-11-22/.'
+  - id: R4.3
+    title: Đường nhanh 0-token voice_prep, tinh gọn skill/prompt và QA tất định .srt + safe-zone
+    status: done
+    owner: agy (pipeline-opt)
+    note: 'Commit 45c2e59: thêm try_auto_voice_prep & build_voice_prep_delta_context (còn nối vào runner.py ở bước kế tiếp), cắt nhiễu 12 skill tổng quát + đồng bộ 5 skill pyh + 3 prompt <=60 dòng, thêm src/healthvideo/qa/{subtitles,safe_zone,pipeline}.py. ruff sạch; pytest toàn repo 2781 passed, 2 skipped.'
+  - id: R4.4
+    title: Chẩn đoán HTTP 400 Vibi, Remotion 1-bundle reuse, loudness -14/-16 LUFS, ffprobe QA & FLUX khẳng định
+    status: done
+    owner: agy (factory-fixer)
+    note: 'Commit 77b8c8b: sanitize lỗi JSON trong vibi.py + thêm voices(); tái sử dụng 1 Remotion bundle + fallback ANGLE/SwiftShader; chuẩn hóa master loudness -14/-16 LUFS; probe_video_streams bằng ffprobe; sửa hậu tố FLUX Style A trong tools/flux/generate.py. ruff sạch; pytest toàn repo 2781 passed, 2 skipped.'
+  - id: R4.5
+    title: Bác sĩ chốt voice_id Vibi mới cho profiles/voice.yaml và chạy produce hoàn chỉnh PYH-003
+    status: doing
+    owner: bác sĩ + xưởng
+    note: 'Vibi /v1/auth/me còn 51728 credits nhưng voice_id 1d90e9bd-a67b-4d63-a415-032eb9ce91b5 trả HTTP 400 ("voice is not ready (status: deleted)"). Tài khoản hiện có voice fd0856c1-f9db-45c8-a7de-c8f3f3f1d380 ("Tú", Vietnamese, Male, status done). Giữ nguyên profiles/voice.yaml chờ bác sĩ xác nhận chuyển giọng.'
