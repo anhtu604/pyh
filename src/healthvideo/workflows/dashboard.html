@@ -10,39 +10,62 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
+/* ---------- Hệ thống thiết kế PYH ----------
+   Màu thương hiệu lấy từ profiles/brand.vi.yaml (navy #12304A, teal #18A6A6, yellow #F4B942, off_white #F7F4EC).
+   Trạng thái dự án dùng đúng 5 màu ở mọi nơi: đang chạy = teal, chờ bác sĩ = vàng, tạm dừng = xám xanh,
+   lỗi = hồng đỏ, đã xong = xanh lá. Chữ thường đạt tương phản WCAG AA (≥4.5:1) trên cả hai giao diện. */
 :root{
-  --bg:#070b14; --bg2:#0c1324; --panel:rgba(18,27,48,.78); --panel-solid:#121b30;
-  --line:rgba(148,173,255,.18); --line-strong:rgba(148,173,255,.34);
-  --text:#f0f4ff; --muted:#b8c7ec; --faint:#96a8d6;
-  --teal:hsl(168 78% 52%); --teal-d:hsl(168 70% 38%);
-  --violet:hsl(258 90% 72%); --amber:hsl(38 96% 62%); --rose:hsl(350 88% 66%); --sky:hsl(204 95% 66%);
-  --inp-bg:rgba(4,8,18,.55);
+  --brand-navy:#12304A; --brand-teal:#18A6A6; --brand-yellow:#F4B942; --brand-offwhite:#F7F4EC;
+  --bg:#0A1B2B; --bg2:#0E2335; --panel:#102A40; --panel-solid:#102A40; --panel-2:#153550;
+  --line:rgba(247,244,236,.13); --line-strong:rgba(247,244,236,.26);
+  --text:#F7F4EC; --muted:#C9D3DC; --faint:#A3B3C2;
+  --teal:#45CBC6; --teal-d:#18A6A6;
+  --violet:#B9A7FF; --amber:#F4B942; --yellow:#F4B942; --rose:#FF8590; --sky:#86C8F3; --ok:#63D394;
+  --on-primary:#03201F; --primary-bg:#22B3B0; --primary-bg-hover:#3CC5C1;
+  --on-yellow:#231703; --focus:#F4B942;
+  --st-run:var(--teal); --st-doctor:var(--yellow); --st-paused:#B4C2CF; --st-error:var(--rose); --st-done:var(--ok);
+  --inp-bg:rgba(4,14,24,.55);
+  --fs-xs:12.5px; --fs-sm:13.5px; --fs-md:15px; --fs-lg:17px; --fs-xl:21px;
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:20px; --sp-6:24px; --sp-8:32px;
+  --r-sm:8px; --r-md:12px; --r-lg:16px;
   --radius:16px; --ease:cubic-bezier(.22,1,.36,1);
+  --shadow-pop:0 18px 40px -12px rgba(0,0,0,.5);
   --chat-w:350px;
+  color-scheme:dark;
 }
 html[data-theme="light"]{
-  --bg:#f4f7fb; --bg2:#e9eef7; --panel:rgba(255,255,255,.92); --panel-solid:#ffffff;
-  --line:rgba(15,23,42,.12); --line-strong:rgba(15,23,42,.24);
-  --text:#0f172a; --muted:#334155; --faint:#64748b;
-  --teal:hsl(168 76% 34%); --teal-d:hsl(168 78% 28%);
-  --violet:hsl(258 72% 52%); --amber:hsl(34 92% 40%); --rose:hsl(350 80% 48%); --sky:hsl(204 88% 38%);
-  --inp-bg:rgba(241,245,249,.9);
+  --bg:#F7F4EC; --bg2:#EEE9DD; --panel:#FFFFFF; --panel-solid:#FFFFFF; --panel-2:#FBF9F4;
+  --line:rgba(18,48,74,.14); --line-strong:rgba(18,48,74,.30);
+  --text:#12304A; --muted:#36505F; --faint:#566B7B;
+  --teal:#0C7372; --teal-d:#0A6261;
+  --violet:#5A41B0; --amber:#7A4E00; --yellow:#7A4E00; --rose:#B0202E; --sky:#1C5C88; --ok:#1B7041;
+  --on-primary:#FFFFFF; --primary-bg:#0C7372; --primary-bg-hover:#0A6261;
+  --on-yellow:#231703; --focus:#12304A;
+  --st-paused:#566B7B;
+  --inp-bg:#FBF9F4;
+  --shadow-pop:0 18px 40px -16px rgba(18,48,74,.35);
+  color-scheme:light;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{min-height:100%}
 body{font-family:'Be Vietnam Pro',system-ui,sans-serif;font-size:15px;line-height:1.55;color:var(--text);background:var(--bg);
   -webkit-font-smoothing:antialiased;overflow-x:hidden;padding-right:var(--chat-w)}
-.wrap{max-width:1000px;margin:0 auto;padding:20px 22px 56px}
-header{display:flex;align-items:center;gap:14px;justify-content:space-between;flex-wrap:wrap;margin-bottom:20px}
+::selection{background:color-mix(in srgb,var(--brand-teal) 45%,transparent);color:var(--text)}
+html{scrollbar-color:var(--line-strong) transparent}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+a{color:var(--sky);text-underline-offset:3px}
+.vh{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.ico{width:16px;height:16px;flex-shrink:0;display:inline-block;vertical-align:-3px}
+.wrap{max-width:1040px;margin:0 auto;padding:20px 24px 56px}
+header{display:flex;align-items:center;gap:14px;justify-content:space-between;flex-wrap:wrap;margin-bottom:18px}
 .brand{display:flex;align-items:center;gap:12px}
-.mark{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;
-  background:linear-gradient(135deg,var(--teal),var(--violet));box-shadow:0 8px 24px -8px hsl(168 80% 45% / .5)}
+.mark{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;background:var(--brand-teal)}
 .mark svg{width:24px;height:24px}
 h1{font-size:21px;font-weight:800;letter-spacing:-.02em}
 .sub{color:var(--muted);font-size:14px;margin-top:2px;line-height:1.45}
 .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 
-.pill{display:inline-flex;align-items:center;gap:8px;min-height:38px;padding:7px 14px;border-radius:999px;font-size:13.5px;font-weight:600;
+.pill{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:7px 14px;border-radius:999px;font-size:13.5px;font-weight:600;
   background:var(--panel);border:1px solid var(--line)}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--faint);position:relative}
 .on .dot{background:var(--teal)}
@@ -50,35 +73,46 @@ h1{font-size:21px;font-weight:800;letter-spacing:-.02em}
 @keyframes ping{0%{transform:scale(.5);opacity:.9}100%{transform:scale(1.6);opacity:0}}
 
 button{font:inherit;cursor:pointer;border:0;color:inherit}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:38px;padding:8px 14px;border-radius:11px;font-size:14px;font-weight:600;
-  background:rgba(148,173,255,.08);border:1px solid var(--line-strong);transition:transform .2s var(--ease),background .2s,border-color .2s}
-.btn:hover:not(:disabled){transform:translateY(-1px);background:rgba(148,173,255,.15)}
-.btn:disabled,.btn.primary:disabled{opacity:.6;cursor:not-allowed;transform:none}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:40px;padding:8px 14px;border-radius:var(--r-md);font-size:14px;font-weight:600;
+  background:color-mix(in srgb,var(--text) 6%,transparent);border:1px solid var(--line-strong);transition:transform .2s var(--ease),background .2s,border-color .2s}
+.btn:hover:not(:disabled){transform:translateY(-1px);background:color-mix(in srgb,var(--text) 12%,transparent)}
+.btn:disabled,.btn.primary:disabled{opacity:.55;cursor:not-allowed;transform:none}
 .btn[hidden]{display:none}
-.btn.primary{background:linear-gradient(135deg,var(--teal),var(--teal-d));border-color:transparent;color:#03140f}
-html[data-theme="light"] .btn.primary{color:#fff}
-.btn.warn{background:linear-gradient(135deg,var(--amber),hsl(24 95% 55%));color:#1d1102;border-color:transparent}
-.btn.rose{background:linear-gradient(135deg,var(--rose),hsl(340 80% 52%));border-color:transparent;color:#fff}
+.btn.primary{background:var(--primary-bg);border-color:transparent;color:var(--on-primary)}
+.btn.primary:hover:not(:disabled){background:var(--primary-bg-hover)}
+.btn.warn{background:var(--brand-yellow);color:var(--on-yellow);border-color:transparent}
+.btn.warn:hover:not(:disabled){background:#F7C766}
+.btn.rose{background:#C62B3A;border-color:transparent;color:#fff}
 .btn.danger:hover:not(:disabled){border-color:var(--rose);color:var(--rose)}
+.btn.err{border-color:color-mix(in srgb,var(--st-error) 70%,transparent);color:var(--st-error);background:color-mix(in srgb,var(--st-error) 10%,transparent)}
+.btn.err:hover:not(:disabled){background:color-mix(in srgb,var(--st-error) 18%,transparent)}
 .btn.ghost{background:transparent}
-.btn svg{width:16px;height:16px}
+.btn svg{width:16px;height:16px;flex-shrink:0}
 .btn-link{background:none;border:0;color:var(--sky);font-size:14px;font-weight:600;padding:4px 8px;border-radius:8px;text-decoration:underline}
 
-.glass{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);backdrop-filter:blur(14px)}
-.section-title{font-size:13px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.07em;margin:16px 2px 10px}
+.glass{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius)}
+.section-title{font-size:17px;color:var(--text);font-weight:700;letter-spacing:-.01em;margin:28px 2px 10px;display:flex;align-items:center;gap:8px}
+.section-title .count{display:inline-grid;place-items:center;min-width:24px;height:24px;padding:0 7px;border-radius:999px;font-size:13px;font-weight:800;
+  background:var(--brand-yellow);color:var(--on-yellow);font-variant-numeric:tabular-nums}
+.section-title .count[hidden]{display:none}
 
-/* 1. KPI Tiles */
-.home-nav{display:flex;flex-wrap:wrap;gap:4px;border-bottom:1px solid var(--line);margin:0 0 20px}
-.home-nav a{padding:10px 14px;border-bottom:2px solid transparent;color:var(--muted);font-size:14px;font-weight:600;text-decoration:none}
+/* 1. Điều hướng + tiêu đề trang */
+.home-nav{display:flex;flex-wrap:wrap;gap:4px;border-bottom:1px solid var(--line);margin:0 0 22px}
+.home-nav a{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:10px 14px;border-bottom:3px solid transparent;color:var(--muted);font-size:14.5px;font-weight:600;text-decoration:none;white-space:nowrap}
 .home-nav a:hover,.home-nav a[aria-current="page"]{color:var(--text)}
 .home-nav a[aria-current="page"]{border-bottom-color:var(--teal)}
+.home-nav a:focus-visible{outline-offset:-3px;border-radius:8px}
 [data-home-view][hidden]{display:none}
-.home-title{font-size:clamp(22px,3vw,30px);margin:0 0 12px}
+.home-title{font-size:clamp(22px,3vw,28px);letter-spacing:-.02em;margin:0 0 12px}
 .tiles-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:18px}
 .project-more{margin-top:10px;color:var(--muted);font-size:13px}
 .project-more summary,.activity-history summary{cursor:pointer;width:fit-content;padding:6px 0;font-weight:600}
 .activity-history{margin-top:8px}
-@media (max-width:480px){.home-nav a{padding:9px}.tile{padding:10px}.tile .k{letter-spacing:0}}
+@media (max-width:720px){
+  .home-nav{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin:0 -12px 18px;padding:0 8px;scroll-snap-type:x proximity}
+  .home-nav::-webkit-scrollbar{display:none}
+  .home-nav a{padding:10px 11px;scroll-snap-align:start}
+}
 .tile{padding:13px 14px}
 .tile .k{color:var(--muted);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
 .tile .v{font-size:22px;font-weight:800;margin-top:4px;display:flex;align-items:baseline;gap:6px}
@@ -92,52 +126,77 @@ html[data-theme="light"] .btn.primary{color:#fff}
 .decision-banner h3{font-size:16px;font-weight:700}
 .decision-banner p{font-size:13.5px;color:var(--muted);margin-top:2px}
 .decision-calm{padding:11px 16px;font-size:14px;color:var(--muted);display:flex;align-items:center;justify-content:space-between}
-/* Home v2: doctor tasks + one-line project rows */
-.home-head{display:flex;align-items:baseline;gap:6px 16px;flex-wrap:wrap;margin:0 0 14px}
+/* Home v3: việc của bác sĩ + mỗi dự án một thẻ rõ trạng thái */
+.home-head{display:grid;gap:10px;margin:0 0 6px}
 .home-head .home-title{margin:0}
-.home-summary{font-size:13.5px;color:var(--muted)}
-.todo-list{padding:2px 16px}
-.todo-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;min-height:52px;padding:8px 0;border-top:1px solid var(--line)}
+.home-summary{display:flex;flex-wrap:wrap;gap:8px;font-size:var(--fs-sm);color:var(--muted);min-height:32px}
+.sum-i{display:inline-flex;align-items:center;gap:7px;min-height:32px;padding:4px 12px;border-radius:999px;background:var(--panel);border:1px solid var(--line);white-space:nowrap}
+.sum-i b{color:var(--text);font-size:15px;font-variant-numeric:tabular-nums}
+.sum-i i,.chip.st::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:currentColor;flex-shrink:0}
+.sum-i i{background:var(--faint)}
+.sum-i.run i{background:var(--st-run)} .sum-i.doctor i{background:var(--st-doctor)} .sum-i.paused i{background:var(--st-paused)} .sum-i.error i{background:var(--st-error)}
+.sum-i.doctor.has{border-color:color-mix(in srgb,var(--brand-yellow) 60%,transparent)}
+.sum-i.error.has{border-color:color-mix(in srgb,var(--st-error) 55%,transparent)}
+.todo-list{padding:4px 18px}
+.todo-list.has-items{border-color:color-mix(in srgb,var(--brand-yellow) 55%,transparent);background:color-mix(in srgb,var(--brand-yellow) 6%,var(--panel))}
+.todo-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px 14px;align-items:center;min-height:60px;padding:12px 0;border-top:1px solid var(--line)}
 .todo-row:first-child{border-top:0}
 .todo-main{min-width:0}
-.todo-t{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.todo-s{font-size:13px;color:var(--muted)}
+.todo-t{font-weight:700;font-size:15px;line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow-wrap:anywhere}
+.todo-s{font-size:var(--fs-sm);color:var(--muted);margin-top:2px;overflow-wrap:anywhere}
 .todo-acts{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
-@media (max-width:480px){.todo-guidance{grid-template-columns:minmax(0,1fr)}.todo-row.todo-guidance>.chip{display:inline-block;justify-self:start}.todo-guidance .todo-t,.todo-guidance .todo-s{white-space:normal;overflow-wrap:anywhere}.todo-acts{justify-content:flex-start}}
-.todo-calm{display:flex;align-items:center;min-height:48px;font-size:14px;color:var(--muted)}
-.plist{display:grid;gap:8px}
-.prow{display:grid;grid-template-columns:62px minmax(0,1fr) 104px 132px 172px 164px;gap:12px;align-items:center;min-height:62px;padding:8px 14px;cursor:pointer}
-.prow:hover{border-color:var(--line-strong)}
-.prow.gate{border-color:hsl(38 96% 60% / .45)}
-.prow.blocked{border-color:hsl(350 88% 64% / .45)}
-.prow-code{font-family:'JetBrains Mono',monospace;font-size:12.5px;font-weight:600;color:var(--muted)}
-.prow-main{min-width:0}
-.prow-title{display:block;max-width:100%;padding:2px 0;background:none;text-align:left;font-weight:700;font-size:15px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.prow-reason{font-size:12.5px;line-height:1.4;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.prow-reason.bad{color:var(--rose)}
-.prow .chip{max-width:132px;overflow:hidden;text-overflow:ellipsis;text-align:center}
-.prow-who{font-size:13px;line-height:1.35;font-weight:600;min-width:0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow-wrap:anywhere}
-.prow-who.none{color:var(--faint);font-weight:500}
-.prow-act{display:flex;gap:6px;align-items:center;justify-content:flex-end}
-.prow-title:focus-visible,.pmenu summary:focus-visible{outline:2px solid var(--teal);outline-offset:2px;border-radius:6px}
-.msteps{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
-.pmenu{position:relative}
-.prow{position:relative}
-.prow:has(.pmenu[open]){z-index:30}
-.pmenu summary{list-style:none;cursor:pointer;min-width:38px;min-height:38px;display:grid;place-items:center;border-radius:11px;border:1px solid var(--line-strong);font-weight:800;font-size:16px;line-height:1}
-.pmenu summary::-webkit-details-marker{display:none}
-.pmenu-pop{position:absolute;right:0;top:44px;z-index:20;min-width:220px;display:grid;gap:6px;padding:10px;border-radius:12px;background:var(--panel-solid);border:1px solid var(--line-strong);box-shadow:0 18px 40px -12px rgba(0,0,0,.5)}
-.pmenu-pop .btn{justify-content:flex-start;width:100%}
-@media (max-width:1240px){
-  .prow{grid-template-columns:54px minmax(0,1fr) auto;grid-template-areas:"code main act" "code steps chip" "code who who";row-gap:6px}
-  .prow-code{grid-area:code;align-self:start;padding-top:4px}
-  .prow-main{grid-area:main}
-  .prow-act{grid-area:act}
-  .prow .msteps{grid-area:steps;max-width:140px}
-  .prow .chip{grid-area:chip;justify-self:start}
-  .prow-who{grid-area:who}
+@media (max-width:640px){
+  .todo-list{padding:4px 14px}
+  .todo-row{grid-template-columns:minmax(0,1fr);gap:8px}
+  .todo-row>.chip,.todo-row.todo-guidance>.chip{display:inline-flex;justify-self:start}
+  .todo-acts{justify-content:flex-start}
+  .todo-row>.btn,.todo-acts .btn{width:100%}
 }
-@media (max-width:480px){.todo-row{grid-template-columns:minmax(0,1fr) auto}.todo-row>.chip{display:none}.prow{padding:8px 10px}}
+.todo-calm{display:flex;align-items:center;gap:12px;min-height:60px;padding:10px 0;font-size:15px;color:var(--text)}
+.todo-calm .ico{width:22px;height:22px;color:var(--st-done)}
+.todo-calm small{display:block;font-size:var(--fs-sm);color:var(--muted)}
+.load-err{display:grid;gap:10px;justify-items:start;padding:18px;color:var(--text);text-align:left}
+.load-err p{color:var(--muted);font-size:var(--fs-sm)}
+.plist{display:grid;gap:10px}
+.prow{display:grid;grid-template-columns:minmax(0,1fr) 200px auto;grid-template-areas:"head prog act" "main prog act";gap:6px 20px;align-items:center;padding:14px 16px 14px 18px;cursor:pointer;position:relative;transition:border-color .2s}
+.prow:hover{border-color:var(--line-strong)}
+.prow.gate,.prow.st-doctor{border-color:color-mix(in srgb,var(--brand-yellow) 55%,transparent)}
+.prow.blocked{border-color:color-mix(in srgb,var(--st-error) 50%,transparent)}
+.prow-head{grid-area:head;display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-width:0}
+.prow-code{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:var(--text);letter-spacing:.02em;padding:2px 8px;border-radius:6px;background:color-mix(in srgb,var(--text) 8%,transparent)}
+.prow-main{grid-area:main;min-width:0}
+.prow-title{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-width:100%;padding:0;background:none;text-align:left;font-weight:700;font-size:15.5px;line-height:1.4;overflow-wrap:anywhere;border-radius:6px}
+.prow-title:hover{text-decoration:underline;text-underline-offset:3px}
+.prow-reason{font-size:var(--fs-sm);line-height:1.45;color:var(--muted);margin-top:4px;overflow-wrap:anywhere}
+.prow-reason.bad{color:var(--st-error)}
+.prow .chip{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.prow-who{display:block;font-size:var(--fs-xs);line-height:1.4;font-weight:600;color:var(--muted);margin-top:4px;min-width:0;overflow-wrap:anywhere}
+.prow-who.none{color:var(--faint);font-weight:500}
+.prow-prog{grid-area:prog;display:grid;gap:6px;min-width:0}
+.prow-step{font-size:var(--fs-xs);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prow-step b{color:var(--text);font-weight:700}
+.prow-act{grid-area:act;display:flex;gap:6px;align-items:center;justify-content:flex-end}
+.prow-title:focus-visible,.pmenu summary:focus-visible{outline:3px solid var(--focus);outline-offset:2px;border-radius:6px}
+.msteps{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
+.msteps .bar{height:7px}
+.pmenu{position:relative}
+.prow:has(.pmenu[open]){z-index:30}
+.pmenu summary{list-style:none;cursor:pointer;min-width:40px;min-height:40px;display:grid;place-items:center;border-radius:var(--r-md);border:1px solid var(--line-strong);color:var(--text)}
+.pmenu summary svg{width:18px;height:18px}
+.pmenu summary:hover{background:color-mix(in srgb,var(--text) 10%,transparent)}
+.pmenu summary::-webkit-details-marker{display:none}
+.pmenu-pop{position:absolute;right:0;top:46px;z-index:20;min-width:240px;display:grid;gap:6px;padding:10px;border-radius:var(--r-md);background:var(--panel-solid);border:1px solid var(--line-strong);box-shadow:var(--shadow-pop)}
+.pmenu-pop .btn{justify-content:flex-start;width:100%}
+@media (max-width:860px){
+  .prow{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"head act" "main main" "prog prog";row-gap:8px}
+  .prow-prog{grid-template-columns:minmax(90px,150px) minmax(0,1fr);align-items:center;gap:10px}
+}
+@media (max-width:520px){
+  .prow{grid-template-columns:minmax(0,1fr);grid-template-areas:"head" "main" "prog" "act";padding:14px}
+  .prow-act{justify-content:stretch}
+  .prow-act>.btn{flex:1}
+  .pmenu-pop{min-width:min(260px,calc(100vw - 48px))}
+}
 /* Progress tab */
 .prog-top{padding:16px 18px;margin-bottom:14px}
 .prog-count{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
@@ -178,24 +237,24 @@ html[data-theme="light"] .btn.primary{color:#fff}
 .card h3{font-size:17px;font-weight:700;line-height:1.35}
 .meta{color:var(--faint);font-size:12.5px;margin-top:3px;font-family:'JetBrains Mono',monospace}
 .status-line{margin-top:6px;font-size:14px;font-weight:600;color:var(--text)}
-.chip{flex-shrink:0;padding:4px 10px;border-radius:999px;font-size:12.5px;font-weight:600;white-space:nowrap;
-  background:hsl(204 95% 62% / .14);color:var(--sky);border:1px solid hsl(204 95% 62% / .3)}
-.chip.gate{background:hsl(38 96% 60% / .16);color:var(--amber);border-color:hsl(38 96% 60% / .4)}
-.chip.question{background:hsl(38 96% 60% / .14);color:var(--amber);border-color:hsl(38 96% 60% / .38)}
-.chip.done{background:hsl(168 78% 52% / .15);color:var(--teal);border:1px solid hsl(168 78% 52% / .4)}
-.chip.bad{background:hsl(350 88% 64% / .15);color:var(--rose);border-color:hsl(350 88% 64% / .4)}
-.chip.paused{background:hsl(38 96% 60% / .16);color:var(--amber);border-color:hsl(38 96% 60% / .42)}
-.chip.work{background:hsl(258 90% 70% / .16);color:var(--violet);border-color:hsl(258 90% 70% / .38)}
-.chip.pending{background:rgba(148,173,255,.09);color:var(--muted);border-color:var(--line-strong)}
+.chip{flex-shrink:0;display:inline-flex;align-items:center;gap:7px;padding:4px 11px;border-radius:999px;font-size:13px;font-weight:700;white-space:nowrap;line-height:1.35;
+  background:color-mix(in srgb,var(--sky) 14%,transparent);color:var(--sky);border:1px solid color-mix(in srgb,var(--sky) 35%,transparent)}
+.chip.gate,.chip.question{background:color-mix(in srgb,var(--brand-yellow) 18%,transparent);color:var(--st-doctor);border-color:color-mix(in srgb,var(--brand-yellow) 55%,transparent)}
+.chip.done{background:color-mix(in srgb,var(--st-done) 15%,transparent);color:var(--st-done);border:1px solid color-mix(in srgb,var(--st-done) 42%,transparent)}
+.chip.bad{background:color-mix(in srgb,var(--st-error) 15%,transparent);color:var(--st-error);border-color:color-mix(in srgb,var(--st-error) 45%,transparent)}
+.chip.paused{background:color-mix(in srgb,var(--st-paused) 13%,transparent);color:var(--st-paused);border-color:color-mix(in srgb,var(--st-paused) 40%,transparent)}
+.chip.work{background:color-mix(in srgb,var(--st-run) 15%,transparent);color:var(--st-run);border-color:color-mix(in srgb,var(--st-run) 42%,transparent)}
+.chip.pending{background:color-mix(in srgb,var(--text) 7%,transparent);color:var(--muted);border-color:var(--line-strong)}
 
 .steps{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px;margin:12px 0 6px}
 .step{position:relative;min-width:0}
-.bar{height:6px;border-radius:99px;background:rgba(148,173,255,.15);overflow:hidden}
-.step.done .bar{background:linear-gradient(90deg,var(--teal-d),var(--teal))}
-.step.cur .bar{background:rgba(148,173,255,.2)}
-.step.cur .bar::after{content:"";display:block;height:100%;width:55%;border-radius:99px;background:linear-gradient(90deg,var(--violet),var(--sky))}
-.step.cur.wait .bar::after{background:var(--amber);width:100%}
-.step.cur.bad .bar::after{background:var(--rose);width:100%}
+.bar{height:6px;border-radius:99px;background:color-mix(in srgb,var(--text) 14%,transparent);overflow:hidden}
+.step.done .bar{background:var(--st-run)}
+.step.cur .bar{background:color-mix(in srgb,var(--text) 16%,transparent)}
+.step.cur .bar::after{content:"";display:block;height:100%;width:55%;border-radius:99px;background:var(--st-run)}
+.step.cur.wait .bar::after{background:var(--brand-yellow);width:100%}
+.step.cur.paused .bar::after{background:var(--st-paused);width:100%}
+.step.cur.bad .bar::after{background:var(--st-error);width:100%}
 .step span{display:block;font-size:11.5px;color:var(--faint);margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .step.done span{color:var(--muted)}
 .step.cur span{color:var(--text);font-weight:700}
@@ -258,36 +317,42 @@ html[data-theme="light"] .btn.primary{color:#fff}
   background:var(--panel-solid);border-left:1px solid var(--line-strong);box-shadow:-12px 0 34px -18px rgba(0,0,0,.5)}
 .chat-head{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:8px}
 .chat-head h2{font-size:15.5px;font-weight:800}
-.chat-ctx{font-size:12px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:2px}
+.chat-ctx{font-size:12.5px;color:var(--muted);margin-top:2px}
 .chat-msgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px}
-.c-msg{padding:10px 12px;border-radius:12px;font-size:13.5px;line-height:1.5;max-width:94%;word-break:break-word}
-.c-msg.doctor{align-self:flex-end;background:hsl(168 78% 52% / .16);border:1px solid hsl(168 78% 52% / .35)}
-.c-msg.coordinator{align-self:flex-start;background:rgba(148,173,255,.08);border:1px solid var(--line)}
-.c-msg .c-meta{font-size:11px;color:var(--faint);margin-bottom:4px;font-family:'JetBrains Mono',monospace}
+.c-msg{padding:10px 12px;border-radius:12px;font-size:14px;line-height:1.55;max-width:94%;word-break:break-word}
+.c-msg.doctor{align-self:flex-end;background:color-mix(in srgb,var(--brand-teal) 18%,transparent);border:1px solid color-mix(in srgb,var(--brand-teal) 40%,transparent)}
+.c-msg.coordinator{align-self:flex-start;background:color-mix(in srgb,var(--text) 6%,transparent);border:1px solid var(--line)}
+.c-msg .c-meta{font-size:12px;color:var(--faint);margin-bottom:4px;font-weight:600}
 .c-opts{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .c-opts button{font-size:12.5px;padding:5px 10px;border-radius:8px;background:rgba(148,173,255,.12);border:1px solid var(--line-strong)}
 .c-confirm{margin-top:8px;padding-top:8px;border-top:1px dashed var(--line);display:flex;align-items:center;justify-content:space-between;gap:8px}
 .chat-form{padding:12px;border-top:1px solid var(--line);display:grid;gap:8px}
-.chat-form textarea{min-height:62px;max-height:140px;font-size:13.5px;resize:vertical}
+.chat-form textarea{min-height:62px;max-height:140px;font-size:14px;resize:vertical}
+#btn-chat-toggle,#btn-chat-close{display:none}
 @media (max-width:980px){
   body{padding-right:0}
-  .chat-panel{transform:translateX(100%);transition:transform .25s var(--ease)}
-  .chat-panel.open{transform:translateX(0)}
+  .chat-panel{transform:translateX(100%);transition:transform .25s var(--ease),visibility .25s;visibility:hidden}
+  .chat-panel.open{transform:translateX(0);visibility:visible}
+  #btn-chat-toggle,#btn-chat-close{display:inline-flex}
 }
+@media (max-width:520px){.chat-panel{width:100vw}}
 
 /* Inputs & Modals */
 label.f{display:block;font-size:14px;color:var(--muted);font-weight:600;margin:12px 0 5px}
-.inp{width:100%;font:inherit;font-size:14.5px;min-height:38px;color:var(--text);padding:8px 12px;border-radius:10px;
+.inp{width:100%;font:inherit;font-size:14.5px;min-height:40px;color:var(--text);padding:8px 12px;border-radius:10px;
   background:var(--inp-bg);border:1px solid var(--line-strong);outline:none}
 .inp:focus{border-color:var(--teal)}
+.inp:focus-visible{outline:3px solid var(--focus);outline-offset:1px}
+.inp::placeholder{color:var(--faint);opacity:1}
 textarea.inp{min-height:90px;resize:vertical;line-height:1.55}
 .pin{letter-spacing:.3em;font-family:'JetBrains Mono',monospace;font-size:17px;max-width:210px}
-.toast{position:fixed;left:42%;bottom:22px;transform:translate(-50%,30px);opacity:0;z-index:20;padding:11px 18px;border-radius:12px;
-  background:var(--panel-solid);border:1px solid var(--line-strong);font-size:14px;transition:all .3s var(--ease);pointer-events:none}
+.toast{position:fixed;left:calc((100% - var(--chat-w)) / 2);bottom:22px;transform:translate(-50%,30px);opacity:0;z-index:20;padding:12px 18px;border-radius:12px;max-width:min(560px,calc(100vw - 32px));
+  background:var(--panel-solid);border:1px solid var(--line-strong);font-size:14px;transition:all .3s var(--ease);pointer-events:none;box-shadow:var(--shadow-pop)}
+@media (max-width:980px){.toast{left:50%}}
 .toast.show{transform:translate(-50%,0);opacity:1}
 .toast.err{border-color:var(--rose)}
-.offline{display:none;margin-bottom:14px;padding:12px 16px;border-radius:12px;background:hsl(350 88% 64% / .12);border:1px solid hsl(350 88% 64% / .4);font-size:14px}
-.offline.show{display:block}
+.offline{display:none;margin-bottom:14px;padding:12px 16px;border-radius:12px;background:color-mix(in srgb,var(--st-error) 12%,var(--panel));border:1px solid color-mix(in srgb,var(--st-error) 45%,transparent);font-size:14px}
+.offline.show{display:flex;align-items:center;justify-content:space-between;gap:10px 16px;flex-wrap:wrap}
 
 /* Project View (#pv) & Standards View (#sv) */
 .view{position:fixed;top:0;left:0;bottom:0;right:var(--chat-w);z-index:8;display:none;flex-direction:column;background:var(--bg)}
@@ -532,6 +597,20 @@ pre.md{white-space:pre-wrap;word-break:break-word;font-family:'Be Vietnam Pro',s
 .ops-form label,.ops-filters label{display:grid;gap:5px;font-size:13.5px;font-weight:600;color:var(--muted)}
 .ops-form label:has(input[type=checkbox]){display:flex;align-items:center}
 .ops-form button{justify-self:start}.ops-filters{display:grid;grid-template-columns:1fr 1fr 2fr;gap:12px;margin:14px 0}
+.ops-form select,.ops-form input:not([type=checkbox]):not([type=radio]),.ops-form textarea{width:100%;font:inherit;font-size:14.5px;min-height:40px;color:var(--text);padding:8px 12px;border-radius:10px;background:var(--inp-bg);border:1px solid var(--line-strong);outline:none}
+.ops-form select:focus,.ops-form input:focus,.ops-form textarea:focus{border-color:var(--teal)}
+.ops-form textarea{min-height:90px;resize:vertical;line-height:1.55}
+.res-head input[type=text]{min-height:40px;padding:8px 12px;border-radius:10px;background:var(--inp-bg);border:1px solid var(--line-strong);color:var(--text);font:inherit;font-size:14px}
+.res-head input[type=text]:focus{border-color:var(--teal);outline:none}
+.add-std{flex-wrap:wrap}
+@media (max-width:640px){
+  .ops-filters{grid-template-columns:1fr}
+  .vbar,.vfoot{padding:12px 14px}
+  .vbody{padding:14px 14px 110px}
+  .row{grid-template-columns:1fr;gap:8px}
+  .cbox,.ctext{grid-column:1 / -1}
+  .modal{padding:16px}
+}
 .ops-assets{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-top:14px}
 .ops-asset{border:1px solid var(--line-strong);border-radius:10px;overflow:hidden;padding:10px;min-width:0}
 .ops-asset img{width:100%;height:150px;object-fit:contain;background:var(--bg2);border-radius:6px}
@@ -818,13 +897,18 @@ html[data-theme="light"] .ws-iso-stage{background:radial-gradient(ellipse 62% 46
       </span>
       <button class="btn danger" id="btn-stop" type="button" style="display:none">
         <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>Dừng xưởng</button>
-      <button class="btn" id="btn-admin-toggle" type="button" aria-expanded="false">Quản trị ▾</button>
-      <button class="btn ghost" id="btn-theme" type="button" title="Đổi giao diện Sáng / Tối">Sáng / Tối</button>
-      <button class="btn ghost" id="btn-chat-toggle" type="button" style="display:none">Chat</button>
+      <button class="btn" id="btn-admin-toggle" type="button" aria-expanded="false" aria-controls="admin-drawer">Quản trị ▾</button>
+      <button class="btn ghost" id="btn-theme" type="button" title="Đổi giao diện Sáng / Tối" aria-label="Đổi giao diện Sáng / Tối">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/></svg><span class="lbl">Sáng / Tối</span></button>
+      <button class="btn" id="btn-chat-toggle" type="button" aria-controls="chat-panel" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Điều phối viên</button>
     </div>
   </header>
 
-  <div class="offline" id="offline">Mất kết nối với app. Bấm đúp lại biểu tượng <b>Xưởng video</b> trên Desktop để mở lại.</div>
+  <div class="offline" id="offline" role="alert">
+    <span>Mất kết nối với máy chủ xưởng. Nếu vừa khởi động lại, hãy tải lại trang; nếu đã tắt app, bấm đúp biểu tượng <b>Xưởng video</b> trên Desktop để mở lại.</span>
+    <button type="button" class="btn" id="btn-offline-reload">Tải lại trang</button>
+  </div>
 
   <nav class="home-nav" aria-label="Điều hướng xưởng">
     <a href="#home" data-home-tab="home" aria-current="page">Tổng quan</a>
@@ -841,12 +925,12 @@ html[data-theme="light"] .ws-iso-stage{background:radial-gradient(ellipse 62% 46
   </div>
 
   <!-- 2. Việc của bác sĩ -->
-  <h2 class="section-title" data-home-view="home">Việc của bác sĩ</h2>
-  <section class="glass todo-list" id="decisions" data-home-view="home" aria-live="polite"></section>
+  <h2 class="section-title" id="sec-todo" data-home-view="home">Việc của bác sĩ <span class="count" id="todo-count" hidden>0</span></h2>
+  <section class="glass todo-list" id="decisions" data-home-view="home" aria-live="polite"><div class="todo-calm">Đang kiểm tra việc cần bác sĩ…</div></section>
 
   <!-- 3. Project cards -->
-  <h2 class="section-title" data-home-view="home">Dự án video</h2>
-  <section id="projects" class="plist" data-home-view="home"><div class="glass empty">Đang tải…</div></section>
+  <h2 class="section-title" id="sec-projects" data-home-view="home">Dự án video</h2>
+  <section id="projects" class="plist" data-home-view="home"><div class="glass empty">Đang tải danh sách dự án…</div></section>
 
   <!-- 3c. Tiến độ hoàn thiện xưởng -->
   <section id="progress" data-home-view="progress" hidden aria-labelledby="prog-title">
@@ -870,7 +954,7 @@ html[data-theme="light"] .ws-iso-stage{background:radial-gradient(ellipse 62% 46
       </div>
       <div class="res-head">
         <button type="button" class="btn" id="btn-sync-sheet">Đồng bộ Google Sheet</button>
-        <input type="text" id="res-discover-q" placeholder="Từ khóa để AI tìm đề tài…" style="min-width:190px;max-width:260px" />
+        <input type="text" class="inp" id="res-discover-q" placeholder="Từ khóa để AI tìm đề tài…" style="min-width:190px;max-width:260px" />
         <button type="button" class="btn primary" id="btn-discover-ai">AI Tìm đề</button>
       </div>
     </div>
@@ -1118,7 +1202,10 @@ html[data-theme="light"] .ws-iso-stage{background:radial-gradient(ellipse 62% 46
       <h2>Điều phối viên</h2>
       <div class="chat-ctx" id="chat-ctx">Toàn xưởng</div>
     </div>
-    <span class="tag" id="chat-badge">Trực tuyến</span>
+    <div style="display:flex;align-items:center;gap:6px">
+      <span class="tag" id="chat-badge">Trực tuyến</span>
+      <button type="button" class="btn ghost" id="btn-chat-close" aria-label="Đóng khung chat" style="min-height:34px;padding:4px 10px">Đóng</button>
+    </div>
   </div>
   <div class="chat-msgs" id="chat-msgs" aria-live="polite">
     <div class="empty">Gõ câu hỏi hoặc yêu cầu sửa. Không bao giờ nhập PIN vào khung chat.</div>
@@ -1282,6 +1369,18 @@ $('btn-admin-toggle').onclick = () => {
     if(typeof opsDeleted === 'function') opsDeleted().catch(()=>{});
   }
 };
+function toggleChatPanel(force){
+  const panel = $('chat-panel');
+  if(!panel) return;
+  const open = force === undefined ? !panel.classList.contains('open') : Boolean(force);
+  panel.classList.toggle('open', open);
+  const tgl = $('btn-chat-toggle');
+  if(tgl) tgl.setAttribute('aria-expanded', String(open));
+  if(open) $('chat-input')?.focus();
+}
+if($('btn-chat-toggle')) $('btn-chat-toggle').onclick = () => toggleChatPanel();
+if($('btn-chat-close')) $('btn-chat-close').onclick = () => toggleChatPanel(false);
+if($('btn-offline-reload')) $('btn-offline-reload').onclick = () => { if(typeof location !== 'undefined') location.reload(); };
 
 const STEP_VI = {
   create:'tạo dự án', research:'nghiên cứu', draft:'viết kịch bản', storyboard_design:'thiết kế phân cảnh',
@@ -1306,7 +1405,11 @@ function friendlyError(text){
   }
   m=s.match(/Scene\s+([A-Za-z0-9_-]+):\s*beat at\s+[\d.]+\s+outside timed scene/i);
   if(m) return `Cảnh ${m[1]} có nhịp nằm ngoài thời lượng cảnh.`;
+  if(/Visual review requires current rendered contact sheet/i.test(s)) return 'Chưa có bảng ảnh liên hoàn mới nhất để kiểm hình; cần dựng lại video hoặc chạy lại bước kiểm hình.';
   if(/paging file is too small/i.test(s)) return 'Máy thiếu bộ nhớ ảo khi chạy nhạc nền (ACE-Step).';
+  if(/TimeoutExpired|timed out/i.test(s)) return 'Bước xử lý chạy quá thời gian cho phép.';
+  if(/quota|429|rate.?limit/i.test(s)) return 'Tạm hết hạn mức model AI; xưởng sẽ tự thử lại khi có suất.';
+  if(/ENOENT|No such file or directory|FileNotFoundError/i.test(s)) return 'Thiếu tệp đầu vào cần thiết cho bước xử lý này.';
   m=s.match(/(?:bước\s+|step\s+|ở bước\s+)([a-z_]+)|^([a-z_]+)\s+lỗi:/i);
   if(m){const k=(m[1]||m[2]).toLowerCase(); return `Bước ${STEP_VI[k]||k} gặp lỗi.`}
   if(/vượt số bước/i.test(s)) return 'Chủ đề vượt quá số bước tự động tối đa.';
@@ -1360,9 +1463,17 @@ function renderOverview(ov){
   const questionCount = projs.filter(p => p.doctor_question && !p.gate).length;
   const attention = projs.filter(p => p.blocked && !p.gate && !p.doctor_question).length;
   const total = projs.length;
-  $('tiles').textContent = total
-    ? `${total} dự án · ${t.running ?? 0} đang chạy · ${t.waiting_doctor ?? 0} chờ bác sĩ${questionCount ? ` · ${questionCount} chờ ý kiến` : ''} · ${attention} cần chú ý`
-    : 'Chưa có dự án nào.';
+  const sumPill = (cls, n, lbl, has=false) =>
+    `<span class="sum-i ${cls}${has?' has':''}"><i></i><b>${n}</b><span> ${lbl}</span></span>`;
+  $('tiles').innerHTML = total
+    ? [
+        sumPill('', total, 'dự án'),
+        sumPill('run', t.running ?? 0, 'đang chạy'),
+        sumPill('doctor', t.waiting_doctor ?? 0, 'chờ bác sĩ', (t.waiting_doctor ?? 0) > 0),
+        questionCount ? sumPill('doctor', questionCount, 'chờ ý kiến', true) : '',
+        sumPill('error', attention, 'cần chú ý', attention > 0),
+      ].filter(Boolean).join(' ')
+    : '<span class="sum-i">Chưa có dự án nào.</span>';
   const decBox = $('decisions');
   const decs = ov.decisions || [];
   const seen = new Set(decs.map(d => d.slug));
@@ -1377,12 +1488,18 @@ function renderOverview(ov){
       : {slug:d.slug, code:d.code, title:d.title, gate:d.gate, styleScore:d.style_score || null, sub:`${d.count} điểm cần quyết`, btn:`Mở thẻ quyết định (${d.count})`}),
     ...gateOnly.map(p => ({slug:p.slug, code:p.code, title:p.title, gate:p.gate, styleScore:null, sub:'Gói đã sẵn sàng để duyệt', btn:'Mở gói duyệt'})),
   ];
+  const todoBadge = $('todo-count');
+  if(todoBadge){
+    todoBadge.textContent = String(rows.length);
+    todoBadge.hidden = !rows.length;
+  }
+  decBox.classList.toggle('has-items', rows.length > 0);
   if(!rows.length){
-    decBox.innerHTML = '<div class="todo-calm">Không có việc nào cần bác sĩ lúc này</div>';
+    decBox.innerHTML = '<div class="todo-calm"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8.5 12.2 2.4 2.4 4.8-4.8"/></svg><div><div>Không có việc nào cần bác sĩ lúc này</div><small>Xưởng đang tự xử lý hoặc chờ bạn bấm Bật xưởng để chạy tiếp.</small></div></div>';
   } else {
     decBox.innerHTML = rows.map(r => r.doctorQuestion ? `
       <div class="todo-row">
-        <span class="chip question">Chờ ý kiến bác sĩ</span>
+        <span class="chip st question">Chờ ý kiến bác sĩ</span>
         <div class="todo-main">
           <div class="todo-t" title="${esc(r.title)}">${r.code ? esc(r.code) + ' · ' : ''}${esc(r.title)}</div>
           <div class="todo-s">${r.station ? `Trạm ${esc(r.station)} · ` : ''}${esc(r.sub)}</div>
@@ -1390,7 +1507,7 @@ function renderOverview(ov){
         <button class="btn warn" type="button" data-decide-slug="${esc(r.slug)}">${esc(r.btn)}</button>
       </div>` : r.guidance ? `
       <div class="todo-row todo-guidance">
-        <span class="chip gate">${esc(r.guidanceRole || (r.productGuidance ? 'Thợ dựng' : 'Biên kịch'))}</span>
+        <span class="chip st gate">${esc(r.guidanceRole || (r.productGuidance ? 'Thợ dựng' : 'Biên kịch'))}</span>
         <div class="todo-main">
           <div class="todo-t" title="${esc(r.title)}">${r.code ? esc(r.code) + ' · ' : ''}${esc(r.title)}</div>
           <div class="todo-s">${esc(r.sub)}</div>
@@ -1401,7 +1518,7 @@ function renderOverview(ov){
         </div>
       </div>` : `
       <div class="todo-row">
-        <span class="chip gate">${esc(GATE_LABEL[r.gate] || 'Cần duyệt')}</span>
+        <span class="chip st gate">${esc(GATE_LABEL[r.gate] || 'Cần duyệt')}</span>
         ${r.gate === 'video' && r.styleScore ? `<span class="chip ${r.styleScore.passed ? 'done' : 'gate'}" data-style-score="${esc(r.styleScore.score)}">Phong cách PYH: ${esc(r.styleScore.score)}/10</span>` : ''}
         <div class="todo-main">
           <div class="todo-t" title="${esc(r.title)}">${r.code ? esc(r.code) + ' · ' : ''}${esc(r.title)}</div>
@@ -1883,7 +2000,7 @@ function handlerView(p, ovp){
   const h = p.handler || ovp.handler || {label:'—', kind:'idle', reason:''};
   const kind = h.kind || 'idle';
   let reason = '';
-  if(['repair','blocked','paused'].includes(kind)){
+  if(['repair','blocked','paused','doctor'].includes(kind)){
     reason = String(h.reason || '').trim();
     const fe = friendlyError(reason);
     if(fe && fe !== CALM_REASON) reason = fe;
@@ -1895,14 +2012,15 @@ function handlerView(p, ovp){
   return {kind, reason, who, none};
 }
 
+const REOPENABLE=['medically_approved','production_in_progress','needs_production_revision'];
 function renderProjects(d){
   const box=$('projects');
   const expanded = new Set([...box.querySelectorAll('.pmenu[open]')].map(el => el.dataset.projectMore));
-  if(!d.projects.length){box.innerHTML='<div class="glass empty">Chưa có chủ đề nào.</div>';return}
+  if(!d.projects.length){box.innerHTML='<div class="glass empty">Chưa có chủ đề nào. Vào <b>Kho đề tài</b> hoặc <b>Quản trị → Hàng đợi</b> để thêm chủ đề mới.</div>';return}
   const ovMap = {};
   (overviewData?.projects || []).forEach(p => ovMap[p.slug] = p);
   const stages = d.stages || [];
-  const order=p=>p.gate?0:(p.blocked?1:(p.paused?3:2));
+  const order=p=>p.gate?0:(p.doctor_question?0:(p.blocked?1:(p.paused?3:2)));
   box.innerHTML=[...d.projects].sort((a,b)=>order(a)-order(b)).map(p=>{
     const ovp = ovMap[p.slug] || {};
     const isPaused = Boolean(ovp.paused ?? p.paused);
@@ -1919,12 +2037,12 @@ function renderProjects(d){
     } else if(isPaused && !done){
       primary = `<button type="button" class="btn primary" data-resume-project="${esc(p.slug)}">▶ Tiếp tục</button>`; detailInMenu = true;
     } else if(p.blocked && !done){
-      primary = `<button type="button" class="btn warn" data-retry-project="${esc(p.slug)}" data-revision="${esc(p.revision)}">Làm lại</button>`; detailInMenu = true;
+      primary = `<button type="button" class="btn err" data-retry-project="${esc(p.slug)}" data-revision="${esc(p.revision)}">Làm lại</button>`; detailInMenu = true;
     }
     const more = [];
     if(detailInMenu) more.push(detailBtn);
     if(p.comments) more.push(`<span class="tag" style="color:var(--amber)">${p.comments} góp ý nháp</span>`);
-    if(p.blocked && !p.gate && !done && !primary.includes('data-retry-project')) more.push(`<button type="button" class="btn warn" data-retry-project="${esc(p.slug)}" data-revision="${esc(p.revision)}">Làm lại bước lỗi</button>`);
+    if(p.blocked && !p.gate && !done && !primary.includes('data-retry-project')) more.push(`<button type="button" class="btn err" data-retry-project="${esc(p.slug)}" data-revision="${esc(p.revision)}">Làm lại bước lỗi</button>`);
     if(p.blocked && REOPENABLE.includes(p.state)) more.push(`<button type="button" class="btn warn" data-reopen="${esc(p.slug)}">Mở lại cổng y khoa để sửa</button>`);
     if(!done && !isPaused) more.push(`<button type="button" class="btn" data-pause-project="${esc(p.slug)}">${ovp.is_running ? '⏸ Dừng bước / Tạm hoãn' : '⏸ Tạm dừng'}</button>`);
     more.push(`<button type="button" class="btn ghost" data-chat-project="${esc(p.slug)}" data-revision="${esc(p.revision)}">💬 Nhắn điều phối</button>`);
@@ -1935,25 +2053,36 @@ function renderProjects(d){
     const bars = [0,1,2,3,4,5,6].map(k => {
       let c='step';
       if(k<stage || done) c+=' done';
-      else if(k===stage){ c+=' cur'; if(p.gate || isPaused || p.doctor_question) c+=' wait'; if(cls==='bad') c+=' bad'; }
+      else if(k===stage){ c+=' cur'; if(isPaused) c+=' paused'; else if(p.gate || p.doctor_question) c+=' wait'; if(cls==='bad') c+=' bad'; }
       return `<div class="${c}"><div class="bar"></div></div>`;
     }).join('');
     const stepsTip = done ? 'Đã hoàn tất 7/7 bước' : `Bước ${stage+1}/7: ${stageName}`;
-    const chipText = cls==='question' ? 'Chờ ý kiến bác sĩ' : (cls==='bad' ? 'Bị chặn' : (cls==='paused' ? 'Tạm dừng' : p.state_label));
+    const chipText = cls==='question' ? 'Chờ ý kiến bác sĩ'
+      : (cls==='gate' ? (p.gate==='medical' ? 'Chờ bác sĩ · Duyệt y khoa' : (p.gate==='video' ? 'Chờ bác sĩ · Duyệt video' : 'Chờ bác sĩ'))
+      : (cls==='bad' ? 'Lỗi cần xử lý'
+      : (cls==='paused' ? 'Tạm dừng'
+      : (cls==='done' ? (p.state_label || 'Đã xong') : 'Đang chạy'))));
     const reasonHtml = hv.reason ? `<div class="prow-reason ${hv.kind==='paused' || hv.kind==='doctor'?'':'bad'}" title="${esc(hv.reason)}">${esc(hv.reason)}</div>` : '';
-    return `<article class="glass prow ${p.gate?'gate':''} ${cls==='bad'?'blocked':''}" data-row-slug="${esc(p.slug)}">
-        <span class="prow-code">${esc(p.code || '')}</span>
+    const whoHtml = hv.who && hv.who !== '—' ? `<div class="prow-who ${hv.none?'none':''}" title="${esc(hv.who)}">${esc(hv.who)}</div>` : '';
+    const stepHtml = done ? '<b>Hoàn tất 7/7 bước</b>' : `Bước ${stage+1}/7 · <b>${esc(stageName)}</b>`;
+    return `<article class="glass prow ${p.gate?'gate':''} ${p.doctor_question?'st-doctor':''} ${cls==='bad'?'blocked':''}" data-row-slug="${esc(p.slug)}">
+        <div class="prow-head">
+          <span class="prow-code">${esc(p.code || '')}</span>
+          <span class="chip st ${cls}" title="${esc(p.state_label || chipText)}">${esc(chipText)}</span>
+        </div>
         <div class="prow-main">
           <button type="button" class="prow-title" data-product="${esc(p.slug)}" title="${esc(p.title)}">${esc(p.title)}</button>
           ${reasonHtml}
+          ${whoHtml}
         </div>
-        <div class="msteps" role="img" aria-label="${esc(stepsTip)}" title="${esc(stepsTip)}">${bars}</div>
-        <span class="chip ${cls}" title="${esc(p.state_label)}">${esc(chipText)}</span>
-        <span class="prow-who ${hv.none?'none':''}" title="${esc(hv.who)}">${esc(hv.who)}</span>
+        <div class="prow-prog">
+          <div class="prow-step">${stepHtml}</div>
+          <div class="msteps" role="img" aria-label="${esc(stepsTip)}" title="${esc(stepsTip)}">${bars}</div>
+        </div>
         <div class="prow-act">
           ${primary}
           <details class="pmenu" data-project-more="${esc(p.slug)}" ${expanded.has(p.slug)?'open':''}>
-            <summary aria-label="Thao tác khác cho ${esc(p.code || p.title)}" title="Thao tác khác">⋯</summary>
+            <summary aria-label="Thao tác khác cho ${esc(p.code || p.title)}" title="Thao tác khác"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></summary>
             <div class="pmenu-pop">${more.join('')}</div>
           </details>
         </div>
@@ -1977,6 +2106,7 @@ document.addEventListener('click', ev => {
 document.addEventListener('keydown', ev => {
   if(ev.key !== 'Escape') return;
   document.querySelectorAll('.pmenu[open]').forEach(m => { m.removeAttribute('open'); m.querySelector('summary')?.focus(); });
+  if($('chat-panel')?.classList.contains('open')) toggleChatPanel(false);
 });
 
 /* ---------- Tab Tiến độ: /api/progress ---------- */
@@ -2241,6 +2371,17 @@ async function refresh(){
   }catch(e){
     wsOffline = true;
     $('offline').classList.add('show');
+    if(!state){
+      const decBox = $('decisions');
+      if(decBox) decBox.innerHTML = '<div class="todo-calm">Chưa kết nối được với máy chủ xưởng để kiểm tra việc cần duyệt.</div>';
+      const projBox = $('projects');
+      if(projBox){
+        projBox.innerHTML = '<div class="glass load-err"><b>Không tải được danh sách dự án</b><p>Máy chủ app chưa phản hồi. Hãy kiểm tra lại app Xưởng video rồi bấm Thử tải lại.</p><button type="button" class="btn primary" id="btn-retry-load">Thử tải lại</button></div>';
+        const btn = $('btn-retry-load');
+        if(btn) btn.onclick = () => refresh();
+      }
+      if($('tiles') && !$('tiles').textContent.trim()) $('tiles').innerHTML = '<span class="sum-i error has"><i></i><span>Mất kết nối máy chủ</span></span>';
+    }
     renderWorkshop();
   }
 }
@@ -5784,7 +5925,6 @@ $('ops-tabs').querySelectorAll('[data-ops-tab]').forEach(button=>button.onclick=
 $('ops-topic').onsubmit=async e=>{e.preventDefault();try{await post('/api/topics/add',Object.fromEntries(new FormData(e.target)));e.target.reset();await opsQueue();await refresh();toast('Đã thêm chủ đề vào hàng đợi.')}catch(ex){toast(ex.message,true)}};
 $('ops-project').onchange=()=>{ $('ops-reopen').hidden=true;opsPreview().catch(e=>toast(e.message,true))};
 $('ops-retry').onclick=async()=>{if(!opsCurrent)return;const d=opsCurrent;if(!confirm(`Thử lại bước ${d.next_step||'—'}? Tối đa ${d.cache.max_requests} yêu cầu TTS cho một lượt; cache chưa kiểm hash/giọng/provider.`))return;try{await post(`/api/project/${encodeURIComponent(d.slug)}/retry`,{expected_revision:d.revision});await opsPreview();toast('Đã cho phép thử lại. Bật xưởng khi sẵn sàng.')}catch(e){toast(e.message,true)}};
-const REOPENABLE=['medically_approved','production_in_progress','needs_production_revision'];
 async function openReopen(p){
   $('admin-drawer').classList.add('show');
   await $('ops-tabs').querySelector('[data-ops-tab="queue"]').onclick();

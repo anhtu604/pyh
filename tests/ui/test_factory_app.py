@@ -1446,3 +1446,109 @@ def test_stage12_guidance_blocked_card_and_preset_replies():
     pyh.renderPv();
     assert(!slot.querySelector('#pv-stage12-card'), 'no doctor_question must not render card');
     ''')
+
+
+def test_overview_status_labels_friendly_errors_offline_and_mobile_chat():
+    html = DASHBOARD_HTML.read_text(encoding='utf-8')
+    assert '--brand-navy:#12304A' in html and '--brand-teal:#18A6A6' in html
+    assert '--brand-yellow:#F4B942' in html and '--brand-offwhite:#F7F4EC' in html
+    assert 'id="btn-chat-close"' in html
+
+    _run_workshop_js(r'''
+    const assert = (cond, msg) => { if (!cond) throw new Error(msg); };
+    const { pyh, doc, setFetchHandler } = ctx;
+
+    // 1. Initial offline load shows Vietnamese recovery message + retry button
+    setFetchHandler(async () => { throw new Error('network down'); });
+    await pyh.refresh();
+    assert(doc.getElementById('offline').classList.contains('show'), 'offline banner shown');
+    assert(doc.getElementById('projects').textContent.includes('Không tải được danh sách dự án'), 'friendly offline projects card');
+    assert(doc.getElementById('btn-retry-load'), 'retry button rendered on initial offline error');
+
+    // 2. Online load renders uniform Vietnamese status labels, friendly errors, and todo badge
+    setFetchHandler(async (url) => {
+      if (url.startsWith('/api/status')) {
+        return {
+          ok: true, status: 200,
+          async json() {
+            return {
+              factory: { running: true, pid: 123 }, waiting: 1,
+              stages: ['Chủ đề', 'Nghiên cứu', 'Kịch bản', 'Duyệt y khoa', 'Sản xuất', 'Duyệt video', 'Đóng gói'],
+              log: [], agents: [], now: '2026-11-22T18:00:00Z', standards: 0,
+              projects: [
+                {
+                  slug: 'err-proj', code: 'PYH-003', title: 'Dự án lỗi hình',
+                  state: 'medically_approved', state_label: 'Bị chặn · sản xuất',
+                  stage: 4, gate: null, paused: false, revision: '001', comments: 0,
+                  blocked: 'ValueError: Visual review requires current rendered contact sheet',
+                  handler: { label: 'Kỹ sư sửa lỗi đang sửa lỗi', kind: 'repair', reason: 'Visual review requires current rendered contact sheet' },
+                },
+                {
+                  slug: 'gate-proj', code: 'PYH-002', title: 'Dự án chờ duyệt',
+                  state: 'draft_ready', state_label: 'Chờ duyệt y khoa',
+                  stage: 3, gate: 'medical', paused: false, revision: '001', comments: 0,
+                  blocked: '', handler: { label: 'Chờ bác sĩ', kind: 'doctor', reason: '' },
+                },
+                {
+                  slug: 'run-proj', code: 'PYH-001', title: 'Dự án đang chạy',
+                  state: 'researching', state_label: 'Đang nghiên cứu',
+                  stage: 1, gate: null, paused: false, revision: '001', comments: 0,
+                  blocked: '', handler: { label: 'Chuyên gia y học', kind: 'work', reason: '' },
+                },
+                {
+                  slug: 'pause-proj', code: 'PYH-004', title: 'Dự án tạm dừng',
+                  state: 'draft_ready', state_label: 'Tạm dừng · kịch bản',
+                  stage: 2, gate: null, paused: true, revision: '001', comments: 0,
+                  blocked: '', handler: { label: 'Tạm dừng', kind: 'paused', reason: '' },
+                },
+              ],
+            };
+          },
+        };
+      }
+      if (url.startsWith('/api/overview')) {
+        return {
+          ok: true, status: 200,
+          async json() {
+            return {
+              tiles: { running: 1, waiting_doctor: 1, done_7d: 0, done_30d: 0, avg_days_topic_to_video: 0, models_resting: 0 },
+              decisions: [{ slug: 'gate-proj', code: 'PYH-002', title: 'Dự án chờ duyệt', gate: 'medical', count: 1 }],
+              projects: [
+                { slug: 'err-proj', blocked: 'Visual review requires current rendered contact sheet', gate: null, paused: false },
+                { slug: 'gate-proj', blocked: '', gate: 'medical', paused: false },
+                { slug: 'run-proj', blocked: '', gate: null, paused: false },
+                { slug: 'pause-proj', blocked: '', gate: null, paused: true },
+              ],
+              resting: [],
+            };
+          },
+        };
+      }
+      if (url.startsWith('/api/company')) return { ok: true, status: 200, async json() { return { roles: [], production_running: [], production: { work_state: 'idle' } }; } };
+      if (url.startsWith('/api/activity')) return { ok: true, status: 200, async json() { return { items: [] }; } };
+      if (url.startsWith('/api/progress')) return { ok: true, status: 200, async json() { return { phases: [], doing: [], total: 0, done: 0 }; } };
+      return { ok: true, status: 200, async json() { return {}; } };
+    });
+
+    await pyh.refresh();
+    const projectsEl = doc.getElementById('projects');
+    const errRow = projectsEl.querySelector('[data-row-slug="err-proj"]');
+    assert(errRow && errRow.querySelector('.chip.bad').textContent === 'Lỗi cần xử lý', 'error row shows Lỗi cần xử lý');
+    assert(!errRow.textContent.includes('Visual review requires'), 'raw English error must be translated');
+    assert(errRow.textContent.includes('Chưa có bảng ảnh liên hoàn mới nhất'), 'friendly Vietnamese error shown');
+    const gateRow = projectsEl.querySelector('[data-row-slug="gate-proj"]');
+    assert(gateRow && gateRow.querySelector('.chip.gate').textContent === 'Chờ bác sĩ · Duyệt y khoa', 'medical gate label');
+    const runRow = projectsEl.querySelector('[data-row-slug="run-proj"]');
+    assert(runRow && runRow.querySelector('.chip.work').textContent === 'Đang chạy', 'running label');
+    const pauseRow = projectsEl.querySelector('[data-row-slug="pause-proj"]');
+    assert(pauseRow && pauseRow.querySelector('.chip.paused').textContent === 'Tạm dừng', 'paused label');
+    assert(doc.getElementById('todo-count').textContent === '1' && !doc.getElementById('todo-count').hidden, 'todo badge shows 1');
+    assert(doc.getElementById('decisions').classList.contains('has-items'), 'decisions highlighted when active');
+
+    // 3. Mobile chat drawer toggle and close
+    const chatPanel = doc.getElementById('chat-panel');
+    doc.getElementById('btn-chat-toggle').onclick();
+    assert(chatPanel.classList.contains('open'), 'chat toggle opens chat drawer');
+    doc.getElementById('btn-chat-close').onclick();
+    assert(!chatPanel.classList.contains('open'), 'chat close closes chat drawer');
+    ''')
