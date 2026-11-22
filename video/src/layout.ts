@@ -30,6 +30,18 @@ export const captionBox = (layout: FrameLayout): Box => ({
   height: layout.captions.height,
 });
 
+/** Safe region for 9:16 TikTok/Shorts/Reels captions: clears the right action-button rail (>=148 px) and bottom UI (>=368 px). */
+export const SHORTS_RIGHT_SAFE_MARGIN = 148;
+export const SHORTS_BOTTOM_SAFE_MARGIN = 368;
+
+export const shortsCaptionSafeBox = (layout: FrameLayout, hasMascot = false): Box => {
+  const left = hasMascot ? 272 : 56;
+  const width = Math.min(layout.captions.width, layout.frame.width - left - SHORTS_RIGHT_SAFE_MARGIN);
+  const height = 140;
+  const top = layout.frame.height - SHORTS_BOTTOM_SAFE_MARGIN - height;
+  return {left, top, width, height};
+};
+
 // Region above the caption band (plus SAFE_GAP) where source imagery may be placed.
 export const evidenceFrame = (layout: FrameLayout): {width: number; height: number} => ({
   width: layout.frame.width,

@@ -2,7 +2,7 @@ import React from 'react';
 // @ts-expect-error @types/react-dom is not installed
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, it, vi} from 'vitest';
-import {LAYOUTS, LayoutContext} from '../layout';
+import {LAYOUTS, LayoutContext, shortsCaptionSafeBox, SHORTS_BOTTOM_SAFE_MARGIN, SHORTS_RIGHT_SAFE_MARGIN} from '../layout';
 import {Captions} from './Captions';
 import {evenWordTiming, firstUseTermWords, paginateCaptions} from './captionPaging';
 import {StyleCaptions} from './StyleCaptions';
@@ -137,4 +137,50 @@ it('rejects impossible fragments instead of rendering one-word pages', () => {
   expect(paginateCaptions([], 42)).toEqual([]);
   expect(() => paginateCaptions(['gan'], 42)).toThrow(/four words/);
   expect(() => paginateCaptions(['a'.repeat(42), 'b'.repeat(42), 'c'.repeat(42), 'd'.repeat(42)], 42)).toThrow(/line budget/);
+});
+
+describe('Shorts 9:16 active-word highlight and safe zone', () => {
+  it('highlights the active Whisper-timed word on a high-contrast dark band inside TikTok/Shorts/Reels safe zones, and suppresses 16:9', () => {
+    const safeNoMascot = shortsCaptionSafeBox(LAYOUTS.vertical_clip, false);
+    const safeWithMascot = shortsCaptionSafeBox(LAYOUTS.vertical_clip, true);
+    for (const box of [safeNoMascot, safeWithMascot]) {
+      expect(LAYOUTS.vertical_clip.frame.width - (box.left + box.width)).toBeGreaterThanOrEqual(SHORTS_RIGHT_SAFE_MARGIN);
+      expect(LAYOUTS.vertical_clip.frame.height - (box.top + box.height)).toBeGreaterThanOrEqual(SHORTS_BOTTOM_SAFE_MARGIN);
+    }
+
+    const words = [
+      {text: 'Đừng', start_frame: 0, end_frame: 12},
+      {text: 'tự', start_frame: 12, end_frame: 24},
+      {text: 'mua', start_frame: 24, end_frame: 40},
+      {text: 'thuốc', start_frame: 40, end_frame: 60},
+    ];
+    clock.frame = 28;
+    const portraitHtml = renderToStaticMarkup(
+      <LayoutContext.Provider value={LAYOUTS.vertical_clip}>
+        <Captions variant="shorts" text="Đừng tự mua thuốc" durationInFrames={90} words={words} />
+      </LayoutContext.Provider>,
+    );
+    expect(portraitHtml).toContain('data-shorts-captions="true"');
+    expect(portraitHtml).toContain('data-active="true"');
+    expect(portraitHtml).toContain('mua');
+    expect(portraitHtml).toContain('#F4B942');
+
+    // Smooth fallback when timed words are absent (even with < 4 words)
+    clock.frame = 10;
+    const fallbackHtml = renderToStaticMarkup(
+      <LayoutContext.Provider value={LAYOUTS.vertical_clip}>
+        <Captions variant="shorts" text="Men gan tăng" durationInFrames={90} />
+      </LayoutContext.Provider>,
+    );
+    expect(fallbackHtml).toContain('data-shorts-captions="true"');
+    expect(fallbackHtml).toContain('Men');
+
+    // 16:9 landscape never burns in captions
+    const landscapeHtml = renderToStaticMarkup(
+      <LayoutContext.Provider value={LAYOUTS.youtube_long}>
+        <Captions variant="shorts" text="Đừng tự mua thuốc" durationInFrames={90} words={words} />
+      </LayoutContext.Provider>,
+    );
+    expect(landscapeHtml).toBe('');
+  });
 });

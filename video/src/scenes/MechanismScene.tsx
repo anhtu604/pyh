@@ -11,6 +11,7 @@ import {DiagramAnnotations} from '../anatomy/annotations';
 import {AuthoredStep, AuthoredWorksheet, panelRows} from '../components/AuthoredPanels';
 import {useVisualStyle} from '../scalezoom/context';
 import {ScaleZoomStage} from '../scalezoom/ScaleZoomStage';
+import {IsoInfographicStage} from '../isoinfo/IsoInfographicStage';
 
 export type MechanismKind = 'anatomy' | 'process' | 'comparison' | 'timelapse';
 /** Only resolved alignment cues replace the legacy continuous animation. */
@@ -101,6 +102,9 @@ export const MechanismScene: React.FC<{scene: Scene; kind: MechanismKind; visual
   const cueProgress = anatomyCueProgress(scene, frame);
   if (effectiveStyle === 'scale_zoom' && (kind === 'anatomy' || kind === 'process') && !panelRows(scene, 3).length) {
     return <ScaleZoomStage scene={scene} kind={kind} cueProgress={cueProgress} />;
+  }
+  if (effectiveStyle === 'iso_infographic' && (kind === 'anatomy' || kind === 'process') && !panelRows(scene, 3).length) {
+    return <IsoInfographicStage scene={scene} kind={kind} cueProgress={cueProgress} />;
   }
   const Organ = ANATOMY_COMPONENTS[anatomy.subject];
   if (!Organ) throw new Error(`Unsupported anatomy subject: ${anatomy.subject}`);

@@ -584,7 +584,7 @@ export const ScaleZoomStage: React.FC<ScaleZoomStageProps> = ({
       </div>
 
       {/* Standard 9:16 captions (suppressed in 16:9 per shouldRenderCaptions) */}
-      {shouldRenderCaptions(frameLayout) ? (
+      {shouldRenderCaptions(frameLayout) && !scene.words?.length ? (
         <div
           data-mechanism-caption-band="true"
           style={{
@@ -599,7 +599,13 @@ export const ScaleZoomStage: React.FC<ScaleZoomStageProps> = ({
           }}
         />
       ) : null}
-      <Captions text={scene.narration} words={scene.words} durationInFrames={scene.duration_frames} />
+      <Captions
+        variant={scene.words?.length ? 'shorts' : undefined}
+        hasMascot={hasMascot}
+        text={scene.narration}
+        words={scene.words}
+        durationInFrames={scene.duration_frames}
+      />
     </AbsoluteFill>
   );
 };

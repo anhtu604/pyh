@@ -12,9 +12,10 @@ type CaptionsProps = {
   text: string;
   durationInFrames: number;
   words?: Scene['words'];
-  /** 'styleA' switches to the PYH style A static paged captions; omit for the legacy renderer. */
-  variant?: 'styleA';
+  /** 'styleA' uses static paged captions; 'shorts' uses 9:16 active-word highlight in Shorts/TikTok safe zone. */
+  variant?: 'styleA' | 'shorts';
   glossary?: readonly string[];
+  hasMascot?: boolean;
 };
 
 export const MAX_CAPTION_WORDS = 6;
@@ -84,12 +85,16 @@ export const captionRows = (
   return {startIndex, rows};
 };
 
-export const Captions: React.FC<CaptionsProps> = ({variant, glossary, ...rest}) => {
+export const Captions: React.FC<CaptionsProps> = ({variant, glossary, hasMascot, ...rest}) => {
   const layout = useLayout();
   if (!shouldRenderCaptions(layout)) return null;
-  return variant === 'styleA'
-    ? <StyleCaptions text={rest.text} durationInFrames={rest.durationInFrames} words={rest.words} glossary={glossary} />
-    : <LegacyCaptions {...rest} />;
+  if (variant === 'styleA') {
+    return <StyleCaptions text={rest.text} durationInFrames={rest.durationInFrames} words={rest.words} glossary={glossary} />;
+  }
+  if (variant === 'shorts') {
+    return <StyleCaptions highlightMode="shorts" hasMascot={hasMascot} text={rest.text} durationInFrames={rest.durationInFrames} words={rest.words} glossary={glossary} />;
+  }
+  return <LegacyCaptions {...rest} />;
 };
 
 const LegacyCaptions: React.FC<Omit<CaptionsProps, 'variant' | 'glossary'>> = ({text, durationInFrames, words: timedWords}) => {
