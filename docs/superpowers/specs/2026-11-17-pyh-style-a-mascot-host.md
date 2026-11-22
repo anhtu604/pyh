@@ -104,3 +104,7 @@ thùy thì hình chi tiết là tiểu thùy). Giữ hình chi tiết ≥ 2 s tr
 Trước khi xưởng làm video thật: một clip mẫu 10–15 s (16:9 và 9:16) từ một câu lời đọc của
 PYH-003, có hook, một cảnh cơ chế dựng dần, phụ đề sáng từng chữ, mascot đổi 2 tư thế. Bác sĩ
 xem trong app và duyệt; ảnh khung đạt được lưu làm golden reference cho trạm 10 và 12.
+
+## Bổ sung 2026-11-21
+
+Video dài 16:9 không dùng phụ đề cháy cứng. Gói đăng xuất `publish/subtitles.vi.srt` tiếng Việt từ lời đọc đã duyệt và timing thật, gồm cả outro, để người xem bật/tắt trên YouTube. Reviewer không trừ điểm vì thiếu phụ đề trên khung hình 16:9. Shorts 9:16 giữ phụ đề cháy cứng như cũ, không xuất SRT. Không tự động tải phụ đề lên YouTube/TikTok.

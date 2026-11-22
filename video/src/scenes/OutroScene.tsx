@@ -1,5 +1,6 @@
 import React from 'react';
 import {AbsoluteFill, interpolate, useCurrentFrame} from 'remotion';
+import {brand} from '../anatomy/palette';
 import {FONT_FAMILY} from '../fonts';
 import {useLayout} from '../layout';
 import type {Scene} from '../types';
@@ -47,8 +48,31 @@ export const outroFontSize = (text: string, width: number, height: number, prefe
 
 export const OutroScene: React.FC<{scene: Scene}> = ({scene}) => {
   const frame = useCurrentFrame();
-  const t = useLayout().outroText;
+  const layout = useLayout();
+  const isLandscape = layout.frame.width >= layout.frame.height;
   const opacity = interpolate(frame, [0, 12], [0, 1], {extrapolateRight: 'clamp'});
+  if (isLandscape) {
+    const brandBox = layout.assets.outroBrand;
+    const accentWidth = 180;
+    return (
+      <AbsoluteFill data-outro-landscape="true" style={{backgroundColor: '#FFFDF7'}}>
+        <div
+          data-outro-accent="true"
+          style={{
+            position: 'absolute',
+            left: Math.round(brandBox.left + (brandBox.width - accentWidth) / 2),
+            top: brandBox.top + brandBox.height + 36,
+            width: accentWidth,
+            height: 6,
+            borderRadius: 3,
+            backgroundColor: brand.teal,
+            opacity,
+          }}
+        />
+      </AbsoluteFill>
+    );
+  }
+  const t = layout.outroText;
   const fontSize = outroFontSize(scene.narration, t.width, t.height, t.fontSize);
   return (
     <AbsoluteFill style={{backgroundColor: '#FFFDF7'}}>

@@ -1,9 +1,12 @@
 ﻿import {FONT_FAMILY} from '../fonts';
 import React from 'react';
 import {useCurrentFrame} from 'remotion';
-import {useLayout} from '../layout';
+import {useLayout, type FrameLayout} from '../layout';
 import type {Scene} from '../types';
 import {StyleCaptions} from './StyleCaptions';
+
+export const shouldRenderCaptions = (layout: FrameLayout): boolean =>
+  layout.frame.width < layout.frame.height;
 
 type CaptionsProps = {
   text: string;
@@ -81,9 +84,13 @@ export const captionRows = (
   return {startIndex, rows};
 };
 
-export const Captions: React.FC<CaptionsProps> = ({variant, glossary, ...rest}) => variant === 'styleA'
-  ? <StyleCaptions text={rest.text} durationInFrames={rest.durationInFrames} words={rest.words} glossary={glossary} />
-  : <LegacyCaptions {...rest} />;
+export const Captions: React.FC<CaptionsProps> = ({variant, glossary, ...rest}) => {
+  const layout = useLayout();
+  if (!shouldRenderCaptions(layout)) return null;
+  return variant === 'styleA'
+    ? <StyleCaptions text={rest.text} durationInFrames={rest.durationInFrames} words={rest.words} glossary={glossary} />
+    : <LegacyCaptions {...rest} />;
+};
 
 const LegacyCaptions: React.FC<Omit<CaptionsProps, 'variant' | 'glossary'>> = ({text, durationInFrames, words: timedWords}) => {
   const frame = useCurrentFrame();

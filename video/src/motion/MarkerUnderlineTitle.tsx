@@ -21,6 +21,8 @@ const mulberry32 = (seed: number) => () => {
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 };
 
+const STROKE_VIEWBOX_H = 14;
+
 const buildStroke = (len: number, seed: number): string => {
   const rand = mulberry32(seed);
   const steps = 40;
@@ -30,11 +32,11 @@ const buildStroke = (len: number, seed: number): string => {
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
     const x = t * len;
-    // Slight upward tilt from left-low to right-high following italic slant.
-    const mid = 19 - t * 9 + Math.sin(t * Math.PI * 1.6 + 0.4) * 2.6 + wob[i] * 1.6;
+    // Flat horizontal underline beneath the baseline so the stroke never climbs onto glyphs.
+    const mid = STROKE_VIEWBOX_H / 2 + Math.sin(t * Math.PI * 1.4 + 0.3) * 0.6 + wob[i] * 0.5;
     const wBase =
-      14 + Math.sin(t * Math.PI) * 6 - Math.max(0, t - 0.86) * 46 - Math.max(0, 0.06 - t) * 70;
-    const w = Math.max(2.2, wBase + wob[i] * 3);
+      7.5 + Math.sin(t * Math.PI) * 1.6 - Math.max(0, t - 0.9) * 28 - Math.max(0, 0.06 - t) * 36;
+    const w = Math.max(2.2, wBase + wob[i] * 0.8);
     top.push(`${x.toFixed(1)},${(mid - w / 2).toFixed(1)}`);
     bot.push(`${x.toFixed(1)},${(mid + w / 2).toFixed(1)}`);
   }
@@ -70,6 +72,10 @@ export const MarkerUnderlineTitle: React.FC<MarkerUnderlineTitleProps> = ({
   const push = 1 + 0.015 * smooth(frame / 74);
 
   const safeWidth = Math.round(width * 0.86);
+  const titleFontSize = overlay ? u(52) : isVertical ? u(76) : u(84);
+  // Keep the underline strictly within the bottom <= 20% band beneath glyphs, never obscuring text.
+  const underlineHeight = Math.max(4, Math.round(u(10)));
+  const underlineBottom = -Math.round(u(8));
 
   return (
     <AbsoluteFill
@@ -93,7 +99,7 @@ export const MarkerUnderlineTitle: React.FC<MarkerUnderlineTitleProps> = ({
           textAlign: 'center',
           lineHeight: 1.2,
           backgroundColor: overlay ? 'rgba(247, 244, 236, 0.94)' : 'transparent',
-          padding: overlay ? `${u(18)}px ${u(36)}px ${u(26)}px` : 0,
+          padding: overlay ? `${u(18)}px ${u(36)}px ${u(28)}px` : 0,
           borderRadius: overlay ? u(22) : 0,
           border: overlay ? `${u(3)}px solid ${brand.teal}` : 'none',
         }}
@@ -101,7 +107,7 @@ export const MarkerUnderlineTitle: React.FC<MarkerUnderlineTitleProps> = ({
         {prefix || emphasisText ? (
           <div
             style={{
-              fontSize: overlay ? u(52) : isVertical ? u(76) : u(84),
+              fontSize: titleFontSize,
               fontWeight: 800,
               opacity: Math.min(1, line1 * 1.4),
               transform: `translateY(${((1 - line1) * u(36)).toFixed(1)}px)`,
@@ -115,28 +121,30 @@ export const MarkerUnderlineTitle: React.FC<MarkerUnderlineTitleProps> = ({
                   fontStyle: 'italic',
                   position: 'relative',
                   display: 'inline-block',
+                  isolation: 'isolate',
                   color: brand.teal,
                 }}
               >
-                {emphasisText}
                 <svg
                   aria-label="Nét gạch bút dạ"
+                  data-marker-underline="true"
                   width={STROKE_LEN}
-                  height={44}
-                  viewBox={`0 0 ${STROKE_LEN} 44`}
+                  height={STROKE_VIEWBOX_H}
+                  viewBox={`0 0 ${STROKE_LEN} ${STROKE_VIEWBOX_H}`}
                   preserveAspectRatio="none"
                   style={{
                     position: 'absolute',
-                    left: -u(8),
-                    bottom: -u(16),
-                    width: `calc(100% + ${u(16)}px)`,
-                    height: u(36),
+                    left: -u(6),
+                    bottom: underlineBottom,
+                    width: `calc(100% + ${u(12)}px)`,
+                    height: underlineHeight,
+                    zIndex: 0,
                     overflow: 'visible',
                   }}
                 >
                   <defs>
                     <clipPath id={revealId}>
-                      <rect x={0} y={-20} width={drawEase * (STROKE_LEN + 6)} height={60} />
+                      <rect x={0} y={-4} width={drawEase * (STROKE_LEN + 6)} height={STROKE_VIEWBOX_H + 8} />
                     </clipPath>
                   </defs>
                   {drawRaw > 0 ? (
@@ -145,6 +153,9 @@ export const MarkerUnderlineTitle: React.FC<MarkerUnderlineTitleProps> = ({
                     </g>
                   ) : null}
                 </svg>
+                <span data-marker-label="true" style={{position: 'relative', zIndex: 1}}>
+                  {emphasisText}
+                </span>
               </span>
             ) : null}
           </div>

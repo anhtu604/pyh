@@ -1,4 +1,5 @@
 import json
+import re
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
@@ -8,12 +9,16 @@ import pytest
 import healthvideo.workflows.package as package_workflow
 from healthvideo.domain.gate_review import GateKind
 from healthvideo.domain.project_v2 import WorkflowState
-from healthvideo.storage.files import read_yaml, write_yaml_atomic
+from healthvideo.storage.files import read_yaml, sha256_file, write_yaml_atomic
 from healthvideo.tts.silent import SilentTTS
 from healthvideo.workflows.gate_review import approve_gate
 from healthvideo.workflows.package import package_project
 from healthvideo.workflows.produce import produce_project
-from tests.helpers import create_v2_project_fixture, submit_video_fixture
+from tests.helpers import (
+    create_long_form_project_fixture,
+    create_v2_project_fixture,
+    submit_video_fixture,
+)
 
 NOW = datetime(2026, 9, 12, 8, 0, tzinfo=UTC)
 
@@ -168,7 +173,54 @@ def _revision_root(project_dir: Path) -> Path:
 
 
 def _fake_renderer(argv: list[str]) -> int:
-    output = Path(argv[argv.index("--output") + 1])
+    output = Path(argv[argv.index("--output") + 1] if '--output' in argv else argv[-1])
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_bytes(b"synthetic-v2-mp4")
     return 0
+
+
+@pytest.fixture
+def long_approved_project(tmp_path):
+    project = create_long_form_project_fixture(tmp_path)
+    approve_gate(project, GateKind.MEDICAL, reviewer='BS thử', now=NOW)
+    produce_project(project, SilentTTS(), _fake_renderer)
+    submit_video_fixture(project)
+    approve_gate(project, GateKind.VIDEO, reviewer='BS thử', now=NOW)
+    return project
+
+
+def test_long_package_includes_hashed_srt_with_outro_and_no_short_sidecars(long_approved_project):
+    output = package_project(long_approved_project)
+    srt = output / 'subtitles.vi.srt'
+    manifest = json.loads((output / 'manifest.json').read_text(encoding='utf-8'))
+    assert manifest['payload_sha256']['subtitles.vi.srt'] == sha256_file(srt)
+    assert list(output.rglob('*.srt')) == [srt]
+    script = read_yaml(_revision_root(long_approved_project) / 'script/script.yaml')
+    blocks = srt.read_text(encoding='utf-8').strip().split('\n\n')
+    words = []
+    for index, block in enumerate(blocks, 1):
+        number, timestamps, *caption = block.splitlines()
+        assert number == str(index)
+        assert re.fullmatch(r'\d{2}:\d{2}:\d{2},\d{3} --> \d{2}:\d{2}:\d{2},\d{3}', timestamps)
+        words.extend(' '.join(caption).split())
+    assert words == ' '.join(line['text'] for line in script['lines']).split()
+
+
+@pytest.mark.parametrize('relative', ['renders/video.mp4', 'script/script.yaml',
+                                    'renders/render-manifest.json', 'renders/scene-timing.json'])
+def test_long_package_refuses_stale_approval_or_unbound_timing(long_approved_project, relative):
+    revision = _revision_root(long_approved_project)
+    path = revision / relative
+    path.write_bytes(path.read_bytes() + b' ')
+    if relative == 'script/script.yaml':
+        data = read_yaml(path)
+        data['lines'][0]['text'] += ' thay đổi'
+        write_yaml_atomic(path, data)
+    elif relative == 'renders/render-manifest.json':
+        data = json.loads(path.read_text(encoding='utf-8'))
+        data['scene_timing_sha256'] = 'changed'
+        path.write_text(json.dumps(data), encoding='utf-8')
+    with pytest.raises(ValueError, match='approval|approved render manifest'):
+        package_project(long_approved_project)
+    assert not (revision / 'publish').exists()
+    assert read_yaml(long_approved_project / 'project.yaml')['state'] == 'video_approved'

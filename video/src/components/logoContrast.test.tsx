@@ -56,10 +56,24 @@ describe('PYH logo contrast across all surfaces', () => {
 
   it('detects reverse vs primary logo paths reliably', () => {
     expect(isReverseLogoPath('clips/cta/logo.svg', false)).toBe(true);
+    expect(isReverseLogoPath('assets/brand/pyh-logo.svg', false)).toBe(true);
+    expect(isReverseLogoPath('brand/pyh-logo.svg', false)).toBe(true);
     expect(isReverseLogoPath('brand/reverse.svg', false)).toBe(true);
     expect(isReverseLogoPath('assets/pyh-primary.svg', true)).toBe(false);
     expect(isReverseLogoPath('assets/pyh.svg', false)).toBe(false);
     expect(isReverseLogoPath('custom/logo.svg', true)).toBe(true);
+  });
+
+  it('renders a high-contrast reverse badge for assets/brand/pyh-logo.svg on light outro', () => {
+    const outroBrandLogoHtml = renderToStaticMarkup(
+      <LayoutContext.Provider value={LAYOUTS.youtube_long}>
+        <VisualAsset asset={{path: 'assets/brand/pyh-logo.svg', role: 'brand'}} outro />
+      </LayoutContext.Provider>,
+    );
+    expect(outroBrandLogoHtml).toContain('data-brand-badge="true"');
+    expect(outroBrandLogoHtml).toContain('data-brand-variant="reverse"');
+    expect(outroBrandLogoHtml).toContain(`background-color:${brand.night}`);
+    expect(outroBrandLogoHtml).toContain(`border:3px solid ${brand.teal}`);
   });
 
   it('renders a high-contrast badge for VisualAsset brand logos and YouTubeEndCard', () => {

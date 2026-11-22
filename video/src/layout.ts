@@ -86,7 +86,7 @@ export const LAYOUTS: Record<FormatProfile, FrameLayout> = {
     quote: {bottom: 200, inset: 160, fontSize: 40},
     assets: {
       brand: {left: 1320, top: 60, width: 520, height: 300},
-      outroBrand: {left: 840, top: 80, width: 520, height: 220},
+      outroBrand: {left: 650, top: 320, width: 620, height: 260},
       outroMascot: {left: 0, top: 669.6, width: 470, height: 410.4},
       whiteboard: {left: 500, top: 80, width: 1200, height: 540},
       explain: {left: 0, top: 669.6, width: 470, height: 410.4},

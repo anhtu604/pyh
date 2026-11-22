@@ -20,6 +20,7 @@ export const StyleCaptions: React.FC<StyleCaptionsProps> = ({text, durationInFra
   const frame = useCurrentFrame();
   const layout = useLayout();
   const format = formatOf(layout);
+  if (format === 'landscape') return null;
   const c = layout.captions;
   const limits = pyhCaptions[format];
   const words: TimedWord[] = timed?.length ? [...timed]

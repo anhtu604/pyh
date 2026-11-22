@@ -56,16 +56,22 @@ const render = (frame: number, format: keyof typeof LAYOUTS) => {
 };
 
 describe('StyleCaptions', () => {
-  it('keeps the whole page static while words are being read', () => {
-    const html = render(4 + 14 * 2 + 3, 'youtube_long');
-    expect(html).not.toContain('data-active');
-    expect(html).not.toContain('text-decoration');
-    expect(html).toEqual(render(4 + 14 * 5, 'youtube_long'));
+  it('suppresses burned-in captions on 16:9 youtube_long while keeping 9:16 vertical_clip', () => {
+    expect(render(10, 'youtube_long')).toBe('');
+    expect(render(4 + 14 * 16 + 2, 'youtube_long')).toBe('');
+    expect(render(10, 'vertical_clip')).toContain('data-style-captions="true"');
   });
 
-  it('shows the second sentence on its own page and tints the term yellow', () => {
-    const html = render(4 + 14 * 16 + 2, 'youtube_long');
-    expect(html).toContain('Đây');
+  it('keeps the whole page static while words are being read in 9:16', () => {
+    const html = render(4 + 14 * 2 + 3, 'vertical_clip');
+    expect(html).not.toContain('data-active');
+    expect(html).not.toContain('text-decoration');
+    expect(html).toEqual(render(4 + 14 * 5, 'vertical_clip'));
+  });
+
+  it('shows the second sentence on its own page and tints the term yellow in 9:16', () => {
+    const html = render(4 + 14 * 16 + 2, 'vertical_clip');
+    expect(html).toContain('tế');
     expect(html).not.toContain('hỏng');
     expect(html.match(/data-term="true"/g)).toHaveLength(3);
     expect(html).toContain('#F4B942');

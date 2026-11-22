@@ -75,13 +75,14 @@ describe('layouts', () => {
     expect(visualAssetBox(asset)).toEqual(LAYOUTS.vertical_clip.assets.explain);
   });
 
-  it('WhiteboardScene renders landscape values inside the youtube_long provider', () => {
+  it('WhiteboardScene renders landscape values without captions in youtube_long and keeps captions in vertical_clip', () => {
     const scene = {id: 'S01', start_frame: 0, duration_frames: 90, narration: 'Noi dung', on_screen_text: 'Y chinh', visual: 'whiteboard' as const, visual_assets: []};
     const html = (layout: typeof LAYOUTS.vertical_clip) => renderToStaticMarkup(
       React.createElement(LayoutContext.Provider, {value: layout}, React.createElement(WhiteboardScene, {scene})),
     );
     const landscape = html(LAYOUTS.youtube_long);
-    expect(landscape).toContain('viewBox="0 0 1200 148"');
+    expect(landscape).not.toContain('aria-label="Phụ đề đang đọc"');
+    expect(landscape).not.toContain('viewBox="0 0 1200 148"');
     expect(landscape).toContain('width:1200px');
     expect(landscape).toContain('top:300px');
     expect(html(LAYOUTS.vertical_clip)).toContain('viewBox="0 0 936 160"');

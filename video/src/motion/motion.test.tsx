@@ -542,4 +542,53 @@ describe('shotcraft motion components', () => {
       }
     });
   }
+
+  it('MarkerUnderlineTitle paints a thin yellow underline strictly behind text (<= 25% line height, SVG before label)', () => {
+    for (const [width, height] of [
+      [1920, 1080],
+      [1080, 1920],
+    ] as const) {
+      env.width = width;
+      env.height = height;
+      env.frame = 60;
+      for (const overlay of [true, false]) {
+        const html = renderToStaticMarkup(
+          <MarkerUnderlineTitle
+            overlay={overlay}
+            prefix={overlay ? undefined : 'Cảnh báo'}
+            emphasisText="tăng men gan"
+            subline={overlay ? undefined : 'Cần tìm đúng nguyên nhân nền'}
+          />,
+        );
+        const svgIdx = html.indexOf('data-marker-underline="true"');
+        const labelIdx = html.indexOf('data-marker-label="true"');
+        expect(svgIdx).toBeGreaterThan(-1);
+        expect(labelIdx).toBeGreaterThan(svgIdx);
+        expect(html).toContain('isolation:isolate');
+        expect(html).toContain('data-marker-stroke="1.00"');
+
+        const svgTag = html.match(/<svg[^>]*data-marker-underline="true"[^>]*>/)?.[0] ?? '';
+        const labelTag = html.match(/<span[^>]*data-marker-label="true"[^>]*>/)?.[0] ?? '';
+        expect(svgTag).toContain('z-index:0');
+        expect(labelTag).toContain('z-index:1');
+
+        const fontMatch = html.match(/font-size:(\d+(?:\.\d+)?)px;font-weight:800/);
+        const heightMatch = svgTag.match(/height:(\d+(?:\.\d+)?)px/);
+        const bottomMatch = svgTag.match(/bottom:(-?\d+(?:\.\d+)?)px/);
+        expect(fontMatch).not.toBeNull();
+        expect(heightMatch).not.toBeNull();
+        expect(bottomMatch).not.toBeNull();
+
+        const fontSize = Number.parseFloat(fontMatch![1]);
+        const lineHeight = fontSize * 1.2;
+        const strokeHeight = Number.parseFloat(heightMatch![1]);
+        const strokeBottom = Number.parseFloat(bottomMatch![1]);
+
+        expect(strokeHeight).toBeLessThanOrEqual(lineHeight * 0.25);
+        expect(strokeBottom).toBeLessThan(0);
+        // Overlap above the bottom edge of the inline box stays negligible (<= 10% of line height).
+        expect(strokeHeight + strokeBottom).toBeLessThanOrEqual(lineHeight * 0.1);
+      }
+    }
+  });
 });

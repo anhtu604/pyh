@@ -6,6 +6,7 @@ manifest. It never calls a publishing API; v2 advances to ``packaged`` only
 after the payload directory is atomically promoted.
 """
 
+import hashlib
 import json
 import re
 import shutil
@@ -48,6 +49,7 @@ from healthvideo.workflows.gate_review import (
     medical_reviewed_paths,
     video_reviewed_paths,
 )
+from healthvideo.workflows.subtitles import SUBTITLES_NAME, render_subtitles
 
 LedgerEntry = TypeVar("LedgerEntry", bound=BaseModel)
 
@@ -135,6 +137,14 @@ def _package_v2(layout: ProjectLayout) -> Path:
         )
     render_input = RenderInput.model_validate(render_input_data)
     citations = _citations(script, ledger, render_input)
+    subtitles = None
+    if render_input.format_profile == 'youtube_long':
+        timing_path = renders_dir / 'scene-timing.json'
+        # The current video approval binds render-manifest.json, including this hash.
+        timing_bytes = timing_path.read_bytes()
+        if hashlib.sha256(timing_bytes).hexdigest() != render_manifest.get('scene_timing_sha256'):
+            raise ValueError('subtitle timing does not match the approved render manifest')
+        subtitles = render_subtitles(script, render_input, json.loads(timing_bytes))
 
     publish_dir = layout.artifact_root / PUBLISH_DIRECTORY
     staging_dir = Path(
@@ -174,6 +184,8 @@ def _package_v2(layout: ProjectLayout) -> Path:
         write_text_atomic(staging_dir / CAPTION_NAME, _caption(script, citations))
         write_text_atomic(staging_dir / SOURCES_NAME, _sources(script, citations))
         write_text_atomic(staging_dir / POSTS_MD_NAME, _posts_markdown(posts))
+        if subtitles is not None:
+            write_text_atomic(staging_dir / SUBTITLES_NAME, subtitles)
         for clip_id, relative in render_manifest.get("clips", {}).items():
             # Gate 2 freshness above binds these final MP4 bytes.
             clip_dir = staging_dir / "clips"
@@ -529,6 +541,8 @@ def _manifest_json(
             "video": _approval_binding(video_approval),
         },
         "payload_sha256": {
+            **({SUBTITLES_NAME: sha256_file(staging_dir / SUBTITLES_NAME)}
+               if (staging_dir / SUBTITLES_NAME).is_file() else {}),
             **({'workflow/standards.yaml': sha256_file(staging_dir / 'workflow/standards.yaml')}
                if (staging_dir / 'workflow/standards.yaml').is_file() else {}),
             **{path.relative_to(staging_dir).as_posix(): sha256_file(path)

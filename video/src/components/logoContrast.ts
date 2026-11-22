@@ -37,10 +37,11 @@ export const contrastRatio = (fgHex: string, bgHex: string): number => {
 
 /**
  * Infers whether a logo asset path uses light (reverse) ink.
- * `clips/cta/logo.svg` is always generated with `LogoVariant.REVERSE` in Python.
+ * `clips/cta/logo.svg` and `assets/brand/pyh-logo.svg` are always generated
+ * with `LogoVariant.REVERSE` in Python.
  */
 export const isReverseLogoPath = (path: string, defaultReverse = false): boolean => {
-  if (/reverse|cta\/logo/i.test(path)) return true;
+  if (/reverse|cta\/logo|(?:^|\/)brand\/pyh-logo\.svg$/i.test(path)) return true;
   if (/primary|one_color|monogram/i.test(path)) return false;
   return defaultReverse;
 };

@@ -47,28 +47,36 @@ it('enters then bobs deterministically, uses only a registered mascot, and suppo
 });
 
 
-it('centres text and mascot as one group with a shared spring and literal YouTube highlight', () => {
+it('centres end card group with shared spring, keeping CTA text in 9:16 and omitting it in 16:9', () => {
   for (const layout of Object.values(LAYOUTS)) {
+    const vertical = layout.frame.height > layout.frame.width;
     const {group, mascot} = endCardGeometry(layout.frame.width, layout.frame.height);
     expect(group.left + group.width / 2).toBe(layout.frame.width / 2);
     expect(group.top + group.height / 2).toBe(layout.frame.height / 2);
     expect(group.left + mascot.left + mascot.width / 2).toBeCloseTo(layout.frame.width / 2, 6);
-    if (layout.frame.height > layout.frame.width) {
+    if (vertical) {
       expect(mascot.height / layout.frame.height).toBeCloseTo(0.30);
       expect(group.top).toBeGreaterThanOrEqual(200);
       expect(group.top + group.height).toBeLessThanOrEqual(layout.frame.height - layout.captions.bottom - layout.captions.height);
       expect(group.left + group.width).toBeLessThanOrEqual(layout.frame.width * 0.85);
+    } else {
+      expect(mascot.top).toBe(0);
     }
     const render = (text: string) => renderToStaticMarkup(<LayoutContext.Provider value={layout}><YouTubeEndCard text={text} mascotPath="cta.svg" /></LayoutContext.Provider>);
     clock.frame = 45;
     const settled = render('Visit YouTube then YouTube again');
-    expect(settled.match(/color:#F4B942/g)).toHaveLength(2);
-    expect(settled).toContain('font-size:72px;font-weight:800');
     expect(settled).toContain('color:#F7F4EC');
     expect(settled).toContain(`left:${group.left}px;top:${group.top}px`);
-    expect(settled).toContain(`left:${mascot.left}px;top:${mascot.top}px`);
-    expect(render('Custom invitation')).not.toContain('YouTube');
-    expect(render('Custom invitation')).not.toContain('color:#F4B942');
+    expect(settled).toContain(`left:${mascot.left}px;top:${mascot.top}${mascot.top ? 'px' : ''}`);
+    if (vertical) {
+      expect(settled.match(/color:#F4B942/g)).toHaveLength(2);
+      expect(settled).toContain('font-size:72px;font-weight:800');
+      expect(render('Custom invitation')).not.toContain('YouTube');
+      expect(render('Custom invitation')).not.toContain('color:#F4B942');
+    } else {
+      expect(settled).not.toContain('data-end-card-text');
+      expect(settled).not.toContain('Visit YouTube');
+    }
     clock.frame = 0;
     expect(render('Visit YouTube')).toContain('opacity:0;transform:translateY(40px)');
     expect(render('Visit YouTube')).not.toBe(settled);
@@ -78,8 +86,9 @@ it('centres text and mascot as one group with a shared spring and literal YouTub
 
 it('places a reverse logo below the mascot with a 32px gap in both formats', () => {
   for (const layout of Object.values(LAYOUTS)) {
+    const vertical = layout.frame.height > layout.frame.width;
     const {group, mascot, logo} = endCardGeometry(layout.frame.width, layout.frame.height);
-    expect(logo.height).toBe(layout.frame.height > layout.frame.width ? 64 : 48);
+    expect(logo.height).toBe(vertical ? 64 : 48);
     expect(logo.width / logo.height).toBeCloseTo(760 / 300);
     expect(logo.top - mascot.top - mascot.height).toBe(32);
     expect(logo.left + logo.width / 2).toBeCloseTo(group.width / 2);
@@ -88,8 +97,13 @@ it('places a reverse logo below the mascot with a 32px gap in both formats', () 
       <YouTubeEndCard text="Xem b?n ??y ?? tr?n YouTube" mascotPath="welcome.png" logoPath="custom/logo.svg" />
     </LayoutContext.Provider>);
     expect(html).toContain('/static/custom/logo.svg');
-    expect(html).toContain('Be Vietnam Pro');
-    expect(html).toContain('font-weight:800');
+    expect(html).toContain('data-end-card-logo-badge="true"');
+    if (vertical) {
+      expect(html).toContain('Be Vietnam Pro');
+      expect(html).toContain('font-weight:800');
+    } else {
+      expect(html).not.toContain('data-end-card-text');
+    }
   }
 });
 

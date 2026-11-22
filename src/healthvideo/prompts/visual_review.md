@@ -12,10 +12,11 @@ Kiểm từng ảnh/FLUX theo mục 1: nền `off_white #F7F4EC`, nét/chữ `na
 Kiểm bắt buộc bàn tay ở mọi ảnh/FLUX có bàn tay: đếm ngón trên từng bàn tay (đúng 5 ngón mỗi tay, ngón cái đúng chỗ, độ dài ngón hợp lý, không dính/chồng, tay không quá to dính vào tờ giấy/đồ vật), cổ tay/cẳng tay liền mạch. Sai thì ghi `style_hands` vào `style_issues` và `reject`; không chọn ảnh tay sai "cho xong". Nếu cả ba ứng viên tay sai: `reject` và `new_prompt` phải đổi bố cục để KHÔNG có tay (đặt vật lên bàn, không thấy tay — `no hands in frame`) hoặc tay ở xa/bị che một phần (`hands partially out of frame / hidden`).
 Kiểm bắt buộc bản quyền và thương hiệu ở MỌI ảnh (kể cả khi prompt và provenance trông vô hại): soi logo, nhãn/nhãn hiệu trên chai lọ thuốc hoặc bao bì, chữ thương hiệu, khuôn mặt người thật dễ nhận ra, nhân vật hoạt hình/phim có bản quyền. Nếu thấy bất kỳ dấu hiệu nào, ghi `style_rights` kèm mô tả rõ thấy gì vào `style_issues` và `reject` (không được `select`); `new_prompt` phải đổi bố cục để loại bỏ hoàn toàn (chai lọ nhãn trống `blank unbranded label`, bỏ vật có nhãn, tránh khuôn mặt người thật).
 Kiểm và chọn tư thế mascot theo bảng 9 tư thế mục 2 (`welcome`, `explain`, `point_up`, `thinking`, `surprised`, `caution`, `myth_bust`, `blank_board`, `thumbs_up`) khớp đúng ý lời đọc.
-Kiểm contact sheet: phụ đề tĩnh theo trang không đè ảnh/nhãn/mascot, nhãn đọc được ở 720p, không bị cắt; zoom y khoa dùng kính lúp mục 3b (không cross-fade chồng mờ).
+Kiểm contact sheet: video dài 16:9 không có phụ đề cháy cứng (không trừ điểm vì thiếu phụ đề); phụ đề tĩnh theo trang chỉ ở Shorts 9:16 và không đè ảnh/nhãn/mascot, nhãn đọc được ở 720p, không bị cắt; zoom y khoa dùng kính lúp mục 3b (không cross-fade chồng mờ).
 Không sửa script, storyboard, manifest, candidate index, ảnh hoặc approval.
 
 Ghi `reviews/visual-review.yaml`:
+Tuân thủ quy tắc ghi tệp UTF-8 chung: dùng Write/Edit/apply_patch hoặc tệp Python UTF-8 chạy trực tiếp. Cấm Set-Content/Out-File/redirect và here-string chứa tiếng Việt pipe vào Python; `encoding='utf-8'` ở đầu ra không cứu được dữ liệu đã hỏng trong pipe.
 ```yaml
 candidate_index_sha256: "sha256 của candidates.yaml vừa đọc"
 inspected_images: ["đường dẫn tương đối mọi ảnh đã mở, gồm contact sheet"]

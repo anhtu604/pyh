@@ -49,13 +49,19 @@ describe.each(['vertical_clip', 'youtube_long'] as const)('brand_outro geometry 
   };
   const captions = captionBox(layout);
 
-  it('keeps logo, mascot, outro text, and caption zone pairwise disjoint and inside the frame', () => {
-    const named: [string, Box][] = [
-      ['outroBrand', brandBox],
-      ['outroMascot', mascotBox],
-      ['outroText', textBox],
-      ['captionBox', captions],
-    ];
+  it('keeps logo, mascot, active outro elements, and caption zone pairwise disjoint and inside the frame', () => {
+    const named: [string, Box][] = format === 'vertical_clip'
+      ? [
+        ['outroBrand', brandBox],
+        ['outroMascot', mascotBox],
+        ['outroText', textBox],
+        ['captionBox', captions],
+      ]
+      : [
+        ['outroBrand', brandBox],
+        ['outroMascot', mascotBox],
+        ['captionBox', captions],
+      ];
     for (const [, box] of named) {
       expect(inside(box, layout.frame)).toBe(true);
     }
@@ -64,16 +70,20 @@ describe.each(['vertical_clip', 'youtube_long'] as const)('brand_outro geometry 
         expect(boxesIntersect(named[i][1], named[j][1])).toBe(false);
       }
     }
+    if (format === 'youtube_long') {
+      expect(brandBox.left + brandBox.width / 2).toBe(layout.frame.width / 2);
+    }
   });
 
-  it('maintains safe separation around outroText and preserves >= 54px base font size', () => {
+  it('maintains safe separation around outro layout elements and preserves >= 54px base font size', () => {
     expect(layout.outroText.fontSize).toBeGreaterThanOrEqual(54);
-    expect(textBox.top - (brandBox.top + brandBox.height)).toBeGreaterThanOrEqual(SAFE_GAP);
-    expect(captions.top - (textBox.top + textBox.height)).toBeGreaterThanOrEqual(SAFE_GAP);
     if (format === 'vertical_clip') {
+      expect(textBox.top - (brandBox.top + brandBox.height)).toBeGreaterThanOrEqual(SAFE_GAP);
+      expect(captions.top - (textBox.top + textBox.height)).toBeGreaterThanOrEqual(SAFE_GAP);
       expect(mascotBox.top - (textBox.top + textBox.height)).toBeGreaterThanOrEqual(SAFE_GAP);
     } else {
-      expect(textBox.left - (mascotBox.left + mascotBox.width)).toBeGreaterThanOrEqual(SAFE_GAP);
+      expect(brandBox.left - (mascotBox.left + mascotBox.width)).toBeGreaterThanOrEqual(SAFE_GAP);
+      expect(captions.top - (brandBox.top + brandBox.height)).toBeGreaterThanOrEqual(SAFE_GAP);
     }
   });
 
@@ -87,7 +97,7 @@ describe.each(['vertical_clip', 'youtube_long'] as const)('brand_outro geometry 
     expect(estimateOutroTextHeight(LONG_OUTRO, textBox.width, longSize)).toBeLessThanOrEqual(textBox.height);
   });
 
-  it('renders OutroScene with bounded text container and high-contrast brand badge on #FFFDF7', () => {
+  it('renders OutroScene with high-contrast brand badge on #FFFDF7, keeping text in 9:16 and omitting it in 16:9', () => {
     const scene = outroScene(TYPICAL_OUTRO);
     const html = renderToStaticMarkup(
       <LayoutContext.Provider value={layout}>
@@ -98,11 +108,18 @@ describe.each(['vertical_clip', 'youtube_long'] as const)('brand_outro geometry 
       </LayoutContext.Provider>,
     );
     expect(html).toContain('background-color:#FFFDF7');
-    expect(html).toContain('data-outro-text="true"');
-    expect(html).toContain(`height:${textBox.height}px`);
-    expect(html).toContain('overflow:hidden');
     expect(html).toContain('data-brand-badge="true"');
     expect(html).toContain('data-mascot-presenter="true"');
-    expect(html).toContain(TYPICAL_OUTRO);
+    if (format === 'vertical_clip') {
+      expect(html).toContain('data-outro-text="true"');
+      expect(html).toContain(`height:${textBox.height}px`);
+      expect(html).toContain('overflow:hidden');
+      expect(html).toContain(TYPICAL_OUTRO);
+    } else {
+      expect(html).toContain('data-outro-landscape="true"');
+      expect(html).toContain('data-outro-accent="true"');
+      expect(html).not.toContain('data-outro-text');
+      expect(html).not.toContain(TYPICAL_OUTRO);
+    }
   });
 });
