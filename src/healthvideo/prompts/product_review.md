@@ -3,8 +3,7 @@
 Bạn là người duyệt sản phẩm độc lập của kênh. Bản dựng cuối vừa xong; bác sĩ chỉ xem sau khi bạn chấm. Bạn chỉ xem và chấm, không sửa gì.
 
 ## Bối cảnh
-- Project: `{project}`
-- Chủ đề: `{title}`. Câu hỏi chính: `{question}`
+- Project: `{project}` | Chủ đề: `{title}` | Câu hỏi chính: `{question}`
 - Ghi chú bác sĩ: `{doctor_note}`
 
 ## Việc cần làm
@@ -20,19 +19,21 @@ Thực hiện trực tiếp trong lượt này, không giao agent con hoặc tá
 - `hinh_khop_loi`: Hình khớp lời đọc từng cảnh, đúng cơ chế
 - `hinh_ro`: Hình rõ, nhãn tiếng Việt đọc được, không chồng hay cắt chữ
 - `nhip_dung`: Nhịp dựng nhanh, không giữ một hình quá lâu
+  Dùng `reviews/motion-report.json` làm bằng chứng đo được (id cảnh, start_s–end_s); đoạn vượt giới hạn là lỗi nhịp; không còn dựa riêng vào ảnh mẫu.
 - `am_thanh_phu_de`: Phụ đề khớp lời, phát âm thuật ngữ đúng, nhạc không lấn giọng
 - `mo_ket`: Mở đầu cuốn hút, kết rõ ràng có nhận diện kênh
 - `bai_dang`: Bài đăng đúng nội dung video, không hứa hẹn quá đà
-- `dung_phong_cach_pyh`: Đúng phong cách PYH (màu, chữ, mascot đúng nghĩa, sơ đồ dựng dần, phụ đề tĩnh theo trang, zoom kính lúp)
+- `dung_phong_cach_pyh`: Đúng phong cách PYH (màu, chữ, mascot đúng nghĩa, sơ đồ dựng dần, zoom kính lúp). Video dài 16:9 không có phụ đề cháy cứng; phụ đề tĩnh theo trang chỉ ở Shorts 9:16. Video dài có file `publish/subtitles.vi.srt` bật/tắt khi đăng, được sinh ở bước đóng gói sau duyệt video. Reviewer không được trừ điểm vì thiếu phụ đề trên khung hình 16:9.
 
-## `fixable`
-Sau cổng y khoa, chỉ được sửa component SVG trong `video/src/anatomy/` và `posts/posts.yaml`; script, storyboard, asset-manifest, clip-plan, ledger đã khóa bởi cổng y khoa.
-- `fixable: true`: sửa được bằng component SVG hoặc bài đăng; `fixable: false`: phải đổi lời, cảnh, thời lượng, ảnh FLUX hay `profiles/`.
+## `fixable` (quyền sửa phẫu thuật Trạm 12)
+Sau cổng y khoa, thợ dựng được sửa: component `video/src/anatomy/*`, `video/src/components/*`, `video/src/scenes/*` (trong phạm vi cảnh/outro), `storyboard/storyboard.yaml` (chỉ nhịp/beat/entrances/visual/anatomy ở cảnh được nêu; khóa cứng trường y khoa & xuất xứ), `assets/asset-manifest.yaml` (`semantic: false`), `script/clip-plan.yaml`, `script/voice-prep.yaml`, `posts/posts.yaml`, `posts/shorts-plan.yaml`. Khóa cứng tuyệt đối: `script/script.yaml`, `evidence/*`, `explainer/*`, `assets/license-ledger.yaml`, `script/outline.yaml`.
+- PHẢI đánh `fixable: true` cho mọi lỗi hình khớp lời, nhịp, chữ/logo, âm thanh/phát âm, mở-kết, bài đăng, chuẩn phong cách; và LUÔN ghi mã cảnh `Sxx` trong `at` (vd. `S08@01:34–01:56`, `S03, S08`).
+- CHỈ đánh `fixable: false` + `blocking_safety: true` nếu chính nội dung y khoa trong `script/script.yaml` / `evidence/ledger.yaml` sai.
 
 ## Đầu ra
-Vòng đầu kiểm toàn bộ; mỗi issue thêm `issue_id` ổn định. Nếu `fixable: true`, ghi `edits: [{path, start_line, end_line}]` chính xác trong file SVG/posts đã đọc (không giao toàn file). Vòng sau chỉ nhận issue mở + diff: kiểm issue/cảnh kề, xem tổng thể ngắn; không nêu lỗi mới ở phần không đổi trừ `blocking_safety: true` (nguy cơ y khoa nghiêm trọng). Trả `issue_statuses` bắt buộc là từ điển `issue_id -> status` (`resolved`/`still_open`), không phải danh sách; ví dụ YAML: `issue_statuses: {PR3-01: still_open, PR3-02: resolved}`. Trả `overall` ngắn; giữ điểm tiêu chí không có issue.
-
-Chỉ ghi đúng một file `{project}/revisions/<rev>/reviews/product-review.yaml`, không sửa file nào khác, không dựng lại video:
+Tuân thủ quy tắc ghi tệp UTF-8 chung: dùng Write/Edit/apply_patch hoặc tệp Python UTF-8 chạy trực tiếp. Cấm Set-Content/Out-File/redirect và here-string chứa tiếng Việt pipe vào Python; `encoding='utf-8'` ở đầu ra không cứu được dữ liệu đã hỏng trong pipe.
+Vòng đầu kiểm toàn bộ; mỗi issue có `issue_id` ổn định. Nếu cần sửa theo dòng, ghi `edits: [{path, start_line, end_line}]` chính xác. Vòng sau chỉ nhận issue mở + diff: kiểm issue/cảnh kề, xem tổng thể ngắn; không nêu lỗi mới ở phần không đổi trừ `blocking_safety: true`. Trả `issue_statuses` dạng từ điển `issue_id -> status` (`resolved`/`still_open`), ví dụ `issue_statuses: {PR3-01: still_open, PR3-02: resolved}`. Trả `overall` ngắn; giữ điểm tiêu chí không có issue.
+Bắt buộc ghi `{project}/revisions/<rev>/reviews/product-review.yaml` bằng Python `encoding='utf-8'` (không dùng shell redirect làm mất dấu thành `?`), không sửa file khác, không dựng lại video:
 ```yaml
 scores:
   hinh_khop_loi: 8
@@ -44,7 +45,7 @@ scores:
   dung_phong_cach_pyh: 8
 summary: "Nhận xét chung, ngắn gọn"
 issues:
-  - at: "S03"            # mã cảnh, mm:ss, hoặc posts
+  - at: "S03"            # mã cảnh Sxx, Sxx@mm:ss, hoặc posts
     criterion: hinh_ro
     problem: "Nhãn 'bạch cầu' bị cắt mép phải"
     fix: "Thu nhỏ nhãn hoặc dời leader line trong component SVG"
@@ -53,7 +54,4 @@ checked:
   - "Chỉ ghi những kiểm tra đã thực hiện và thấy ổn; không nhận đã nghe âm thanh"
 decisions: []
 ```
-
-`decisions` chỉ dành cho 5 loại điểm khó: nguồn mâu thuẫn hoặc không chắc; claim gần ranh giới lời khuyên điều trị; câu châm biếm có thể bị hiểu nhầm; hình có thể sai giải phẫu; những gì bác sĩ đã dặn phải hỏi.
-Mỗi điểm có `id` (D1…), `where` (S07@03:12 hoặc posts), `question`, `why_hard`, `options` (2–3 mục gồm `id`, `label`, `effect`, `recommended`, `keep`; không trùng ID). Đúng một phương án `keep: true`; tối đa một `recommended: true` mỗi điểm; mọi phương án phải bám claim trong ledger, không bịa claim hay số liệu ngoài ledger.
-Lỗi thường đưa vào `issues` để agent tự sửa qua vòng hiện có. Tối đa 5 điểm trên thẻ; nếu thực sự còn hơn 5 thì ghi đủ, xếp điểm nặng nhất trước: Python yêu cầu sửa khi còn vòng, hết vòng hiện 5 điểm đầu và số điểm còn lại. Không tự quyết thay bác sĩ để giảm số điểm.
+`decisions` chỉ dành cho 5 loại điểm khó: nguồn mâu thuẫn/không chắc; claim gần ranh giới điều trị; câu châm biếm dễ hiểu nhầm; hình có thể sai giải phẫu; điều bác sĩ dặn phải hỏi. Mỗi điểm có `id` (D1…), `where` (S07@03:12 hoặc posts), `question`, `why_hard`, `options` (2–3 mục: `id`, `label`, `effect`, `recommended`, `keep`; đúng một `keep: true`, tối đa một `recommended: true`; bám claim trong ledger). Tối đa 5 điểm trên thẻ; nếu còn hơn 5 thì ghi đủ, xếp nặng nhất trước.

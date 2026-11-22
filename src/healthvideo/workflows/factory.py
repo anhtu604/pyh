@@ -27,6 +27,7 @@ from healthvideo.env import (
 from healthvideo.storage.files import read_yaml, write_text_atomic, write_yaml_atomic
 from healthvideo.storage.queue import load_queue
 from healthvideo.storage.revisions import create_revision
+from healthvideo.workflows import doctor_questions
 from healthvideo.workflows.gate_review import resume_gate
 from healthvideo.workflows.package import package_project
 from healthvideo.workflows.production_retry import clear_retry, retry_deadlines
@@ -52,6 +53,26 @@ def gate_for_project(path: Path, project: ProjectManifestV2) -> str | None:
     except (OSError, ValueError, KeyError, TypeError):
         return None
     return gate
+
+
+def is_paused(root: Path, slug: str) -> bool:
+    """Return True when the doctor paused automatic work for ``slug``."""
+    return (root / 'topics' / 'logs' / slug / 'paused.yaml').is_file()
+
+
+def waiting_doctor_count(root: Path) -> int:
+    """Count projects awaiting a formal gate or an open doctor question."""
+    gated_slugs: set[str] = set()
+    question_slugs: set[str] = set()
+    for path, project in projects(root):
+        if gate_for_project(path, project) is not None:
+            gated_slugs.add(path.name)
+        elif doctor_questions.open_question(root, path.name) is not None:
+            question_slugs.add(path.name)
+    for entry in load_queue(root):
+        if entry.slug not in gated_slugs and doctor_questions.open_question(root, entry.slug) is not None:
+            question_slugs.add(entry.slug)
+    return len(gated_slugs) + len(question_slugs)
 
 
 def projects(root: Path):
@@ -367,6 +388,7 @@ def run_factory(root: Path, deps: RunDeps, *, interval: float = 120, once: bool 
                     backs = [back for slug in report.waiting_model
                              if (back := waiting_until(root, slug)) is not None]
                     backs.extend(back for entry in load_queue(root)
+                                 if doctor_questions.open_question(root, entry.slug) is None
                                  for back in retry_deadlines(root, entry.slug))
                     if backs:  # wake when the first paused topic's model returns
                         wait = (min(backs) - datetime.now(UTC)).total_seconds()
@@ -374,7 +396,11 @@ def run_factory(root: Path, deps: RunDeps, *, interval: float = 120, once: bool 
                     for path, project in projects(root):
                         event = gate_for_project(path, project)
                         signature = f'{project.active_revision}:{project.artifact_hashes}'
-                        if project.state == WorkflowState.VIDEO_APPROVED:
+                        open_q = doctor_questions.open_question(root, path.name)
+                        if open_q is not None and event is None:
+                            event = f"chờ ý kiến bác sĩ: {open_q['question']}"
+                            signature = f"{project.active_revision}:{open_q['id']}"
+                        elif project.state == WorkflowState.VIDEO_APPROVED:
                             try:
                                 package_project(path)
                                 clear_retry(root, path.name)

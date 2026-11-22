@@ -31,6 +31,7 @@ from healthvideo.env import hide_child_consoles, load_dotenv
 from healthvideo.evidence import elsevier
 from healthvideo.evidence.clients import EuropePMCClient, PubMedClient
 from healthvideo.process import prepare_subprocess_argv, resolve_pnpm_argv
+from healthvideo.project_codes import project_codes
 from healthvideo.qa.script import lint_project_script
 from healthvideo.render.remotion import build_render_argv
 from healthvideo.render.run import (
@@ -45,7 +46,7 @@ from healthvideo.tts.base import TTSProvider
 from healthvideo.tts.command import CommandTTS
 from healthvideo.tts.normalize import NormalizedTTS
 from healthvideo.tts.silent import SilentTTS
-from healthvideo.workflows import factory, factory_deps
+from healthvideo.workflows import doctor_questions, factory, factory_deps
 from healthvideo.workflows.doctor import (
     check_environment,
     has_mandatory_failure,
@@ -842,20 +843,29 @@ def run(
 
 def _queue_table(root: Path, *, include_next: bool) -> None:
     try:
+        codes = project_codes(root)
         rows = []
         for entry in load_queue(root):
             manifest_path = root / "projects" / entry.slug / "project.yaml"
             project = ProjectManifestV2.model_validate(read_yaml(manifest_path)) if manifest_path.exists() else None
             state = project.state if project else None
             label = state.value if state is not None else "chưa bắt đầu"
+            is_paused = factory.is_paused(root, entry.slug)
+            open_q = doctor_questions.open_question(root, entry.slug)
+            if is_paused:
+                label = f"{label} [tạm dừng]"
+            if open_q is not None:
+                label = f"{label} [chờ ý kiến bác sĩ]"
             following = next_step(state)
             if state in {WorkflowState.AWAITING_MEDICAL_REVIEW, WorkflowState.AWAITING_VIDEO_REVIEW}:
                 following = f"chờ cổng {state.value}"
-            rows.append([entry.slug, entry.title, label, following or "—"])
+            elif open_q is not None:
+                following = f"chờ ý kiến bác sĩ ({open_q.get('id', '')})"
+            rows.append([codes.get(entry.slug, "—"), entry.slug, entry.title, label, following or "—"])
     except (OSError, TypeError, ValueError) as error:
         _echo_error(error)
         raise typer.Exit(code=1) from error
-    columns = ["slug", "title", "state", "next_step"] if include_next else ["slug", "title", "state"]
+    columns = ["code", "slug", "title", "state", "next_step"] if include_next else ["code", "slug", "title", "state"]
     # Plain tabular output stays readable in terminals and captured logs.
     typer.echo(" | ".join(columns))
     for row in rows:
@@ -875,7 +885,7 @@ def status(
         _queue_table(root, include_next=True)
         pid = factory.running_pid(root)
         typer.echo(f'Xưởng nền: PID {pid}' if pid else 'Xưởng nền: không chạy')
-        waiting = sum(factory.gate_for_project(p, m) is not None for p, m in factory.projects(root))
+        waiting = factory.waiting_doctor_count(root)
         typer.echo(f'Đang chờ bác sĩ: {waiting}')
 
 

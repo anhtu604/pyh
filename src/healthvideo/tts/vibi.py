@@ -68,7 +68,9 @@ def vibi_request(
         headers={"xi-api-key": api_key, "User-Agent": USER_AGENT, "Content-Type": "application/json"},
         method="GET" if payload is None else "POST",
     )
-    for attempt in range(retries + 1):
+    unauthorized = 0
+    attempt = 0
+    while True:
         try:
             with opener(request, timeout=timeout) as response:
                 return response.read()
@@ -77,11 +79,17 @@ def vibi_request(
             error.close()
             if (status == 429 or 500 <= status < 600) and attempt < retries:
                 sleep(min(2**attempt, 8))
+                attempt += 1
+                continue
+            # vibi intermittently answers 401 for a valid key (seen 2026-11-20): retry it
+            # on its own budget, only when retries are enabled.
+            if status == 401 and retries > 0 and unauthorized < 10:
+                unauthorized += 1
+                sleep(1)
                 continue
             raise VibiError(f"vibi HTTP {status}; check credit, voice and API key.") from None
         except (OSError, ValueError):
             raise VibiError("vibi connection failed; check network and API configuration.") from None
-    raise AssertionError("unreachable")
 
 
 def account(*, api_key: str, opener=None) -> dict[str, Any]:

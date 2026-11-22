@@ -25,10 +25,17 @@ from healthvideo.domain.queue import QueueEntry
 from healthvideo.domain.script import Script
 from healthvideo.domain.storyboard import Storyboard
 from healthvideo.process import is_same_process
+from healthvideo.project_codes import project_codes
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
 from healthvideo.storage.project_layout import resolve_project_layout
 from healthvideo.storage.queue import add_to_queue, load_queue, remove_from_queue
-from healthvideo.workflows import channel_analytics, chat, factory, researcher
+from healthvideo.workflows import (
+    channel_analytics,
+    chat,
+    doctor_questions,
+    factory,
+    researcher,
+)
 from healthvideo.workflows.gate_review import reopen_gate
 from healthvideo.workflows.production_retry import AGENT_RETRY_FILE
 from healthvideo.workflows.review import approval_is_stale, latest_approval
@@ -112,12 +119,13 @@ def project_operations(root: Path, slug: str) -> dict:
     board = inside(rev, rev / 'storyboard/storyboard.yaml')
     scenes = read_yaml(board).get('scenes', []) if board.is_file() else []
     return {
-        'slug': slug, 'revision': layout.manifest.active_revision,
+        'slug': slug, 'code': project_codes(root).get(slug), 'revision': layout.manifest.active_revision,
         'state': layout.manifest.state.value, 'gate': factory.GATES.get(layout.manifest.state),
         'next_step': next_step(layout.manifest.state), 'retry_status': retry,
         'scenes': [{'id': s['id'], 'label': s.get('narration', '')[:100]} for s in scenes if s.get('visual') == 'whiteboard'],
         'blocked': blocked.read_text(encoding='utf-8')[:4000] if blocked.is_file() else '',
-        'paused': (root / 'topics/logs' / slug / 'paused.yaml').is_file(),
+        'paused': factory.is_paused(root, slug),
+        'doctor_question': doctor_questions.open_question(root, slug),
         'cache': {'files': cached, 'lines': len(lines), 'verified_hits': None, 'max_requests': len(lines),
                   'note': 'File cache chưa kiểm hash/giọng/provider; số yêu cầu tối đa cho một lượt TTS.'},
     }
@@ -418,9 +426,11 @@ def _editable(root: Path, slug: str, expected_revision: str):
         raise ValueError('Revision đã thay đổi; tải lại trước khi thao tác.')
     marker = inside(root, root / 'topics/logs' / slug / RUNNING_MARKER)
     parallel_running = any((root / 'topics/logs' / slug).glob(f'parallel-*/{RUNNING_MARKER}'))
-    # A blocked project is skipped by the factory loop, so it can be fixed while the factory runs.
+    # A blocked project or one waiting on a doctor question is skipped by the factory loop,
+    # so it can be fixed while the factory runs.
     blocked = inside(root, root / 'topics/logs' / slug / 'blocked.txt').is_file()
-    if marker.exists() or parallel_running or (factory.running_pid(root) is not None and not blocked):
+    waiting_question = doctor_questions.open_question(root, slug) is not None
+    if marker.exists() or parallel_running or (factory.running_pid(root) is not None and not blocked and not waiting_question):
         raise ValueError('Hãy dừng xưởng và chờ agent kết thúc trước khi thao tác.')
     check_revision_paths(layout.project_dir, layout.artifact_root)
     inside(root, root / 'profiles/doctor-feedback.yaml')

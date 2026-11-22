@@ -1,4 +1,5 @@
 import gc
+import inspect
 import json
 import os
 import re
@@ -133,6 +134,21 @@ V2_VIDEO_QA_ARTIFACT = "reviews/video-qa.json"
 CHAPTER_CACHE_DIRECTORY = "renders-cache"
 
 
+def _accepts_asr_lexicon(fn: Callable[..., Any]) -> bool:
+    try:
+        parameters = inspect.signature(fn).parameters.values()
+    except (TypeError, ValueError):
+        return False
+    return any(
+        (
+            param.name == "asr_lexicon"
+            and param.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+        )
+        or param.kind is inspect.Parameter.VAR_KEYWORD
+        for param in parameters
+    )
+
+
 def _telemetry_root(project_dir: Path) -> Path:
     return project_dir.parent.parent if project_dir.parent.name == "projects" else project_dir.parent
 
@@ -202,6 +218,14 @@ def _build_v2_input_hash(
     )
 
 
+def tts_cache_key(tts: TTSProvider, request: TTSRequest) -> str:
+    """Compute the deterministic line-audio cache key from post-pronunciation request and provider."""
+    return canonical_json_hash({
+        "request": request.model_dump(mode="json"),
+        "provider": provider_identity(tts),
+    })
+
+
 def _synthesize_cached_line(
     tts: TTSProvider, request: TTSRequest, output: Path, *, cache_dir: Path,
 ) -> None:
@@ -209,8 +233,7 @@ def _synthesize_cached_line(
     if provider_identity(tts)["provider"] not in {"vibi_minimax"}:
         tts.synthesize(request, output)
         return
-    key = canonical_json_hash({"request": request.model_dump(mode="json"),
-                               "provider": provider_identity(tts)})
+    key = tts_cache_key(tts, request)
     cached = cache_dir / f"{key}.wav"
     receipt = cached.with_suffix(".json")
     try:
@@ -571,6 +594,10 @@ def _produce_v2_inner(
         return output
     if dry_run:
         return output
+    from healthvideo.workflows.product_review import rebuild_requested
+
+    if cache_valid and rebuild_requested(layout.artifact_root):
+        cache_valid = False
     if cache_valid:
         if not review_complete(layout.artifact_root):
             prepare_contact_sheet(layout.artifact_root)
@@ -653,17 +680,29 @@ def _produce_v2_inner(
                 gpu=True,
             ),
         ):
+            raw_scripts = {line.id: line.text for line in script.lines}
             alignment = align_lines(
-                line_wavs, {line.id: line.text for line in script.lines},
+                line_wavs, raw_scripts,
                 out_dir=staging_dir / "audio/alignment",
             )
-            # Caption anchors remain canonical. QA compares the actual spoken forms;
-            # align_lines reuses raw Whisper transcripts for the same WAV bytes.
+            # Caption anchors remain canonical. QA compares the actual spoken forms
+            # and expands Whisper ITN tokens only on the QA pass; align_lines reuses
+            # unmodified raw Whisper transcripts for the same WAV bytes.
             qa_alignment = alignment
-            if spoken_scripts != {line.id: line.text for line in script.lines}:
+            if spoken_scripts != raw_scripts:
+                asr_lexicon = {
+                    entry.written: entry.spoken.replace("-", " ")
+                    for entry in pronunciation.entries
+                }
+                qa_kwargs = (
+                    {"asr_lexicon": asr_lexicon}
+                    if _accepts_asr_lexicon(align_lines)
+                    else {}
+                )
                 qa_alignment = align_lines(
                     line_wavs, spoken_scripts,
                     out_dir=staging_dir / "audio/pronunciation-alignment",
+                    **qa_kwargs,
                 )
             pronunciation_report = pronunciation_qa(
                 qa_alignment, terms=[term for entry in pronunciation.entries
@@ -901,6 +940,7 @@ def _produce_v2_inner(
                     ),
                 },
             )
+            _record_motion_qa(staging_dir, {scene.id: scene.visual for scene in render_input.scenes})
             _validate_v2_staged_run(
                 staging_dir, input_hash, provider_name, asset_hashes,
                 pronunciation_sha256=pronunciation_sha256,
@@ -1121,6 +1161,7 @@ def _promote_v2_video_qa_if_needed(
     expected_visual_budget: Mapping[str, Any] | None = None,
 ) -> None:
     _promote_pronunciation_qa(revision_root, input_hash)
+    _promote_motion_report(revision_root)
     if _v2_video_qa_is_valid(
         revision_root, input_hash, require_timing=require_timing,
         final_frame=final_frame,
@@ -1313,6 +1354,9 @@ def submit_video(project_dir: Path) -> None:
 
 def _production_project(layout: ProjectLayout, project: ProjectManifestV2, input_hash: str,
                         *, hold: bool = False) -> ProjectManifestV2:
+    from healthvideo.workflows.product_review import REBUILD_MARKER
+
+    (layout.artifact_root / REBUILD_MARKER).unlink(missing_ok=True)
     if review_complete(layout.artifact_root) and not hold:
         from healthvideo.workflows import script_review
         from healthvideo.workflows.product_review import require_passed_review
@@ -1426,6 +1470,33 @@ def _read_alignment(run_dir: Path, script: Script) -> dict[str, list[dict]]:
                 raise ValueError("Cached alignment differs from script")
             result[line.id] = words
     return result
+
+
+def _record_motion_qa(run_dir: Path, visuals: Mapping[str, str]) -> None:
+    """Motion is evidence only: decoder/report failures never fail production."""
+    from healthvideo.render.motion_report import measure_video
+
+    try:
+        timing = json.loads((run_dir / "scene-timing.json").read_text(encoding="utf-8"))
+        report = measure_video(run_dir / OUTPUT_NAME, timing, visuals)
+        _write_json_atomic(run_dir / "motion-report.json", report)
+        summary = {"passed": report["passed"], "max_static_s": report["max_static_s"],
+                   "violation_count": len(report["scenes_with_violation"])}
+    except (OSError, RuntimeError, ValueError, KeyError) as error:
+        summary = {"error": str(error)}
+        (run_dir / "motion-report.json").unlink(missing_ok=True)
+    qa_path = run_dir / "video-qa.json"
+    data = json.loads(qa_path.read_text(encoding="utf-8"))
+    _write_json_atomic(qa_path, {**data, "motion": summary})
+
+
+def _promote_motion_report(revision_root: Path) -> None:
+    source = revision_root / "renders/motion-report.json"
+    target = revision_root / "reviews/motion-report.json"
+    if source.is_file():
+        _write_json_atomic(target, json.loads(source.read_text(encoding="utf-8")))
+    else:
+        target.unlink(missing_ok=True)
 
 
 def _promote_pronunciation_qa(revision_root: Path, input_hash: str) -> None:

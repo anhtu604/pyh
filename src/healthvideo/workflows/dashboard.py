@@ -6,6 +6,7 @@ verified here; the PIN is never stored, logged, or passed to agents.
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import re
@@ -34,15 +35,17 @@ from healthvideo.domain.gate_review import GateKind
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.queue import QueueEntry
 from healthvideo.env import child_env, hide_child_consoles
-from healthvideo.process import is_same_process, resolve_pnpm_argv
+from healthvideo.process import is_same_process, process_token, resolve_pnpm_argv
 from healthvideo.project_codes import project_codes
-from healthvideo.storage.files import read_yaml, write_yaml_atomic
+from healthvideo.storage.files import read_yaml, write_text_atomic, write_yaml_atomic
 from healthvideo.storage.queue import load_queue
 from healthvideo.workflows import (
     asset_library,
     channel_analytics,
+    chat,
     dashboard_operations,
     decision_card,
+    doctor_questions,
     factory,
     feedback_inbox,
     medanim_library,
@@ -62,6 +65,8 @@ from healthvideo.workflows.script_review import (
 
 APP_ID = 'healthvideo-dashboard'
 DEFAULT_PORT = 8765
+FALLBACK_PORT_END = 8775
+SERVER_STATE_FILE = 'cache/dashboard-server.json'
 STUDIO_URL = 'http://localhost:3000'
 HTML_PATH = Path(__file__).with_name('dashboard.html')
 LOG_TAIL = 40
@@ -617,6 +622,7 @@ def project_handler(
     running_jobs: list[dict],
     producing: bool = False,
     roles: dict[str, str] | None = None,
+    doctor_question: dict | None = None,
 ) -> dict:
     """Who is handling a project right now: ``{label, kind, reason}``.
 
@@ -638,6 +644,12 @@ def project_handler(
                 'kind': 'agent', 'reason': ''}
     if gate:
         return {'label': 'Chờ bác sĩ', 'kind': 'doctor', 'reason': ''}
+    if doctor_question:
+        return {
+            'label': 'Chờ ý kiến bác sĩ',
+            'kind': 'doctor',
+            'reason': _first_line(doctor_question.get('question')),
+        }
     if paused:
         reason = _first_line(_safe_yaml(logs_dir / 'paused.yaml').get('reason'))
         return {'label': 'Tạm dừng', 'kind': 'paused', 'reason': reason}
@@ -725,7 +737,8 @@ def _project_pending_step(root: Path, path: Path, project: ProjectManifestV2, bl
                 return 'posts'
         if (rev / 'renders/video.mp4').is_file() and product_review.pending(path):
             try:
-                return product_review.next_product_action(path)
+                action = product_review.next_product_action(path, root=root, create_question=False)
+                return None if action == 'wait_doctor' else action
             except (OSError, ValueError):
                 return 'product_review'
         return 'produce'
@@ -1192,6 +1205,17 @@ def _safe_json(path: Path) -> dict:
     return data if isinstance(data, dict) else {}
 
 
+def _safe_json_any(path: Path) -> dict | list:
+    """Read a JSON dict or list defensively; return {} on missing or corrupt files."""
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding='utf-8', errors='replace'))
+    except (OSError, ValueError, TypeError):
+        return {}
+    return data if isinstance(data, (dict, list)) else {}
+
+
 def _summarize_pronunciation_qa(path: Path) -> dict:
     """Summarize reviews/pronunciation-qa.json for the detail inspector."""
     raw = _safe_json(path)
@@ -1265,12 +1289,16 @@ def _project_status_line(
     running_job: dict | None,
     recent_job: dict | None,
     blocked_note: str,
+    doctor_question: dict | None = None,
 ) -> str:
     if running_job is not None:
         step = running_job.get('step_label') or STEP_LABELS.get(str(running_job.get('step') or ''), 'Đang xử lý')
         role = running_job.get('role_name') or running_job.get('role') or 'Agent'
         model = running_job.get('model') or running_job.get('cli') or ''
         return f'{step} · {role} · {model}'.strip(' ·')
+    if doctor_question:
+        station = str(doctor_question.get('station') or '').strip()
+        return f'Chờ ý kiến bác sĩ · Trạm {station}' if station else 'Chờ ý kiến bác sĩ'
     paused_file = root / 'topics/logs' / path.name / 'paused.yaml'
     if paused_file.is_file():
         paused_reason = str(_safe_yaml(paused_file).get('reason') or '').strip()
@@ -1346,6 +1374,7 @@ def overview(
 
     for path, project in factory.projects(root):
         note = _blocked_note(root, path, project)
+        open_q = doctor_questions.open_question(root, path.name)
         current_card = _gate_card_with_style(path)
         title = factory.project_title(path, project)
         if current_card is not None:
@@ -1360,6 +1389,19 @@ def overview(
             if current_card.get('style_score') is not None:
                 row['style_score'] = current_card['style_score']
             decisions.append(row)
+        if open_q is not None and current_card is None:
+            decisions.append({
+                'kind': 'doctor_question',
+                'slug': path.name,
+                'code': codes[path.name],
+                'title': title,
+                'gate': None,
+                'count': len(open_q.get('options') or []),
+                'revision': project.active_revision,
+                'station': str(open_q.get('station') or ''),
+                'question_id': str(open_q.get('id') or ''),
+                'question': str(open_q.get('question') or ''),
+            })
         guidance = _script_guidance(path, note)
         if (('Storyboard cần hướng dẫn:' in (note or '')
              or 'Góp ý y khoa chưa có vị trí:' in (note or '')) and current_card is None):
@@ -1442,7 +1484,9 @@ def overview(
         }
         label = STATE_LABELS.get(project.state, project.state.value)
         state_label = (
-            f'Tạm dừng · {STAGES[stage_index(project)].lower()}'
+            'Chờ ý kiến bác sĩ'
+            if open_q is not None and current_card is None
+            else f'Tạm dừng · {STAGES[stage_index(project)].lower()}'
             if is_paused and current_card is None
             else f'Bị chặn · {STAGES[stage_index(project)].lower()}'
             if note
@@ -1459,6 +1503,7 @@ def overview(
             'gate': factory.gate_for_project(path, project),
             'revision': project.active_revision,
             'blocked': note,
+            'doctor_question': open_q,
             'paused': is_paused,
             'is_running': is_running,
             'in_queue': path.name in queue_dates,
@@ -1469,6 +1514,7 @@ def overview(
                 running_by_slug.get(path.name),
                 recent_by_slug.get(path.name),
                 note,
+                doctor_question=open_q,
             ),
             'handler': project_handler(
                 root, path.name,
@@ -1478,6 +1524,7 @@ def overview(
                 running_jobs=verified_jobs,
                 producing=path.name in prod_by_slug,
                 roles=role_names,
+                doctor_question=open_q,
             ),
             'updated_at': mtime_dt.isoformat(timespec='seconds'),
         })
@@ -1575,10 +1622,13 @@ def snapshot(root: Path, *, agents: Callable[[], list[str]] | None = None) -> di
             note = source.read_text(encoding='utf-8', errors='replace').strip() if source.exists() else ''
         manifest = path / 'project.yaml'
         gate = factory.gate_for_project(path, project)
+        open_q = doctor_questions.open_question(root, path.name)
         is_paused = (logs / path.name / 'paused.yaml').is_file()
         label = STATE_LABELS.get(project.state, project.state.value)
         state_label = (
-            f'Tạm dừng · {STAGES[stage_index(project)].lower()}'
+            'Chờ ý kiến bác sĩ'
+            if open_q is not None and not gate
+            else f'Tạm dừng · {STAGES[stage_index(project)].lower()}'
             if is_paused and not gate
             else f'Bị chặn · {STAGES[stage_index(project)].lower()}'
             if note
@@ -1593,10 +1643,11 @@ def snapshot(root: Path, *, agents: Callable[[], list[str]] | None = None) -> di
             'stage': stage_index(project),
             'gate': gate,
             'blocked': note,
+            'doctor_question': open_q,
             'paused': is_paused,
             'handler': project_handler(
                 root, path.name, gate=gate, paused=is_paused and not gate, blocked_note=note,
-                running_jobs=verified_jobs, roles=role_names,
+                running_jobs=verified_jobs, roles=role_names, doctor_question=open_q,
             ),
             'revision': project.active_revision,
             'comments': len(load_draft(root, path.name)),
@@ -1608,6 +1659,7 @@ def snapshot(root: Path, *, agents: Callable[[], list[str]] | None = None) -> di
     return {
         'app': APP_ID,
         'factory': {'running': pid is not None, 'pid': pid},
+        'xuong': {'running': pid is not None, 'pid': pid},
         'telegram': telegram_bot.bot_status(root),
         'agents': agents() if agents is not None else running_agents(root),
         'stages': list(STAGES),
@@ -1627,6 +1679,445 @@ def snapshot(root: Path, *, agents: Callable[[], list[str]] | None = None) -> di
 
 MEDIA_TYPES = {'.mp4': 'video/mp4', '.wav': 'audio/wav', '.mp3': 'audio/mpeg',
                '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp'}
+_REVIEW_SHEET_EXTS = frozenset({'.jpg', '.jpeg', '.png', '.webp'})
+_WORD_TOK_RE = re.compile(r'\w+')
+_SCENE_AT_RE = re.compile(r'\b(S\d+)\b', re.IGNORECASE)
+_TIME_AT_RE = re.compile(r'(\d{1,2}):(\d{2})(?::(\d{2}))?')
+
+
+def _safe_int(value: object, default: int = 0) -> int:
+    if isinstance(value, bool) or value is None:
+        return default
+    if isinstance(value, (int, float)):
+        return int(value)
+    try:
+        return int(float(str(value)))
+    except (ValueError, TypeError):
+        return default
+
+
+def _normalize_tokens(text: object) -> list[str]:
+    return _WORD_TOK_RE.findall(str(text or '').casefold())
+
+
+def _resolve_beat_frame(
+    beat: dict,
+    words: list[dict],
+    narration: str,
+    duration_frames: int,
+    fps: float,
+) -> int | None:
+    raw_sf = beat.get('start_frame')
+    if raw_sf is not None and not isinstance(raw_sf, bool):
+        frame = _safe_int(raw_sf, -1)
+        if frame >= 0:
+            return min(frame, duration_frames - 1) if duration_frames > 0 else frame
+    at = beat.get('at')
+    if isinstance(at, (int, float)) and not isinstance(at, bool):
+        frame = max(0, round(float(at) * fps))
+        return min(frame, duration_frames - 1) if duration_frames > 0 else frame
+    if isinstance(at, str) and at.strip():
+        wanted = _normalize_tokens(at)
+        if wanted:
+            if words:
+                indexed: list[tuple[str, int]] = []
+                for w in words:
+                    wsf = _safe_int(w.get('start_frame'), 0)
+                    for tok in _normalize_tokens(w.get('text')):
+                        indexed.append((tok, wsf))
+                for i in range(len(indexed) - len(wanted) + 1):
+                    if [t for t, _ in indexed[i:i + len(wanted)]] == wanted:
+                        frame = indexed[i][1]
+                        return min(frame, duration_frames - 1) if duration_frames > 0 else frame
+            raw_words = str(narration or '').split()
+            if raw_words:
+                indexed_nar: list[tuple[str, int]] = []
+                total_w = len(raw_words)
+                for idx_w, rw in enumerate(raw_words):
+                    est = round(idx_w * duration_frames / total_w) if duration_frames > 0 else 0
+                    for tok in _normalize_tokens(rw):
+                        indexed_nar.append((tok, est))
+                for i in range(len(indexed_nar) - len(wanted) + 1):
+                    if [t for t, _ in indexed_nar[i:i + len(wanted)]] == wanted:
+                        frame = indexed_nar[i][1]
+                        return min(frame, duration_frames - 1) if duration_frames > 0 else frame
+    return None
+
+
+def _parse_marker_at(
+    at_raw: object,
+    fps: float,
+    scene_by_id: dict[str, dict],
+    scenes: list[dict],
+) -> tuple[str | None, int | None]:
+    text = str(at_raw or '').strip()
+    if not text:
+        return None, None
+    scene_id: str | None = None
+    sc_match = _SCENE_AT_RE.search(text)
+    if sc_match:
+        cand = sc_match.group(1).upper()
+        if cand in scene_by_id:
+            scene_id = cand
+        else:
+            for key in scene_by_id:
+                if key.upper() == cand:
+                    scene_id = key
+                    break
+            if scene_id is None:
+                scene_id = cand
+    t_match = _TIME_AT_RE.search(text)
+    if t_match:
+        if t_match.group(3) is not None:
+            sec = int(t_match.group(1)) * 3600 + int(t_match.group(2)) * 60 + int(t_match.group(3))
+        else:
+            sec = int(t_match.group(1)) * 60 + int(t_match.group(2))
+        frame = max(0, round(sec * fps))
+        if scene_id is None:
+            for sc in scenes:
+                if sc['start_frame'] <= frame < sc['end_frame']:
+                    scene_id = sc['id']
+                    break
+        return scene_id, frame
+    if scene_id is not None and scene_id in scene_by_id:
+        return scene_id, scene_by_id[scene_id]['start_frame']
+    return scene_id, None
+
+
+def _frame_inspector_payload(
+    rev: Path,
+    slug: str,
+    timeline_rows: list[dict],
+    product_rev: dict | None,
+    pron_qa: dict,
+) -> dict:
+    """Build frame-accurate multi-track NLE payload from render artifacts or storyboard fallback."""
+    render_input = _safe_json(rev / 'renders/render-input.json')
+    scene_timing = _safe_json(rev / 'renders/scene-timing.json')
+    render_manifest = _safe_json(rev / 'renders/render-manifest.json')
+    final_sheets = _safe_yaml(rev / 'reviews/visual/final-contact-sheets.yaml')
+    storyboard = _safe_yaml(rev / 'storyboard/storyboard.yaml')
+
+    raw_fps = render_input.get('fps') or scene_timing.get('fps') or 30
+    try:
+        fps_val = float(raw_fps)
+        if fps_val <= 0:
+            fps_val = 30.0
+    except (ValueError, TypeError):
+        fps_val = 30.0
+    fps: int | float = int(fps_val) if fps_val.is_integer() else fps_val
+
+    format_profile = str(
+        render_input.get('format_profile')
+        or storyboard.get('format_profile')
+        or ''
+    )
+
+    timing_by_scene: dict[str, dict] = {}
+    raw_timing_scenes = scene_timing.get('scenes')
+    if isinstance(raw_timing_scenes, list):
+        for row in raw_timing_scenes:
+            if isinstance(row, dict):
+                sid = str(row.get('scene_id') or row.get('id') or '')
+                if sid:
+                    timing_by_scene[sid] = row
+
+    open_change_map: dict[str, bool] = {}
+    for row in timeline_rows:
+        if isinstance(row, dict) and row.get('scene'):
+            open_change_map[str(row['scene'])] = bool(row.get('open_change'))
+
+    open_briefs: dict[str, str] = {}
+    open_unscoped_briefs: list[str] = []
+    changes_dir = rev / 'reviews/changes'
+    if changes_dir.is_dir():
+        for req_path in sorted(changes_dir.glob('*-requested.yaml')):
+            req = _safe_yaml(req_path)
+            if req and not req.get('applied', False):
+                ctx = req.get('context') if isinstance(req.get('context'), dict) else {}
+                brief = str(req.get('brief') or '').strip()
+                if ctx.get('scene'):
+                    sc_key = str(ctx['scene'])
+                    open_change_map[sc_key] = True
+                    if brief and sc_key not in open_briefs:
+                        open_briefs[sc_key] = brief
+                elif brief:
+                    open_unscoped_briefs.append(brief)
+
+    ri_scenes = render_input.get('scenes')
+    sb_scenes = storyboard.get('scenes')
+    using_render_input = isinstance(ri_scenes, list) and len(ri_scenes) > 0
+    source_scenes = ri_scenes if using_render_input else (sb_scenes if isinstance(sb_scenes, list) else [])
+
+    scenes_out: list[dict] = []
+    scene_by_id: dict[str, dict] = {}
+    line_first_scene: dict[str, dict] = {}
+    cursor_frame = 0
+
+    for idx, raw_sc in enumerate(source_scenes):
+        if not isinstance(raw_sc, dict):
+            continue
+        sc_id = str(raw_sc.get('id') or raw_sc.get('scene') or raw_sc.get('scene_id') or f'S{idx + 1:02d}')
+        t_row = timing_by_scene.get(sc_id, {})
+
+        if using_render_input:
+            start_frame = _safe_int(raw_sc.get('start_frame'), cursor_frame)
+            dur_frames = _safe_int(raw_sc.get('duration_frames'), 0)
+        else:
+            start_frame = _safe_int(
+                t_row.get('start_frame') if t_row.get('start_frame') is not None else raw_sc.get('start_frame'),
+                cursor_frame,
+            )
+            dur_raw = (
+                t_row.get('duration_frames')
+                if t_row.get('duration_frames') is not None
+                else raw_sc.get('duration_frames')
+            )
+            if dur_raw is not None:
+                dur_frames = _safe_int(dur_raw, 0)
+            elif raw_sc.get('expected_duration_seconds') is not None:
+                try:
+                    dur_frames = round(float(raw_sc['expected_duration_seconds']) * fps_val)
+                except (ValueError, TypeError):
+                    dur_frames = 0
+            else:
+                dur_frames = 0
+
+        start_frame = max(0, start_frame)
+        dur_frames = max(0, dur_frames)
+        end_frame = start_frame + dur_frames
+        cursor_frame = end_frame
+
+        raw_audio_ms = t_row.get('audio_ms') if t_row.get('audio_ms') is not None else raw_sc.get('audio_ms')
+        audio_ms = _safe_int(raw_audio_ms, 0) if raw_audio_ms is not None else None
+
+        narration = str(raw_sc.get('narration') or '')
+        words_raw = raw_sc.get('words')
+        words_out = [
+            {
+                'text': str(w.get('text') or ''),
+                'start_frame': max(0, _safe_int(w.get('start_frame'), 0)),
+                'end_frame': max(0, _safe_int(w.get('end_frame'), 0)),
+            }
+            for w in (words_raw if isinstance(words_raw, list) else [])
+            if isinstance(w, dict) and str(w.get('text') or '').strip()
+        ]
+
+        beats_raw = raw_sc.get('beats')
+        beats_out: list[dict] = []
+        for b_item in (beats_raw if isinstance(beats_raw, list) else []):
+            if not isinstance(b_item, dict):
+                continue
+            rel_frame = _resolve_beat_frame(b_item, words_out, narration, dur_frames, fps_val)
+            beats_out.append({
+                'at': b_item.get('at'),
+                'start_frame': rel_frame,
+                'abs_frame': (start_frame + rel_frame) if rel_frame is not None else None,
+                'focus': b_item.get('focus'),
+                'labels': list(b_item.get('labels') or []) if isinstance(b_item.get('labels'), list) else [],
+                'action': b_item.get('action'),
+            })
+
+        entrances_raw = raw_sc.get('entrances')
+        entrances_out: list[dict] = []
+        for ent in (entrances_raw if isinstance(entrances_raw, list) else []):
+            if not isinstance(ent, dict):
+                continue
+            ent_sf = max(0, _safe_int(ent.get('start_frame'), 0))
+            entrances_out.append({
+                'text': str(ent.get('text') or ''),
+                'start_frame': ent_sf,
+                'abs_frame': start_frame + ent_sf,
+            })
+
+        assets_raw = raw_sc.get('visual_assets')
+        assets_out = [
+            _json_safe(a)
+            for a in (assets_raw if isinstance(assets_raw, list) else [])
+            if isinstance(a, dict)
+        ]
+
+        mascot_pose = raw_sc.get('mascot_pose')
+        if mascot_pose is None:
+            for a in assets_out:
+                if isinstance(a, dict) and a.get('role') == 'mascot' and a.get('pose'):
+                    mascot_pose = a.get('pose')
+                    break
+
+        is_open = bool(
+            open_change_map.get(sc_id, False)
+            or any(re.search(rf'\b{re.escape(sc_id)}\b', br) for br in open_unscoped_briefs)
+        )
+        if is_open and sc_id not in open_briefs:
+            for br in open_unscoped_briefs:
+                if re.search(rf'\b{re.escape(sc_id)}\b', br):
+                    open_briefs[sc_id] = br
+                    break
+
+        line_id = raw_sc.get('script_line_id') or raw_sc.get('script_line')
+        anatomy = _json_safe(raw_sc.get('anatomy')) if isinstance(raw_sc.get('anatomy'), dict) else None
+        motion = _json_safe(raw_sc.get('motion')) if isinstance(raw_sc.get('motion'), dict) else None
+
+        sc_entry = {
+            'id': sc_id,
+            'index': len(scenes_out),
+            'start_frame': start_frame,
+            'end_frame': end_frame,
+            'duration_frames': dur_frames,
+            'start_s': round(start_frame / fps_val, 3),
+            'end_s': round(end_frame / fps_val, 3),
+            'audio_ms': audio_ms,
+            'visual': str(raw_sc.get('visual') or ''),
+            'script_line_id': str(line_id) if line_id is not None else None,
+            'claim_id': str(raw_sc['claim_id']) if raw_sc.get('claim_id') is not None else None,
+            'chapter_id': str(raw_sc['chapter_id']) if raw_sc.get('chapter_id') is not None else None,
+            'source_marker': str(raw_sc['source_marker']) if raw_sc.get('source_marker') is not None else None,
+            'on_screen_text': str(raw_sc.get('on_screen_text') or ''),
+            'narration': narration,
+            'mascot_pose': str(mascot_pose) if mascot_pose is not None else None,
+            'anatomy': anatomy,
+            'motion': motion,
+            'beats': beats_out,
+            'entrances': entrances_out,
+            'words': words_out,
+            'assets': assets_out,
+            'open_change': is_open,
+        }
+        scenes_out.append(sc_entry)
+        scene_by_id[sc_id] = sc_entry
+        if sc_entry['script_line_id'] and sc_entry['script_line_id'] not in line_first_scene:
+            line_first_scene[sc_entry['script_line_id']] = sc_entry
+
+    total_frames = max((s['end_frame'] for s in scenes_out), default=0)
+    duration_s = round(total_frames / fps_val, 3)
+
+    raw_sfx = render_manifest.get('sfx')
+    if not isinstance(raw_sfx, list):
+        sfx_file = _safe_json_any(rev / 'renders/sfx.json')
+        raw_sfx = sfx_file if isinstance(sfx_file, list) else []
+    sfx_out: list[dict] = []
+    for ev in raw_sfx:
+        if not isinstance(ev, dict):
+            continue
+        ev_scene = str(ev.get('scene') or '')
+        ev_time = ev.get('time')
+        ev_at = ev.get('at')
+        ev_frame: int | None = None
+        if isinstance(ev_time, (int, float)) and not isinstance(ev_time, bool):
+            ev_frame = max(0, round(float(ev_time) * fps_val))
+        elif ev_scene in scene_by_id and isinstance(ev_at, (int, float)) and not isinstance(ev_at, bool):
+            ev_frame = max(0, scene_by_id[ev_scene]['start_frame'] + round(float(ev_at) * fps_val))
+        sfx_out.append({
+            'id': str(ev.get('id') or ''),
+            'scene': ev_scene,
+            'at': ev_at,
+            'time': float(ev_time) if isinstance(ev_time, (int, float)) and not isinstance(ev_time, bool) else None,
+            'frame': ev_frame,
+            'volume': ev.get('volume'),
+        })
+
+    markers: list[dict] = []
+    if isinstance(product_rev, dict):
+        for issue in (product_rev.get('issues') or []):
+            if not isinstance(issue, dict):
+                continue
+            at_val = issue.get('at') or issue.get('line') or ''
+            sc_id, m_frame = _parse_marker_at(at_val, fps_val, scene_by_id, scenes_out)
+            if m_frame is not None and total_frames > 0:
+                m_frame = min(m_frame, max(0, total_frames - 1))
+            fixable = bool(issue.get('fixable', True))
+            blocking = bool(issue.get('blocking_safety', False))
+            markers.append({
+                'kind': 'issue',
+                'source': 'product_review',
+                'frame': m_frame,
+                'scene': sc_id,
+                'at': str(at_val),
+                'criterion': str(issue.get('criterion') or ''),
+                'label': f'{at_val} · {issue.get("criterion") or ""}'.strip(' ·'),
+                'detail': str(issue.get('problem') or ''),
+                'fix': str(issue.get('fix') or ''),
+                'fixable': fixable,
+                'severity': 'error' if (blocking or not fixable) else 'warn',
+            })
+
+    if isinstance(pron_qa, dict):
+        for flag in (pron_qa.get('flagged') or []):
+            if not isinstance(flag, dict):
+                continue
+            line_id = str(flag.get('line') or '')
+            base_sc = line_first_scene.get(line_id)
+            m_frame: int | None = None
+            sc_id: str | None = None
+            if base_sc is not None:
+                sc_id = base_sc['id']
+                start_offset = flag.get('start')
+                offset_frames = (
+                    round(float(start_offset) * fps_val)
+                    if isinstance(start_offset, (int, float)) and not isinstance(start_offset, bool)
+                    else 0
+                )
+                m_frame = max(0, base_sc['start_frame'] + offset_frames)
+                if total_frames > 0:
+                    m_frame = min(m_frame, max(0, total_frames - 1))
+            sw = str(flag.get('script_word') or '')
+            heard = str(flag.get('heard') or '')
+            markers.append({
+                'kind': 'pronunciation',
+                'source': 'pronunciation_qa',
+                'frame': m_frame,
+                'scene': sc_id,
+                'line': line_id,
+                'label': f'{line_id}: {sw} → {heard}'.strip(' :→'),
+                'detail': str(flag.get('suggestion') or ''),
+                'severity': 'warn',
+            })
+
+    for sc in scenes_out:
+        if sc['open_change']:
+            markers.append({
+                'kind': 'open_change',
+                'source': 'change_request',
+                'frame': sc['start_frame'],
+                'scene': sc['id'],
+                'label': f"{sc['id']} · Đang sửa",
+                'detail': open_briefs.get(sc['id'], 'Có yêu cầu sửa đang chờ xử lý'),
+                'severity': 'info',
+            })
+
+    markers.sort(key=lambda m: (m['frame'] is None, m['frame'] or 0))
+
+    raw_sheets = final_sheets.get('sheets') if isinstance(final_sheets.get('sheets'), list) else []
+    sample_frames = [
+        int(f) for f in (final_sheets.get('sample_frames') or [])
+        if isinstance(f, int) and not isinstance(f, bool) and f >= 0
+    ]
+    sheets_out: list[dict] = []
+    for idx_sh, item in enumerate(raw_sheets):
+        raw_path = item.get('path') if isinstance(item, dict) else (item if isinstance(item, str) else '')
+        name = Path(str(raw_path or '')).name
+        if (not name or '/' in name or '\\' in name or '..' in name
+                or Path(name).suffix.lower() not in _REVIEW_SHEET_EXTS):
+            continue
+        sheets_out.append({
+            'name': name,
+            'url': f'/media/{slug}/review-sheet/{name}',
+            'sample_frames': sample_frames[idx_sh * 25:(idx_sh + 1) * 25],
+        })
+
+    return {
+        'fps': fps,
+        'total_frames': total_frames,
+        'duration_s': duration_s,
+        'format_profile': format_profile,
+        'scenes': scenes_out,
+        'sfx': sfx_out,
+        'markers': markers,
+        'contact_sheets': {
+            'sheets': sheets_out,
+            'sample_frames': sample_frames,
+        },
+    }
 
 
 def _draft_path(root: Path, slug: str) -> Path:
@@ -1730,21 +2221,29 @@ def review_bundle(root: Path, project_dir: Path, project: ProjectManifestV2) -> 
         if revs_dir.is_dir() else [project.active_revision]
     )
     gate = factory.gate_for_project(project_dir, project)
+    open_q = doctor_questions.open_question(root, project_dir.name)
     blocked = _blocked_note(root, project_dir, project)
     label = STATE_LABELS.get(project.state, project.state.value)
     state_label = (
-        f'Tạm dừng · {STAGES[stage_index(project)].lower()}'
+        'Chờ ý kiến bác sĩ'
+        if open_q is not None and not gate
+        else f'Tạm dừng · {STAGES[stage_index(project)].lower()}'
         if is_paused and not gate
         else f'Bị chặn · {STAGES[stage_index(project)].lower()}'
         if blocked
         else label
     )
+    tl_rows = timeline(project_dir)
+    prod_rev = product_review.review_view(rev)
+    pron_qa = _summarize_pronunciation_qa(rev / 'reviews/pronunciation-qa.json')
+    frame_insp = _frame_inspector_payload(rev, project_dir.name, tl_rows, prod_rev, pron_qa)
     return {
         'slug': project_dir.name, 'title': factory.project_title(project_dir, project),
         'code': project_codes(root)[project_dir.name],
         'state': project.state.value, 'state_label': state_label,
         'gate': gate, 'revision': project.active_revision,
         'paused': is_paused, 'paused_info': paused_info, 'blocked': blocked,
+        'doctor_question': open_q,
         'stage_index': stage_index(project), 'stages': list(STAGES), 'revisions': revisions,
         'topic_card': _safe_yaml(rev / 'topic/card.yaml'),
         'dossier': _safe_yaml(rev / 'topic/dossier.yaml'),
@@ -1769,11 +2268,12 @@ def review_bundle(root: Path, project_dir: Path, project: ProjectManifestV2) -> 
         'posts': _safe_yaml(rev / 'posts/posts.yaml'),
         'shorts_plan': _safe_yaml(rev / 'posts/shorts-plan.yaml'),
         'thumbnail_url': _project_preview_url(project_dir, project),
-        'timeline': timeline(project_dir),
+        'timeline': tl_rows,
+        'frame_inspector': frame_insp,
         'card': _gate_card_with_style(project_dir),
         'activity': activity(root, limit=50, slug=project_dir.name)['items'],
         'script_review': review_view(rev),
-        'product_review': product_review.review_view(rev),
+        'product_review': prod_rev,
         'video_stale': project.state in {WorkflowState.MEDICALLY_APPROVED, WorkflowState.PRODUCTION_IN_PROGRESS,
                                          WorkflowState.AWAITING_MEDICAL_REVIEW, WorkflowState.DRAFT_READY},
         'notes': _read_text(rev / 'reviews/medical-revision-notes.md'),
@@ -1781,7 +2281,7 @@ def review_bundle(root: Path, project_dir: Path, project: ProjectManifestV2) -> 
                'warnings': [*(qa.get('warnings') or []), *(qa.get('errors') or [])]},
         'qa_detail': {
             'video_qa': qa,
-            'pronunciation_qa': _summarize_pronunciation_qa(rev / 'reviews/pronunciation-qa.json'),
+            'pronunciation_qa': pron_qa,
         },
         'approvals': {
             'medical': _safe_yaml(rev / 'reviews/medical-approval.yaml'),
@@ -1801,6 +2301,26 @@ def media_file(project_dir: Path, project: ProjectManifestV2, rel: str) -> Path:
     target = (renders / rel).resolve()
     if (not renders.is_relative_to(project_dir.resolve()) or renders not in target.parents
             or target.suffix.lower() not in MEDIA_TYPES or not target.is_file()):
+        raise LookupError('Không có file này')
+    return target
+
+
+def review_sheet_file(project_dir: Path, project: ProjectManifestV2, filename: str) -> Path:
+    """Resolve a visual review contact sheet inside revisions/<active>/reviews/visual."""
+    if (not filename or '/' in filename or '\\' in filename or '..' in filename
+            or Path(filename).name != filename):
+        raise LookupError('Không có file này')
+    proj_root = project_dir.resolve()
+    rev = (project_dir / 'revisions' / project.active_revision).resolve()
+    if not rev.is_relative_to(proj_root):
+        raise LookupError('Không có file này')
+    visual_dir = (rev / 'reviews/visual').resolve()
+    target = (visual_dir / filename).resolve()
+    if (not visual_dir.is_relative_to(rev)
+            or not target.is_relative_to(visual_dir)
+            or target.parent != visual_dir
+            or target.suffix.lower() not in _REVIEW_SHEET_EXTS
+            or not target.is_file()):
         raise LookupError('Không có file này')
     return target
 
@@ -2065,7 +2585,7 @@ class _Handler(BaseHTTPRequestHandler):
                 self._send(HTTPStatus.OK, html.encode('utf-8'), 'text/html; charset=utf-8')
             elif path == '/api/ping':
                 self._json({'app': APP_ID})
-            elif path == '/api/status':
+            elif path in {'/api/status', '/api/state'}:
                 self._json(snapshot(self.server.root, agents=self.server.agents))
             elif path == '/api/overview':
                 self._json(overview(self.server.root))
@@ -2097,6 +2617,9 @@ class _Handler(BaseHTTPRequestHandler):
             elif len(parts) == 4 and parts[:2] == ['api', 'project'] and parts[3] == 'bundle':
                 project_dir, project = self.server.project_dir(parts[2])
                 self._json(review_bundle(self.server.root, project_dir, project))
+            elif len(parts) >= 4 and parts[0] == 'media' and parts[2] == 'review-sheet':
+                project_dir, project = self.server.project_dir(parts[1])
+                self._file(review_sheet_file(project_dir, project, '/'.join(parts[3:])))
             elif len(parts) >= 3 and parts[0] == 'media':
                 project_dir, project = self.server.project_dir(parts[1])
                 self._file(media_file(project_dir, project, '/'.join(parts[2:])))
@@ -2187,7 +2710,6 @@ class DashboardServer(ThreadingHTTPServer):
                  agents: Callable[[], list[str]] | None = None,
                  actions: dict[str, Callable[..., str]] | None = None) -> None:
         hide_child_consoles()
-        super().__init__(('127.0.0.1', port), _Handler)
         self.root = root.resolve()
         self.token = token or secrets.token_urlsafe(24)
         self.agents = agents
@@ -2195,6 +2717,7 @@ class DashboardServer(ThreadingHTTPServer):
         self._studio_proc: object | None = None
         self._studio_log_handle: object | None = None
         self._studio_lock = threading.Lock()
+        super().__init__(('127.0.0.1', port), _Handler)
         self.actions = actions or default_actions(self)
 
     @property
@@ -2257,9 +2780,10 @@ class DashboardServer(ThreadingHTTPServer):
             return {'url': url}
 
     def server_close(self) -> None:
-        if self._studio_log_handle is not None:
+        handle = getattr(self, '_studio_log_handle', None)
+        if handle is not None:
             try:
-                self._studio_log_handle.close()
+                handle.close()
             except OSError:
                 pass
             self._studio_log_handle = None
@@ -2286,6 +2810,56 @@ class DashboardServer(ThreadingHTTPServer):
             if key in self.actions:
                 return self.actions[key](parts[2], body or {})
         raise LookupError('Không có thao tác này')
+
+
+def answer_doctor_question(root: Path, slug: str, body: dict) -> dict:
+    """Answer an open doctor question, notify coordinator chat, record standard, and release wait."""
+    allowed = {'question_id', 'option_id', 'text', 'expected_revision'}
+    if set(body) - allowed:
+        raise ValueError('Trường dữ liệu câu hỏi không hợp lệ; không nhận PIN.')
+    with dashboard_operations._MUTATION_LOCK:
+        layout = dashboard_operations.project_layout(root, slug)
+        expected_revision = body.get('expected_revision')
+        if expected_revision != layout.manifest.active_revision:
+            raise ValueError('Revision đã thay đổi; tải lại trước khi trả lời.')
+        answered = doctor_questions.answer(
+            root,
+            slug,
+            str(body.get('question_id') or ''),
+            body.get('option_id'),
+            str(body.get('text') or ''),
+        )
+        product_review.apply_doctor_answer(layout.project_dir, answered)
+        ans = answered['answer']
+        station = str(answered.get('station') or '').strip()
+        label = str(ans.get('option_label') or '').strip()
+        extra_text = str(ans.get('text') or '').strip()
+        decision_text = '. '.join(part for part in (label, extra_text) if part)
+        chat_text = (
+            f'Quyết định Trạm {station}: {decision_text}'
+            if station
+            else f'Quyết định bác sĩ: {decision_text}'
+        )
+        chat_msg = chat.post(
+            root,
+            slug,
+            chat_text[:4000],
+            {'slug': slug, 'revision': layout.manifest.active_revision, 'view': 'overview'},
+        )
+        standards.record(
+            root,
+            slug=slug,
+            gate=f'tram-{station}' if station else 'question',
+            revision=layout.manifest.active_revision,
+            kind='comment',
+            text=chat_text[:4000],
+            reviewer=reviewer_name(),
+        )
+        return {
+            'answered': answered,
+            'chat_message_id': chat_msg['id'],
+            'summary': f'Đã ghi nhận: {chat_text}',
+        }
 
 
 def default_actions(server: DashboardServer) -> dict[str, Callable[..., str]]:
@@ -2347,6 +2921,9 @@ def default_actions(server: DashboardServer) -> dict[str, Callable[..., str]]:
         feedback_inbox.start(root, entry['id'])
         return 'Đang phân tích lại.'
 
+    def answer_question(slug: str, body: dict) -> dict:
+        return answer_doctor_question(root, slug, body)
+
     def quit_app() -> str:
         threading.Thread(target=server.shutdown, daemon=True).start()
         return 'App đã tắt (xưởng nền vẫn chạy nếu đang bật).'
@@ -2354,26 +2931,128 @@ def default_actions(server: DashboardServer) -> dict[str, Callable[..., str]]:
     return {
         'factory/start': start, 'factory/stop': stop, 'review/open': review,
         'project/packet': packet, 'project/folder': folder, 'project/decide': decision,
-        'project/comment': comment, 'standards/add': add_standard,
-        'feedback/add': add_feedback, 'feedback/retry': retry_feedback,
-        'app/quit': quit_app,
+        'project/comment': comment, 'project/answer-question': answer_question,
+        'standards/add': add_standard, 'feedback/add': add_feedback,
+        'feedback/retry': retry_feedback, 'app/quit': quit_app,
     }
 
 
+def _is_pyh_state_payload(data: object) -> bool:
+    return (
+        isinstance(data, dict)
+        and isinstance(data.get('projects'), list)
+        and (data.get('app') == APP_ID or 'xuong' in data or 'factory' in data)
+    )
+
+
 def existing_dashboard(port: int) -> bool:
+    from urllib.error import HTTPError
+
+    for route in ('/api/state', '/api/status'):
+        try:
+            with urlopen(f'http://127.0.0.1:{port}{route}', timeout=0.25) as response:
+                data = json.loads(response.read().decode('utf-8'))
+                if _is_pyh_state_payload(data):
+                    return True
+        except HTTPError:
+            continue
+        except (URLError, OSError, ValueError):
+            return False
+    return False
+
+
+def server_state_path(root: Path) -> Path:
+    return root / SERVER_STATE_FILE
+
+
+def read_server_state(root: Path) -> dict | None:
+    path = server_state_path(root)
+    if not path.is_file():
+        return None
     try:
-        with urlopen(f'http://127.0.0.1:{port}/api/ping', timeout=1) as response:
-            return json.loads(response.read().decode('utf-8')).get('app') == APP_ID
-    except (URLError, OSError, ValueError):
-        return False
+        data = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    port = data.get('port')
+    if type(port) is not int or not (1024 <= port <= 65535):
+        return None
+    return data
+
+
+def write_server_state(root: Path, port: int, url: str) -> Path:
+    path = server_state_path(root)
+    payload = {
+        'port': port,
+        'url': url,
+        'pid': os.getpid(),
+        'process_token': process_token(os.getpid()),
+        'started_at': datetime.now(UTC).isoformat(timespec='seconds'),
+    }
+    write_text_atomic(path, json.dumps(payload, ensure_ascii=False, indent=2))
+    return path
+
+
+def clear_server_state(root: Path, *, port: int | None = None) -> None:
+    path = server_state_path(root)
+    data = read_server_state(root)
+    if data is None:
+        return
+    if data.get('pid') == os.getpid() and (port is None or data.get('port') == port):
+        path.unlink(missing_ok=True)
+
+
+def find_running_dashboard(root: Path, *, port: int = DEFAULT_PORT) -> tuple[int, str] | None:
+    candidates: list[int] = []
+    if port == DEFAULT_PORT:
+        saved = read_server_state(root)
+        if saved is not None:
+            candidates.append(saved['port'])
+        candidates.extend(range(DEFAULT_PORT, FALLBACK_PORT_END + 1))
+    else:
+        candidates.append(port)
+    for candidate in dict.fromkeys(candidates):
+        if existing_dashboard(candidate):
+            return candidate, f'http://127.0.0.1:{candidate}/'
+    return None
+
+
+def dashboard_url(root: Path, *, port: int = DEFAULT_PORT) -> str | None:
+    found = find_running_dashboard(root, port=port)
+    return found[1] if found is not None else None
+
+
+def _is_port_in_use(error: OSError) -> bool:
+    winerror = getattr(error, 'winerror', None)
+    return error.errno in {errno.EADDRINUSE, errno.EACCES} or winerror in {10048, 10013}
+
+
+def _bind_dashboard_server(root: Path, port: int) -> DashboardServer:
+    candidates = (
+        list(range(DEFAULT_PORT, FALLBACK_PORT_END + 1))
+        if port == DEFAULT_PORT
+        else [port]
+    )
+    last_error: OSError | None = None
+    for index, candidate in enumerate(candidates):
+        try:
+            return DashboardServer(root, candidate)
+        except OSError as error:
+            if not _is_port_in_use(error) or index == len(candidates) - 1:
+                raise
+            last_error = error
+    assert last_error is not None
+    raise last_error
 
 
 def serve(root: Path, *, port: int = DEFAULT_PORT, open_browser: bool = True,
           echo: Callable[[str], object] = print) -> None:
-    """Run the dashboard until quit; reuse an already-open one on the same port."""
+    """Run the dashboard until quit; reuse an already-open one or fall back to a free port."""
     hide_child_consoles()
-    url = f'http://127.0.0.1:{port}/'
-    if existing_dashboard(port):
+    found = find_running_dashboard(root, port=port)
+    if found is not None:
+        _, url = found
         if open_browser:
             webbrowser.open(url)
         echo(f'App đã mở sẵn: {url}')
@@ -2381,7 +3060,9 @@ def serve(root: Path, *, port: int = DEFAULT_PORT, open_browser: bool = True,
     from healthvideo.workflows import telegram_bot
 
     telegram_bot.ensure_background(root)
-    server = DashboardServer(root, port)
+    server = _bind_dashboard_server(root, port)
+    bound_port = server.server_address[1]
+    write_server_state(root, bound_port, server.url)
     echo(f'App xưởng: {server.url} (đóng bằng nút "Tắt app")')
     if open_browser:
         threading.Timer(0.3, webbrowser.open, args=(server.url,)).start()
@@ -2390,6 +3071,7 @@ def serve(root: Path, *, port: int = DEFAULT_PORT, open_browser: bool = True,
     except KeyboardInterrupt:
         pass
     finally:
+        clear_server_state(root, port=bound_port)
         server.server_close()
 
 

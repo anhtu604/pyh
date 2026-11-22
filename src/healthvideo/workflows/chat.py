@@ -11,7 +11,7 @@ from typing import Literal
 from uuid import uuid4
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from healthvideo.agents import (
     RUNNING_MARKER,
@@ -25,7 +25,14 @@ from healthvideo.domain.project_v2 import WorkflowState
 from healthvideo.domain.queue import QueueEntry
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
 from healthvideo.process import is_same_process, process_token
-from healthvideo.storage.files import read_yaml, write_text_atomic, write_yaml_atomic
+from healthvideo.project_codes import project_codes
+from healthvideo.storage.files import (
+    AgentEncodingError,
+    read_agent_yaml,
+    read_yaml,
+    write_text_atomic,
+    write_yaml_atomic,
+)
 from healthvideo.storage.queue import add_to_queue, load_queue
 from healthvideo.workflows import change_request
 
@@ -108,6 +115,22 @@ _STEP_TO_ACTION = frozenset({
 })
 
 
+def _normalize_topic(value: object) -> object:
+    """Coerce an LLM-emitted string topic (e.g. a project code or slug) into dict | None."""
+    if value is None or isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            parsed = yaml.safe_load(text)
+        except yaml.YAMLError:
+            return None
+        return parsed if isinstance(parsed, dict) else None
+    return value
+
+
 class TaskAssignment(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
@@ -126,6 +149,8 @@ class TaskAssignment(BaseModel):
     clip_id: str | None = None
     privacy: str | None = None
     title_index: int | None = Field(default=None, ge=0)
+
+    _normalize_topic = field_validator('topic', mode='before')(_normalize_topic)
 
     @model_validator(mode='after')
     def valid_assignment(self):
@@ -154,6 +179,8 @@ class CoordinatorReply(BaseModel):
     clip_id: str | None = None
     privacy: str | None = None
     title_index: int | None = Field(default=None, ge=0)
+
+    _normalize_topic = field_validator('topic', mode='before')(_normalize_topic)
 
     @model_validator(mode='after')
     def valid_action(self):
@@ -305,7 +332,12 @@ def _running_jobs(root: Path) -> list[dict]:
 
 
 def _company_summary(root: Path) -> dict:
-    from healthvideo.workflows import channel_analytics, factory, researcher
+    from healthvideo.workflows import (
+        channel_analytics,
+        doctor_questions,
+        factory,
+        researcher,
+    )
 
     cfg = root / 'profiles/company.yaml'
     roster: list[dict] = []
@@ -318,14 +350,23 @@ def _company_summary(root: Path) -> dict:
     except (OSError, ValueError, TypeError):
         pass
 
+    codes: dict[str, str] = {}
+    try:
+        codes = project_codes(root)
+    except (OSError, ValueError, TypeError):
+        pass
+
     projects_list: list[dict] = []
     try:
         for path, project in factory.projects(root):
             blocked_file = root / 'topics/logs' / path.name / 'blocked.txt'
             projects_list.append({
+                'code': codes.get(path.name),
                 'slug': path.name,
                 'title': factory.project_title(path, project),
                 'state': project.state.value,
+                'paused': factory.is_paused(root, path.name),
+                'doctor_question': doctor_questions.open_question(root, path.name),
                 'blocked_reason': (
                     blocked_file.read_text(encoding='utf-8', errors='replace').strip()[:240]
                     if blocked_file.is_file() else ''
@@ -336,7 +377,7 @@ def _company_summary(root: Path) -> dict:
 
     queue_list: list[dict] = []
     try:
-        queue_list = [{'slug': e.slug, 'title': e.title} for e in load_queue(root)]
+        queue_list = [{'code': codes.get(e.slug), 'slug': e.slug, 'title': e.title} for e in load_queue(root)]
     except (OSError, ValueError, TypeError):
         pass
 
@@ -598,11 +639,20 @@ def run_coordinator(root: Path, message_id: str, *, invoke=invoke_with_failover)
             for role_id in ('coordinator', 'coordinator_senior'):
                 skills = role_skill_block(role_id, company)
                 role_prompt = f'{prompt}\n{skills}' if skills else prompt
-                result = invoke(company.chain(role_id), role_prompt, cwd=root, log_dir=log_dir,
-                                role=role_id, slug=slug or 'chung', step=role_id)
-                if not result.ok:
-                    raise ValueError('Điều phối viên chưa trả lời được; hãy gửi lại.')
-                reply = _guard_channel_readiness(root, guard(CoordinatorReply.model_validate(read_yaml(report))))
+                for encoding_attempt in range(2):
+                    result = invoke(company.chain(role_id), role_prompt, cwd=root, log_dir=log_dir,
+                                    role=role_id, slug=slug or 'chung', step=role_id)
+                    if not result.ok:
+                        raise ValueError('Điều phối viên chưa trả lời được; hãy gửi lại.')
+                    try:
+                        raw_reply = read_agent_yaml(report)
+                        break
+                    except AgentEncodingError as exc:
+                        if encoding_attempt:
+                            raise
+                        report.unlink(missing_ok=True)
+                        role_prompt += '\nĐầu ra bị từ chối: ' + str(exc)
+                reply = _guard_channel_readiness(root, guard(CoordinatorReply.model_validate(raw_reply)))
                 if not reply.escalate or role_id == 'coordinator_senior':
                     break
                 with locked(root):

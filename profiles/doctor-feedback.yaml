@@ -482,3 +482,80 @@ entries:
   text: 'PYH-003: sửa minh họa S06, S31, S34; đổi bố cục các cảnh lặp, bỏ mã nguồn
     nội bộ trên bản xem, sửa vùng phụ đề; giữ lời và dữ kiện y khoa.'
   items: []
+- at: '2026-11-19T15:33:48+07:00'
+  slug: thay-men-gan-tang-lien-voi-mua-thuoc-bo-gan-mat-gan-uong-coi
+  gate: medical
+  revision: '001'
+  kind: approve_note
+  reviewer: Tu
+  text: Anh Tu Vuong Dinh
+  items: []
+- at: '2026-11-19T15:34:11+07:00'
+  slug: hoc-xuong-ca-nuot-ngay-nam-com-to-cach-chua-meo-hay-tu-day-x
+  gate: medical
+  revision: '001'
+  kind: approve_note
+  reviewer: Tu
+  text: Anh Tu Vuong Dinh
+  items: []
+- at: '2026-11-20T13:42:09+07:00'
+  slug: thay-men-gan-tang-lien-voi-mua-thuoc-bo-gan-mat-gan-uong-coi
+  gate: medical
+  revision: '001'
+  kind: approve_note
+  reviewer: Tu
+  text: Anh Tu Vuong Dinh
+  items: []
+- at: '2026-11-20T14:44:32+07:00'
+  slug: thay-men-gan-tang-lien-voi-mua-thuoc-bo-gan-mat-gan-uong-coi
+  gate: medical
+  revision: '001'
+  kind: approve_note
+  reviewer: Tu
+  text: Anh Tu Vuong Dinh
+  items: []
+- at: '2026-11-21T20:08:48+07:00'
+  slug: thay-men-gan-tang-lien-voi-mua-thuoc-bo-gan-mat-gan-uong-coi
+  gate: video
+  revision: '001'
+  kind: comment
+  reviewer: Tu
+  text: 'Bác sĩ chốt cách đọc: enzyme=en-zim, silymarin=xi-li-ma-rin, statin=xta-tin,
+    like=lai, subscribe=xáp-xcrai.'
+  items: []
+- at: '2026-11-21T20:47:15+07:00'
+  slug: thay-men-gan-tang-lien-voi-mua-thuoc-bo-gan-mat-gan-uong-coi
+  gate: video
+  revision: '001'
+  kind: comment
+  reviewer: Tu
+  text: ALT đọc "a lờ tê", AST đọc "a ét tê" (chữ cái tiếng Việt); đọc kiểu tiếng
+    Anh nghe không xuôi.
+  items: []
+- at: '2026-11-21T23:47:17+07:00'
+  slug: thay-men-gan-tang-lien-voi-mua-thuoc-bo-gan-mat-gan-uong-coi
+  gate: medical
+  revision: '001'
+  kind: reopen
+  reviewer: dev-lead (bác sĩ ủy quyền trong chat 2026-11-21)
+  text: 'Chuyển PYH-003 sang style Scale Zoom: thêm visual_style và visual_takeaway
+    cho cảnh cơ chế (R3.32); lời đọc, claim, nguồn, timing giữ nguyên.'
+  items: []
+- at: '2026-11-21T23:49:54+07:00'
+  slug: thay-men-gan-tang-lien-voi-mua-thuoc-bo-gan-mat-gan-uong-coi
+  gate: medical
+  revision: '001'
+  kind: approve_note
+  reviewer: Tu
+  text: Anh Tu Vuong Dinh
+  items: []
+- at: '2026-11-21T23:57:01+07:00'
+  slug: thay-men-gan-tang-lien-voi-mua-thuoc-bo-gan-mat-gan-uong-coi
+  gate: tram-12
+  revision: '001'
+  kind: comment
+  reviewer: Tu
+  text: 'Quyết định Trạm 12: Dựng lại rồi chấm: bản cũ đã được thay bằng storyboard
+    Scale Zoom đã duyệt y khoa và cách đọc ALT/AST mới; dựng lại video (kể cả giọng),
+    rồi cho Trạm 12 chấm lại từ đầu.'
+  items: []

@@ -7,6 +7,8 @@ from hashlib import sha256
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
+from healthvideo.storage.files import validate_agent_text
+
 
 def normalize_issue_statuses(value: object) -> object:
     """Accept an unambiguous agent row list; leave legacy mappings to Pydantic."""
@@ -158,6 +160,8 @@ def check_nodes(before: bytes, after: bytes, allowed: set[str], collection: str)
         raise ValueError('Repair scope violation: malformed document') from exc
     if changed:
         raise ValueError('Repair scope violation: unchanged script lines/metadata must remain exact')
+    if before != after:
+        validate_agent_text(yaml.safe_load(after), 'repair')
 
 
 def check_script(before: bytes, after: bytes, allowed: set[str]) -> None:

@@ -42,6 +42,15 @@ def _run_workshop_js(test_body: str, *, pre_storage: dict[str, str] | None = Non
         '   if ("state" in patch) state = patch.state;'
         '   if ("wsOffline" in patch) wsOffline = patch.wsOffline;'
         ' },'
+        ' tabVideo, renderPv, wireVideoNle, pvBuildTimelineModel,'
+        ' WS_AVATARS, wsIsoSvg, wsPersonSvg, wsPropSvg, wsGateEmptySvg,'
+        ' pvFormatTc, pvParseJumpInput, stopPvVideoRuntime,'
+        ' updateChatContext, closeProduct,'
+        ' getVideoState: () => ({ pv, pvTab, chatCtx, pvVideoState }),'
+        ' setVideoState: (patch) => {'
+        '   if ("pv" in patch) pv = patch.pv;'
+        '   if ("pvTab" in patch) pvTab = patch.pvTab;'
+        ' },'
         '};'
     )
     runner = r'''
@@ -1052,3 +1061,388 @@ def test_script_guidance_row_in_doctor_tasks():
     assert "product ? 'Thợ dựng' : 'Biên kịch'" in html
     assert 'aria-label="Gửi hướng dẫn:' in html
     assert '.todo-row.todo-guidance>.chip' in html
+
+
+def test_workshop_avatars_cover_18_stations_with_distinct_personalities():
+    _run_workshop_js(r'''
+    const assert = (cond, msg) => { if (!cond) throw new Error(msg); };
+    const { pyh } = ctx;
+    const ids = [
+      'researcher', 'scout', 'medical_expert', 'writer', 'storyboard_director', 'voice_director',
+      'script_critic', 'art_director', 'editor', 'product_critic', 'copywriter', 'shorts_producer',
+      'coordinator', 'coordinator_senior', 'feedback_analyst', 'repair_engineer', 'gate_medical', 'gate_video',
+    ];
+    const avatars = pyh.WS_AVATARS;
+    assert(ids.every((id) => avatars[id]), 'WS_AVATARS must define all 18 station identities');
+    assert(Object.keys(avatars).length === 18, 'WS_AVATARS must contain exactly 18 identities');
+
+    const styles = new Set(ids.map((id) => avatars[id].style));
+    const outfits = new Set(ids.map((id) => avatars[id].outfit));
+    const skins = new Set(ids.map((id) => avatars[id].skin));
+    for (const s of ['side', 'bob', 'bun', 'ponytail', 'curly', 'undercut', 'crop', 'long']) {
+      assert(styles.has(s), 'missing hair style ' + s);
+    }
+    assert(outfits.size >= 7, 'need at least 7 distinct outfits, got ' + outfits.size);
+    assert(skins.size >= 6, 'need at least 6 distinct skin tones, got ' + skins.size);
+    for (const id of ['medical_expert', 'gate_medical', 'gate_video']) {
+      assert(avatars[id].outfit === 'blouse' && avatars[id].steth && avatars[id].glasses === 'thin', id + ' wears blouse + stethoscope + thin glasses');
+    }
+    for (const id of ['art_director', 'storyboard_director']) {
+      assert(avatars[id].headwear === 'beret' || avatars[id].style === 'bun', id + ' has artistic beret or bun');
+      assert(avatars[id].phones, id + ' wears studio headphones');
+    }
+    for (const id of ['voice_director', 'editor', 'shorts_producer', 'coordinator', 'coordinator_senior']) {
+      assert(avatars[id].phones === 'on', id + ' wears headphones');
+    }
+    assert(avatars.coordinator.mic && avatars.coordinator_senior.mic, 'coordinators have mic boom');
+    for (const id of ['script_critic', 'product_critic', 'feedback_analyst']) {
+      assert(avatars[id].glasses === 'square' && avatars[id].outfit === 'vest' && avatars[id].pin, id + ' wears square glasses, vest and badge');
+    }
+    assert(avatars.repair_engineer.headwear === 'cap' && avatars.repair_engineer.outfit === 'tech', 'repair engineer: cap/goggles + orange harness');
+    assert(avatars.scout.headwear === 'ranger' && avatars.scout.outfit === 'jacket', 'scout: ranger hat + jacket');
+
+    const states = ['working', 'idle', 'error', 'waiting_model', 'waiting_retry', 'waiting_gate', 'unknown'];
+    for (const id of ids) {
+      for (const ws of states) {
+        const st = { id, isGate: id.startsWith('gate_'), isMachine: false, workState: ws, folders: [], actClass: '', running: [] };
+        const svg = pyh.wsIsoSvg(st);
+        assert(svg.startsWith('<svg') && svg.endsWith('</svg>'), `${id}/${ws} renders a complete svg`);
+        assert(!svg.includes('undefined') && !svg.includes('NaN'), `${id}/${ws} svg must not leak undefined/NaN`);
+        assert(!svg.includes('stroke-dasharray="3 2.2"'), `${id}/${ws} must not draw the old dashed placeholder circle`);
+        if (ws === 'working' && !st.isGate) {
+          assert(svg.includes('ws-arm-l') && svg.includes('ws-arm-r'), id + ' working keeps ws-arm-l / ws-arm-r');
+          assert((svg.match(/ws-person-bob/g) || []).length === 2, id + ' working animates body and arms together');
+        }
+        if (ws === 'idle' && !st.isGate) {
+          assert(svg.includes('translate(124,64)'), id + ' idle keeps coffee cup at translate(124,64)');
+          assert(!svg.includes('ws-person-bob'), id + ' idle must not bob');
+        }
+      }
+    }
+
+    // Gate sitting empty: leather armchair + gold nameplate instead of a dashed circle.
+    const gateIdle = pyh.wsIsoSvg({ id: 'gate_medical', isGate: true, isMachine: false, workState: 'idle', folders: [], actClass: '' });
+    assert(gateIdle.includes('ws-gate-armchair') && gateIdle.includes('#6b2d1d'), 'empty gate renders a leather armchair');
+    assert(gateIdle.includes('#fbbf24') && gateIdle.includes('polygon points="76,82 90,75 100,80 86,87"'), 'empty gate shows gold nameplate on desk');
+    const gateWait = pyh.wsIsoSvg({ id: 'gate_video', isGate: true, isMachine: false, workState: 'waiting_gate', folders: [{ slug: 'a', tone: 'gate' }], actClass: '' });
+    assert(!gateWait.includes('ws-gate-armchair') && gateWait.includes('#f8fafc'), 'waiting gate shows the doctor in a white blouse');
+
+    // Worn accessories moved onto the person: no floating headphone strokes left in wsPropSvg.
+    for (const id of ['art_director', 'editor', 'coordinator']) {
+      const prop = pyh.wsPropSvg(id, 'working');
+      assert(!prop.includes('M90 25c0-6 20-6 20 0') && !prop.includes('M110 28l-5 5'), id + ' prop must not draw detached headphones');
+    }
+    const coord = pyh.wsIsoSvg({ id: 'coordinator', isGate: false, isMachine: false, workState: 'working', folders: [], actClass: '' });
+    assert(coord.includes('M90.2 31.6C90.6 36 94.4 37.4 97.8 36.2'), 'coordinator headset has a mic boom on the head group');
+    const med = pyh.wsIsoSvg({ id: 'medical_expert', isGate: false, isMachine: false, workState: 'idle', folders: [], actClass: '' });
+    assert(med.includes('M95.4 42.4c-2.6 5.8'), 'medical expert wears a stethoscope');
+
+    // Face expression follows workState.
+    const working = pyh.wsIsoSvg({ id: 'writer', isGate: false, isMachine: false, workState: 'working', folders: [], actClass: '' });
+    const errored = pyh.wsIsoSvg({ id: 'writer', isGate: false, isMachine: false, workState: 'error', folders: [], actClass: '' });
+    assert(working.includes('M94.4 25.4l3.8.9') && errored.includes('M94.4 26.4l3.8-1.1'), 'brows: focused when working, worried on error');
+    assert(errored.includes('#7dd3fc'), 'error face shows a sweat drop');
+
+    // Rendering never depends on duration_s, so wsSvgSig stays stable.
+    const a = pyh.wsSvgSig({ id: 'writer', workState: 'working', actClass: 'ws-act-writer', folders: [], running: [{ duration_s: 1 }] });
+    const b = pyh.wsSvgSig({ id: 'writer', workState: 'working', actClass: 'ws-act-writer', folders: [], running: [{ duration_s: 99 }] });
+    assert(a === b, 'wsSvgSig must ignore duration changes');
+    ''')
+
+
+def test_video_nle_timeline_runtime_transport_inspector_and_fallback(tmp_path):
+    node = shutil.which('node')
+    assert node is not None, 'Node.js is required to run dashboard UI runtime tests'
+    scripts = _extract_dashboard_scripts()
+    assert len(scripts) >= 1
+    for idx, script in enumerate(scripts):
+        js_file = tmp_path / f'dash_{idx}.js'
+        js_file.write_text(script, encoding='utf-8')
+        proc = subprocess.run([node, '--check', str(js_file)], capture_output=True, check=False)
+        assert proc.returncode == 0, proc.stderr.decode('utf-8', 'replace')
+
+    _run_workshop_js(r'''
+    const assert = (cond, msg) => { if (!cond) throw new Error(msg); };
+    const { pyh, doc } = ctx;
+
+    assert(pyh.pvFormatTc(0, 30) === '00:00:00', 'tc 0');
+    assert(pyh.pvFormatTc(95, 30) === '00:03:05', 'tc 95');
+    assert(pyh.pvParseJumpInput('8327', 30) === 8327, 'jump raw frame');
+    assert(pyh.pvParseJumpInput('04:37', 30) === (4 * 60 + 37) * 30, 'jump MM:SS');
+    assert(pyh.pvParseJumpInput('00:03:05', 30) === 95, 'jump MM:SS:FF');
+
+    const bundle = {
+      slug: 'nle-demo',
+      title: 'Demo NLE',
+      code: 'PYH-099',
+      state: 'awaiting_video_review',
+      state_label: 'Chờ duyệt video',
+      gate: 'video',
+      revision: '001',
+      media: [
+        { label: 'Video hoàn chỉnh', url: '/media/nle-demo/video.mp4', kind: 'mp4' },
+        { label: 'Clip CL01', url: '/media/nle-demo/clips/CL01.mp4', kind: 'mp4' },
+        { label: 'Giọng đọc', url: '/media/nle-demo/audio/narration-voice.wav', kind: 'wav' },
+      ],
+      timeline: [
+        { scene: 'S01', start_s: 0.0, end_s: 3.0, open_change: true },
+        { scene: 'S02', start_s: 3.0, end_s: 7.0, open_change: false },
+      ],
+      frame_inspector: {
+        fps: 30,
+        total_frames: 210,
+        duration_s: 7.0,
+        format_profile: 'youtube_long',
+        scenes: [
+          {
+            id: 'S01', index: 0, start_frame: 0, end_frame: 90, duration_frames: 90,
+            start_s: 0.0, end_s: 3.0, audio_ms: 2700, visual: 'anatomy_animation',
+            script_line_id: 'N01', claim_id: 'C01', chapter_id: 'CH01', source_marker: '[1]',
+            on_screen_text: 'Chữ cảnh S01', narration: 'Lời đọc cảnh một',
+            mascot_pose: 'explain',
+            anatomy: { subject: 'liver_organ', state: 'normal', severity: 0.0, motion: 'Xoay nhẹ' },
+            beats: [{ at: 'cảnh một', start_frame: 30, abs_frame: 30, focus: 'overview', labels: [] }],
+            entrances: [{ text: 'Chữ cảnh S01', start_frame: 5, abs_frame: 5 }],
+            words: [{ text: 'Lời', start_frame: 0, end_frame: 15 }, { text: 'đọc', start_frame: 15, end_frame: 30 }],
+            assets: [], open_change: true,
+          },
+          {
+            id: 'S02', index: 1, start_frame: 90, end_frame: 210, duration_frames: 120,
+            start_s: 3.0, end_s: 7.0, audio_ms: 3400, visual: 'source_card',
+            script_line_id: 'N02', claim_id: 'C02', chapter_id: 'CH02', source_marker: '[2]',
+            on_screen_text: 'Chữ cảnh S02', narration: 'Lời đọc cảnh hai',
+            mascot_pose: null, anatomy: null,
+            beats: [], entrances: [], words: [], assets: [], open_change: false,
+          },
+        ],
+        sfx: [{ id: 'whoosh-soft', scene: 'S02', at: 0, time: 3.0, frame: 90 }],
+        markers: [
+          { kind: 'issue', source: 'product_review', frame: 95, scene: 'S02', label: 'S02@00:03 · hình rõ', detail: 'Chữ nhỏ', severity: 'warn' },
+          { kind: 'open_change', source: 'change_request', frame: 0, scene: 'S01', label: 'S01 · Đang sửa', detail: 'Sửa màu', severity: 'info' },
+        ],
+        contact_sheets: {
+          sheets: [{ name: 'final-contact-sheet-001.jpg', url: '/media/nle-demo/review-sheet/final-contact-sheet-001.jpg' }],
+          sample_frames: [0, 45, 150],
+        },
+      },
+      draft: [], claims: [], records: [], lines: [], activity: [], feedback: [],
+    };
+
+    doc.getElementById('pv').classList.add('show');
+    pyh.setVideoState({ pv: bundle, pvTab: 'video' });
+    pyh.updateChatContext({ slug: bundle.slug, revision: bundle.revision, view: 'video', scene: null, time_s: null });
+    pyh.renderPv();
+
+    const body = doc.getElementById('pv-body');
+    const nle = body.querySelector('#pv-nle-timeline');
+    const transport = body.querySelector('#pv-transport');
+    const inspector = body.querySelector('#pv-frame-inspector');
+    const playhead = body.querySelector('#pv-playhead');
+    const vid = body.querySelector('#pv-video');
+    assert(nle && transport && inspector && playhead && vid, 'all NLE panels and #pv-video must render');
+    assert(body.querySelector('#pv-scene-strip'), 'backward-compatible #pv-scene-strip must exist');
+    assert(body.querySelectorAll('.nle-v1-block').length === 2, 'V1 track renders 2 scene blocks');
+    assert(body.querySelector('#pv-tc-readout').textContent === '00:00:00', 'initial timecode 00:00:00');
+    assert(body.querySelector('#pv-frame-readout').textContent === 'Frame 0 / 210 @ 30 fps', 'initial frame readout');
+
+    // +1f step
+    body.querySelector('#pv-btn-fwd-1').onclick();
+    assert(Math.abs(vid.currentTime - (1 + 0.02) / 30) < 1e-6, '+1f sets currentTime to 1.02/30');
+    assert(body.querySelector('#pv-tc-readout').textContent === '00:00:01', '+1f timecode 00:00:01');
+    assert(inspector.textContent.includes('Cảnh S01') && inspector.textContent.includes('Frame nội cảnh: 1 / 90'), 'inspector tracks S01 frame 1');
+
+    // +10f step
+    body.querySelector('#pv-btn-fwd-10').onclick();
+    assert(Math.abs(vid.currentTime - (11 + 0.02) / 30) < 1e-6, '+10f sets currentTime to 11.02/30');
+    assert(body.querySelector('#pv-frame-readout').textContent === 'Frame 11 / 210 @ 30 fps', '+10f readout 11');
+
+    // -1f step
+    body.querySelector('#pv-btn-back-1').onclick();
+    assert(Math.abs(vid.currentTime - (10 + 0.02) / 30) < 1e-6, '-1f sets currentTime to 10.02/30');
+
+    // Jump via timecode input to S02 (frame 95 = 00:03:05)
+    const jumpInp = body.querySelector('#pv-frame-jump');
+    jumpInp.value = '00:03:05';
+    body.querySelector('#pv-jump-form').onsubmit({ preventDefault() {} });
+    assert(Math.abs(vid.currentTime - (95 + 0.02) / 30) < 1e-6, 'jump to 00:03:05 -> frame 95');
+    assert(inspector.textContent.includes('Cảnh S02') && inspector.textContent.includes('Frame nội cảnh: 5 / 120'), 'inspector switches to S02');
+    assert(pyh.getVideoState().chatCtx.scene === 'S02' && pyh.getVideoState().chatCtx.time_s === 3, 'chatCtx updates to S02 @ 3s');
+
+    // Jump via scene chip [data-scene="S01"]
+    body.querySelector('#pv-scene-strip [data-scene="S01"]').onclick();
+    assert(Math.abs(vid.currentTime - (0 + 0.02) / 30) < 1e-6, 'scene chip S01 jumps to frame 0');
+    assert(pyh.getVideoState().chatCtx.scene === 'S01', 'chatCtx updates to S01');
+
+    // Safezone toggle & zoom & vertical clip source switch
+    body.querySelector('#pv-safezone-toggle').onclick();
+    assert(body.querySelector('#pv-stage-wrap').classList.contains('show-safezone'), 'safezone overlay toggles on');
+
+    body.querySelector('[data-nle-zoom="4"]').onclick();
+    assert(String(body.querySelector('#pv-nle-canvas').style.width || '').endsWith('px'), 'zoom 4x sets pixel width');
+
+    const clipBtn = body.querySelectorAll('[data-pv-src]')[1];
+    clipBtn.onclick();
+    assert(body.querySelector('#pv-stage-frame').classList.contains('is-vertical'), 'Clip switches viewport to 9:16');
+    assert(vid.src === '/media/nle-demo/clips/CL01.mp4', 'video src switches to Clip CL01');
+
+    // Pin frame to chat
+    body.querySelector('#pv-pin-frame-chat').onclick();
+    assert(doc.getElementById('chat-panel').classList.contains('open'), 'pin button opens chat panel');
+    assert(doc.getElementById('chat-input').value.startsWith('[Cảnh S01 · Frame '), 'pin button populates frame prefix');
+
+    // Fallback when b.frame_inspector is absent
+    const fallbackBundle = {
+      slug: 'fb-demo', title: 'Fallback', code: 'PYH-100', state: 'awaiting_video_review',
+      state_label: 'Chờ duyệt video', gate: 'video', revision: '001',
+      media: [{ label: 'Video hoàn chỉnh', url: '/media/fb-demo/video.mp4', kind: 'mp4' }],
+      timeline: [{ scene: 'S01', start_s: 0, end_s: 2.5, open_change: false }],
+      storyboard: { scenes: [{ id: 'S01', visual: 'whiteboard', on_screen_text: 'Fallback text', narration: 'Fallback narration' }] },
+      draft: [], claims: [], records: [], lines: [], activity: [], feedback: [],
+    };
+    pyh.setVideoState({ pv: fallbackBundle, pvTab: 'video' });
+    pyh.renderPv();
+    assert(body.querySelector('#pv-nle-timeline') && body.querySelectorAll('.nle-v1-block').length === 1, 'fallback without frame_inspector still renders NLE timeline');
+
+    pyh.closeProduct();
+    assert(pyh.getVideoState().pvVideoState.active === false, 'closeProduct cleans up video runtime');
+    ''')
+
+
+def test_stage12_guidance_blocked_card_and_preset_replies():
+    _run_workshop_js(r'''
+    const assert = (cond, msg) => { if (!cond) throw new Error(msg); };
+    const { pyh, doc, setFetchHandler } = ctx;
+
+    const answerPosts = [];
+    const longSummary = 'Hình minh họa tế bào gan ở cảnh này đang thiếu mũi tên chỉ đường đi của men gan và nhãn chữ hơi chồng lên vùng tối ở góc phải màn hình khi chuyển sang khung hình tiếp theo, cần chỉnh bố cục rõ ràng hơn.';
+    const longLoc = 'S04@01:12-01:35 · anatomy-overlay-liver-enzymes-very-long-label';
+    const openQuestion = {
+      id: 'dq-abc123',
+      station: '12',
+      kind: 'stuck_issue',
+      question: 'Trạm 12 kẹt cùng issue qua 2 vòng duyệt sản phẩm; bác sĩ chọn hướng xử lý tiếp theo.',
+      context: [
+        { code: 'PR-01', location: longLoc, summary: longSummary },
+        { code: 'PR-03', location: 'S09@03:10', summary: 'Cảnh dài 28 giây chưa tách nhịp.' },
+      ],
+      options: [
+        { id: 'fix_visuals', label: 'Sửa hình các cảnh bị nêu', detail: 'Giao Thợ dựng sửa lại hình ảnh các cảnh còn mở.' },
+        { id: 'split_long_scenes', label: 'Tách cảnh dài', detail: 'Tách cảnh dài để cải thiện nhịp.' },
+      ],
+      allow_free_text: true,
+      created_at: '2026-11-21T10:00:00+00:00',
+      status: 'open',
+      answer: null,
+    };
+
+    const baseBundle = {
+      slug: 'demo-stage12-stuck',
+      title: 'Demo Trạm 12 kẹt',
+      code: 'PYH-112',
+      state: 'production_in_progress',
+      state_label: 'Chờ ý kiến bác sĩ',
+      gate: null,
+      revision: '002',
+      blocked: '',
+      doctor_question: openQuestion,
+      media: [], timeline: [], draft: [], claims: [], records: [], lines: [], activity: [], feedback: [],
+    };
+
+    setFetchHandler((url, opts) => {
+      if (url === '/api/project/demo-stage12-stuck/answer-question' && opts && opts.method === 'POST') {
+        answerPosts.push(JSON.parse(opts.body));
+        return { ok: true, status: 200, async json() { return { ok: true, summary: 'Đã ghi nhận' }; } };
+      }
+      if (url === '/api/project/demo-stage12-stuck/bundle') {
+        return { ok: true, status: 200, async json() { return { ...baseBundle, doctor_question: null }; } };
+      }
+      if (url.startsWith('/api/status')) {
+        return {
+          ok: true, status: 200,
+          async json() {
+            return {
+              factory: { running: false, pid: null }, waiting: 0,
+              projects: [{
+                slug: 'demo-stage12-stuck', code: 'PYH-112', title: 'Demo Trạm 12 kẹt',
+                state: 'production_in_progress', state_label: 'Chờ ý kiến bác sĩ',
+                stage: 4, gate: null, blocked: '', doctor_question: openQuestion,
+                paused: false, revision: '002', comments: 0,
+                handler: { label: 'Chờ ý kiến bác sĩ', kind: 'doctor', reason: openQuestion.question },
+              }],
+              stages: ['1','2','3','4','5','6','7'], log: [], agents: [], now: '2026-11-21T10:00:00Z', standards: 0,
+            };
+          },
+        };
+      }
+      if (url.startsWith('/api/overview')) {
+        return {
+          ok: true, status: 200,
+          async json() {
+            return {
+              tiles: { running: 0, waiting_doctor: 1, done_7d: 0, done_30d: 0, avg_days_topic_to_video: 0, models_resting: 0 },
+              decisions: [{
+                kind: 'doctor_question', slug: 'demo-stage12-stuck', code: 'PYH-112',
+                title: 'Demo Trạm 12 kẹt', gate: null, count: 2, revision: '002',
+                station: '12', question_id: 'dq-abc123', question: openQuestion.question,
+              }],
+              projects: [
+                { slug: 'demo-stage12-stuck', gate: null, blocked: '', doctor_question: openQuestion },
+                { slug: 'real-blocked', gate: null, blocked: 'TTS lỗi', doctor_question: null },
+              ],
+              resting: [],
+            };
+          },
+        };
+      }
+      return { ok: true, status: 200, async json() { return {}; } };
+    });
+
+    // Refresh home view: verify neutral badge "Chờ ý kiến bác sĩ" and separate count in #tiles
+    await pyh.refresh();
+    const tilesText = doc.getElementById('tiles').textContent;
+    assert(tilesText.includes('1 chờ ý kiến') && tilesText.includes('1 cần chú ý'), 'tiles shows separate chờ ý kiến count: ' + tilesText);
+    const chip = doc.getElementById('projects').querySelector('.chip.question');
+    assert(chip && chip.textContent === 'Chờ ý kiến bác sĩ', 'project row shows neutral Chờ ý kiến bác sĩ badge');
+    assert(!doc.getElementById('projects').querySelector('.chip.bad'), 'question project must not use red Bị chặn badge');
+
+    // Detail modal renders merged #pv-stage12-card from b.doctor_question
+    doc.getElementById('pv').classList.add('show');
+    pyh.setVideoState({ pv: baseBundle, pvTab: 'overview' });
+    pyh.renderPv();
+
+    const slot = doc.getElementById('pv-card-slot');
+    const card = slot.querySelector('#pv-stage12-card');
+    assert(card, 'doctor question card must render in #pv-card-slot');
+    assert(card.textContent.includes('Chờ ý kiến bác sĩ'), 'card heading must be Chờ ý kiến bác sĩ');
+
+    const items = card.querySelectorAll('.s12-issue');
+    assert(items.length === 2, 'context items must render');
+    assert(items[0].dataset.s12Issue === 'PR-01' && items[1].dataset.s12Issue === 'PR-03', 'context codes match');
+
+    const at0 = items[0].querySelector('.s12-at');
+    assert(at0 && at0.textContent.length <= 48 && at0.textContent.endsWith('…'), 'long location shortened');
+    assert(at0.getAttribute('title') === longLoc, 'full location kept in title');
+
+    const btns = card.querySelectorAll('[data-dq-option]');
+    assert(btns.length === 2, 'must render two option buttons');
+    assert(btns[0].dataset.dqOption === 'fix_visuals' && btns[0].classList.contains('primary'), 'recommended option first with primary style');
+    assert(btns[1].dataset.dqOption === 'split_long_scenes', 'second option id matches');
+
+    const freeInput = card.querySelector('#dq-free-text');
+    assert(freeInput, 'free text input rendered when allow_free_text is true');
+    freeInput.value = 'Chỉnh nhãn rõ hơn';
+
+    // Clicking option posts exact payload to /api/project/<slug>/answer-question
+    await btns[0].onclick();
+    assert(answerPosts.length === 1, 'option click sends one POST');
+    assert(answerPosts[0].question_id === 'dq-abc123', 'payload includes question_id');
+    assert(answerPosts[0].option_id === 'fix_visuals', 'payload includes option_id');
+    assert(answerPosts[0].text === 'Chỉnh nhãn rõ hơn', 'payload includes optional free text');
+    assert(answerPosts[0].expected_revision === '002', 'payload includes expected_revision');
+
+    // No open doctor_question -> card does NOT render even if blocked text exists
+    const blockedOnly = { ...baseBundle, doctor_question: null, blocked: 'TTS lỗi: timeout kết nối' };
+    pyh.setVideoState({ pv: blockedOnly, pvTab: 'overview' });
+    pyh.renderPv();
+    assert(!slot.querySelector('#pv-stage12-card'), 'no doctor_question must not render card');
+    ''')

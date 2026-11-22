@@ -41,14 +41,24 @@ from healthvideo.process import process_token
 from healthvideo.qa.script import review_script
 from healthvideo.storage.explainer import read_explainer
 from healthvideo.storage.files import (
+    AGENT_UTF8_RULE,
     canonical_json_hash,
+    read_agent_text,
+    read_agent_yaml,
     read_yaml,
     write_text_atomic,
     write_yaml_atomic,
 )
 from healthvideo.storage.project_layout import resolve_project_layout
 from healthvideo.storage.queue import load_queue
-from healthvideo.workflows import change_request, chat, expert, product_review, rework
+from healthvideo.workflows import (
+    change_request,
+    chat,
+    doctor_questions,
+    expert,
+    product_review,
+    rework,
+)
 from healthvideo.workflows.factory_standards import style_a_active
 from healthvideo.workflows.gate_review import (
     MEDICAL_APPROVAL_ARTIFACT,
@@ -224,6 +234,7 @@ def is_project_paused(root: Path, slug: str) -> bool:
     return (root / "topics" / "logs" / slug / PAUSED_FILE).is_file()
 
 HARD_RULES: tuple[str, ...] = (
+    AGENT_UTF8_RULE,
     "Không chép toàn văn hay đoạn dài từ nguồn vào project; trích dẫn ≤ 25 từ kèm locator.",
     "Không tự sinh SVG/PNG giả làm ảnh nguồn; diễn giải ledger dùng visual source_card, evidence_highlight chỉ dùng crop nguồn thật đã đăng ký giấy phép.",
     "Không bịa nguồn, DOI, PMID, số liệu, kết quả nghiên cứu hay trải nghiệm của bác sĩ; mọi khẳng định y khoa phải trỏ tới claim trong ledger.",
@@ -439,6 +450,8 @@ class RunReport:
     code_changes: list[Path] = field(default_factory=list)
     # Topics paused until a model of their chain returns from quota rest.
     waiting_model: list[str] = field(default_factory=list)
+    # Topics paused waiting for a doctor question outside formal approval gates.
+    waiting_doctor: list[str] = field(default_factory=list)
 
 
 WAITING_MODEL_FILE = "waiting-model.txt"
@@ -641,26 +654,58 @@ def _build_step_prompt(
         reviewing = step in {'script_review', 'product_review'}
         schema = (script_review.ScriptReviewReport if step == 'script_review'
                   else product_review.ProductReviewReport)
-        output = (f'Chỉ ghi {_artifact_report_path(project_dir, step)}. Schema báo cáo:\n'
-                  + json.dumps(schema.model_json_schema(), ensure_ascii=False)
-                  if reviewing else
-                  'Chỉ sửa các dòng/phạm vi issue mở. Giữ nguyên từng byte ngoài phạm vi; '
-                  'không tự sửa dòng kề. Giữ id, thứ tự và metadata. '
-                  'Dùng lệnh nộp của bước hiện hành sau khi sửa; không tự duyệt cổng.')
-        prompt = (f'Project: {project_dir}\nBước: (`{step}`)\n'
-                  f'Ghi chú bác sĩ: {entry.doctor_note or ""}\n'
-                  f'Yêu cầu bác sĩ: {deps.reject_note(project_dir) or ""}\n'
-                  'Đây là vòng sửa/duyệt từng phần. Gói bên dưới là đầu vào chính; '
-                  'không đọc lại toàn bộ bài để chấm lại từ đầu. Ngữ cảnh diff chỉ để đọc. '
-                  'Chỉ kiểm issue mở và ảnh hưởng ngữ cảnh quanh chỗ sửa; xem tổng thể ngắn. '
-                  'Không nêu lỗi mới ở phần không đổi trừ an toàn y khoa nghiêm trọng '
-                  '(blocking_safety: true, ghi lý do cụ thể). Giữ issue_id và vị trí. '
-                  'Trả issue_statuses bắt buộc là từ điển issue_id -> status '
-                  '(resolved/still_open), không phải danh sách. Ví dụ YAML: '
-                  'issue_statuses: {PR3-01: still_open, PR3-02: resolved}. overall ngắn. '
-                  'Giữ điểm tiêu chí không có issue và các decisions chưa có chỉ dẫn xử lý.\n'
-                  + incremental + '\n' + output
-                  + '\n## Quy tắc cứng\n' + '\n'.join(f'- {rule}' for rule in HARD_RULES))
+        if reviewing:
+            output = (
+                f'Chỉ ghi {_artifact_report_path(project_dir, step)} bằng Python với encoding="utf-8". '
+                f'Schema báo cáo:\n'
+                + json.dumps(schema.model_json_schema(), ensure_ascii=False)
+            )
+            prompt = (f'Project: {project_dir}\nBước: (`{step}`)\n'
+                      f'Ghi chú bác sĩ: {entry.doctor_note or ""}\n'
+                      f'Yêu cầu bác sĩ: {deps.reject_note(project_dir) or ""}\n'
+                      'Đây là vòng sửa/duyệt từng phần. Gói bên dưới là đầu vào chính; '
+                      'không đọc lại toàn bộ bài để chấm lại từ đầu. Ngữ cảnh diff chỉ để đọc. '
+                      'Chỉ kiểm issue mở và ảnh hưởng ngữ cảnh quanh chỗ sửa; xem tổng thể ngắn. '
+                      'Không nêu lỗi mới ở phần không đổi trừ an toàn y khoa nghiêm trọng '
+                      '(blocking_safety: true, ghi lý do cụ thể). Giữ issue_id và vị trí. '
+                      'Trả issue_statuses bắt buộc là từ điển issue_id -> status '
+                      '(resolved/still_open), không phải danh sách. Ví dụ YAML: '
+                      'issue_statuses: {PR3-01: still_open, PR3-02: resolved}. overall ngắn. '
+                      'Giữ điểm tiêu chí không có issue và các decisions chưa có chỉ dẫn xử lý. '
+                      'Bắt buộc ghi YAML bằng Python encoding="utf-8" (không làm mất dấu tiếng Việt thành "?").\n'
+                      + incremental + '\n' + output
+                      + '\n## Quy tắc cứng\n' + '\n'.join(f'- {rule}' for rule in HARD_RULES))
+        elif step == 'revise_product':
+            output = (
+                'Chỉ sửa phẫu thuật đúng phạm vi issue mở (fixable: true). '
+                'Khóa cứng tuyệt đối `script/script.yaml`, `evidence/*`, `explainer/*`, '
+                '`assets/license-ledger.yaml`, `script/outline.yaml` và các trường y khoa '
+                '(`id`, `script_line_id`, `narration`, `claim_id`, `chapter_id`, `source_marker`, '
+                '`source_card`, `evidence_highlight`) trong storyboard; không sửa cảnh ngoài danh sách. '
+                'Ghi mọi file YAML bằng Python với encoding="utf-8". '
+                'Không tự dựng video hay đổi trạng thái project; Python dựng lại ngay sau bước này.'
+            )
+            prompt = (f'Project: {project_dir}\nBước: (`{step}`)\n'
+                      f'Ghi chú bác sĩ: {entry.doctor_note or ""}\n'
+                      f'Yêu cầu bác sĩ: {deps.reject_note(project_dir) or ""}\n'
+                      'Đây là vòng sửa phẫu thuật tại Trạm 12. Kỷ luật thợ dựng (`mục 5` Spec Style A): '
+                      'không tự thêm hiệu ứng ngoài bộ động tác nhận diện để "cho sinh động".\n'
+                      + incremental + '\n' + output
+                      + '\n## Quy tắc cứng\n' + '\n'.join(f'- {rule}' for rule in HARD_RULES))
+        else:
+            output = (
+                'Chỉ sửa các dòng/phạm vi issue mở. Giữ nguyên từng byte ngoài phạm vi; '
+                'không tự sửa dòng kề. Giữ id, thứ tự và metadata. '
+                'Ghi file YAML bằng Python với encoding="utf-8". '
+                'Dùng lệnh nộp của bước hiện hành sau khi sửa; không tự duyệt cổng.'
+            )
+            prompt = (f'Project: {project_dir}\nBước: (`{step}`)\n'
+                      f'Ghi chú bác sĩ: {entry.doctor_note or ""}\n'
+                      f'Yêu cầu bác sĩ: {deps.reject_note(project_dir) or ""}\n'
+                      'Đây là vòng sửa/duyệt từng phần. Gói bên dưới là đầu vào chính; '
+                      'không đọc lại toàn bộ bài để chấm lại từ đầu. Ngữ cảnh diff chỉ để đọc.\n'
+                      + incremental + '\n' + output
+                      + '\n## Quy tắc cứng\n' + '\n'.join(f'- {rule}' for rule in HARD_RULES))
         if step == 'product_review':
             prompt += (f'\nLấy bằng chứng hình hiện hành: healthvideo step review-frames {project_dir} --every 4. '
                        'Chờ lệnh xong, mở contact sheet của các cảnh có issue và cảnh kề; '
@@ -821,8 +866,12 @@ def _run_agent_invocation(
         )
         for correction in range(2):
             if not (scoped_script or scoped_product or scoped_medical or scoped_storyboard):
+                if result.ok:
+                    _validate_agent_step_files(project_dir, step)
                 break
             try:
+                if result.ok:
+                    _validate_agent_step_files(project_dir, step)
                 protected_after = {p for name in protected_dirs
                                    for p in (repair_root / name).rglob('*.yaml')} - sibling_files
                 extra_allowed = ({repair_root / 'script/questions.yaml'} if scoped_medical
@@ -847,6 +896,7 @@ def _run_agent_invocation(
                             raise ValueError(f'Repair scope violation: {original}')
                 elif scoped_product:
                     product_review.check_repair(project_dir, product_before)
+                    product_review.finalize_product_repair(project_dir, product_before)
                 elif scoped_storyboard:
                     from healthvideo.workflows import rework
 
@@ -1036,7 +1086,7 @@ def _voice_prep_validation_problem(project_dir: Path) -> str | None:
     if not script_path.is_file():
         return f"thiếu script/script.yaml để đối chiếu {VOICE_PREP_ARTIFACT}"
     try:
-        sheet = VoicePrepSheet.model_validate(read_yaml(vp_path))
+        sheet = VoicePrepSheet.model_validate(read_agent_yaml(vp_path))
     except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
         return f"{VOICE_PREP_ARTIFACT} chưa hợp lệ: {_sanitize_reason(exc)}"
     try:
@@ -1064,7 +1114,7 @@ def _shorts_plan_validation_problem(project_dir: Path) -> str | None:
     if not plan_path.is_file():
         return f"thiếu {SHORTS_PLAN_ARTIFACT}"
     try:
-        plan = ShortsPlan.model_validate(read_yaml(plan_path))
+        plan = ShortsPlan.model_validate(read_agent_yaml(plan_path))
     except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
         return f"{SHORTS_PLAN_ARTIFACT} chưa hợp lệ: {_sanitize_reason(exc)}"
     script_path = revision_root / "script" / "script.yaml"
@@ -1110,7 +1160,7 @@ def _diagnose_script_error(revision_root: Path) -> str | None:
     if not script_path.is_file():
         return "thiếu script/script.yaml"
     try:
-        script = Script.model_validate(read_yaml(script_path))
+        script = Script.model_validate(read_agent_yaml(script_path))
     except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
         return f"script/script.yaml chưa hợp lệ: {_sanitize_reason(exc)}"
     if not script.lines:
@@ -1258,6 +1308,35 @@ def _validate_nonstate_agent_step(
     return None
 
 
+def _validate_agent_step_files(project_dir: Path, step: str) -> None:
+    """Catch direct writes too; never inspect historical review archives/snapshots."""
+    revision, _ = _revision_root_or_error(project_dir)
+    if revision is None:
+        return  # Existing schema/state validation reports missing or invalid projects.
+    script = ('script/script.yaml', 'script/outline.yaml', 'script/questions.yaml')
+    visuals = ('storyboard/storyboard.yaml', 'assets/asset-manifest.yaml', 'script/clip-plan.yaml')
+    outputs = {
+        'research': ('evidence/question.yaml', 'evidence/claims.yaml', 'evidence/records.yaml',
+                     'evidence/ledger.yaml', expert.EXPERT_BRIEF, 'explainer/explainer.yaml',
+                     expert.QUESTIONS),
+        'draft': script,
+        'revise_medical': script + visuals,
+        'storyboard_design': visuals,
+        'voice_prep': (VOICE_PREP_ARTIFACT,),
+        'shorts_plan': (SHORTS_PLAN_ARTIFACT,),
+        'posts': (POSTS_ARTIFACT,),
+        'script_review': ('reviews/script-review.yaml',),
+        'product_review': (product_review.REPORT,),
+        'visual_review': ('reviews/visual-review.yaml',),
+        'revise_product': visuals + (POSTS_ARTIFACT, SHORTS_PLAN_ARTIFACT, VOICE_PREP_ARTIFACT),
+        'revise_production': visuals + (POSTS_ARTIFACT,),
+    }
+    for relative in outputs.get(step, ()):
+        path = revision / relative
+        if path.is_file():
+            read_agent_text(path)
+
+
 def _run_parallel_branches(
     root: Path,
     deps: RunDeps,
@@ -1371,6 +1450,14 @@ def _run_topic(
     for entry in entries:
         if is_project_paused(root, entry.slug):
             continue
+        candidate_dir = root / "projects" / entry.slug
+        if (candidate_dir / "project.yaml").is_file():
+            product_review.reconcile_doctor_question(root, candidate_dir)
+        if doctor_questions.open_question(root, entry.slug) is not None:
+            with _REPORT_LOCK:
+                if entry.slug not in report.waiting_doctor:
+                    report.waiting_doctor.append(entry.slug)
+            continue
         waiting = root / "topics" / "logs" / entry.slug / WAITING_MODEL_FILE
         if waiting.exists():
             back = waiting_until(root, entry.slug)
@@ -1391,6 +1478,13 @@ def _run_topic(
         while True:
             with chat.step_boundary(root, entry.slug):
                 if is_project_paused(root, entry.slug):
+                    break
+                if (project_dir / "project.yaml").is_file():
+                    product_review.reconcile_doctor_question(root, project_dir)
+                if doctor_questions.open_question(root, entry.slug) is not None:
+                    with _REPORT_LOCK:
+                        if entry.slug not in report.waiting_doctor:
+                            report.waiting_doctor.append(entry.slug)
                     break
                 state = deps.read_state(project_dir)
                 pending_change = change_request.pending_note(project_dir)
@@ -1524,6 +1618,11 @@ def _run_topic(
                         except (OSError, ValueError) as exc:
                             _mark_blocked(root, entry.slug, f"duyệt sản phẩm lỗi: {exc}", report)
                             break
+                        if step == "wait_doctor":
+                            with _REPORT_LOCK:
+                                if entry.slug not in report.waiting_doctor:
+                                    report.waiting_doctor.append(entry.slug)
+                            break
 
                 answering = False
                 if step == "script_review":
@@ -1552,6 +1651,11 @@ def _run_topic(
                             step = next_script_action(project_dir)
                     except (OSError, ValueError) as exc:
                         _mark_blocked(root, entry.slug, f"chấm kịch bản lỗi: {exc}", report)
+                        break
+                    if step == "wait_doctor":
+                        with _REPORT_LOCK:
+                            if entry.slug not in report.waiting_doctor:
+                                report.waiting_doctor.append(entry.slug)
                         break
                 if (step in {"script_review", "submit_medical"}
                         and state == WorkflowState.DRAFT_READY
@@ -1761,6 +1865,11 @@ def _run_topic(
                         )
                         _mark_blocked(root, entry.slug, reason, report, log_path=result_log_path)
                         break
+                    if rewrite_action == "wait_doctor":
+                        with _REPORT_LOCK:
+                            if entry.slug not in report.waiting_doctor:
+                                report.waiting_doctor.append(entry.slug)
+                        break
                     if rewrite_action == "draft":
                         rev_root, _ = _revision_root_or_error(project_dir)
                         detail = _diagnose_script_error(rev_root) if rev_root is not None else None
@@ -1903,6 +2012,7 @@ def run_queue(
             paths.extend(logs / name for name in (
                 'blocked.txt', 'production-retry.yaml', 'agent-retry.yaml',
                 WAITING_MODEL_FILE, 'waiting-model-step.yaml', PAUSED_FILE,
+                doctor_questions.QUESTION_FILE,
             ))
             contents = []
             for path in paths:
@@ -1931,7 +2041,7 @@ def run_queue(
                         continue
                     # A fresh retry replaces the previous blocked/gate summary.
                     with _REPORT_LOCK:
-                        for items in (report.blocked, report.at_gate, report.waiting_model):
+                        for items in (report.blocked, report.at_gate, report.waiting_model, report.waiting_doctor):
                             if entry.slug in items:
                                 items.remove(entry.slug)
                     pending[pool.submit(run_and_snapshot, entry)] = entry.slug

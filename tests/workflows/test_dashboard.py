@@ -1125,6 +1125,44 @@ def test_html_workshop_places_all_16_roles_including_repair_engineer():
         assert f"'{role_id}'" in workshop_slice, role_id
 
 
+def test_html_workshop_animations_and_repair_engineer_motion(tmp_path):
+    import re
+    import shutil
+    import subprocess
+
+    html = dashboard.HTML_PATH.read_text(encoding='utf-8')
+    shirts_block = html[html.index('const WS_SHIRTS ='):html.index('const WS_ROLE_ACT =')]
+    role_act_block = html[html.index('const WS_ROLE_ACT ='):html.index('const WS_STATE_META =')]
+    assert 'repair_engineer:' in shirts_block
+    assert "repair_engineer:'ws-act-repair'" in role_act_block
+
+    for marker in (
+        '.ws-act-repair',
+        '.ws-mach-gear',
+        '.ws-mach-progress',
+        '.ws-person-bob',
+        '.ws-badge-dot',
+        '@keyframes ws-station-glow',
+        '@keyframes ws-station-scan',
+        '#workshop:not([data-motion="on"])',
+    ):
+        assert marker in html, marker
+
+    scripts = re.findall(r'<script[^>]*>([\s\S]*?)</script>', html)
+    assert scripts
+    node = shutil.which('node')
+    if node:
+        for idx, script in enumerate(scripts):
+            js_file = tmp_path / f'dashboard_script_{idx}.js'
+            js_file.write_text(script, encoding='utf-8')
+            proc = subprocess.run(
+                [node, '--check', str(js_file)],
+                capture_output=True,
+                check=False,
+            )
+            assert proc.returncode == 0, f'JS syntax error in <script> #{idx}: {proc.stderr.decode("utf-8", "replace")}'
+
+
 def test_marker_non_string_job_id_is_rejected(tmp_path, monkeypatch):
     from healthvideo.agents import RUNNING_MARKER
     from healthvideo.process import process_token
@@ -1949,3 +1987,352 @@ def test_medanim_dashboard_api_preview_and_pin_approve_reject(tmp_path, monkeypa
     finally:
         srv.shutdown()
         srv.server_close()
+
+
+def test_review_bundle_frame_inspector_and_storyboard_fallback(tmp_path):
+    from healthvideo.storage.files import write_yaml_atomic
+    from healthvideo.workflows import product_review as pr
+
+    project = _create_named_v2_project(tmp_path / 'projects', 'nle-video', 'awaiting_video_review')
+    rev = project / 'revisions/001'
+    renders = rev / 'renders'
+    renders.mkdir(parents=True, exist_ok=True)
+    (renders / 'video.mp4').write_bytes(b'fake-mp4')
+
+    (renders / 'render-input.json').write_text(json.dumps({
+        'fps': 30,
+        'format_profile': 'youtube_long',
+        'scenes': [
+            {
+                'id': 'S01',
+                'start_frame': 0,
+                'duration_frames': 90,
+                'visual': 'anatomy_animation',
+                'script_line_id': 'L01',
+                'claim_id': 'C01',
+                'chapter_id': 'CH01',
+                'source_marker': '[1]',
+                'on_screen_text': 'Ăn mặn tăng huyết áp',
+                'narration': 'Ăn mặn có thể làm huyết áp tăng.',
+                'mascot_pose': 'explain',
+                'anatomy': {'subject': 'liver_organ', 'state': 'normal', 'severity': 0.0, 'motion': 'Giữ khung'},
+                'motion': {'emphasis': 'marker-underline-title'},
+                'beats': [{'at': 'huyết áp', 'start_frame': 45, 'focus': 'overview', 'labels': ['bp'], 'action': None}],
+                'entrances': [{'text': 'Ăn mặn', 'start_frame': 10}],
+                'words': [
+                    {'text': 'Ăn', 'start_frame': 0, 'end_frame': 15},
+                    {'text': 'mặn', 'start_frame': 15, 'end_frame': 30},
+                    {'text': 'huyết', 'start_frame': 45, 'end_frame': 65},
+                ],
+                'visual_assets': [{'path': 'assets/evidence-r01.svg', 'role': 'chart'}],
+            },
+            {
+                'id': 'S02',
+                'start_frame': 90,
+                'duration_frames': 120,
+                'visual': 'source_card',
+                'script_line_id': 'L02',
+                'claim_id': 'C01',
+                'chapter_id': 'CH02',
+                'source_marker': '[1]',
+                'on_screen_text': 'Giảm muối mỗi ngày',
+                'narration': 'Giảm muối giúp kiểm soát huyết áp.',
+                'beats': [],
+                'entrances': [],
+                'words': [],
+                'visual_assets': [],
+            },
+        ],
+    }), encoding='utf-8')
+    (renders / 'scene-timing.json').write_text(json.dumps({
+        'schema_version': '1.0',
+        'fps': 30,
+        'pad_frames': 9,
+        'scenes': [
+            {'scene_id': 'S01', 'script_line_id': 'L01', 'audio_ms': 2700, 'start_frame': 0, 'duration_frames': 90},
+            {'scene_id': 'S02', 'script_line_id': 'L02', 'audio_ms': 3500, 'start_frame': 90, 'duration_frames': 120},
+        ],
+    }), encoding='utf-8')
+    (renders / 'render-manifest.json').write_text(json.dumps({
+        'sfx': [{'scene': 'S02', 'id': 'whoosh-soft', 'at': 0, 'time': 3.0, 'volume': 0.2}],
+    }), encoding='utf-8')
+    write_yaml_atomic(rev / pr.LOG, {
+        'version': 1,
+        'submitted': 0,
+        'rounds': [{
+            'round': 1,
+            'render_sha256': 'a' * 64,
+            'passed': False,
+            'scores': dict.fromkeys(pr.CRITERIA, 8),
+            'summary': 'Có 1 điểm cần chỉnh.',
+            'issues': [{
+                'at': 'S02@00:04',
+                'criterion': 'hinh_ro',
+                'problem': 'Chữ hơi nhỏ',
+                'fix': 'Tăng cỡ chữ',
+                'fixable': True,
+            }],
+            'checked': [],
+            'decisions': [],
+        }],
+    })
+    (rev / 'reviews/pronunciation-qa.json').write_text(json.dumps({
+        'status': 'flagged',
+        'blocked': False,
+        'lines': [{'id': 'L01'}],
+        'flags': [{'line': 'L01', 'script_word': 'natri', 'heard': 'na-ti', 'start': 1.0}],
+    }), encoding='utf-8')
+    write_yaml_atomic(rev / 'reviews/changes/20261119-requested.yaml', {
+        'at': '2026-11-19T10:00:00+07:00',
+        'by': 'doctor-chat',
+        'kind': 'edit_production',
+        'brief': 'Chỉnh màu cảnh S01',
+        'context': {'scene': 'S01', 'time_s': 1},
+        'applied': False,
+    })
+    visual_dir = rev / 'reviews/visual'
+    visual_dir.mkdir(parents=True, exist_ok=True)
+    (visual_dir / 'final-contact-sheet-001.jpg').write_bytes(b'\xff\xd8\xff\xe0fake-jpg')
+    write_yaml_atomic(visual_dir / 'final-contact-sheets.yaml', {
+        'sheets': [{'path': 'reviews/visual/final-contact-sheet-001.jpg', 'sha256': 'x'}],
+        'sample_frames': [0, 45, 150],
+    })
+
+    def check(srv):
+        st, raw = request(srv, 'GET', f'/api/project/{project.name}/bundle')
+        assert st == 200
+        fi = json.loads(raw)['frame_inspector']
+        assert fi['fps'] == 30
+        assert fi['total_frames'] == 210
+        assert fi['duration_s'] == 7.0
+        assert fi['format_profile'] == 'youtube_long'
+        assert len(fi['scenes']) == 2
+        s1, s2 = fi['scenes']
+        assert s1['id'] == 'S01' and s1['index'] == 0
+        assert s1['start_frame'] == 0 and s1['end_frame'] == 90 and s1['duration_frames'] == 90
+        assert s1['audio_ms'] == 2700
+        assert s1['anatomy']['subject'] == 'liver_organ'
+        assert s1['beats'][0]['abs_frame'] == 45
+        assert s1['entrances'][0]['abs_frame'] == 10
+        assert s1['words'][1]['text'] == 'mặn'
+        assert s1['open_change'] is True
+        assert s2['open_change'] is False
+        assert fi['sfx'][0]['id'] == 'whoosh-soft' and fi['sfx'][0]['frame'] == 90
+        kinds = {m['kind']: m for m in fi['markers']}
+        assert kinds['issue']['frame'] == 120 and kinds['issue']['scene'] == 'S02'
+        assert kinds['pronunciation']['frame'] == 30 and kinds['pronunciation']['scene'] == 'S01'
+        assert kinds['open_change']['frame'] == 0 and kinds['open_change']['scene'] == 'S01'
+        assert fi['contact_sheets']['sample_frames'] == [0, 45, 150]
+        assert fi['contact_sheets']['sheets'][0]['url'] == f'/media/{project.name}/review-sheet/final-contact-sheet-001.jpg'
+
+    _with_server(tmp_path, check)
+
+    # Fallback when render-input.json is absent: reads storyboard.yaml & renders/sfx.json
+    fb_proj = _create_named_v2_project(tmp_path / 'projects_fb', 'fb-topic', 'draft_ready')
+    fb_rev = fb_proj / 'revisions/001'
+    write_yaml_atomic(fb_rev / 'storyboard/storyboard.yaml', {
+        'schema_version': '1.0',
+        'title': 'Fallback',
+        'format_profile': 'vertical_clip',
+        'scenes': [{
+            'id': 'S01',
+            'start_frame': 0,
+            'duration_frames': 120,
+            'narration': 'Uống đủ nước mỗi ngày giúp thận khỏe.',
+            'visual': 'whiteboard',
+            'on_screen_text': 'Uống đủ nước',
+            'beats': [{'at': 'mỗi ngày', 'focus': 'overview', 'labels': []}],
+        }],
+    })
+    (fb_rev / 'renders').mkdir(parents=True, exist_ok=True)
+    (fb_rev / 'renders/sfx.json').write_text(
+        json.dumps([{'scene': 'S01', 'id': 'chime-soft', 'at': 1.0, 'time': 1.0, 'volume': 0.2}]),
+        encoding='utf-8',
+    )
+    fb_fi = dashboard._frame_inspector_payload(fb_rev, fb_proj.name, [], None, {})
+    assert fb_fi['format_profile'] == 'vertical_clip'
+    assert fb_fi['total_frames'] == 120
+    assert fb_fi['scenes'][0]['beats'][0]['start_frame'] is not None
+    assert fb_fi['sfx'][0]['id'] == 'chime-soft' and fb_fi['sfx'][0]['frame'] == 30
+
+
+def test_review_sheet_route_serves_valid_images_and_blocks_traversal(tmp_path):
+    project = _create_named_v2_project(tmp_path / 'projects', 'sheet-topic', 'awaiting_video_review')
+    rev = project / 'revisions/001'
+    visual_dir = rev / 'reviews/visual'
+    visual_dir.mkdir(parents=True, exist_ok=True)
+    jpg_bytes = b'\xff\xd8\xff\xe0sheet-data'
+    (visual_dir / 'final-contact-sheet-001.jpg').write_bytes(jpg_bytes)
+    (visual_dir / 'sub').mkdir()
+    (visual_dir / 'sub/nested.jpg').write_bytes(jpg_bytes)
+    (visual_dir / 'final-contact-sheets.yaml').write_text('sheets: []\n', encoding='utf-8')
+    (rev / 'reviews/secret.jpg').write_bytes(b'secret')
+
+    def check(srv):
+        port = srv.server_address[1]
+        conn = HTTPConnection('127.0.0.1', port, timeout=5)
+        conn.request('GET', f'/media/{project.name}/review-sheet/final-contact-sheet-001.jpg',
+                     headers={'Host': f'127.0.0.1:{port}'})
+        resp = conn.getresponse()
+        body = resp.read()
+        ctype = resp.getheader('Content-Type')
+        conn.close()
+        assert resp.status == 200
+        assert body == jpg_bytes
+        assert ctype == 'image/jpeg'
+
+        for bad_path in (
+            f'/media/{project.name}/review-sheet/missing.jpg',
+            f'/media/{project.name}/review-sheet/final-contact-sheets.yaml',
+            f'/media/{project.name}/review-sheet/sub/nested.jpg',
+            f'/media/{project.name}/review-sheet/..%2Fsecret.jpg',
+            f'/media/{project.name}/review-sheet/..%2F..%2Fproject.yaml',
+        ):
+            assert request(srv, 'GET', bad_path)[0] == 404, bad_path
+
+    _with_server(tmp_path, check)
+
+
+def test_html_workshop_avatar_redesign_contract():
+    html = dashboard.HTML_PATH.read_text(encoding='utf-8')
+    avatar_ids = (
+        'researcher', 'scout', 'medical_expert', 'writer', 'storyboard_director', 'voice_director',
+        'script_critic', 'art_director', 'editor', 'product_critic', 'copywriter', 'shorts_producer',
+        'coordinator', 'coordinator_senior', 'feedback_analyst', 'repair_engineer',
+        'gate_medical', 'gate_video',
+    )
+    block = html[html.index('const WS_AVATARS = {'):html.index('function wsShade(')]
+    for avatar_id in avatar_ids:
+        assert f'{avatar_id}:{{' in block, avatar_id
+    for style in ("'side'", "'bob'", "'bun'", "'ponytail'", "'curly'", "'undercut'", "'crop'", "'long'"):
+        assert f'style:{style}' in block, style
+    for fn in ('function wsPersonSvg(', 'function wsHairBackSvg(', 'function wsHairFrontSvg(',
+               'function wsOutfitSvg(', 'function wsFaceSvg(', 'function wsArmSvg(', 'function wsGateEmptySvg('):
+        assert fn in html, fn
+    # Accessories are worn by the person, not drawn as detached props.
+    prop_block = html[html.index('function wsPropSvg('):html.index('function wsIsoSvg(')]
+    assert 'M90 25c0-6 20-6 20 0' not in prop_block
+    assert 'M110 28l-5 5' not in prop_block
+    # The old dashed placeholder circle for an empty gate is gone; the armchair replaces it.
+    assert 'stroke-dasharray="3 2.2"' not in html
+    assert 'ws-gate-armchair' in html
+    # Roomier card and stage styles, with a light-theme counterpart; animation contracts are preserved.
+    assert '.ws-iso-stage{width:100%;height:110px' in html
+    assert '.ws-iso-svg{width:100%;height:110px;max-width:196px' in html
+    assert 'min-height:192px;padding:10px 11px 11px' in html
+    assert 'border-radius:14px;background:var(--ws-station-bg)' in html
+    assert 'html[data-theme="light"] .ws-iso-stage{' in html
+    for contract in ('ws-person-bob', 'ws-arm-l', 'ws-arm-r', 'translate(124,64)', 'ws-dossier-active',
+                     'ws-scr-bar', 'ws-mach-gear', 'ws-mach-progress', 'ws-badge-dot'):
+        assert contract in html, contract
+    # The NLE video timeline from the previous task stays intact.
+    for nle in ('id="pv-nle-timeline"', 'id="pv-transport"', 'id="pv-frame-inspector"', 'id="pv-playhead"',
+                'function wireVideoNle('):
+        assert nle in html, nle
+
+
+def test_api_state_and_existing_dashboard_rejects_foreign_http(tmp_path):
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    def check(srv):
+        status, body = request(srv, 'GET', '/api/state')
+        assert status == 200
+        payload = json.loads(body)
+        assert isinstance(payload['projects'], list)
+        assert 'xuong' in payload
+        assert dashboard.existing_dashboard(srv.server_address[1]) is True
+
+    _with_server(tmp_path, check)
+
+    class ForeignHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(501)
+            self.end_headers()
+
+        def log_message(self, *args):
+            pass
+
+    foreign = ThreadingHTTPServer(('127.0.0.1', 0), ForeignHandler)
+    t = threading.Thread(target=foreign.serve_forever, daemon=True)
+    t.start()
+    try:
+        assert dashboard.existing_dashboard(foreign.server_address[1]) is False
+    finally:
+        foreign.shutdown()
+        foreign.server_close()
+
+
+def test_serve_falls_back_from_busy_default_port_and_persists_server_state(tmp_path, monkeypatch):
+    import socket
+    import time
+    import urllib.request
+
+    # Pick an available contiguous port range to stand in for 8765..8768 without touching real port 8765.
+    probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    probe.bind(('127.0.0.1', 0))
+    base_port = probe.getsockname()[1]
+    probe.close()
+
+    blocker = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        blocker.bind(('127.0.0.1', base_port))
+        blocker.listen(1)
+    except OSError:
+        blocker.close()
+        pytest.skip('Ephemeral base port not free')
+
+    monkeypatch.setattr(dashboard, 'DEFAULT_PORT', base_port)
+    monkeypatch.setattr(dashboard, 'FALLBACK_PORT_END', base_port + 5)
+    from healthvideo.workflows import telegram_bot
+    monkeypatch.setattr(telegram_bot, 'ensure_background', lambda root: None)
+
+    started_urls = []
+    orig_write = dashboard.write_server_state
+    recorded = {}
+
+    def capture_state(root, port, url):
+        path = orig_write(root, port, url)
+        recorded['state'] = json.loads(path.read_text(encoding='utf-8'))
+        return path
+
+    monkeypatch.setattr(dashboard, 'write_server_state', capture_state)
+
+    def serve_thread():
+        dashboard.serve(tmp_path, port=base_port, open_browser=False, echo=started_urls.append)
+
+    try:
+        # Start serve in background; once state file appears, verify find_running_dashboard & reuse, then quit.
+        t = threading.Thread(target=serve_thread, daemon=True)
+        t.start()
+        deadline = time.monotonic() + 10
+        while 'state' not in recorded and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert 'state' in recorded
+        bound_port = recorded['state']['port']
+        assert base_port < bound_port <= base_port + 5
+        assert recorded['state']['url'] == f'http://127.0.0.1:{bound_port}/'
+        assert dashboard.find_running_dashboard(tmp_path, port=base_port) == (
+            bound_port,
+            f'http://127.0.0.1:{bound_port}/',
+        )
+
+        # Second serve() call with default port reuses the fallback port instead of failing.
+        reused = []
+        dashboard.serve(tmp_path, port=base_port, open_browser=False, echo=reused.append)
+        assert reused == [f'App đã mở sẵn: http://127.0.0.1:{bound_port}/']
+
+        # Read token from HTML and trigger app/quit to cleanly stop the server.
+        html = urllib.request.urlopen(f'http://127.0.0.1:{bound_port}/', timeout=2).read().decode('utf-8')
+        token = html.split("TOKEN = '", 1)[1].split("'", 1)[0]
+        req = urllib.request.Request(
+            f'http://127.0.0.1:{bound_port}/api/app/quit',
+            data=b'{}',
+            headers={'Content-Type': 'application/json', 'X-Dashboard-Token': token},
+            method='POST',
+        )
+        with urllib.request.urlopen(req, timeout=2) as resp:
+            assert resp.status == 200
+        t.join(timeout=5)
+        assert not dashboard.server_state_path(tmp_path).exists()
+    finally:
+        blocker.close()

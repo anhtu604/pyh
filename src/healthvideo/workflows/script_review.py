@@ -6,9 +6,14 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from healthvideo.storage.files import canonical_json_hash, read_yaml, write_yaml_atomic
+from healthvideo.storage.files import (
+    canonical_json_hash,
+    read_agent_yaml,
+    read_yaml,
+    write_yaml_atomic,
+)
 from healthvideo.storage.project_layout import resolve_project_layout
-from healthvideo.workflows import scoped_review
+from healthvideo.workflows import doctor_questions, scoped_review
 from healthvideo.workflows.decision_card import (
     MAX_DECISIONS,
     Decision,
@@ -29,9 +34,7 @@ CRITERIA: dict[str, str] = {
     'ca_tinh': 'Có cá tính, châm biếm đúng đối tượng',
     'dung_yeu_cau': 'Bám câu hỏi, ghi chú bác sĩ và đúng nghĩa claim',
 }
-ScriptAction = Literal['script_review', 'draft', 'submit_medical']
-
-
+ScriptAction = Literal['script_review', 'draft', 'submit_medical', 'wait_doctor']
 class ScriptIssue(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
@@ -146,23 +149,66 @@ def mark_submitted(artifact_root: Path) -> None:
     (artifact_root / PLAN).unlink(missing_ok=True)
 
 
-def next_script_action(project: Path) -> ScriptAction:
+def next_script_action(
+    project: Path,
+    *,
+    root: Path | None = None,
+    create_question: bool = True,
+) -> ScriptAction:
     """Choose the next step for a draft_ready script from the recorded rounds."""
-    root = _root(project)
-    log = _log(root)
+    artifact_root = _root(project)
+    log = _log(artifact_root)
     current = script_hash(project)
-    active = _rounds(root)[max(int(log.get('submitted', 0)),
-                               int(log.get('guidance_start', 0))):]
+    active = _rounds(artifact_root)[max(int(log.get('submitted', 0)),
+                                        int(log.get('guidance_start', 0))):]
     stuck = scoped_review.stuck(active)
     if stuck and not active[-1]['passed']:
-        labels = ', '.join(f"{CRITERIA[item['criterion']]} tại {item['line']} ({item['issue_id']})"
-                           for item in active[-1]['issues'] if item['issue_id'] in stuck)
-        raise ValueError(f'Trạm 07 cần hướng dẫn: cùng issue kẹt 2 vòng ({len(active)} vòng); '
-                         f'tiêu chí kẹt: {labels}. '
-                         'Bác sĩ gửi hướng dẫn cho Biên kịch qua chat.')
+        if create_question:
+            stuck_issues = [
+                item for item in active[-1].get('issues', [])
+                if item.get('issue_id') in stuck
+            ] or list(active[-1].get('issues', []))
+            context = [
+                {
+                    'code': str(item.get('issue_id') or ''),
+                    'location': str(item.get('line') or ''),
+                    'summary': (
+                        f"{CRITERIA.get(item.get('criterion', ''), item.get('criterion', ''))}: "
+                        f"{item.get('problem', '')}"
+                    ).strip()[:200],
+                }
+                for item in stuck_issues
+            ]
+            options = [
+                {
+                    'id': 'rewrite_stuck_lines',
+                    'label': 'Viết lại các dòng bị nêu',
+                    'detail': 'Giao Biên kịch sửa trực tiếp các dòng kẹt theo góp ý của bác sĩ.',
+                },
+                {
+                    'id': 'keep_style_and_recheck',
+                    'label': 'Giữ cách diễn đạt hiện tại, chỉnh nhẹ mạch nối',
+                    'detail': 'Giữ ý chính của các dòng bị nêu, chỉ chỉnh nhẹ ngữ điệu và câu chuyển.',
+                },
+            ]
+            factory_root = root if root is not None else project.resolve().parents[1]
+            doctor_questions.ask(
+                factory_root,
+                project.name,
+                station='07',
+                kind='stuck_issue',
+                question=(
+                    f'Trạm 07 kẹt cùng issue qua 2 vòng chấm kịch bản ({len(active)} vòng); '
+                    'bác sĩ chọn hướng xử lý cho Biên kịch.'
+                ),
+                context=context,
+                options=options,
+                allow_free_text=True,
+            )
+        return 'wait_doctor'
     if log.get('rewrite_pending_hash') == current:
         return 'draft'
-    rounds = _cycle(root)
+    rounds = _cycle(artifact_root)
     if rounds and not rounds[-1]['passed'] and len(rounds) >= MAX_REVIEWS:
         cycles = int(log.get('cycles', 1))
         if cycles < MAX_CYCLES:
@@ -174,7 +220,7 @@ def next_script_action(project: Path) -> ScriptAction:
                 updated.pop('rewrite_pending_hash', None)
             else:
                 updated['rewrite_pending_hash'] = current
-            write_yaml_atomic(root / LOG, updated)
+            write_yaml_atomic(artifact_root / LOG, updated)
             return 'script_review' if rewritten else 'draft'
         stuck = ', '.join(f'{CRITERIA[key]} ({score}/10)'
                           for key, score in rounds[-1]['scores'].items() if score < PASS_SCORE)
@@ -246,7 +292,7 @@ def record_review(project: Path, reviewed_hash: str) -> dict:
     if not report_file.is_file():
         raise ValueError('Agent chấm điểm chưa ghi báo cáo (thiếu reviews/script-review.yaml).')
     try:
-        report = ScriptReviewReport.model_validate(read_yaml(report_file))
+        report = ScriptReviewReport.model_validate(read_agent_yaml(report_file))
     except yaml.YAMLError as exc:
         raise ValueError(f'Báo cáo chấm kịch bản sai YAML: {exc}') from exc
     script = read_yaml(script_path(project))

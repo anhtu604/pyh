@@ -58,6 +58,32 @@ def _review(project: Path, score: int) -> dict:
     return record_review(project, script_hash(project))
 
 
+@pytest.mark.parametrize('field', ['summary', 'overall', 'checked', 'problem', 'fix'])
+def test_corrupt_review_is_not_logged(tmp_path, field):
+    project = _project(tmp_path)
+    bad = 'Kh?ng c? issue m? c?n x? l? trong v?ng n?y.'
+    changes = {field: [bad] if field == 'checked' else bad}
+    if field in {'problem', 'fix'}:
+        changes = {'issues': [{'line': 'N01', 'criterion': 'ca_tinh',
+                               'problem': 'Nhận xét.', 'fix': 'Sửa câu.', field: bad}]}
+    _report(project, **changes)
+    with pytest.raises(ValueError, match=r'văn bản bị mất dấu \(mã hóa\)'):
+        record_review(project, script_hash(project))
+    assert not (project / 'revisions/001' / LOG).exists()
+    assert (project / 'revisions/001' / REPORT).exists()
+
+
+def test_utf8_review_and_question_are_preserved(tmp_path):
+    project = _project(tmp_path)
+    text = 'Vì sao? Không có vấn đề cần xử lý. https://example.org/a?b=c'
+    _report(project, summary=text, overall=text, checked=[text])
+    entry = record_review(project, script_hash(project))
+    saved = read_yaml(project / 'revisions/001' / LOG)['rounds'][-1]
+    assert saved['summary'] == saved['overall'] == text
+    assert saved['checked'] == [text]
+    assert entry['summary'] == text
+
+
 def test_failed_review_requires_rewrite_then_new_script_is_reviewed(tmp_path):
     project = _project(tmp_path)
     assert next_script_action(project) == 'script_review'

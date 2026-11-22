@@ -14,7 +14,17 @@ def test_repository_lexicon_has_medical_terms_and_review_flags() -> None:
     assert apply_pronunciation("Gout và monosodium urat, acid uric.", lexicon) == (
         "gút và mô-nô-sô-đi-um u-rát, a-xít u-ríc."
     )
-    assert all(not entry.needs_doctor_review for entry in lexicon.entries)
+    assert apply_pronunciation("ALT, AST, INR.", lexicon) == "ây-eo-ti, ây-ét-ti, ai-en-a."
+    by_written = {entry.written: entry for entry in lexicon.entries}
+    for confirmed in (
+        "gout", "urat", "acid uric", "axit uric", "monosodium urat",
+        "NLRP3", "IL-1β", "MSU", "colchicine", "allopurinol", "NSAID",
+        "ALT", "AST", "INR",
+    ):
+        assert by_written[confirmed].needs_doctor_review is False
+    for entry in lexicon.entries:
+        if entry.needs_doctor_review:
+            assert entry.note.strip()
 
     pending = PronunciationLexicon(
         schema_version="1.0",
