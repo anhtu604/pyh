@@ -734,6 +734,20 @@
           "title": "Visual Assets",
           "type": "array"
         },
+        "visual_takeaway": {
+          "anyOf": [
+            {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Visual Takeaway"
+        },
         "words": {
           "default": [],
           "items": {
@@ -1239,6 +1253,23 @@
       ],
       "title": "Visual Budget Profile",
       "type": "string"
+    },
+    "visual_style": {
+      "anyOf": [
+        {
+          "enum": [
+            "scale_zoom",
+            "iso_infographic",
+            "whiteboard"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Visual Style"
     }
   },
   "required": [

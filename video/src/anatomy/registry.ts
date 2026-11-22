@@ -214,3 +214,61 @@ export const ANATOMY_VIEW_BOXES: Record<AnatomySubject, FocusRegion> = {
   urate_crystal_close_up: {left:0,top:0,width:560,height:560},
   urate_deposition: {left:0,top:0,width:560,height:560},
 };
+
+export type AnatomyScaleTier = 'organ' | 'tissue' | 'cell' | 'molecule';
+export type AnatomyStateOption = 'normal' | 'diseased';
+
+export type AnatomyRegistryEntry = {
+  readonly id: AnatomySubject;
+  readonly scaleLevel: AnatomyScaleTier;
+  readonly supportedStates: readonly AnatomyStateOption[];
+  readonly source: 'PYH code-drawn';
+  readonly reviewedByDoctor: boolean;
+};
+
+const entry = (
+  id: AnatomySubject,
+  scaleLevel: AnatomyScaleTier,
+  supportedStates: readonly AnatomyStateOption[] = ['normal', 'diseased'],
+): AnatomyRegistryEntry => ({
+  id,
+  scaleLevel,
+  supportedStates,
+  source: 'PYH code-drawn',
+  reviewedByDoctor: false,
+});
+
+/** Canonical subject registry for MechanismScene and Scale Zoom. */
+export const ANATOMY_REGISTRY: Readonly<Record<AnatomySubject, AnatomyRegistryEntry>> = {
+  liver_organ: entry('liver_organ', 'organ'),
+  heart: entry('heart', 'organ'),
+  gout_foot_overview: entry('gout_foot_overview', 'organ'),
+  alt_ast_tissue_distribution: entry('alt_ast_tissue_distribution', 'organ'),
+  esophagus_aortic_arch_impaction: entry('esophagus_aortic_arch_impaction', 'organ'),
+  esophagus_food_bolus: entry('esophagus_food_bolus', 'organ'),
+  esophagus_transverse_impaction: entry('esophagus_transverse_impaction', 'organ'),
+
+  liver_lobule: entry('liver_lobule', 'tissue'),
+  artery_cross_section: entry('artery_cross_section', 'tissue'),
+  hepatic_fibrosis_section: entry('hepatic_fibrosis_section', 'tissue'),
+  muscle_wasting_section: entry('muscle_wasting_section', 'tissue'),
+  esophagus_wall_penetration: entry('esophagus_wall_penetration', 'tissue'),
+  intestinal_vitamin_c_absorption: entry('intestinal_vitamin_c_absorption', 'tissue'),
+  renal_tubule_oxalate: entry('renal_tubule_oxalate', 'tissue'),
+
+  hepatocyte_sinusoid_unit: entry('hepatocyte_sinusoid_unit', 'cell'),
+  hepatic_toxic_injury: entry('hepatic_toxic_injury', 'cell'),
+  hepatic_synthesis_and_bile: entry('hepatic_synthesis_and_bile', 'cell'),
+  hepatic_cell_and_tissue_lipid_balance: entry('hepatic_cell_and_tissue_lipid_balance', 'cell'),
+  immune_cell_alarm: entry('immune_cell_alarm', 'cell'),
+  tumor_protein_uptake: entry('tumor_protein_uptake', 'cell'),
+  muscle_protein_turnover: entry('muscle_protein_turnover', 'cell'),
+  muscle_tumor_amino_acid_balance: entry('muscle_tumor_amino_acid_balance', 'cell'),
+  vitamin_c_transport: entry('vitamin_c_transport', 'cell'),
+  joint_fluid_urate_to_inflammation: entry('joint_fluid_urate_to_inflammation', 'cell'),
+
+  calcium_oxalate_crystal: entry('calcium_oxalate_crystal', 'molecule'),
+  vitamin_c_oxalate_pathway: entry('vitamin_c_oxalate_pathway', 'molecule'),
+  urate_crystal_close_up: entry('urate_crystal_close_up', 'molecule'),
+  urate_deposition: entry('urate_deposition', 'molecule'),
+};

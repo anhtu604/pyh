@@ -20,8 +20,10 @@ vi.mock('remotion', () => ({
   OffthreadVideo: 'video',
   Sequence: 'section',
   interpolate: () => 1,
+  spring: () => 1,
   staticFile: (path: string) => path,
   useCurrentFrame: () => 0,
+  useVideoConfig: () => ({fps: 30, width: 1080, height: 1920}),
 }));
 
 const input = (visual: 'whiteboard' | 'evidence_highlight') => ({
@@ -195,5 +197,104 @@ describe('HealthVideo visual asset layer', () => {
     expect(html).toContain('tăng acid uric máu');
     expect(html).toContain('Ngưỡng bão hòa urat');
     expect(html).toContain('Cơn viêm khớp khởi phát đột ngột do tinh thể urat.');
+  });
+
+  it('omits burned-in captions and outro narration text on 16:9 youtube_long while preserving them on 9:16 vertical_clip', () => {
+    const words = [
+      {text: 'Lời', start_frame: 0, end_frame: 15},
+      {text: 'đọc', start_frame: 15, end_frame: 30},
+      {text: 'riêng', start_frame: 30, end_frame: 45},
+    ];
+    const baseScenes = [
+      {
+        schema_version: '1.0',
+        id: 'S01',
+        start_frame: 0,
+        duration_frames: 90,
+        narration: 'Lời đọc riêng',
+        words,
+        on_screen_text: 'Ý chính ngắn',
+        visual: 'whiteboard' as const,
+        visual_assets: [{path: 'assets/guide.svg', role: 'mascot' as const, pose: 'welcome' as const}],
+      },
+      {
+        schema_version: '1.0',
+        id: 'OUTRO',
+        start_frame: 90,
+        duration_frames: 60,
+        narration: 'Để lại 1 lượt like và subscribe nhé.',
+        words: [{text: 'Để', start_frame: 0, end_frame: 10}],
+        visual: 'brand_outro' as const,
+        visual_assets: [
+          {path: 'assets/pyh.svg', role: 'brand' as const},
+          {path: 'assets/guide.svg', role: 'mascot' as const, pose: 'welcome' as const},
+        ],
+      },
+    ];
+
+    const longProps = parseRenderInput({
+      ...input('whiteboard'),
+      format_profile: 'youtube_long',
+      width: 1920,
+      height: 1080,
+      scenes: baseScenes,
+    });
+    expect(longProps.scenes[0].words).toEqual(words);
+    const longHtml = renderToStaticMarkup(<HealthVideo {...longProps} />);
+    expect(longHtml).not.toContain('aria-label="Phụ đề đang đọc"');
+    expect(longHtml).not.toContain('data-outro-text="true"');
+    expect(longHtml).not.toContain('Để lại 1 lượt like và subscribe');
+    expect(longHtml).toContain('Ý chính ngắn');
+    expect(longHtml).toContain('data-brand-badge="true"');
+    expect(longHtml).toContain('data-outro-landscape="true"');
+
+    const shortProps = parseRenderInput({
+      ...input('whiteboard'),
+      format_profile: 'vertical_clip',
+      width: 1080,
+      height: 1920,
+      scenes: baseScenes,
+    });
+    const shortHtml = renderToStaticMarkup(<HealthVideo {...shortProps} />);
+    expect(shortHtml).toContain('aria-label="Phụ đề đang đọc"');
+    expect(shortHtml).toContain('data-outro-text="true"');
+    expect(shortHtml).toContain('Để lại 1 lượt like và subscribe');
+  });
+
+  it('drops marker-underline-title on ScaleZoomStage scenes while keeping wipe-transitions and whiteboard emphasis', () => {
+    const props = parseRenderInput({
+      ...input('whiteboard'),
+      visualStyle: 'scale_zoom',
+      format_profile: 'youtube_long',
+      width: 1920,
+      height: 1080,
+      scenes: [
+        {
+          schema_version: '1.0',
+          id: 'S01',
+          start_frame: 0,
+          duration_frames: 120,
+          narration: 'Men gan tăng cần tìm nguyên nhân.',
+          visual: 'anatomy_animation',
+          anatomy: {subject: 'hepatocyte_sinusoid_unit', state: 'diseased', severity: 0.4, motion: 'leak'},
+          motion: {emphasis: 'marker-underline-title', emphasis_text: 'tìm nguyên nhân', transition_in: 'wipe-transitions'},
+          visual_assets: [],
+        },
+        {
+          schema_version: '1.0',
+          id: 'S02',
+          start_frame: 120,
+          duration_frames: 120,
+          narration: 'Nhắc lại điểm chính.',
+          visual: 'whiteboard',
+          motion: {emphasis: 'marker-underline-title', emphasis_text: 'điểm chính'},
+          visual_assets: [],
+        },
+      ],
+    });
+    const html = renderToStaticMarkup(<HealthVideo {...props} />);
+    expect(html).not.toContain('tìm nguyên nhân');
+    expect(html).toContain('data-motion="wipe-transitions"');
+    expect(html).toContain('điểm chính');
   });
 });

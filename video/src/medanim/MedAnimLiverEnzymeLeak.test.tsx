@@ -285,17 +285,18 @@ describe('doctor revision 2 requirements', () => {
     expect(LOBULE_BOX_SMALL.width / IMAGES.lobule.width).toBeLessThanOrEqual(1.0);
   });
 
-  it('uses pill/badge highlight in mini-map and static StyleCaptions without underline or per-word jump', () => {
+  it('uses pill/badge highlight in mini-map and omits burned-in StyleCaptions on 16:9 while keeping them on 9:16', () => {
     for (const f of [10, 150, 390, 600, 1200]) {
       const html = renderAt(f);
       expect(html).toContain('data-mini-map="true"');
       expect(html).toContain('data-active-step="true"');
+      expect(html).not.toContain('data-style-captions');
       expect(html).not.toContain('text-decoration');
       expect(html).not.toContain('data-active=');
     }
-    const b2Html = renderAt(390);
-    expect(b2Html.match(/data-term-group="true"/g)).toHaveLength(1);
-    expect(b2Html).toContain('#F4B942');
+    const b2VerticalHtml = renderVerticalAt(390);
+    expect(b2VerticalHtml).toContain('data-style-captions="true"');
+    expect(b2VerticalHtml).toContain('data-format="portrait"');
   });
 
   it('uses soft SVG <mask> (no polygon clipPath) and separates mild cytosolic vs severe mitochondrial injury', () => {

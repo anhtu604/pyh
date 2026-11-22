@@ -6,6 +6,7 @@ import {textEntrances} from '../components/entrances';
 import {slowDriftTransform} from '../components/slowDrift';
 import {useLayout} from '../layout';
 import type {Scene} from '../types';
+import {AuthoredWorksheet, panelRows} from '../components/AuthoredPanels';
 
 type WhiteboardSceneProps = {
   scene: Scene;
@@ -32,6 +33,11 @@ export const WhiteboardScene: React.FC<WhiteboardSceneProps> = ({scene}) => {
   const textBox = hasIllustration ? layout.illustrationText : layout.whiteboardText;
   const pieces = textEntrances(scene);
   const drift = slowDriftTransform(frame, scene.duration_frames);
+
+  if (panelRows(scene, 3).length) return <>
+    <AuthoredWorksheet scene={scene} frame={frame}/>
+    <Captions text={scene.narration} words={scene.words} durationInFrames={scene.duration_frames}/>
+  </>;
 
   return (
     <>

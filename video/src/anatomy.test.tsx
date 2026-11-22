@@ -76,14 +76,19 @@ describe('mechanism scenes', () => {
     const output = html(AnatomyScene, {...scene, source_marker: '[12]'});
     expect(output).not.toContain('[12]');
   });
-  it('places readable captions and presenter after the closed subject camera', () => {
+  it('places readable captions after the closed subject camera in 9:16 and omits caption band in 16:9', () => {
     clock.frame = 0;
-    const output = html(AnatomyScene, {...scene, narration: 'Caption words', visual_assets: []});
-    expect(output).toContain('data-mechanism-caption-band="true"');
-    expect(output).toContain('background-color:#FFFDF7');
-    expect(output).toContain('Caption');
-    const end = output.indexOf('data-mechanism-caption-band');
-    expect(output.slice(0, end)).toContain('</div>');
+    const portrait = html(AnatomyScene, {...scene, narration: 'Caption words', visual_assets: []}, 'vertical_clip');
+    expect(portrait).toContain('data-mechanism-caption-band="true"');
+    expect(portrait).toContain('background-color:#FFFDF7');
+    expect(portrait).toContain('Caption');
+    const end = portrait.indexOf('data-mechanism-caption-band');
+    expect(portrait.slice(0, end)).toContain('</div>');
+
+    const landscape = html(AnatomyScene, {...scene, narration: 'Caption words', visual_assets: []}, 'youtube_long');
+    expect(landscape).not.toContain('data-mechanism-caption-band');
+    expect(landscape).not.toContain('aria-label="Phụ đề đang đọc"');
+    expect(landscape).not.toContain('Caption');
   });
   for (const Component of [AnatomyScene, ProcessScene, ComparisonScene, TimelapseScene]) {
     for (const format of ['youtube_long', 'vertical_clip'] as const) {
@@ -97,8 +102,13 @@ describe('mechanism scenes', () => {
             expect(output).toContain('data-mascot-presenter="true"');
             expect(output).not.toContain('data-mascot-plate');
             expect(output).toContain('/static/assets/explain.svg');
-            expect(output).toContain('data-mechanism-caption-band="true"');
-            expect(output).toContain('Illustration');
+            if (format === 'vertical_clip') {
+              expect(output).toContain('data-mechanism-caption-band="true"');
+              expect(output).toContain('Illustration');
+            } else {
+              expect(output).not.toContain('data-mechanism-caption-band');
+              expect(output).not.toContain('aria-label="Phụ đề đang đọc"');
+            }
             expect(output).not.toMatch(/NaN|Infinity|linearGradient|radialGradient|filter=|animation:/);
             expect(html(Component, {...scene, anatomy: {...scene.anatomy!, subject}}, format)).toBe(output);
           }

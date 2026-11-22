@@ -3,9 +3,33 @@ import {existsSync, readFileSync} from 'node:fs';
 import {describe, expect, it} from 'vitest';
 import {AnatomySchema} from '../types';
 import library from './library.json';
-import {ANATOMY_COMPONENTS, ANATOMY_SUBJECTS, ANATOMY_CUE_ACTIONS} from './registry';
+import {
+  ANATOMY_COMPONENTS,
+  ANATOMY_CUE_ACTIONS,
+  ANATOMY_REGISTRY,
+  ANATOMY_SUBJECTS,
+  type AnatomySubject,
+} from './registry';
+import {SUBJECT_SCALE_LEVEL} from '../scalezoom/levels';
 
 describe('anatomy registry', () => {
+  it('registers canonical metadata for every MechanismScene and Scale Zoom subject', () => {
+    const componentKeys = Object.keys(ANATOMY_COMPONENTS).sort();
+    const scaleZoomKeys = Object.keys(SUBJECT_SCALE_LEVEL).sort();
+    const registryMetaKeys = Object.keys(ANATOMY_REGISTRY).sort();
+    expect(registryMetaKeys).toEqual(componentKeys);
+    expect(registryMetaKeys).toEqual(scaleZoomKeys);
+
+    for (const subject of componentKeys as AnatomySubject[]) {
+      const meta = ANATOMY_REGISTRY[subject];
+      expect(meta.id).toBe(subject);
+      expect(meta.scaleLevel).toBe(SUBJECT_SCALE_LEVEL[subject]);
+      expect(meta.supportedStates).toContain('normal');
+      expect(meta.supportedStates).toContain('diseased');
+      expect(meta.source).toBe('PYH code-drawn');
+      expect(meta.reviewedByDoctor).toBe(false);
+    }
+  });
   it('declares cue actions for every component', () => {
     expect(Object.keys(ANATOMY_CUE_ACTIONS).sort()).toEqual(Object.keys(ANATOMY_COMPONENTS).sort());
     expect(ANATOMY_CUE_ACTIONS.joint_fluid_urate_to_inflammation).toEqual(['seed', 'grow', 'deposit']);

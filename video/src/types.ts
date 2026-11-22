@@ -186,6 +186,9 @@ export const KineticTermSchema = z.object({
 });
 export type KineticTerm = z.input<typeof KineticTermSchema>;
 
+export const VisualStyleSchema = z.enum(['scale_zoom', 'iso_infographic', 'whiteboard']);
+export type VisualStyle = z.infer<typeof VisualStyleSchema>;
+
 export const SceneSchema = z
   .object({
     schema_version: z.string().default('1.0'),
@@ -200,6 +203,7 @@ export const SceneSchema = z
     entrances: z.array(z.object({text: z.string(), start_frame: z.number().int().min(0)})).optional(),
     on_screen_text: z.string().refine((text) => Array.from(text).length <= 90,
       'on_screen_text must be at most 90 Unicode characters').nullable().optional(),
+    visualTakeaway: z.string().trim().min(1).optional(),
     script_line_id: z.string().nullable().optional(),
     claim_id: z.string().nullable().optional(),
     chapter_id: z.string().regex(/^CH\d{2}$/).nullable().optional(),
@@ -317,6 +321,7 @@ export const RenderInputSchema = z.object({
     duration_frames: z.literal(90).default(90),
   }).nullable().optional(),
   scenes: z.array(SceneSchema).default([]),
+  visualStyle: VisualStyleSchema.optional(),
   visual_budget_profile: z.enum(['m6_5_v1', 'explain_first_v1']).default('explain_first_v1'),
   format_profile: z.enum(['vertical_clip', 'youtube_long']).default('vertical_clip'),
   width: z.union([z.literal(1080), z.literal(1920)]).default(1080),

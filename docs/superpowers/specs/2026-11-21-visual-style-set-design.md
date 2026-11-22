@@ -25,9 +25,9 @@ giấy phép, không phải tư vấn pháp lý; nếu kênh có mô hình thư�
 | `whiteboard` | Quy trình, nguyên nhân–hệ quả, việc nên làm, đọc phiếu xét nghiệm | Nét mực viết dần theo từng thuật ngữ đúng lúc lời đọc nhắc (0,3–0,8 s mỗi thuật ngữ), tối đa 3 màu + 1 màu nhấn; camera trượt trên một bảng |
 
 Quy tắc chọn: biên kịch/agent storyboard ghi `visual_style` ở đầu `storyboard.yaml` (một giá trị
-cho cả video). Cảnh không hợp style chính (ví dụ phiếu xét nghiệm trong video `scale_zoom`) dùng
-`whiteboard` tối đa một chương liền; không trộn lẻ từng cảnh. `visual_style` nằm trong hash cổng
+cho cả video). Trong video `scale_zoom`/`iso_infographic`, cảnh `whiteboard` dùng cho quy trình, nguyên nhân–hệ quả, việc nên làm, đọc phiếu; tổng thời lượng bị giới hạn bởi ngân sách hình (whiteboard_svg 10–15%). `visual_style` nằm trong hash cổng
 y khoa (vì nằm trong `storyboard.yaml`), nên đổi style của video đã duyệt phải mở lại cổng y khoa.
+Quyết định bác sĩ 2026-11-21: bỏ giới hạn whiteboard trong một chương; PYH-003 giữ whiteboard ở cả CH06 và CH07.
 
 Màu thương hiệu giữ nguyên (`off_white`, `navy`, `teal`, `yellow`, `night`); ba style chỉ đổi cách
 dựng hình, không đổi bảng màu kênh. Tối đa 3 màu nổi trên một khung như Style A.

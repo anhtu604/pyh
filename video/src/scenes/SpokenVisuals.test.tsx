@@ -41,11 +41,15 @@ describe('spoken visual captions', () => {
     stat_gauge: StatGaugeScene, kinetic_term: KineticTermScene,
   } satisfies Record<Exclude<Scene['visual'], 'brand_outro'>, React.FC<{scene: Scene}>>;
   for (const [visual, component] of Object.entries(components)) {
-    it(`${visual} keeps narration captions`, () => {
+    it(`${visual} keeps narration captions in 9:16 and omits them in 16:9`, () => {
       // Render wrappers as well, so the mechanism scenes cannot lose their captions unnoticed.
-      const output = markup(component, {...base, visual: visual as Scene['visual']});
-      expect(output).toContain('aria-label="Phụ đề đang đọc"');
-      expect(output).toContain('Lời');
+      const portrait = markup(component, {...base, visual: visual as Scene['visual']}, LAYOUTS.vertical_clip);
+      expect(portrait).toContain('aria-label="Phụ đề đang đọc"');
+      expect(portrait).toContain('Lời');
+
+      const landscape = markup(component, {...base, visual: visual as Scene['visual']}, LAYOUTS.youtube_long);
+      expect(landscape).not.toContain('aria-label="Phụ đề đang đọc"');
+      expect(landscape).not.toContain('data-mechanism-caption-band');
     });
   }
 });

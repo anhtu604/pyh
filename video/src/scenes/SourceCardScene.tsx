@@ -5,6 +5,7 @@ import {LONG_SCENE_SECONDS} from '../components/slowDrift';
 import {FONT_FAMILY} from '../fonts';
 import {useLayout} from '../layout';
 import type {Scene} from '../types';
+import {AuthoredStep, panelRows} from '../components/AuthoredPanels';
 
 type Card = NonNullable<Scene['source_card']>;
 const GLYPH_EM = 0.6;
@@ -175,13 +176,15 @@ export const SourceCardScene: React.FC<{scene: Scene}> = ({scene}) => {
   const inner = {width: box.width - 2 * box.padding - 6, height: box.height - 2 * box.padding - 6};
 
   const sentences = splitInterpretationSentences(card.interpretation);
-  const progressive = isProgressiveSourceCard(sentences, scene.duration_frames, DEFAULT_FPS);
+  const hasSteps = panelRows(scene, 2).length > 0;
+  const progressive = !hasSteps && isProgressiveSourceCard(sentences, scene.duration_frames, DEFAULT_FPS);
   const timings = progressive
     ? sourceCardSentenceTimings(sentences, scene.duration_frames, scene.words)
     : [];
   const activeIdx = progressive ? activeSentenceIndex(timings, frame) : 0;
   const activeText = progressive ? timings[activeIdx].text.trim() : card.interpretation;
-  const activeCard = progressive ? {...card, interpretation: activeText} : card;
+  const activeCard = hasSteps ? {...card, interpretation: scene.entrances!.map(e => e.text.replace('\t', ': ')).sort((a, b) => b.length - a.length)[0]}
+    : progressive ? {...card, interpretation: activeText} : card;
 
   const scale = sourceCardScale(activeCard, inner, landscape, box.fontSize);
   const s = (n: number) => Math.floor(n * scale);
@@ -223,7 +226,8 @@ export const SourceCardScene: React.FC<{scene: Scene}> = ({scene}) => {
           <span>Diễn giải</span>
           {progressive ? <span style={{fontSize: s(22), opacity: 0.75}}>{activeIdx + 1}/{sentences.length}</span> : null}
         </div>
-        {showPrevious ? (
+        {hasSteps ? <AuthoredStep scene={scene} frame={frame}/> : null}
+        {!hasSteps && showPrevious ? (
           <p
             data-previous-sentence="true"
             style={{
@@ -236,7 +240,7 @@ export const SourceCardScene: React.FC<{scene: Scene}> = ({scene}) => {
             {previousText}
           </p>
         ) : null}
-        <p
+        {!hasSteps ? <p
           data-active-sentence={progressive ? 'true' : undefined}
           style={{
             fontSize: s(box.fontSize),
@@ -246,7 +250,7 @@ export const SourceCardScene: React.FC<{scene: Scene}> = ({scene}) => {
           }}
         >
           {activeText}
-        </p>
+        </p> : null}
       </div>
     </article>
     {!duplicateNarration ? <Captions text={scene.narration} words={scene.words} durationInFrames={scene.duration_frames} /> : null}

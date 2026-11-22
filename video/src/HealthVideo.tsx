@@ -18,7 +18,21 @@ import {ProcessScene} from './scenes/ProcessScene';
 import {ComparisonScene} from './scenes/ComparisonScene';
 import {TimelapseScene} from './scenes/TimelapseScene';
 import {MechanismCameraContext, mechanismSequenceFramings} from './scenes/MechanismScene';
-import type {RenderInput, SceneTiming} from './types';
+import {panelRows} from './components/AuthoredPanels';
+import type {RenderInput, Scene, SceneMotion, SceneTiming, VisualStyle} from './types';
+
+const effectiveSceneMotion = (scene: Scene, visualStyle?: VisualStyle): SceneMotion | null | undefined => {
+  if (!scene.motion) return scene.motion;
+  const usesScaleZoomStage =
+    visualStyle === 'scale_zoom' &&
+    (scene.visual === 'anatomy_animation' || scene.visual === 'process_animation') &&
+    !panelRows(scene, 3).length;
+  if (!usesScaleZoomStage || scene.motion.emphasis !== 'marker-underline-title') {
+    return scene.motion;
+  }
+  if (!scene.motion.transition_in) return null;
+  return {...scene.motion, emphasis: null, emphasis_text: null};
+};
 
 export const activeSceneIndex = (scenes: SceneTiming[], frame: number): number =>
   scenes.findIndex(
@@ -26,20 +40,22 @@ export const activeSceneIndex = (scenes: SceneTiming[], frame: number): number =
   );
 
 export const HealthVideo: React.FC<RenderInput> = (rawInput) => {
-  const {audio_file, format_profile, scenes, youtube_cta} = parseRenderInput(rawInput);
+  const {audio_file, format_profile, scenes, youtube_cta, visualStyle} = parseRenderInput(rawInput);
   const cameraFramings = mechanismSequenceFramings(scenes);
 
   return (
     <LayoutContext.Provider value={LAYOUTS[format_profile]}>
     <AbsoluteFill style={{backgroundColor: CAPTION_BACKGROUND_COLOR, color: CAPTION_TEXT_COLOR}}>
       <Audio src={staticFile(audio_file)} />
-      {scenes.map((scene, index) => (
+      {scenes.map((scene, index) => {
+        const motion = effectiveSceneMotion(scene, visualStyle);
+        return (
         <Sequence key={scene.id} from={scene.start_frame} durationInFrames={scene.duration_frames}>
           {scene.visual_assets.filter((asset) => asset.role === 'whiteboard').map((asset) => (
             <VisualAsset asset={asset} outro={scene.visual === 'brand_outro'} durationFrames={scene.duration_frames} key={asset.path} />
           ))}
-          {scene.visual === 'anatomy_animation' ? <MechanismCameraContext.Provider value={cameraFramings[index]}><AnatomyScene scene={scene} /></MechanismCameraContext.Provider>
-          : scene.visual === 'process_animation' ? <MechanismCameraContext.Provider value={cameraFramings[index]}><ProcessScene scene={scene} /></MechanismCameraContext.Provider>
+          {scene.visual === 'anatomy_animation' ? <MechanismCameraContext.Provider value={cameraFramings[index]}><AnatomyScene scene={scene} visualStyle={visualStyle} /></MechanismCameraContext.Provider>
+          : scene.visual === 'process_animation' ? <MechanismCameraContext.Provider value={cameraFramings[index]}><ProcessScene scene={scene} visualStyle={visualStyle} /></MechanismCameraContext.Provider>
           : scene.visual === 'comparison' ? <MechanismCameraContext.Provider value={cameraFramings[index]}><ComparisonScene scene={scene} /></MechanismCameraContext.Provider>
           : scene.visual === 'timelapse' ? <MechanismCameraContext.Provider value={cameraFramings[index]}><TimelapseScene scene={scene} /></MechanismCameraContext.Provider>
           : scene.visual === 'brand_outro' ? (
@@ -61,9 +77,10 @@ export const HealthVideo: React.FC<RenderInput> = (rawInput) => {
             !isMechanismVisual(scene.visual)).map((asset) => (
             <VisualAsset asset={asset} outro={scene.visual === 'brand_outro'} key={asset.path} />
           ))}
-          {scene.motion ? <SceneMotionOverlay motion={scene.motion} narration={scene.narration} /> : null}
+          {motion ? <SceneMotionOverlay motion={motion} narration={scene.narration} /> : null}
         </Sequence>
-      ))}
+        );
+      })}
       {youtube_cta && (
         <Sequence from={Math.max(...scenes.map((s) => s.start_frame + s.duration_frames))}
           durationInFrames={youtube_cta.duration_frames}>

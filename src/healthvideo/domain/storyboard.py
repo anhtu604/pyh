@@ -11,6 +11,15 @@ from healthvideo.domain.visual_budget import VisualBudgetOverride, VisualBudgetP
 from healthvideo.visuals.anatomy_library import load_library
 
 MECHANISM_VISUALS = ("anatomy_animation", "process_animation", "comparison", "timelapse")
+VisualStyle = Literal["scale_zoom", "iso_infographic", "whiteboard"]
+_SHARED_STYLE_VISUALS = frozenset({
+    "chart", "source_card", "evidence_highlight", "brand_outro", "stat_gauge", "kinetic_term",
+})
+STYLE_VISUALS: dict[VisualStyle, frozenset[str]] = {
+    "scale_zoom": _SHARED_STYLE_VISUALS | frozenset(MECHANISM_VISUALS) | {"whiteboard"},
+    "iso_infographic": _SHARED_STYLE_VISUALS | frozenset(MECHANISM_VISUALS) | {"whiteboard"},
+    "whiteboard": _SHARED_STYLE_VISUALS | {"whiteboard", "process_animation", "comparison"},
+}
 MotionEmphasis = Literal[
     "marker-underline-title",
     "lead-word-zoom-assemble",
@@ -333,6 +342,9 @@ class Scene(BaseModel):
     start_frame: int = Field(json_schema_extra={"minimum": 0})
     duration_frames: int = Field(json_schema_extra={"exclusiveMinimum": 0})
     narration: str
+    visual_takeaway: str | None = Field(
+        default=None, min_length=1, max_length=160, exclude_if=lambda v: v is None,
+    )
     words: tuple[CaptionWord, ...] = Field(default=(), exclude_if=lambda v: not v)
     entrances: tuple[TextEntrance, ...] = Field(default=(), exclude_if=lambda v: not v)
     beats: tuple[SceneBeat, ...] = Field(default=(), exclude_if=lambda v: not v)
@@ -360,6 +372,11 @@ class Scene(BaseModel):
     visual_assets: tuple[VisualAssetRef, ...] = ()
     labels: tuple[AssetTextLabel, ...] = Field(default=(), exclude_if=lambda value: not value)
     annotations: tuple[AssetTextLabel, ...] = Field(default=(), exclude_if=lambda value: not value)
+
+    @field_validator("visual_takeaway", mode="before")
+    @classmethod
+    def strip_visual_takeaway(cls, value: Any) -> Any:
+        return value.strip() if isinstance(value, str) else value
 
     @field_validator("source_marker")
     @classmethod
@@ -497,11 +514,37 @@ class Storyboard(BaseModel):
 
     schema_version: str = "1.0"
     title: str
+    visual_style: VisualStyle | None = Field(default=None, exclude_if=lambda v: v is None)
     sfx_defaults: bool = Field(default=True, exclude_if=lambda v: v is True)
     scenes: tuple[Scene, ...] = Field(default_factory=tuple)
     visual_budget_profile: VisualBudgetProfile = "explain_first_v1"
     visual_budget_override: VisualBudgetOverride | None = None
     format_profile: FormatProfile = "vertical_clip"
+
+    @model_validator(mode="after")
+    def validate_visual_style(self) -> "Storyboard":
+        if self.visual_style is None:
+            return self
+        for scene in self.scenes:
+            if scene.visual not in STYLE_VISUALS[self.visual_style]:
+                raise ValueError(
+                    f"Cảnh {scene.id}: visual {scene.visual!r} không thuộc style {self.visual_style}"
+                )
+            if scene.visual in MECHANISM_VISUALS:
+                takeaway = scene.visual_takeaway
+                if takeaway is None or len(takeaway) < 12:
+                    raise ValueError(
+                        f"Cảnh {scene.id}: visual_takeaway phải có ít nhất 12 ký tự"
+                    )
+                normalized = " ".join(takeaway.lower().split())
+                if normalized in {
+                    " ".join(scene.narration.lower().split()),
+                    " ".join((scene.on_screen_text or "").lower().split()),
+                }:
+                    raise ValueError(
+                        f"Cảnh {scene.id}: visual_takeaway phải khác narration và on_screen_text"
+                    )
+        return self
 
     @model_validator(mode="after")
     def validate_mechanism_variety(self) -> "Storyboard":

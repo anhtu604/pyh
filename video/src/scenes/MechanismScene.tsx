@@ -2,12 +2,15 @@ import React, {createContext, useContext} from 'react';
 import {AbsoluteFill, interpolate, useCurrentFrame} from 'remotion';
 import {brand} from '../anatomy/palette';
 import {ANATOMY_COMPONENTS, ANATOMY_CONTENT_BOXES, ANATOMY_VIEW_BOXES, ANATOMY_CUE_ACTIONS, ANATOMY_FOCUS_REGIONS, ANATOMY_LABELS, type AnatomySubject} from '../anatomy/registry';
-import {Captions, CAPTION_BACKGROUND_COLOR} from '../components/Captions';
+import {Captions, CAPTION_BACKGROUND_COLOR, shouldRenderCaptions} from '../components/Captions';
 import {MascotGuide} from '../components/MascotGuide';
 import {useLayout, type Box} from '../layout';
-import {isMechanismVisual, type Scene} from '../types';
+import {isMechanismVisual, type Scene, type VisualStyle} from '../types';
 import {activeSceneBeat, beatCamera} from './mechanismBeats';
 import {DiagramAnnotations} from '../anatomy/annotations';
+import {AuthoredStep, AuthoredWorksheet, panelRows} from '../components/AuthoredPanels';
+import {useVisualStyle} from '../scalezoom/context';
+import {ScaleZoomStage} from '../scalezoom/ScaleZoomStage';
 
 export type MechanismKind = 'anatomy' | 'process' | 'comparison' | 'timelapse';
 /** Only resolved alignment cues replace the legacy continuous animation. */
@@ -81,15 +84,24 @@ export const mechanismSequenceFramings = (scenes: readonly Scene[]): (number | u
   });
 };
 
-export const MechanismScene: React.FC<{scene: Scene; kind: MechanismKind}> = ({scene, kind}) => {
+export const MechanismScene: React.FC<{scene: Scene; kind: MechanismKind; visualStyle?: VisualStyle}> = ({scene, kind, visualStyle}) => {
   const frame = useCurrentFrame();
   const framingIndex = useContext(MechanismCameraContext);
+  const contextStyle = useVisualStyle();
+  const effectiveStyle = visualStyle ?? contextStyle;
   const frameLayout = useLayout();
-  const layout = frameLayout.mechanism;
+  const hasSteps = panelRows(scene, 2).length > 0;
+  // Reserve a separate band for authored ideas; camera and callouts still share the same safe canvas.
+  const original = frameLayout.mechanism;
+  const shift = (box: Box) => hasSteps ? {...box, top: box.top + 150, height: box.height - 150} : box;
+  const layout = {...original, subject: shift(original.subject), comparison: original.comparison.map(shift)};
   if (!scene.anatomy) throw new Error(`${scene.visual} requires anatomy`);
   const light = scene.visual_assets?.some((asset) => asset.role === 'mascot') ?? false;
   const anatomy = scene.anatomy;
   const cueProgress = anatomyCueProgress(scene, frame);
+  if (effectiveStyle === 'scale_zoom' && (kind === 'anatomy' || kind === 'process') && !panelRows(scene, 3).length) {
+    return <ScaleZoomStage scene={scene} kind={kind} cueProgress={cueProgress} />;
+  }
   const Organ = ANATOMY_COMPONENTS[anatomy.subject];
   if (!Organ) throw new Error(`Unsupported anatomy subject: ${anatomy.subject}`);
   const progress = interpolate(frame, [0, Math.max(1, scene.duration_frames - 1)], [0, 1],
@@ -112,6 +124,12 @@ export const MechanismScene: React.FC<{scene: Scene; kind: MechanismKind}> = ({s
   const activeBeat = activeSceneBeat(scene, frame);
   const relative = (box: typeof layout.subject) => ({...box, left: box.left - viewport.left, top: box.top - viewport.top});
   const caption = frameLayout.captions;
+  // A process can be a clinical history worksheet rather than moving biological tissue.
+  if (panelRows(scene, 3).length) return <AbsoluteFill style={{backgroundColor: brand.off_white}}>
+    <AuthoredWorksheet scene={scene} frame={frame}/>
+    <MascotGuide scene={scene}/>
+    <Captions text={scene.narration} words={scene.words} durationInFrames={scene.duration_frames}/>
+  </AbsoluteFill>;
   return <AbsoluteFill style={{backgroundColor: light ? brand.off_white : brand.night, color: light ? brand.navy : brand.off_white}}>
     <div data-mechanism-subject-region="true" style={{...viewport, position: 'absolute', overflow: 'hidden'}}>
     <AbsoluteFill data-mechanism-camera="true" style={{transform: `translate(${camera.x}%, ${camera.y}%) scale(${camera.zoom})`, transformOrigin: camera.origin}} data-framing={camera.framing}>
@@ -143,9 +161,13 @@ export const MechanismScene: React.FC<{scene: Scene; kind: MechanismKind}> = ({s
       </svg>;
     }) : null}
     </div>
+    {hasSteps ? <AuthoredStep scene={scene} frame={frame} box={{left: original.subject.left, top: original.subject.top,
+      width: original.subject.width, height: 134}}/> : null}
     <MascotGuide scene={scene} />
-    <div data-mechanism-caption-band="true" style={{position: 'absolute', left: caption.left, bottom: caption.bottom,
-      width: caption.width, height: caption.height, backgroundColor: CAPTION_BACKGROUND_COLOR, borderRadius: 16}} />
+    {shouldRenderCaptions(frameLayout) ? (
+      <div data-mechanism-caption-band="true" style={{position: 'absolute', left: caption.left, bottom: caption.bottom,
+        width: caption.width, height: caption.height, backgroundColor: CAPTION_BACKGROUND_COLOR, borderRadius: 16}} />
+    ) : null}
     <Captions text={scene.narration} words={scene.words} durationInFrames={scene.duration_frames} />
   </AbsoluteFill>;
 };

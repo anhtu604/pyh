@@ -28,6 +28,13 @@ Khi nhận lại lỗi validator, chỉ sửa vị trí/cảnh và trường đ�
 4. Nếu `storyboard.format_profile == "youtube_long"`, hoàn thiện `script/clip-plan.yaml` (1–6 clip cắt từ cảnh sẵn kèm caveat).
 5. Kiểm tra bằng `healthvideo step storyboard {project} --storyboard <tmp_sb.yaml> --assets <tmp_assets.yaml>` (thêm `--clip-plan <tmp_cp.yaml>` khi có) cho tới khi thoát mã `0`.
 
+## Style hình ảnh và câu người xem học được
+- Theo bảng mục 2 của `docs/superpowers/specs/2026-11-21-visual-style-set-design.md`, chọn `scale_zoom` cho cơ chế đi từ cơ quan → tế bào → phân tử; `iso_infographic` cho giải phẫu, mặt cắt, đếm số liệu, so sánh cấu trúc; `whiteboard` cho quy trình, nguyên nhân–hệ quả, việc nên làm, đọc phiếu xét nghiệm.
+- Ghi `visual_style` đúng một lần ở đầu storyboard, dùng cho cả video; không trộn style theo từng cảnh.
+- Mỗi cảnh mechanism (`anatomy_animation`, `process_animation`, `comparison`, `timelapse`) có `visual_takeaway`: một câu người xem học được từ hình, khác lời đọc và chữ trên màn hình, dài 12–160 ký tự.
+- Trong video `scale_zoom`/`iso_infographic`, cảnh `whiteboard` dùng cho quy trình, nguyên nhân–hệ quả, việc nên làm, đọc phiếu; tổng thời lượng bị giới hạn bởi ngân sách hình (whiteboard_svg 10–15%).
+- Đổi style của video đã duyệt phải mở lại cổng y khoa.
+
 ## Lệnh được dùng
 - `healthvideo step storyboard {project} --storyboard <path> --assets <path>`
 - `healthvideo status {project}`

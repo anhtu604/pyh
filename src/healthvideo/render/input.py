@@ -5,7 +5,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from healthvideo.domain.format_profile import FORMAT_SPECS, FormatProfile
-from healthvideo.domain.storyboard import Scene, Storyboard
+from healthvideo.domain.storyboard import Scene, Storyboard, VisualStyle
 from healthvideo.domain.visual_budget import VisualBudgetProfile
 
 FRAMES_PER_SECOND = 30
@@ -44,6 +44,7 @@ class RenderInput(BaseModel):
 
     schema_version: str = "1.0"
     title: str
+    visual_style: VisualStyle | None = Field(default=None, exclude_if=lambda v: v is None)
     youtube_cta: YouTubeCTA | None = None
     audio_file: str
     scenes: tuple[Scene, ...] = Field(default_factory=tuple)
@@ -118,6 +119,7 @@ def build_render_input(
 
     return RenderInput(
         title=storyboard.title,
+        visual_style=storyboard.visual_style,
         audio_file=audio_file,
         scenes=tuple(resolve_scene_beats(scene) for scene in storyboard.scenes),
         visual_budget_profile=storyboard.visual_budget_profile,
