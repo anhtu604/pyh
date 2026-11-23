@@ -3029,6 +3029,7 @@ def answer_doctor_question(root: Path, slug: str, body: dict) -> dict:
             text=chat_text[:4000],
             reviewer=reviewer_name(),
         )
+        factory.wake_background(root)
         return {
             'answered': answered,
             'chat_message_id': chat_msg['id'],

@@ -551,10 +551,16 @@ def next_product_action(
             min_answered_at=_render_mtime_utc(rev),
         )
         if answered is not None:
-            if classify_doctor_answer(answered) == 'rebuild':
+            decision = classify_doctor_answer(answered)
+            if decision == 'rebuild':
                 if create_question:
                     apply_doctor_answer(project, answered)
                 return 'produce'
+            if decision == 'accept':
+                if create_question:
+                    apply_doctor_answer(project, answered)
+                require_passed_review(project, root=factory_root)
+                return 'submit_video'
             return 'wait_doctor'
         if create_question:
             doctor_questions.ask(
@@ -589,9 +595,35 @@ def criteria_for_revision(root: Path) -> dict[str, str]:
     return CRITERIA if style_a_active(root) else LEGACY_CRITERIA
 
 
-def require_passed_review(project: Path) -> None:
-    root = _root(project)
-    rounds = _log(root)['rounds']
+def _has_doctor_video_gate_override(
+    project: Path,
+    latest_round: Mapping[str, Any],
+    *,
+    root: Path | None = None,
+) -> bool:
+    """Return True when the doctor explicitly accepted the current non-safety stuck round for the video gate."""
+    issues = list(latest_round.get('issues') or [])
+    if any(bool(item.get('blocking_safety', False)) for item in issues if isinstance(item, Mapping)):
+        return False
+    if latest_round.get('render_sha256') != render_hash(project):
+        return False
+    rev = _root(project)
+    context, _ = _stuck_context_and_options(latest_round)
+    fingerprint = _stuck_fingerprint(latest_round, context)
+    factory_root = root if root is not None else project.resolve().parents[1]
+    probe = {'station': '12', 'kind': 'stuck_issue', 'context': context, 'fingerprint': fingerprint}
+    answered = doctor_questions.has_matching_answered_history(
+        factory_root,
+        project.name,
+        probe,
+        min_answered_at=_render_mtime_utc(rev),
+    )
+    return answered is not None and classify_doctor_answer(answered) == 'accept'
+
+
+def require_passed_review(project: Path, *, root: Path | None = None) -> None:
+    rev_root = _root(project)
+    rounds = _log(rev_root)['rounds']
     if not rounds:
         raise ValueError('Trạm 12 chưa có kết quả kiểm định sản phẩm.')
     latest = rounds[-1]
@@ -600,9 +632,14 @@ def require_passed_review(project: Path) -> None:
     report = ProductReviewReport.model_validate({
         key: latest[key] for key in ProductReviewReport.model_fields if key in latest
     })
-    style_required = style_a_active(root)
+    style_required = style_a_active(rev_root)
     _validated(report, allow_legacy=not style_required, style_required=style_required)
-    blocking = criteria_for_revision(root)
+    if (
+        len(report.decisions) <= MAX_DECISIONS
+        and _has_doctor_video_gate_override(project, latest, root=root)
+    ):
+        return
+    blocking = criteria_for_revision(rev_root)
     if (latest.get('passed') is not True
             or any(report.scores[key] < PASS_SCORE for key in blocking)
             or len(report.decisions) > MAX_DECISIONS):

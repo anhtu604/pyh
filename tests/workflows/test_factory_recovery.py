@@ -8,12 +8,13 @@ import wave
 from datetime import UTC, date, datetime
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from healthvideo import cli
 from healthvideo.agents import AgentResult
 from healthvideo.domain.gate_review import GateKind
-from healthvideo.domain.project_v2 import WorkflowState
+from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.pronunciation import PronunciationEntry, PronunciationLexicon
 from healthvideo.domain.queue import QueueEntry
 from healthvideo.project_codes import project_codes
@@ -26,12 +27,13 @@ from healthvideo.workflows import (
     dashboard,
     dashboard_operations,
     doctor_questions,
+    factory,
     produce,
 )
 from healthvideo.workflows import product_review as pr
 from healthvideo.workflows.gate_review import approve_gate
 from healthvideo.workflows.runner import RunDeps, run_queue
-from tests.helpers import create_v2_project_fixture
+from tests.helpers import create_v2_project_fixture, write_critic_review_fixture
 
 SLUG = 'muoi-va-huyet-ap-v2'
 REV = Path('revisions/001')
@@ -203,7 +205,7 @@ def test_doctor_answer_endpoint_marks_rebuild_and_avoids_duplicate_question(tmp_
     assert pr.next_product_action(project, root=tmp_path) == 'produce'
     assert doctor_questions.open_question(tmp_path, SLUG) is None
 
-    # Also verify non-rebuild accept_for_video_gate never reopens a duplicate question on same round.
+    # Also verify non-rebuild accept_for_video_gate routes to submit_video and avoids duplicate questions.
     root2 = tmp_path / 'accept_case'
     proj2 = create_v2_project_fixture(root2 / 'projects')
     rev2 = proj2 / REV
@@ -221,8 +223,68 @@ def test_doctor_answer_endpoint_marks_rebuild_and_avoids_duplicate_question(tmp_
         'text': '',
         'expected_revision': '001',
     })
-    assert pr.next_product_action(proj2, root=root2) == 'wait_doctor'
+    assert pr.next_product_action(proj2, root=root2) == 'submit_video'
     assert doctor_questions.open_question(root2, proj2.name) is None
+    pr.require_passed_review(proj2, root=root2)
+
+    # New render invalidates the old doctor override immediately.
+    (rev2 / pr.RENDER_MANIFEST).write_text(json.dumps({'version': 3}), encoding='utf-8')
+    with pytest.raises(ValueError, match='kiểm định lại bản dựng hiện hành'):
+        pr.require_passed_review(proj2, root=root2)
+
+    # Restoring v=2 but setting blocking_safety=True blocks override as well.
+    (rev2 / pr.RENDER_MANIFEST).write_text(json.dumps({'version': 2}), encoding='utf-8')
+    log_data = read_yaml(rev2 / pr.LOG)
+    log_data['rounds'][-1]['issues'][0]['blocking_safety'] = True
+    write_yaml_atomic(rev2 / pr.LOG, log_data)
+    with pytest.raises(ValueError, match='Trạm 12 chưa đạt'):
+        pr.require_passed_review(proj2, root=root2)
+
+
+def test_accept_for_video_gate_submits_project_and_exposes_video_gate(tmp_path: Path, monkeypatch) -> None:
+    proj = create_v2_project_fixture(tmp_path / 'projects', state=WorkflowState.AWAITING_MEDICAL_REVIEW)
+    rev = proj / REV
+    write_critic_review_fixture(proj)
+    approve_gate(proj, GateKind.MEDICAL, reviewer='BS An', now=datetime(2026, 11, 23, tzinfo=UTC))
+
+    # Simulate produce completion at production_in_progress with a non-safety stuck Station 12 round.
+    manifest = ProjectManifestV2.model_validate(read_yaml(proj / 'project.yaml'))
+    manifest = manifest.model_copy(update={
+        'state': WorkflowState.PRODUCTION_IN_PROGRESS,
+        'artifact_hashes': {**manifest.artifact_hashes, produce.PRODUCTION_ARTIFACT: '2' * 64},
+    })
+    write_yaml_atomic(proj / 'project.yaml', manifest.model_dump(mode='json'))
+
+    (rev / 'renders').mkdir(parents=True, exist_ok=True)
+    issue = {
+        'issue_id': 'PR-02', 'at': 'S04', 'criterion': 'hinh_ro',
+        'problem': 'Nhãn nhỏ.', 'fix': 'Phóng to.', 'fixable': True, 'blocking_safety': False,
+    }
+    scores = dict.fromkeys(pr.CRITERIA, 8) | {'hinh_ro': 6}
+    for v in (1, 2):
+        (rev / pr.RENDER_MANIFEST).write_text(json.dumps({'version': v}), encoding='utf-8')
+        pr.hold(rev, f'{v:064}')
+        write_yaml_atomic(rev / pr.REPORT, {'scores': scores, 'summary': 'Chưa đạt.', 'issues': [issue]})
+        pr.record_review(proj, pr.render_hash(proj))
+
+    assert pr.next_product_action(proj, root=tmp_path) == 'wait_doctor'
+    q = doctor_questions.open_question(tmp_path, proj.name)
+    assert q is not None
+
+    monkeypatch.setattr(chat, 'start', lambda root, msg_id: None)
+    dashboard.answer_doctor_question(tmp_path, proj.name, {
+        'question_id': q['id'],
+        'option_id': 'accept_for_video_gate',
+        'text': '',
+        'expected_revision': '001',
+    })
+    assert (tmp_path / 'cache/xuong-wakeup.stamp').is_file()
+    assert pr.next_product_action(proj, root=tmp_path) == 'submit_video'
+
+    produce.submit_video(proj)
+    updated = ProjectManifestV2.model_validate(read_yaml(proj / 'project.yaml'))
+    assert updated.state is WorkflowState.AWAITING_VIDEO_REVIEW
+    assert factory.gate_for_project(proj, updated) == 'video'
 
 
 def test_tts_line_cache_invalidates_when_alt_ast_pronunciation_changes(tmp_path: Path) -> None:
