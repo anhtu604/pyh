@@ -416,3 +416,8 @@ phases:
     status: done
     owner: bác sĩ + xưởng
     note: 'Đã chuyển voice_id trong profiles/voice.yaml sang fd0856c1-f9db-45c8-a7de-c8f3f3f1d380 ("Tú", Vietnamese, Male, status done), phá deadlock visual_review/produce (has_current_contact_sheet), sửa nút Làm lại (force=true + tự refresh CSRF token + wakeup 1s) và giữ 9/9 SHA256 medical-approval.yaml; 224 test liên quan + ruff sạch.'
+  - id: R4.6
+    title: Cơ chế "Không Treo Lỗi" & vá lỗi đệ quy .remotion-bundle khi produce
+    status: done
+    owner: agy (factory-fixer + ui-designer + ui-reviewer)
+    note: 'Đặt staged_bundle_dir ra ngoài staging_dir tránh copyDir đệ quy; tái sử dụng diagnosis khi waiting_idle, runner nhường repair_service, tự trình cấp trên (kind=escalation) kèm 3 lựa chọn, /api/overview trả repair/retry_after, UI hiện trạng thái đang chạy/tự khắc phục và thẻ nhắc bật xưởng; 240 test + ruff sạch.'
