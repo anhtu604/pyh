@@ -426,3 +426,8 @@ phases:
     status: done
     owner: agy
     note: 'Commit 7430357: nới motion_report outro_s=15s cho brand_outro; khóa M6.4/anatomy/style A ngay trong product_review._check_storyboard_repair và hỗ trợ leader-guidance.yaml; nối runner + repair_service thoát bẫy needs_production_revision về revise_product; thêm answered_escalations vào fingerprint leo thang và ẩn nhãn interrupted cũ trên dashboard khi không blocked; 379 test + ruff sạch.'
+  - id: R4.8
+    title: Nối quyết định accept_for_video_gate của bác sĩ ở Trạm 12 sang Cổng duyệt Video
+    status: done
+    owner: agy
+    note: 'Commit 7c19c5b: product_review.next_product_action & require_passed_review công nhận quyết định accept_for_video_gate của bác sĩ trên đúng render_sha256 hiện hành (không blocking_safety) để submit_video chuyển sang awaiting_video_review; answer_doctor_question tự wake xuong; 194 test + ruff sạch.'
