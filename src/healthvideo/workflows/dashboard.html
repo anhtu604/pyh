@@ -3257,25 +3257,27 @@ function pvBuildTimelineModel(b){
 }
 
 function tabVideo(b,dm){
-  let h=scoreCard(b.product_review);
+  let h='';
+  if(b.video_stale&&b.media.length) h+='<div class="warnbox">Video/giọng dưới đây là bản dựng trước của revision này, có thể chưa khớp kịch bản mới nhất. Bản mới sẽ có sau bước sản xuất.</div>';
+
+  let qaHtml=scoreCard(b.product_review);
   const pRounds=Array.isArray(b.product_review_rounds)?b.product_review_rounds:(Array.isArray(b.product_review_rounds?.rounds)?b.product_review_rounds.rounds:[]);
   if(pRounds.length>1){
-    h+=`<div class="sec-card"><details><summary>Lịch sử nghiệm thu sản phẩm (${pRounds.length} vòng)</summary><ul style="margin:8px 0 0 18px">${pRounds.map((r,idx)=>`<li>Vòng ${esc(r.round??idx+1)} · ${r.passed?'Đạt':'Chưa đạt'}${r.summary?' — '+esc(r.summary):''}</li>`).join('')}</ul></details></div>`;
+    qaHtml+=`<div class="sec-card"><details><summary>Lịch sử nghiệm thu sản phẩm (${pRounds.length} vòng)</summary><ul style="margin:8px 0 0 18px">${pRounds.map((r,idx)=>`<li>Vòng ${esc(r.round??idx+1)} · ${r.passed?'Đạt':'Chưa đạt'}${r.summary?' — '+esc(r.summary):''}</li>`).join('')}</ul></details></div>`;
   }
-  if(b.video_stale&&b.media.length) h+='<div class="warnbox">Video/giọng dưới đây là bản dựng trước của revision này, có thể chưa khớp kịch bản mới nhất. Bản mới sẽ có sau bước sản xuất.</div>';
   const warns=(b.qa&&b.qa.warnings)||[];
-  if(warns.length) h+=`<div class="warnbox"><b>QA video${b.qa.status?' · '+esc(b.qa.status):''}</b><ul style="margin:6px 0 0 18px">${warns.map(w=>`<li>${esc(typeof w==='string'?w:JSON.stringify(w))}</li>`).join('')}</ul></div>`;
+  if(warns.length) qaHtml+=`<div class="warnbox"><b>QA video${b.qa.status?' · '+esc(b.qa.status):''}</b><ul style="margin:6px 0 0 18px">${warns.map(w=>`<li>${esc(typeof w==='string'?w:JSON.stringify(w))}</li>`).join('')}</ul></div>`;
   const pqa=b.qa_detail?.pronunciation_qa||{};
   const flags=pqa.flagged||[];
   if(pqa.status||flags.length||pqa.checked_count){
-    h+=`<div class="${(pqa.blocked||flags.length)?'warnbox':'sec-card'}"><b>QA phát âm${pqa.status?' · '+esc(pqa.status):''}</b> · Đã kiểm ${esc(pqa.checked_count??0)} dòng${pqa.model_id?' ('+esc(pqa.model_id)+')':''}
+    qaHtml+=`<div class="${(pqa.blocked||flags.length)?'warnbox':'sec-card'}"><b>QA phát âm${pqa.status?' · '+esc(pqa.status):''}</b> · Đã kiểm ${esc(pqa.checked_count??0)} dòng${pqa.model_id?' ('+esc(pqa.model_id)+')':''}
       ${pqa.note?`<div class="sub" style="margin-top:4px">${esc(pqa.note)}</div>`:''}
-      ${flags.length?`<ul style="margin:6px 0 0 18px">${flags.map(f=>`<li>${f.line?`<b>${esc(f.line)}</b> · `:''}Viết: <code>${esc(f.script_word||'')}</code> → Nghe: <code>${esc(f.heard||'')}</code>${f.suggestion?' · Gợi ý: '+esc(f.suggestion):''}</li>`).join('')}</ul>`:''}
+      ${flags.length?`<details style="margin-top:6px"><summary>Xem chi tiết ${flags.length} cờ phát âm</summary><ul style="margin:6px 0 0 18px">${flags.map(f=>`<li>${f.line?`<b>${esc(f.line)}</b> · `:''}Viết: <code>${esc(f.script_word||'')}</code> → Nghe: <code>${esc(f.heard||'')}</code>${f.suggestion?' · Gợi ý: '+esc(f.suggestion):''}</li>`).join('')}</ul></details>`:''}
     </div>`;
   }
   const vqa=b.qa_detail?.video_qa||{};
   if(Object.keys(vqa).length){
-    h+=`<div class="sec-card"><details><summary>Chi tiết QA kỹ thuật (video-qa.json)</summary><pre class="log-box">${esc(JSON.stringify(vqa,null,2))}</pre></details></div>`;
+    qaHtml+=`<div class="sec-card"><details><summary>Chi tiết QA kỹ thuật (video-qa.json)</summary><pre class="log-box">${esc(JSON.stringify(vqa,null,2))}</pre></details></div>`;
   }
 
   const model = pvBuildTimelineModel(b);
@@ -3374,8 +3376,8 @@ function tabVideo(b,dm){
           </div>
           <div class="pv-stage-frame ${isInitVertical ? 'is-vertical' : ''}" id="pv-stage-frame">
             ${firstVideo
-              ? `<video id="pv-video" preload="metadata" src="${esc(activeMedia && activeMedia.kind === 'mp4' ? activeMedia.url : firstVideo.url)}" ${activeMedia && activeMedia.kind !== 'mp4' ? 'hidden' : ''}></video>`
-              : `<video id="pv-video" preload="metadata" hidden></video>${mediaList.length ? '' : '<div class="pv-stage-empty">Chưa có video hoặc giọng đọc cho revision này — đang hiển thị timeline thiết kế.</div>'}`}
+              ? `<video id="pv-video" preload="auto" playsinline controls ${b.thumbnail_url ? `poster="${esc(b.thumbnail_url)}"` : ''} src="${esc(activeMedia && activeMedia.kind === 'mp4' ? activeMedia.url : firstVideo.url)}" ${activeMedia && activeMedia.kind !== 'mp4' ? 'hidden' : ''}></video>`
+              : `<video id="pv-video" preload="auto" playsinline controls hidden></video>${mediaList.length ? '' : '<div class="pv-stage-empty">Chưa có video hoặc giọng đọc cho revision này — đang hiển thị timeline thiết kế.</div>'}`}
             <div class="pv-audio-stage" id="pv-audio-wrap" ${activeMedia && activeMedia.kind !== 'mp4' ? '' : 'hidden'}>
               <div class="sub" id="pv-audio-label">${esc(activeMedia && activeMedia.kind !== 'mp4' ? activeMedia.label : 'Giọng đọc')}</div>
               <audio id="pv-audio" controls preload="metadata" ${activeMedia && activeMedia.kind !== 'mp4' ? `src="${esc(activeMedia.url)}"` : ''}></audio>
@@ -3457,6 +3459,8 @@ function tabVideo(b,dm){
     </section>
   </div>`;
 
+  h += qaHtml;
+
   const tl = b.timeline || [];
   if(tl.length){
     h += `<div class="sec-card"><details><summary>Danh sách ${tl.length} cảnh (chọn nhanh)</summary><div class="scene-strip" id="pv-scene-strip">${tl.map(s =>
@@ -3498,6 +3502,7 @@ function wireVideoNle(body, b){
     loopScene: false,
     activeSourceIdx: defaultIdx,
     curFrame: 0,
+    pendingSeek: null,
   };
   pvVideoState = runtime;
 
@@ -3669,13 +3674,33 @@ function wireVideoNle(body, b){
     }
   };
 
+  const primeFirstFrame = (el) => {
+    if(!el || el !== vid || el.hidden) return;
+    if(runtime.pendingSeek){
+      const ps = runtime.pendingSeek;
+      runtime.pendingSeek = null;
+      if(ps.pause && typeof el.pause === 'function') el.pause();
+      try{ el.currentTime = (ps.frame + 0.02) / fps; }catch(_){}
+      if(ps.play && typeof el.play === 'function') el.play().catch?.(()=>{});
+      return;
+    }
+    if(el.paused !== false && (Number(el.currentTime) || 0) < 0.001){
+      try{ el.currentTime = 0.02; }catch(_){}
+    }
+  };
+
   const seekToFrame = (targetFrame, {pause = false, play = false} = {}) => {
     const effTotal = effectiveTotalFrames();
     const clamped = Math.max(0, effTotal > 0 ? Math.min(Math.round(targetFrame), effTotal - 1) : Math.round(targetFrame));
     const el = activeMediaEl();
     if(el){
       if(pause && typeof el.pause === 'function') el.pause();
-      el.currentTime = (clamped + 0.02) / fps;
+      if(typeof el.readyState === 'number' && el.readyState === 0){
+        runtime.pendingSeek = {frame: clamped, pause, play};
+      } else {
+        runtime.pendingSeek = null;
+      }
+      try{ el.currentTime = (clamped + 0.02) / fps; }catch(_){}
       if(play && typeof el.play === 'function') el.play().catch?.(()=>{});
     }
     syncFrameUI(clamped, {updateCtx: true});
@@ -3766,7 +3791,8 @@ function wireVideoNle(body, b){
     el.onplay = () => { syncFrameUI(runtime.curFrame); startLoop(); };
     el.onpause = () => { stopLoop(); tickFromMedia(); syncFrameUI(runtime.curFrame); };
     el.onended = () => { stopLoop(); syncFrameUI(runtime.curFrame); };
-    el.onloadedmetadata = () => syncFrameUI(runtime.curFrame);
+    el.onloadedmetadata = () => { primeFirstFrame(el); syncFrameUI(runtime.curFrame); };
+    el.onloadeddata = () => { primeFirstFrame(el); syncFrameUI(runtime.curFrame); };
   });
 
   const wireBtn = (id, fn) => { const el = body.querySelector(id); if(el) el.onclick = fn; };
@@ -3997,9 +4023,9 @@ function wireVideoNle(body, b){
         probeCanvas.width = 96;
         probeCanvas.height = 54;
         hiddenVid.muted = true;
-        hiddenVid.preload = 'auto';
+        hiddenVid.preload = 'metadata';
         hiddenVid.playsInline = true;
-        hiddenVid.src = mainMp4.url;
+        const filmstripUrl = mainMp4.url + (mainMp4.url.includes('?') ? '&' : '?') + 'filmstrip=1';
 
         const queue = [];
         const stepScene = Math.max(1, Math.ceil(model.scenes.length / 40));
@@ -4009,6 +4035,7 @@ function wireVideoNle(body, b){
           queue.push({sceneId: sc.id, timeS: (midF + 0.02) / fps});
         }
         let qIdx = 0;
+        let filmstripStarted = false;
         const jobSceneId = (idx) => (queue[idx] ? queue[idx].sceneId : '');
         const nextThumb = () => {
           if(!runtime.active || runtime.filmstripToken !== token || qIdx >= queue.length) return;
@@ -4032,10 +4059,26 @@ function wireVideoNle(body, b){
           }catch(_){}
           if(typeof setTimeout === 'function') setTimeout(nextThumb, 30);
         });
+        const startFilmstrip = () => {
+          if(filmstripStarted || !runtime.active || runtime.filmstripToken !== token) return;
+          filmstripStarted = true;
+          hiddenVid.src = filmstripUrl;
+        };
+        if(vid && typeof vid.readyState === 'number' && vid.readyState >= 2){
+          startFilmstrip();
+        } else {
+          if(vid && typeof vid.addEventListener === 'function'){
+            vid.addEventListener('loadeddata', startFilmstrip, {once: true});
+          }
+          if(typeof setTimeout === 'function') setTimeout(startFilmstrip, 600);
+        }
       }
     }catch(_){}
   }
 
+  if(vid && !vid.hidden && typeof vid.readyState === 'number' && vid.readyState >= 1){
+    primeFirstFrame(vid);
+  }
   syncFrameUI(0);
 }
 function tabPosts(b){

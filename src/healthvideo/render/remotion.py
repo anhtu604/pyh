@@ -274,5 +274,6 @@ def build_concat_argv(concat_list: Path, audio: Path, output: Path) -> list[str]
         "-i", str(audio.resolve()),
         "-map", "0:v", "-map", "1:a",
         "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+        "-movflags", "+faststart",
         str(output.resolve()),
     ]

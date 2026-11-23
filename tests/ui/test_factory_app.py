@@ -1240,10 +1240,20 @@ def test_video_nle_timeline_runtime_transport_inspector_and_fallback(tmp_path):
     const playhead = body.querySelector('#pv-playhead');
     const vid = body.querySelector('#pv-video');
     assert(nle && transport && inspector && playhead && vid, 'all NLE panels and #pv-video must render');
+    assert(vid.getAttribute('preload') === 'auto', '#pv-video must preload auto so first frame decodes');
+    assert(body.querySelector('#pv-video[controls][playsinline]'), '#pv-video must expose native controls and playsinline');
+    assert(body.innerHTML.indexOf('pv-nle-studio') < body.innerHTML.indexOf('Ng\\u01b0\\u1eddi duy\\u1ec7t s\\u1ea3n ph\\u1ea9m') || !body.innerHTML.includes('Ng\\u01b0\\u1eddi duy\\u1ec7t s\\u1ea3n ph\\u1ea9m'), '.pv-nle-studio comes before review/QA cards');
     assert(body.querySelector('#pv-scene-strip'), 'backward-compatible #pv-scene-strip must exist');
     assert(body.querySelectorAll('.nle-v1-block').length === 2, 'V1 track renders 2 scene blocks');
     assert(body.querySelector('#pv-tc-readout').textContent === '00:00:00', 'initial timecode 00:00:00');
     assert(body.querySelector('#pv-frame-readout').textContent === 'Frame 0 / 210 @ 30 fps', 'initial frame readout');
+
+    // Simulating loadedmetadata at currentTime=0 primes frame 0 at 0.02s while keeping Frame 0 readout
+    vid.currentTime = 0;
+    vid.paused = true;
+    vid.onloadedmetadata();
+    assert(Math.abs(vid.currentTime - 0.02) < 1e-6, 'onloadedmetadata primes frame 0 to 0.02s');
+    assert(body.querySelector('#pv-tc-readout').textContent === '00:00:00', 'primed timecode remains 00:00:00');
 
     // +1f step
     body.querySelector('#pv-btn-fwd-1').onclick();

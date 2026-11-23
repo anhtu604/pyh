@@ -31,6 +31,7 @@ def test_concat_argv_copies_video_and_muxes_narration() -> None:
     argv = build_concat_argv(Path("list.txt"), Path("a.wav"), Path("out.mp4"))
     assert argv[0] == "ffmpeg" and ["-c:v", "copy"] == argv[argv.index("-c:v"):argv.index("-c:v") + 2]
     assert ["-map", "0:v", "-map", "1:a"] == argv[argv.index("-map"):argv.index("-map") + 4]
+    assert ["-movflags", "+faststart"] == argv[argv.index("-movflags"):argv.index("-movflags") + 2]
 
 
 def test_renderer_identity_changes_when_font_bytes_change(tmp_path, monkeypatch) -> None:
