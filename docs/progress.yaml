@@ -456,9 +456,9 @@ phases:
     note: 'Bác sĩ 2026-11-23 chê sản phẩm như slide; agy xem thật 10-15 video, đo nhịp cảnh, chữ trên hình, cấu trúc lời; chỉ viết tài liệu.'
   - id: R5.2
     title: Kiểm toán khoảng cách xưởng ↔ mẫu (schema phân cảnh, hình, agent, model, token/thời gian)
-    status: doing
+    status: done
     owner: codex
-    note: 'Đọc code + log thật, tìm vì sao đầu ra thành phiếu/bảng chữ nhỏ; đo token và thời gian từng vai; chỉ viết tài liệu.'
+    note: 'docs/reference/2026-11-23-factory-gap-audit.md: bảng + thẻ nguồn chiếm 53,56% thời lượng PYH-003, 31 cảnh trung bình 14,8s, 5 ảnh FLUX; quota hình 15-25%/55-70% và route tab→phiếu là nguyên nhân chính; 24 vòng product review đều chưa đạt; đề xuất giữ model, cắt vòng lặp.'
   - id: R5.3
     title: Thiết kế chuẩn mới (spec) và kế hoạch thực hiện, bác sĩ duyệt hướng
     status: todo
