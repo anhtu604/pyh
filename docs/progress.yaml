@@ -421,3 +421,8 @@ phases:
     status: done
     owner: agy (factory-fixer + ui-designer + ui-reviewer)
     note: 'Đặt staged_bundle_dir ra ngoài staging_dir tránh copyDir đệ quy; tái sử dụng diagnosis khi waiting_idle, runner nhường repair_service, tự trình cấp trên (kind=escalation) kèm 3 lựa chọn, /api/overview trả repair/retry_after, UI hiện trạng thái đang chạy/tự khắc phục và thẻ nhắc bật xưởng; 240 test + ruff sạch.'
+  - id: R4.7
+    title: Phá vòng lặp M6.4 brand_outro giữa revise_product, repair_service và revise_production
+    status: done
+    owner: agy
+    note: 'Commit 7430357: nới motion_report outro_s=15s cho brand_outro; khóa M6.4/anatomy/style A ngay trong product_review._check_storyboard_repair và hỗ trợ leader-guidance.yaml; nối runner + repair_service thoát bẫy needs_production_revision về revise_product; thêm answered_escalations vào fingerprint leo thang và ẩn nhãn interrupted cũ trên dashboard khi không blocked; 379 test + ruff sạch.'
