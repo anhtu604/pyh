@@ -431,3 +431,8 @@ phases:
     status: done
     owner: agy
     note: 'Commit 7c19c5b: product_review.next_product_action & require_passed_review công nhận quyết định accept_for_video_gate của bác sĩ trên đúng render_sha256 hiện hành (không blocking_safety) để submit_video chuyển sang awaiting_video_review; answer_doctor_question tự wake xuong; 194 test + ruff sạch.'
+  - id: R4.9
+    title: Sửa lỗi khung xem trước video đen xì trên Dashboard & thêm faststart MP4
+    status: done
+    owner: agy
+    note: 'Đặt preload=auto + playsinline + controls + poster, mồi Frame 0 tại 0.02s (primeFirstFrame) và pendingSeek khi chuyển Clip, tách URL/trì hoãn filmstrip sau loadeddata, đưa .pv-nle-studio lên đầu tab Video; thêm -movflags +faststart vào build_concat_argv; 118 test UI/remotion/dashboard + ruff sạch.'
