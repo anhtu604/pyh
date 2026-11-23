@@ -405,3 +405,43 @@ def test_factory_wakeup_stamp_interrupts_sleep_and_runner_auto_voice_prep(
     runner.run_queue(tmp_path, deps, once=True)
     assert 'voice_prep' not in invoked
     assert voice_prep.voice_prep_ready(project) is True
+
+
+def test_runner_yields_when_repair_service_waiting_idle(tmp_path: Path) -> None:
+    from healthvideo.workflows import repair_service, runner
+
+    project = create_v2_project_fixture(tmp_path / 'projects', state=WorkflowState.AWAITING_MEDICAL_REVIEW)
+    approve_gate(project, GateKind.MEDICAL, reviewer='Tu', now=datetime.now(UTC))
+    slug = project.name
+    logs = tmp_path / 'topics/logs' / slug
+    logs.mkdir(parents=True, exist_ok=True)
+    (logs / 'blocked.txt').write_text('bước produce lỗi: timeout', encoding='utf-8')
+    write_yaml_atomic(logs / repair_service.REPORT, {
+        'revision': '001',
+        'phase': 'waiting_idle',
+        'attempts': 0,
+        'incident': {
+            'state': WorkflowState.MEDICALLY_APPROVED.value,
+            'reason': repair_service._normalize_incident_reason('bước produce lỗi: timeout'),
+        },
+    })
+    write_yaml_atomic(tmp_path / 'topics/queue.yaml', {
+        'version': 1,
+        'entries': [{'slug': slug, 'title': 'Yield', 'question': 'Q?', 'added': '2026-11-23'}],
+    })
+
+    called: list[str] = []
+    deps = runner.RunDeps(
+        create_project=lambda *_: project,
+        read_state=lambda p: WorkflowState(read_yaml(p / 'project.yaml')['state']),
+        reject_note=lambda _: None,
+        python_steps={'produce': lambda *_: called.append('produce')},
+        changed_code_paths=lambda _: [],
+        invoke=lambda *a, **k: called.append('invoke'),
+        posts_ready=lambda _: True,
+        shorts_plan_ready=lambda _: True,
+        visual_review_pending=lambda _: False,
+    )
+    report = runner.run_queue(tmp_path, deps, once=True)
+    assert called == []
+    assert slug in report.blocked

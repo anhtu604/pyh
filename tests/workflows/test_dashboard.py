@@ -2421,3 +2421,100 @@ def test_dashboard_server_persists_token_across_restarts(tmp_path) -> None:
         assert srv2.token == tok1
     finally:
         srv2.server_close()
+
+
+def test_overview_includes_repair_retry_after_and_escalation_actions(tmp_path, monkeypatch) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from healthvideo.domain.gate_review import GateKind
+    from healthvideo.domain.project_v2 import WorkflowState
+    from healthvideo.storage.files import write_yaml_atomic
+    from healthvideo.workflows import (
+        chat,
+        dashboard_operations,
+        doctor_questions,
+        production_retry,
+    )
+    from healthvideo.workflows.gate_review import approve_gate
+    from tests.helpers import create_v2_project_fixture
+
+    project = create_v2_project_fixture(tmp_path / 'projects', state=WorkflowState.AWAITING_MEDICAL_REVIEW)
+    approve_gate(project, GateKind.MEDICAL, reviewer='BS Tu', now=datetime.now(UTC))
+    logs = tmp_path / 'topics/logs' / project.name
+    logs.mkdir(parents=True, exist_ok=True)
+    future_iso = (datetime.now(UTC) + timedelta(minutes=15)).isoformat()
+    write_yaml_atomic(logs / 'leader-repair.yaml', {
+        'revision': '001',
+        'phase': 'needs_attention',
+        'attempts': 2,
+        'attempts_before_incident': 0,
+        'attention_reason': 'Hết lượt tự sửa',
+        'diagnosis': {'cause': 'Lỗi render SVG'},
+    })
+    production_retry.record_failure(
+        tmp_path,
+        project,
+        WorkflowState.MEDICALLY_APPROVED,
+        RuntimeError('temporary provider timeout'),
+    )
+    prod_retry_file = logs / 'production-retry.yaml'
+    prod_rec = read_yaml(prod_retry_file)
+    prod_rec['retry_after'] = future_iso
+    write_yaml_atomic(prod_retry_file, prod_rec)
+    (logs / 'blocked.txt').write_text('bước produce lỗi: timeout', encoding='utf-8')
+    q = doctor_questions.ask(
+        tmp_path,
+        project.name,
+        station='repair',
+        kind='escalation',
+        question='Cần quyết định của bác sĩ.',
+        options=[
+            {'id': 'retry_repair_cycle', 'label': 'Thử lại', 'detail': ''},
+            {'id': 'reopen_or_delegate', 'label': 'Giao sửa', 'detail': ''},
+            {'id': 'pause_project', 'label': 'Tạm dừng', 'detail': ''},
+        ],
+        fingerprint='esc-ov-1',
+    )
+
+    monkeypatch.setattr(factory, 'running_pid', lambda _: None)
+    monkeypatch.setattr(chat, 'start', lambda *a, **k: None)
+    ov = dashboard.overview(tmp_path)
+    card = next(p for p in ov['projects'] if p['slug'] == project.name)
+    assert card['repair']['phase'] == 'needs_attention'
+    assert card['repair']['attempts'] == 2
+    assert card['repair']['detail'] == 'Lỗi render SVG'
+    assert card['retry_after'] == future_iso
+
+    monkeypatch.setattr(dashboard_operations, '_retry_api', lambda: production_retry)
+    res = dashboard.answer_doctor_question(tmp_path, project.name, {
+        'question_id': q['id'],
+        'option_id': 'retry_repair_cycle',
+        'text': '',
+        'expected_revision': '001',
+    })
+    assert res['answered']['status'] == 'answered'
+    assert not (logs / 'blocked.txt').exists()
+    assert (tmp_path / 'cache/xuong-wakeup.stamp').is_file()
+    updated_rep = read_yaml(logs / 'leader-repair.yaml')
+    assert updated_rep['attempts_before_incident'] == 2
+    assert 'phase' not in updated_rep
+
+    q2 = doctor_questions.ask(
+        tmp_path,
+        project.name,
+        station='repair',
+        kind='escalation',
+        question='Lần 2.',
+        options=[
+            {'id': 'retry_repair_cycle', 'label': 'Thử lại', 'detail': ''},
+            {'id': 'pause_project', 'label': 'Tạm dừng', 'detail': ''},
+        ],
+        fingerprint='esc-ov-2',
+    )
+    dashboard.answer_doctor_question(tmp_path, project.name, {
+        'question_id': q2['id'],
+        'option_id': 'pause_project',
+        'text': 'Để sau',
+        'expected_revision': '001',
+    })
+    assert (logs / 'paused.yaml').is_file()

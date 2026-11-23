@@ -1442,6 +1442,12 @@ def _run_parallel_branches(
     return "ok", len(branches)
 
 
+def _waiting_for_repair_idle(root: Path, slug: str, state: WorkflowState) -> bool:
+    from healthvideo.workflows.repair_service import waiting_idle_for_topic
+
+    return waiting_idle_for_topic(root, slug, state)
+
+
 def _run_topic(
     root: Path,
     deps: RunDeps,
@@ -1460,6 +1466,11 @@ def _run_topic(
         candidate_dir = root / "projects" / entry.slug
         if (candidate_dir / "project.yaml").is_file():
             product_review.reconcile_doctor_question(root, candidate_dir)
+            if _waiting_for_repair_idle(root, entry.slug, deps.read_state(candidate_dir)):
+                with _REPORT_LOCK:
+                    if entry.slug not in report.blocked:
+                        report.blocked.append(entry.slug)
+                continue
         if doctor_questions.open_question(root, entry.slug) is not None:
             with _REPORT_LOCK:
                 if entry.slug not in report.waiting_doctor:
@@ -1494,6 +1505,11 @@ def _run_topic(
                             report.waiting_doctor.append(entry.slug)
                     break
                 state = deps.read_state(project_dir)
+                if _waiting_for_repair_idle(root, entry.slug, state):
+                    with _REPORT_LOCK:
+                        if entry.slug not in report.blocked:
+                            report.blocked.append(entry.slug)
+                    break
                 pending_change = change_request.pending_note(project_dir)
                 touches_script: bool | None = None
                 if pending_change and state in {

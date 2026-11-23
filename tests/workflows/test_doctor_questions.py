@@ -438,3 +438,21 @@ def test_fingerprint_dedup_and_supersede(tmp_path: Path) -> None:
     assert archived is not None and archived['status'] == 'superseded'
     assert doctor_questions.open_question(tmp_path, SLUG) is None
     assert doctor_questions.history(tmp_path, SLUG)[-1]['superseded_reason'] == 'medical_approval_newer'
+
+
+def test_supersede_kind_only_clears_matching_kind(tmp_path: Path) -> None:
+    q_stuck = doctor_questions.ask(
+        tmp_path, SLUG, station='12', kind='stuck_issue',
+        question='Trạm 12 kẹt.', options=_sample_options(),
+    )
+    assert doctor_questions.supersede_kind(tmp_path, SLUG, 'escalation', reason='noop') is None
+    assert doctor_questions.open_question(tmp_path, SLUG)['id'] == q_stuck['id']
+    doctor_questions.supersede(tmp_path, SLUG, reason='clear')
+
+    q_esc = doctor_questions.ask(
+        tmp_path, SLUG, station='repair', kind='escalation',
+        question='Cần chỉ đạo sửa lỗi.', options=_sample_options(), fingerprint='esc-1',
+    )
+    cleared = doctor_questions.supersede_kind(tmp_path, SLUG, 'escalation', reason='resolved')
+    assert cleared is not None and cleared['id'] == q_esc['id']
+    assert doctor_questions.open_question(tmp_path, SLUG) is None

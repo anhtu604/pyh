@@ -42,6 +42,7 @@ from healthvideo.storage.files import read_yaml, write_text_atomic, write_yaml_a
 from healthvideo.storage.queue import load_queue
 from healthvideo.workflows import (
     asset_library,
+    change_request,
     channel_analytics,
     chat,
     dashboard_operations,
@@ -1334,6 +1335,70 @@ def _gate_card_with_style(project_dir: Path) -> dict | None:
     return {**card_data, 'style_score': style}
 
 
+def _project_repair_summary(root: Path, slug: str, roles: dict[str, str]) -> dict | None:
+    record = _safe_yaml(root / 'topics' / 'logs' / slug / 'leader-repair.yaml')
+    if not record:
+        return None
+    phase = str(record.get('phase') or '')
+    attempts = record.get('attempts') if isinstance(record.get('attempts'), int) else 0
+    diag = record.get('diagnosis') if isinstance(record.get('diagnosis'), dict) else {}
+    delegation = record.get('delegation') if isinstance(record.get('delegation'), dict) else {}
+    if phase == 'repairing':
+        who = roles.get('repair_engineer') or 'Kỹ sư sửa lỗi'
+    elif phase in {'diagnosing', 'waiting_idle'}:
+        who = roles.get('coordinator_senior') or 'Trưởng nhóm'
+    elif phase == 'retry_requested' and delegation.get('role'):
+        role_id = str(delegation['role'])
+        who = roles.get(role_id) or role_id
+    elif phase == 'needs_attention':
+        who = 'Chờ bác sĩ'
+    else:
+        who = roles.get('coordinator_senior') or 'Trưởng nhóm'
+    detail = str(
+        diag.get('cause')
+        or delegation.get('brief')
+        or record.get('attention_reason')
+        or record.get('error')
+        or ''
+    )
+    return {
+        'phase': phase,
+        'attempts': attempts,
+        'who': who,
+        'detail': detail,
+        'attention_reason': str(record.get('attention_reason') or ''),
+        'error': str(record.get('error') or ''),
+    }
+
+
+def _project_retry_after(
+    root: Path,
+    path: Path,
+    state: WorkflowState,
+    current_now: datetime,
+) -> str | None:
+    deadlines: list[datetime] = []
+    try:
+        p_rec = production_retry.retry_status(root, path, state)
+        p_dt = _parse_iso(p_rec.get('retry_after')) if isinstance(p_rec, dict) else None
+        if p_dt is not None and p_dt > current_now:
+            deadlines.append(p_dt)
+    except (OSError, ValueError, TypeError, KeyError, AttributeError, OverflowError, yaml.YAMLError):
+        pass
+    logs_dir = root / 'topics' / 'logs' / path.name
+    a_records, _ = _read_agent_retry_sidecar(logs_dir / 'agent-retry.yaml')
+    for rec in a_records.values():
+        r_dt = rec.get('retry_after_dt')
+        if r_dt is not None and r_dt > current_now:
+            deadlines.append(r_dt)
+    repair_rec = _safe_yaml(logs_dir / 'leader-repair.yaml')
+    if repair_rec.get('phase') in {'cooldown', 'repair_failed'}:
+        rep_dt = _parse_iso(repair_rec.get('retry_after'))
+        if rep_dt is not None and rep_dt > current_now:
+            deadlines.append(rep_dt)
+    return min(deadlines).isoformat() if deadlines else None
+
+
 def overview(
     root: Path,
     *,
@@ -1509,6 +1574,8 @@ def overview(
             'paused': is_paused,
             'is_running': is_running,
             'in_queue': path.name in queue_dates,
+            'repair': _project_repair_summary(root, path.name, role_names),
+            'retry_after': _project_retry_after(root, path, project.state, current_now),
             'counts': counts,
             'preview_url': _project_preview_url(path, project),
             'status_line': _project_status_line(
@@ -2858,6 +2925,61 @@ def answer_doctor_question(root: Path, slug: str, body: dict) -> dict:
         station = str(answered.get('station') or '').strip()
         label = str(ans.get('option_label') or '').strip()
         extra_text = str(ans.get('text') or '').strip()
+        escalation_note = ''
+        if str(answered.get('kind') or '') == 'escalation':
+            opt_id = str(ans.get('option_id') or '').strip()
+            if opt_id == 'pause_project':
+                dashboard_operations.pause_project(
+                    root,
+                    slug,
+                    reason=extra_text or 'Bác sĩ chọn tạm dừng từ thẻ trình cấp trên.',
+                )
+            elif opt_id == 'retry_repair_cycle':
+                repair_path = root / 'topics' / 'logs' / slug / 'leader-repair.yaml'
+                if repair_path.is_file():
+                    rep = _safe_yaml(repair_path)
+                    if rep:
+                        rep['attempts_before_incident'] = (
+                            rep.get('attempts') if isinstance(rep.get('attempts'), int) else 0
+                        )
+                        for stale_key in ('phase', 'attention_reason', 'error', 'retry_after'):
+                            rep.pop(stale_key, None)
+                        write_yaml_atomic(repair_path, rep)
+                dashboard_operations.retry_project(
+                    root,
+                    slug,
+                    expected_revision=layout.manifest.active_revision,
+                    allow_repair_release=True,
+                )
+                factory.wake_background(root)
+            else:
+                if extra_text:
+                    ctx = {
+                        'source': 'doctor-escalation',
+                        'question_id': answered['id'],
+                        'revision': layout.manifest.active_revision,
+                    }
+                    if layout.manifest.state in {
+                        WorkflowState.DRAFT_READY,
+                        WorkflowState.NEEDS_MEDICAL_REVISION,
+                    }:
+                        change_request.request_change(layout.project_dir, 'edit_script', extra_text, ctx)
+                    elif layout.manifest.state in {
+                        WorkflowState.MEDICALLY_APPROVED,
+                        WorkflowState.PRODUCTION_IN_PROGRESS,
+                        WorkflowState.NEEDS_PRODUCTION_REVISION,
+                    }:
+                        change_request.request_change(layout.project_dir, 'edit_production', extra_text, ctx)
+                try:
+                    dashboard_operations.retry_project(
+                        root,
+                        slug,
+                        expected_revision=layout.manifest.active_revision,
+                        allow_repair_release=True,
+                    )
+                    factory.wake_background(root)
+                except ValueError as exc:
+                    escalation_note = f' ({exc})'
         decision_text = '. '.join(part for part in (label, extra_text) if part)
         chat_text = (
             f'Quyết định Trạm {station}: {decision_text}'
@@ -2882,7 +3004,7 @@ def answer_doctor_question(root: Path, slug: str, body: dict) -> dict:
         return {
             'answered': answered,
             'chat_message_id': chat_msg['id'],
-            'summary': f'Đã ghi nhận: {chat_text}',
+            'summary': f'Đã ghi nhận: {chat_text}{escalation_note}',
         }
 
 

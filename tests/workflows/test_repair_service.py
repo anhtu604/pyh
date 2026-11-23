@@ -1337,3 +1337,71 @@ def test_factory_package_writes_and_clears_blocked_and_resists_yaml_errors(tmp_p
     (tmp_path / 'topics/queue.yaml').write_text('bad: [yaml', encoding='utf-8')
     monkeypatch.setattr(sys, 'argv', ['repair_service', '--root', str(tmp_path)])
     repair.main()
+
+
+def test_repair_waiting_idle_reuses_diagnosis_and_escalates_on_stops(tmp_path, monkeypatch):
+    from healthvideo.workflows import doctor_questions
+
+    project = _make_v2_project_in_state(tmp_path / 'projects', WorkflowState.MEDICALLY_APPROVED)
+    logs = tmp_path / 'topics/logs' / project.name
+    logs.mkdir(parents=True)
+    blocked = logs / 'blocked.txt'
+    blocked.write_text('bước produce lỗi: timeout', encoding='utf-8')
+    target_src = tmp_path / 'src/healthvideo/workflows/sample.py'
+    target_test = tmp_path / 'tests/workflows/test_sample.py'
+    target_src.parent.mkdir(parents=True, exist_ok=True)
+    target_test.parent.mkdir(parents=True, exist_ok=True)
+    target_src.write_text('x = 1\n', encoding='utf-8')
+    target_test.write_text('def test_ok(): assert True\n', encoding='utf-8')
+    (tmp_path / 'tests/workflows/test_script_review.py').write_text('def test_sr(): assert True\n', encoding='utf-8')
+    (tmp_path / 'tests/workflows/test_product_review.py').write_text('def test_pr(): assert True\n', encoding='utf-8')
+
+    active = {'value': True}
+    monkeypatch.setattr(repair, '_active', lambda root, slug=None: active['value'] and slug is None)
+
+    steps_called: list[str] = []
+
+    def fake_ask(root, slug, role, step, ctx, out_path, model_cls, invoke):
+        steps_called.append(step)
+        if step == 'repair_diagnose':
+            return repair.Diagnosis(
+                action='repair',
+                cause='Lỗi timeout nhỏ',
+                evidence=['blocked.txt: timeout'],
+                files=['src/healthvideo/workflows/sample.py'],
+                tests=['tests/workflows/test_sample.py'],
+                brief='Sửa timeout',
+            )
+        if step == 'repair':
+            return repair.RepairResult(status='ready', summary='Đã sửa')
+        return repair.Acceptance(passed=True, reason='Đạt')
+
+    monkeypatch.setattr(repair, '_ask', fake_ask)
+    monkeypatch.setattr(repair, '_check_scope', lambda *a, **k: [])
+
+    # First call while active -> waiting_idle (no escalation yet)
+    assert repair.repair_once(tmp_path, project.name, run=lambda *a, **k: CompletedProcess(a[0], 0, 'ok', '')) == 'waiting_idle'
+    assert doctor_questions.open_question(tmp_path, project.name) is None
+    assert steps_called == ['repair_diagnose']
+
+    # Second call when idle -> reuses stored diagnosis without calling repair_diagnose again
+    active['value'] = False
+    phase = repair.repair_once(tmp_path, project.name, run=lambda *a, **k: CompletedProcess(a[0], 0, 'ok', ''))
+    assert phase == 'retry_requested'
+    assert steps_called == ['repair_diagnose', 'repair', 'repair_accept']
+
+    # When exhausted -> escalates with kind='escalation' and 3 options; cleared when blocked disappears
+    blocked.write_text('bước produce lỗi: timeout', encoding='utf-8')
+    rec = read_yaml(logs / repair.REPORT)
+    rec['attempts'] = rec['attempts_before_incident'] + repair.MAX_REPAIRS
+    write_yaml_atomic(logs / repair.REPORT, rec)
+    assert repair.repair_once(tmp_path, project.name) == 'exhausted'
+    esc = doctor_questions.open_question(tmp_path, project.name)
+    assert esc is not None and esc['kind'] == 'escalation'
+    assert [opt['id'] for opt in esc['options']] == [
+        'retry_repair_cycle', 'reopen_or_delegate', 'pause_project',
+    ]
+
+    blocked.unlink()
+    assert repair.repair_once(tmp_path, project.name) == 'idle'
+    assert doctor_questions.open_question(tmp_path, project.name) is None

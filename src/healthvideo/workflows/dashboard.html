@@ -155,6 +155,17 @@ button{font:inherit;cursor:pointer;border:0;color:inherit}
 .todo-calm{display:flex;align-items:center;gap:12px;min-height:60px;padding:10px 0;font-size:15px;color:var(--text)}
 .todo-calm .ico{width:22px;height:22px;color:var(--st-done)}
 .todo-calm small{display:block;font-size:var(--fs-sm);color:var(--muted)}
+.todo-esc{display:grid;gap:10px;padding:14px 0;border-top:1px solid var(--line)}
+.todo-esc:first-child{border-top:0}
+.todo-esc-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.todo-esc-title{font-weight:700;font-size:15.5px;line-height:1.4}
+.todo-esc-q{font-size:14px;color:var(--text);line-height:1.5;overflow-wrap:anywhere}
+.todo-esc-ctx{list-style:none;display:grid;gap:6px;padding:0;margin:0}
+.todo-esc-ctx li{padding:8px 10px;border-radius:10px;background:color-mix(in srgb,var(--text) 5%,transparent);border:1px solid var(--line);font-size:13px;overflow-wrap:anywhere}
+.todo-esc-opts{display:flex;flex-wrap:wrap;gap:8px}
+.todo-esc-free{display:grid;gap:8px}
+.todo-esc-free-act{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+@media (max-width:640px){.todo-esc-opts .btn,.todo-esc-free-act .btn{width:100%}}
 .load-err{display:grid;gap:10px;justify-items:start;padding:18px;color:var(--text);text-align:left}
 .load-err p{color:var(--muted);font-size:var(--fs-sm)}
 .plist{display:grid;gap:10px}
@@ -1455,10 +1466,55 @@ async function act(path, confirmMsg){
   try{ toast(await post(path)) }catch(e){toast(e.message,true)}
   finally{busy=false; await refresh()}
 }
+const ACTIVE_REPAIR_PHASES = new Set(['diagnosing', 'waiting_idle', 'repairing', 'cooldown', 'retry_requested']);
+function isRetryAfterFuture(iso){
+  if(!iso) return false;
+  const ms = Date.parse(iso);
+  return Number.isFinite(ms) && ms > Date.now();
+}
+function formatRetryHHMM(iso){
+  const d = new Date(iso);
+  if(Number.isNaN(d.getTime())) return '';
+  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+function isXuongRunning(){
+  return Boolean(state?.xuong?.running || state?.factory?.running);
+}
+function activeProcessingInfo(p, ovp = {}){
+  const isPaused = Boolean(ovp.paused ?? p.paused);
+  const done = ['packaged','published_manual','video_approved'].includes(p.state);
+  if(!p || p.gate || p.doctor_question || isPaused || done){
+    return {active:false, isRunning:false, chipText:'', statusText:'', detailText:''};
+  }
+  const isRunning = Boolean(p.is_running || ovp.is_running);
+  const repair = p.repair || ovp.repair || null;
+  const phase = repair && repair.phase ? String(repair.phase) : '';
+  const retryAfter = p.retry_after || ovp.retry_after || null;
+  const futureRetry = isRetryAfterFuture(retryAfter);
+  const xuongOn = isXuongRunning();
+  const autoRepair = xuongOn && (ACTIVE_REPAIR_PHASES.has(phase) || futureRetry);
+  if(!isRunning && !autoRepair){
+    return {active:false, isRunning:false, chipText:'', statusText:'', detailText:''};
+  }
+  const chipText = isRunning ? 'Đang chạy' : 'Đang tự khắc phục';
+  let statusText = '';
+  if(phase === 'repairing') statusText = 'Kỹ sư sửa lỗi đang vá mã & chạy test';
+  else if(phase === 'diagnosing') statusText = 'Trưởng nhóm đang chẩn đoán sự cố';
+  else if(isRunning && (['medically_approved','production_in_progress','needs_production_revision'].includes(p.state) || /máy dựng/i.test(String(p.handler?.label || ovp.handler?.label || '')))) statusText = 'Máy dựng đang chạy';
+  else if(phase === 'waiting_idle') statusText = 'Trưởng nhóm đã chẩn đoán, chờ xưởng rảnh để sửa ngay';
+  else if(phase === 'retry_requested') statusText = 'Đã hẹn xưởng tự chạy lại ngay';
+  else if(futureRetry) statusText = `Xưởng hẹn tự thử lại lúc ${formatRetryHHMM(retryAfter)}`;
+  else if(phase === 'cooldown') statusText = 'Xưởng đang chờ nhịp tự khắc phục tiếp theo';
+  else statusText = String((p.handler?.label || ovp.handler?.label || '')).trim() || 'Máy dựng đang chạy';
+  const rawDetail = String((repair && (repair.detail || repair.attention_reason)) || '').trim();
+  const detailText = rawDetail ? (friendlyError(rawDetail) || rawDetail) : '';
+  return {active:true, isRunning, chipText, statusText, detailText};
+}
 function chipClass(p){
   if(p.gate) return 'gate';
   if(p.doctor_question) return 'question';
   if(p.paused) return 'paused';
+  if(p.active_processing) return 'work';
   if(p.blocked || p.state==='blocked') return 'bad';
   if(['packaged','published_manual','video_approved'].includes(p.state)) return 'done';
   return 'work';
@@ -1476,8 +1532,11 @@ function renderOverview(ov){
   overviewData = ov;
   const t = ov.tiles || {};
   const projs = ov.projects || [];
+  const projMap = {};
+  projs.forEach(p => { projMap[p.slug] = p; });
+  const xuongOn = isXuongRunning();
   const questionCount = projs.filter(p => p.doctor_question && !p.gate).length;
-  const attention = projs.filter(p => p.blocked && !p.gate && !p.doctor_question).length;
+  const attention = projs.filter(p => p.blocked && !p.gate && !p.doctor_question && !activeProcessingInfo(p).active).length;
   const total = projs.length;
   const sumPill = (cls, n, lbl, has=false) =>
     `<span class="sum-i ${cls}${has?' has':''}"><i></i><b>${n}</b><span> ${lbl}</span></span>`;
@@ -1494,15 +1553,52 @@ function renderOverview(ov){
   const decs = ov.decisions || [];
   const seen = new Set(decs.map(d => d.slug));
   const gateOnly = projs.filter(p => p.gate && !seen.has(p.slug));
+  const escOnly = projs.filter(p => !p.gate && !seen.has(p.slug) && p.doctor_question && p.doctor_question.kind === 'escalation');
+  const unhandledBlocked = !xuongOn
+    ? projs.filter(p => p.blocked && !p.gate && !p.doctor_question && !p.paused && !['packaged','published_manual','video_approved'].includes(p.state))
+    : [];
   const rows = [
-    ...decs.map(d => d.kind === 'doctor_question'
-      ? {slug:d.slug, code:d.code, title:d.title, doctorQuestion:true, station:d.station || '',
-         sub:d.question || 'Dự án đang chờ ý kiến bác sĩ', btn:'Trả lời câu hỏi'}
-      : d.kind === 'script_guidance' || d.kind === 'product_guidance'
-      ? {slug:d.slug, code:d.code, title:d.title, guidance:true, productGuidance:d.kind === 'product_guidance', guidanceRole:d.role || '', guidanceView:d.view || '', stuck:d.stuck || '', rounds:d.rounds || 0,
-         sub:`${d.message || 'Trạm 07 chưa đạt sau 3 chu kỳ'}${d.rounds ? ` (${d.rounds} vòng)` : ''} · tiêu chí kẹt: ${d.stuck || 'chưa rõ'}`}
-      : {slug:d.slug, code:d.code, title:d.title, gate:d.gate, styleScore:d.style_score || null, sub:`${d.count} điểm cần quyết`, btn:`Mở thẻ quyết định (${d.count})`}),
+    ...decs.map(d => {
+      const ovp = projMap[d.slug] || {};
+      const qObj = d.doctor_question || ovp.doctor_question || null;
+      const isEsc = d.kind === 'escalation' || d.question_kind === 'escalation' || (qObj && qObj.kind === 'escalation');
+      if(isEsc){
+        return {
+          slug:d.slug, code:d.code || ovp.code || '', title:d.title || ovp.title || d.slug,
+          revision:d.revision || ovp.revision || '001',
+          escalation:true,
+          questionObj: qObj || {
+            id: d.question_id || '',
+            kind: 'escalation',
+            question: d.question || 'Cần bác sĩ chỉ đạo hướng xử lý tiếp theo.',
+            context: d.context || [],
+            options: d.options || [
+              { id:'retry_repair_cycle', label:'Cho phép xử lý / thử sửa thêm 1 chu kỳ' },
+              { id:'reopen_or_delegate', label:'Giao làm lại theo chỉ đạo của tôi' },
+              { id:'pause_project', label:'Tạm dừng dự án này' },
+            ],
+            allow_free_text: d.allow_free_text !== false,
+          },
+        };
+      }
+      if(d.kind === 'doctor_question'){
+        return {slug:d.slug, code:d.code, title:d.title, doctorQuestion:true, station:d.station || '',
+          sub:d.question || 'Dự án đang chờ ý kiến bác sĩ', btn:'Trả lời câu hỏi'};
+      }
+      if(d.kind === 'script_guidance' || d.kind === 'product_guidance'){
+        return {slug:d.slug, code:d.code, title:d.title, guidance:true, productGuidance:d.kind === 'product_guidance', guidanceRole:d.role || '', guidanceView:d.view || '', stuck:d.stuck || '', rounds:d.rounds || 0,
+          sub:`${d.message || 'Trạm 07 chưa đạt sau 3 chu kỳ'}${d.rounds ? ` (${d.rounds} vòng)` : ''} · tiêu chí kẹt: ${d.stuck || 'chưa rõ'}`};
+      }
+      return {slug:d.slug, code:d.code, title:d.title, gate:d.gate, styleScore:d.style_score || null, sub:`${d.count} điểm cần quyết`, btn:`Mở thẻ quyết định (${d.count})`};
+    }),
+    ...escOnly.map(p => ({slug:p.slug, code:p.code || '', title:p.title || p.slug, revision:p.revision || '001', escalation:true, questionObj:p.doctor_question})),
     ...gateOnly.map(p => ({slug:p.slug, code:p.code, title:p.title, gate:p.gate, styleScore:null, sub:'Gói đã sẵn sàng để duyệt', btn:'Mở gói duyệt'})),
+    ...(unhandledBlocked.length ? [{
+      factoryStoppedReminder: true,
+      count: unhandledBlocked.length,
+      codes: unhandledBlocked.map(p => p.code || p.title || p.slug).join(', '),
+      firstReason: unhandledBlocked.length === 1 ? (friendlyError(unhandledBlocked[0].blocked) || '') : '',
+    }] : []),
   ];
   const todoBadge = $('todo-count');
   if(todoBadge){
@@ -1513,7 +1609,51 @@ function renderOverview(ov){
   if(!rows.length){
     decBox.innerHTML = '<div class="todo-calm"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8.5 12.2 2.4 2.4 4.8-4.8"/></svg><div><div>Không có việc nào cần bác sĩ lúc này</div><small>Xưởng đang tự xử lý hoặc chờ bạn bấm Bật xưởng để chạy tiếp.</small></div></div>';
   } else {
-    decBox.innerHTML = rows.map(r => r.doctorQuestion ? `
+    decBox.innerHTML = rows.map(r => {
+      if(r.factoryStoppedReminder){
+        return `
+      <div class="todo-row todo-stopped-err" data-todo-factory-reminder="true">
+        <span class="chip st bad">Xưởng đang tắt</span>
+        <div class="todo-main">
+          <div class="todo-t">${r.count} dự án đang có lỗi chờ xưởng xử lý (${esc(r.codes)})</div>
+          <div class="todo-s">${r.firstReason ? esc(r.firstReason) + ' · ' : ''}Xưởng nền đang tắt nên chưa thể tự chẩn đoán hoặc chạy lại bước lỗi.</div>
+        </div>
+        <button class="btn primary" type="button" id="btn-todo-start-factory">Bật xưởng xử lý ngay</button>
+      </div>`;
+      }
+      if(r.escalation){
+        const q = r.questionObj || {};
+        const ctxItems = Array.isArray(q.context) ? q.context : [];
+        const opts = Array.isArray(q.options) ? q.options : [];
+        const ctxHtml = ctxItems.length ? `<ul class="todo-esc-ctx">${ctxItems.map(it => {
+          const sum = String(it.summary || it.description || it.reason || '').trim();
+          const loc = String(it.location || it.at || '').trim();
+          const code = String(it.code || it.id || '').trim();
+          return `<li>${code ? `<b>${esc(code)}</b> ` : ''}${loc ? `<span class="meta">${esc(loc)}</span> · ` : ''}${esc(friendlyError(sum) || sum)}</li>`;
+        }).join('')}</ul>` : '';
+        const optsHtml = opts.map((opt, idx) => `<button type="button" class="btn ${idx === 0 ? 'primary' : ''}" data-esc-slug="${esc(r.slug)}" data-esc-qid="${esc(q.id || '')}" data-esc-rev="${esc(r.revision || '001')}" data-esc-opt="${esc(opt.id)}">${esc(opt.label || opt.id)}</button>`).join('');
+        const freeHtml = q.allow_free_text !== false ? `
+          <div class="todo-esc-free">
+            <textarea class="inp" data-esc-text="${esc(r.slug)}" rows="2" maxlength="4000" placeholder="Nhập chỉ đạo thêm cho trưởng nhóm / kỹ sư (tuỳ chọn)…"></textarea>
+            <div class="todo-esc-free-act">
+              <button type="button" class="btn warn" data-esc-free-send="${esc(r.slug)}" data-esc-qid="${esc(q.id || '')}" data-esc-rev="${esc(r.revision || '001')}">Gửi chỉ đạo riêng</button>
+              <button type="button" class="btn ghost" data-decide-slug="${esc(r.slug)}">Xem chi tiết dự án</button>
+            </div>
+          </div>` : `<div class="todo-esc-free-act"><button type="button" class="btn ghost" data-decide-slug="${esc(r.slug)}">Xem chi tiết dự án</button></div>`;
+        return `
+      <div class="todo-esc" data-esc-card="${esc(r.slug)}">
+        <div class="todo-esc-head">
+          <div class="todo-esc-title">${r.code ? esc(r.code) + ' · ' : ''}${esc(r.title)}</div>
+          <span class="chip st question">Trình cấp trên</span>
+        </div>
+        <div class="todo-esc-q">${esc(friendlyError(q.question || '') || q.question || '')}</div>
+        ${ctxHtml}
+        <div class="todo-esc-opts">${optsHtml}</div>
+        ${freeHtml}
+      </div>`;
+      }
+      if(r.doctorQuestion){
+        return `
       <div class="todo-row">
         <span class="chip st question">Chờ ý kiến bác sĩ</span>
         <div class="todo-main">
@@ -1521,7 +1661,10 @@ function renderOverview(ov){
           <div class="todo-s">${r.station ? `Trạm ${esc(r.station)} · ` : ''}${esc(r.sub)}</div>
         </div>
         <button class="btn warn" type="button" data-decide-slug="${esc(r.slug)}">${esc(r.btn)}</button>
-      </div>` : r.guidance ? `
+      </div>`;
+      }
+      if(r.guidance){
+        return `
       <div class="todo-row todo-guidance">
         <span class="chip st gate">${esc(r.guidanceRole || (r.productGuidance ? 'Thợ dựng' : 'Biên kịch'))}</span>
         <div class="todo-main">
@@ -1532,7 +1675,9 @@ function renderOverview(ov){
           <button class="btn warn" type="button" data-guide-slug="${esc(r.slug)}" data-guide-role="${esc(r.guidanceRole)}" data-guide-view="${esc(r.guidanceView)}" data-guide-product="${r.productGuidance ? 'true' : ''}" data-guide-stuck="${esc(r.stuck)}" aria-label="Gửi hướng dẫn: ${esc(r.title)}">Gửi hướng dẫn</button>
           <button class="btn" type="button" data-guide-review="${esc(r.slug)}" data-guide-view="${esc(r.guidanceView)}" data-guide-product="${r.productGuidance ? 'true' : ''}" aria-label="Xem nhận xét của critic: ${esc(r.title)}">Xem nhận xét</button>
         </div>
-      </div>` : `
+      </div>`;
+      }
+      return `
       <div class="todo-row">
         <span class="chip st gate">${esc(GATE_LABEL[r.gate] || 'Cần duyệt')}</span>
         ${r.gate === 'video' && r.styleScore ? `<span class="chip ${r.styleScore.passed ? 'done' : 'gate'}" data-style-score="${esc(r.styleScore.score)}">Phong cách PYH: ${esc(r.styleScore.score)}/10</span>` : ''}
@@ -1541,10 +1686,57 @@ function renderOverview(ov){
           <div class="todo-s">${esc(r.sub)}</div>
         </div>
         <button class="btn warn" type="button" data-decide-slug="${esc(r.slug)}">${esc(r.btn)}</button>
-      </div>`).join('');
+      </div>`;
+    }).join('');
     decBox.querySelectorAll('[data-decide-slug]').forEach(b => b.onclick = () => openProduct(b.dataset.decideSlug));
     decBox.querySelectorAll('[data-guide-review]').forEach(b => b.onclick = () => openProduct(b.dataset.guideReview, b.dataset.guideView || (b.dataset.guideProduct ? 'video' : 'script')));
     decBox.querySelectorAll('[data-guide-slug]').forEach(b => b.onclick = () => startScriptGuidance(b.dataset.guideSlug, b.dataset.guideStuck, !!b.dataset.guideProduct, b.dataset.guideRole, b.dataset.guideView));
+    const startBtn = decBox.querySelector('#btn-todo-start-factory');
+    if(startBtn){
+      startBtn.onclick = async () => {
+        if(busy) return;
+        busy = true; startBtn.disabled = true;
+        try{
+          await postJson('/api/factory/start');
+          toast('Đã bật xưởng để xử lý dự án!');
+        }catch(e){
+          toast(friendlyError(e.message) || e.message, true);
+        }finally{
+          busy = false; startBtn.disabled = false;
+          await refresh();
+        }
+      };
+    }
+    const submitEsc = async (slug, qid, rev, optId) => {
+      const card = decBox.querySelector(`[data-esc-card="${CSS.escape(slug)}"]`);
+      const ta = card ? card.querySelector(`[data-esc-text="${CSS.escape(slug)}"]`) : null;
+      const text = ta ? String(ta.value || '').trim() : '';
+      if(!optId && !text){
+        toast('Hãy chọn phương án hoặc nhập chỉ đạo trước khi gửi.', true);
+        return;
+      }
+      const btns = card ? [...card.querySelectorAll('button')] : [];
+      btns.forEach(x => { x.disabled = true; });
+      try{
+        const res = await postJson(`/api/project/${encodeURIComponent(slug)}/answer-question`, {
+          question_id: qid,
+          option_id: optId || null,
+          text,
+          expected_revision: rev || '001',
+        });
+        toast(res.summary || 'Đã ghi nhận chỉ đạo của bác sĩ.');
+        await refresh();
+      }catch(e){
+        toast(friendlyError(e.message) || e.message, true);
+        btns.forEach(x => { x.disabled = false; });
+      }
+    };
+    decBox.querySelectorAll('[data-esc-opt]').forEach(b => {
+      b.onclick = () => submitEsc(b.dataset.escSlug, b.dataset.escQid, b.dataset.escRev, b.dataset.escOpt);
+    });
+    decBox.querySelectorAll('[data-esc-free-send]').forEach(b => {
+      b.onclick = () => submitEsc(b.dataset.escFreeSend, b.dataset.escQid, b.dataset.escRev, null);
+    });
   }
 
   renderResearchSummary(ov.inbox || null);
@@ -2036,11 +2228,19 @@ function renderProjects(d){
   const ovMap = {};
   (overviewData?.projects || []).forEach(p => ovMap[p.slug] = p);
   const stages = d.stages || [];
-  const order=p=>p.gate?0:(p.doctor_question?0:(p.blocked?1:(p.paused?3:2)));
+  const order=p=>{
+    const ovp = ovMap[p.slug] || {};
+    const ap = activeProcessingInfo(p, ovp);
+    if(p.gate || p.doctor_question) return 0;
+    if(p.blocked && !ap.active) return 1;
+    if(Boolean(ovp.paused ?? p.paused)) return 3;
+    return 2;
+  };
   box.innerHTML=[...d.projects].sort((a,b)=>order(a)-order(b)).map(p=>{
     const ovp = ovMap[p.slug] || {};
     const isPaused = Boolean(ovp.paused ?? p.paused);
-    const cls=chipClass({...p, paused: isPaused});
+    const ap = activeProcessingInfo(p, ovp);
+    const cls=chipClass({...p, paused: isPaused, active_processing: ap.active});
     const done=['packaged','published_manual'].includes(p.state);
     const hv = handlerView(p, ovp);
     const q=encodeURIComponent(p.slug);
@@ -2052,15 +2252,15 @@ function renderProjects(d){
       primary = `<button type="button" class="btn warn" data-product="${esc(p.slug)}">Trả lời</button>`; detailInMenu = true;
     } else if(isPaused && !done){
       primary = `<button type="button" class="btn primary" data-resume-project="${esc(p.slug)}">▶ Tiếp tục</button>`; detailInMenu = true;
-    } else if(p.blocked && !done){
+    } else if(p.blocked && !done && !ap.active){
       primary = `<button type="button" class="btn err" data-retry-project="${esc(p.slug)}" data-revision="${esc(p.revision)}">Làm lại</button>`; detailInMenu = true;
     }
     const more = [];
     if(detailInMenu) more.push(detailBtn);
     if(p.comments) more.push(`<span class="tag" style="color:var(--amber)">${p.comments} góp ý nháp</span>`);
-    if(p.blocked && !p.gate && !done && !primary.includes('data-retry-project')) more.push(`<button type="button" class="btn err" data-retry-project="${esc(p.slug)}" data-revision="${esc(p.revision)}">Làm lại bước lỗi</button>`);
-    if(p.blocked && REOPENABLE.includes(p.state)) more.push(`<button type="button" class="btn warn" data-reopen="${esc(p.slug)}">Mở lại cổng y khoa để sửa</button>`);
-    if(!done && !isPaused) more.push(`<button type="button" class="btn" data-pause-project="${esc(p.slug)}">${ovp.is_running ? '⏸ Dừng bước / Tạm hoãn' : '⏸ Tạm dừng'}</button>`);
+    if(p.blocked && !p.gate && !done && !ap.active && !primary.includes('data-retry-project')) more.push(`<button type="button" class="btn err" data-retry-project="${esc(p.slug)}" data-revision="${esc(p.revision)}">Làm lại bước lỗi</button>`);
+    if(p.blocked && !ap.active && REOPENABLE.includes(p.state)) more.push(`<button type="button" class="btn warn" data-reopen="${esc(p.slug)}">Mở lại cổng y khoa để sửa</button>`);
+    if(!done && !isPaused) more.push(`<button type="button" class="btn" data-pause-project="${esc(p.slug)}">${ap.isRunning ? '⏸ Dừng bước / Tạm hoãn' : '⏸ Tạm dừng'}</button>`);
     more.push(`<button type="button" class="btn ghost" data-chat-project="${esc(p.slug)}" data-revision="${esc(p.revision)}">💬 Nhắn điều phối</button>`);
     more.push(`<button type="button" class="btn ghost" data-act="/api/project/${q}/folder">Mở thư mục</button>`);
     more.push(`<button type="button" class="btn danger" data-delete-project="${esc(p.slug)}">Xoá dự án</button>`);
@@ -2077,9 +2277,12 @@ function renderProjects(d){
       : (cls==='gate' ? (p.gate==='medical' ? 'Chờ bác sĩ · Duyệt y khoa' : (p.gate==='video' ? 'Chờ bác sĩ · Duyệt video' : 'Chờ bác sĩ'))
       : (cls==='bad' ? 'Lỗi cần xử lý'
       : (cls==='paused' ? 'Tạm dừng'
-      : (cls==='done' ? (p.state_label || 'Đã xong') : 'Đang chạy'))));
-    const reasonHtml = hv.reason ? `<div class="prow-reason ${hv.kind==='paused' || hv.kind==='doctor'?'':'bad'}" title="${esc(hv.reason)}">${esc(hv.reason)}</div>` : '';
-    const whoHtml = hv.who && hv.who !== '—' ? `<div class="prow-who ${hv.none?'none':''}" title="${esc(hv.who)}">${esc(hv.who)}</div>` : '';
+      : (cls==='done' ? (p.state_label || 'Đã xong')
+      : (ap.active ? ap.chipText : 'Đang chạy')))));
+    const reasonText = ap.active ? ap.detailText : hv.reason;
+    const whoText = ap.active ? ap.statusText : hv.who;
+    const reasonHtml = reasonText ? `<div class="prow-reason ${ap.active || hv.kind==='paused' || hv.kind==='doctor'?'':'bad'}" title="${esc(reasonText)}">${esc(reasonText)}</div>` : '';
+    const whoHtml = whoText && whoText !== '—' ? `<div class="prow-who ${!ap.active && hv.none?'none':''}" title="${esc(whoText)}">${esc(whoText)}</div>` : '';
     const stepHtml = done ? '<b>Hoàn tất 7/7 bước</b>' : `Bước ${stage+1}/7 · <b>${esc(stageName)}</b>`;
     return `<article class="glass prow ${p.gate?'gate':''} ${p.doctor_question?'st-doctor':''} ${cls==='bad'?'blocked':''}" data-row-slug="${esc(p.slug)}">
         <div class="prow-head">
@@ -2380,10 +2583,11 @@ async function refresh(){
     const actData = rAct.ok ? await rAct.json().catch(()=>null) : null;
     wsOffline = false;
     $('offline').classList.remove('show');
+    companyData = compData;
+    state = d;
     if(ov) renderOverview(ov);
     if(actData) renderActivityFeed(actData);
-    companyData = compData;
-    state=d; render(d);
+    render(d);
     renderWorkshop();
     if(!busy) document.querySelectorAll('main button, header button').forEach(b=>{if(!b.closest('#channel')) b.disabled=false;});
     syncStartGate();
@@ -2400,7 +2604,7 @@ async function refresh(){
       const projBox = $('projects');
       if(projBox){
         projBox.innerHTML = '<div class="glass load-err"><b>Không tải được danh sách dự án</b><p>Máy chủ app chưa phản hồi. Hãy kiểm tra lại app Xưởng video rồi bấm Thử tải lại.</p><button type="button" class="btn primary" id="btn-retry-load">Thử tải lại</button></div>';
-        const btn = $('btn-retry-load');
+        const btn = projBox.querySelector('#btn-retry-load');
         if(btn) btn.onclick = () => refresh();
       }
       if($('tiles') && !$('tiles').textContent.trim()) $('tiles').innerHTML = '<span class="sum-i error has"><i></i><span>Mất kết nối máy chủ</span></span>';
@@ -2609,7 +2813,7 @@ function renderStage12DecisionSlot(b){
     <section class="dcard s12-card" id="pv-stage12-card" aria-label="Chờ ý kiến bác sĩ">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
         <h3>Chờ ý kiến bác sĩ</h3>
-        <span class="chip question">Trạm ${esc(q.station || '?')} · rev ${esc(b.revision)}</span>
+        <span class="chip question">${q.kind === 'escalation' ? 'Trình cấp trên' : `Trạm ${esc(q.station || '?')}`} · rev ${esc(b.revision)}</span>
       </div>
       <p class="sub s12-lead">${esc(q.question || '')}</p>
       ${listHtml}

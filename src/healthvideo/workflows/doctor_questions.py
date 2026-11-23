@@ -210,6 +210,21 @@ def supersede(
     return archived
 
 
+def supersede_kind(
+    root: Path,
+    slug: str,
+    kind: str,
+    *,
+    reason: str,
+    now: datetime | None = None,
+) -> dict[str, Any] | None:
+    """Supersede an active open question only when its ``kind`` matches ``kind``."""
+    existing = open_question(root, slug)
+    if existing is None or str(existing.get('kind') or '').strip() != str(kind or '').strip():
+        return None
+    return supersede(root, slug, reason=reason, now=now)
+
+
 def ask(
     root: Path,
     slug: str,

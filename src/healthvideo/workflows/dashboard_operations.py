@@ -208,6 +208,7 @@ def pause_project(root: Path, slug: str, *, reason: str = '') -> dict:
             'reason': (reason or '').strip(),
         }
         write_yaml_atomic(paused_path, payload)
+        doctor_questions.supersede_kind(root, slug, 'escalation', reason='Dự án đã được tạm dừng.')
         cancelled = cancel_running_job(root, slug=slug)
         prod_live = _production_marker_live(root, slug)
     note = (
@@ -512,6 +513,7 @@ def retry_project(
         api.clear_retry(root, slug)
         agent_hold.unlink(missing_ok=True)
         blocked_note.unlink(missing_ok=True)
+        doctor_questions.supersede_kind(root, slug, 'escalation', reason='Bác sĩ đã cho thử lại dự án.')
         if allow_repair_release:
             repair_path = inside(root, log_dir / 'leader-repair.yaml')
             if repair_path.is_file():

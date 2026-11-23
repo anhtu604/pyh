@@ -36,6 +36,7 @@ from healthvideo.storage.project_layout import resolve_project_layout
 from healthvideo.workflows import (
     change_request,
     chat,
+    doctor_questions,
     factory,
     product_review,
     scoped_review,
@@ -911,6 +912,99 @@ def _normalize_incident_reason(detail: str) -> str:
     return text or collapsed
 
 
+def waiting_idle_for_topic(root: Path, slug: str, state: WorkflowState | str) -> bool:
+    """Return True when leader-repair is waiting_idle for the topic's active blocked incident."""
+    logs = root / 'topics/logs' / slug
+    blocked = logs / 'blocked.txt'
+    record_path = logs / REPORT
+    if not blocked.is_file() or not record_path.is_file():
+        return False
+    try:
+        record = read_yaml(record_path)
+        detail = blocked.read_text(encoding='utf-8', errors='replace')
+    except (OSError, TypeError, ValueError, yaml.YAMLError):
+        return False
+    if not isinstance(record, dict) or record.get('phase') != 'waiting_idle':
+        return False
+    state_value = state.value if isinstance(state, WorkflowState) else str(state)
+    expected_incident = {'state': state_value, 'reason': _normalize_incident_reason(detail)}
+    return record.get('incident') == expected_incident
+
+
+def _escalate_to_supervisor(
+    root: Path,
+    slug: str,
+    layout,
+    *,
+    reason: str,
+    detail: str,
+    record: dict | None = None,
+) -> dict | None:
+    """Create a deduplicated doctor-question escalation when repair hits an unresolvable stop."""
+    existing = doctor_questions.open_question(root, slug)
+    rec = record if isinstance(record, dict) else {}
+    phase = str(rec.get('phase') or '')
+    attempts_before = int(rec.get('attempts_before_incident') or 0)
+    fp = 'escalation:' + canonical_json_hash({
+        'revision': layout.manifest.active_revision,
+        'state': layout.manifest.state.value,
+        'reason': reason,
+        'phase': phase,
+        'attempts_before': attempts_before,
+    })[:16]
+    if existing is not None:
+        if str(existing.get('kind') or '') != 'escalation':
+            return None
+        if str(existing.get('fingerprint') or '') == fp:
+            return existing
+        doctor_questions.supersede(root, slug, reason='Cập nhật chẩn đoán mới cho sự cố.')
+
+    diag = rec.get('diagnosis') if isinstance(rec.get('diagnosis'), dict) else {}
+    cause = str(diag.get('cause') or rec.get('attention_reason') or reason or detail).strip()
+    summary = ' '.join(cause.split())[:220] or 'Sự cố cần quyết định của bác sĩ.'
+    question = f'Sự cố cần chỉ đạo của bác sĩ: {summary}'
+    context = [
+        {
+            'code': phase or 'escalation',
+            'location': f'rev {layout.manifest.active_revision} ({layout.manifest.state.value})',
+            'summary': ' '.join(str(reason or detail).split())[:200],
+        },
+    ]
+    if diag:
+        context.append({
+            'code': str(diag.get('action') or 'diagnosis'),
+            'location': str(diag.get('delegate_role') or 'leader'),
+            'summary': ' '.join(str(diag.get('cause') or diag.get('brief') or '').split())[:200],
+        })
+    return doctor_questions.ask(
+        root,
+        slug,
+        station='repair',
+        kind='escalation',
+        question=question,
+        context=context,
+        options=[
+            {
+                'id': 'retry_repair_cycle',
+                'label': 'Cho phép xử lý / thử sửa thêm 1 chu kỳ',
+                'detail': 'Cấp lại lượt tự sửa và gỡ trạng thái giữ hiện tại để xưởng thử lại.',
+            },
+            {
+                'id': 'reopen_or_delegate',
+                'label': 'Giao làm lại theo chỉ đạo của tôi',
+                'detail': 'Ghi nhận chỉ đạo của bác sĩ và giao lại bước xử lý phù hợp.',
+            },
+            {
+                'id': 'pause_project',
+                'label': 'Tạm dừng dự án này',
+                'detail': 'Tạm dừng tự động hóa cho dự án này để xem sau.',
+            },
+        ],
+        allow_free_text=True,
+        fingerprint=fp,
+    )
+
+
 def repair_once(
     root: Path,
     slug: str,
@@ -938,6 +1032,9 @@ def repair_once(
         return 'busy'
     blocked = logs / 'blocked.txt'
     if not blocked.is_file():
+        doctor_questions.supersede_kind(
+            root, slug, 'escalation', reason='Lỗi chặn đã được giải quyết.',
+        )
         if record.get('phase') == 'retry_requested':
             ok, err, evidence = _verify_retry_validated(root, slug, layout, logs, record)
             if ok:
@@ -958,19 +1055,37 @@ def repair_once(
             or 'Trạm 12 chưa đạt' in detail
             or 'Storyboard cần hướng dẫn:' in detail or 'Góp ý y khoa chưa có vị trí:' in detail):
         # This is an editorial stop awaiting doctor guidance, not a repair incident.
+        _escalate_to_supervisor(
+            root, slug, layout,
+            reason=_normalize_incident_reason(detail),
+            detail=detail,
+            record=record,
+        )
         return 'needs_attention'
     # Each retry gets a new log path. It is evidence, not a new failure.
     reason = _normalize_incident_reason(detail)
     incident = {'state': layout.manifest.state.value, 'reason': reason}
     if record.get('incident') != incident or record.get('phase') == 'validated':
+        doctor_questions.supersede_kind(
+            root, slug, 'escalation', reason='Xuất hiện sự cố mới khác trước.',
+        )
         # Keep attempt numbers monotonic so old diagnosis files remain available.
         attempts = record.get('attempts', 0)
         record = {'revision': layout.manifest.active_revision, 'attempts': attempts,
                   'incident': incident, 'attempts_before_incident': attempts}
         write_yaml_atomic(record_path, record)
-    if record.get('phase') == 'waiting_idle' and _active(root):
-        return 'waiting_idle'
+    resumed_plan: Diagnosis | None = None
+    if record.get('phase') == 'waiting_idle':
+        if _active(root):
+            return 'waiting_idle'
+        raw_diag = record.get('diagnosis')
+        if isinstance(raw_diag, dict):
+            try:
+                resumed_plan = Diagnosis.model_validate(raw_diag)
+            except (TypeError, ValueError):
+                resumed_plan = None
     if record.get('phase') == 'needs_attention':
+        _escalate_to_supervisor(root, slug, layout, reason=reason, detail=detail, record=record)
         return 'needs_attention'
     now = datetime.now(UTC)
     if record.get('phase') == 'cooldown' and _in_cooldown(record, now):
@@ -985,6 +1100,7 @@ def repair_once(
             'và quyết định hướng sửa trước khi cho thử lại.'
         )
         write_yaml_atomic(record_path, record)
+        _escalate_to_supervisor(root, slug, layout, reason=reason, detail=detail, record=record)
         return 'exhausted'
     # Keep diagnosis and engineer output separate from project approval artifacts.
     record.update(
@@ -1020,9 +1136,13 @@ def repair_once(
     before_bytes: dict[str, bytes] = {}
     before_paths: set[str] = set()
     try:
-        plan = _ask(root, slug, 'coordinator_senior', 'repair_diagnose', context,
-                    work / 'diagnosis.yaml', Diagnosis, invoke)
-        record['diagnosis'] = plan.model_dump(mode='json')
+        if resumed_plan is not None:
+            plan = resumed_plan
+            write_yaml_atomic(work / 'diagnosis.yaml', plan.model_dump(mode='json'))
+        else:
+            plan = _ask(root, slug, 'coordinator_senior', 'repair_diagnose', context,
+                        work / 'diagnosis.yaml', Diagnosis, invoke)
+            record['diagnosis'] = plan.model_dump(mode='json')
         if plan.action == 'hold':
             record['phase'] = 'needs_attention'
         elif plan.action == 'delegate':
@@ -1176,6 +1296,8 @@ def repair_once(
         record['error'] = _sanitize_reason(error)
     finally:
         write_yaml_atomic(record_path, record)
+        if record.get('phase') == 'needs_attention':
+            _escalate_to_supervisor(root, slug, layout, reason=reason, detail=detail, record=record)
         maintenance.close()
     return record['phase']
 

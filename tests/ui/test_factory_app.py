@@ -1685,3 +1685,145 @@ def test_retry_force_auto_start_and_token_auto_refresh():
     }
     assert(pinErr === 'PIN sai.', 'wrong PIN 403 throws exact error without token refresh: ' + pinErr);
     ''')
+
+
+def test_zero_hang_error_ui_active_repair_escalation_and_stopped_reminder():
+    _run_workshop_js(r'''
+    const assert = (cond, msg) => { if (!cond) throw new Error(msg); };
+    const { pyh, doc, setFetchHandler } = ctx;
+
+    const futureIso = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    const posts = [];
+
+    // Part A: Running factory with is_running / diagnosing / repairing / future retry_after -> no dead red error
+    setFetchHandler(async (url, opts = {}) => {
+      if (url.startsWith('/api/status')) {
+        return {
+          ok: true, status: 200,
+          async json() {
+            return {
+              factory: { running: true, pid: 101 }, waiting: 0,
+              stages: ['Chủ đề', 'Nghiên cứu', 'Kịch bản', 'Duyệt y khoa', 'Sản xuất', 'Duyệt video', 'Đóng gói'],
+              log: [], agents: [], now: '2026-11-23T10:00:00Z', standards: 0,
+              projects: [
+                { slug: 'p-run', code: 'PYH-001', title: 'Đang dựng dù có blocked cũ', state: 'medically_approved', state_label: 'Sản xuất', stage: 4, gate: null, paused: false, revision: '001', blocked: 'TimeoutExpired cũ' },
+                { slug: 'p-diag', code: 'PYH-002', title: 'Đang chẩn đoán', state: 'medically_approved', state_label: 'Sản xuất', stage: 4, gate: null, paused: false, revision: '001', blocked: 'Lỗi A' },
+                { slug: 'p-rep', code: 'PYH-003', title: 'Đang sửa mã', state: 'medically_approved', state_label: 'Sản xuất', stage: 4, gate: null, paused: false, revision: '001', blocked: 'Lỗi B' },
+                { slug: 'p-cd', code: 'PYH-004', title: 'Hẹn thử lại', state: 'medically_approved', state_label: 'Sản xuất', stage: 4, gate: null, paused: false, revision: '001', blocked: 'Lỗi C' },
+              ],
+            };
+          },
+        };
+      }
+      if (url.startsWith('/api/overview')) {
+        return {
+          ok: true, status: 200,
+          async json() {
+            return {
+              tiles: { running: 1, waiting_doctor: 0, done_7d: 0, done_30d: 0, avg_days_topic_to_video: 0, models_resting: 0 },
+              decisions: [],
+              projects: [
+                { slug: 'p-run', blocked: 'TimeoutExpired cũ', gate: null, paused: false, is_running: true },
+                { slug: 'p-diag', blocked: 'Lỗi A', gate: null, paused: false, is_running: false, repair: { phase: 'diagnosing', detail: 'Đọc log sản xuất' } },
+                { slug: 'p-rep', blocked: 'Lỗi B', gate: null, paused: false, is_running: false, repair: { phase: 'repairing' } },
+                { slug: 'p-cd', blocked: 'Lỗi C', gate: null, paused: false, is_running: false, repair: { phase: 'cooldown' }, retry_after: futureIso },
+              ],
+              resting: [],
+            };
+          },
+        };
+      }
+      if (url.startsWith('/api/company')) return { ok: true, status: 200, async json() { return { roles: [], production_running: [], production: { work_state: 'idle' } }; } };
+      if (url.startsWith('/api/activity')) return { ok: true, status: 200, async json() { return { items: [] }; } };
+      if (url.startsWith('/api/progress')) return { ok: true, status: 200, async json() { return { phases: [], doing: [], total: 0, done: 0 }; } };
+      return { ok: true, status: 200, async json() { return {}; } };
+    });
+
+    await pyh.refresh();
+    const projBox = doc.getElementById('projects');
+    assert(!projBox.querySelector('.chip.bad') && !projBox.querySelector('.prow.blocked'), 'active/auto-repairing projects must not show red error');
+    const rRun = projBox.querySelector('[data-row-slug="p-run"]');
+    assert(rRun.querySelector('.chip.work').textContent === 'Đang chạy' && rRun.textContent.includes('Máy dựng đang chạy'), 'is_running overrides stale blocked');
+    const rDiag = projBox.querySelector('[data-row-slug="p-diag"]');
+    assert(rDiag.querySelector('.chip.work').textContent === 'Đang tự khắc phục' && rDiag.textContent.includes('Trưởng nhóm đang chẩn đoán sự cố'), 'diagnosing text');
+    const rRep = projBox.querySelector('[data-row-slug="p-rep"]');
+    assert(rRep.querySelector('.chip.work').textContent === 'Đang tự khắc phục' && rRep.textContent.includes('Kỹ sư sửa lỗi đang vá mã') && rRep.textContent.includes('chạy test'), 'repairing text');
+    const rCd = projBox.querySelector('[data-row-slug="p-cd"]');
+    assert(rCd.querySelector('.chip.work').textContent === 'Đang tự khắc phục' && rCd.textContent.includes('Xưởng hẹn tự thử lại lúc '), 'future retry_after HH:MM');
+
+    // Part B: Escalation card in "Việc của bác sĩ" + stopped factory reminder when blocked has no doctor_question
+    const escQuestion = {
+      id: 'esc-001',
+      kind: 'escalation',
+      station: 'repair',
+      question: 'Hết 2 lượt tự sửa lỗi bundle Remotion.',
+      context: [{ code: 'LOG', location: 'produce.py', summary: 'Đệ quy bundle quá thời gian' }],
+      options: [
+        { id: 'retry_repair_cycle', label: 'Cho phép xử lý / thử sửa thêm 1 chu kỳ' },
+        { id: 'reopen_or_delegate', label: 'Giao làm lại theo chỉ đạo của tôi' },
+        { id: 'pause_project', label: 'Tạm dừng dự án này' },
+      ],
+      allow_free_text: true,
+      status: 'open',
+    };
+    setFetchHandler(async (url, opts = {}) => {
+      if (opts && opts.method === 'POST') {
+        posts.push({ url, body: opts.body ? JSON.parse(opts.body) : null });
+        return { ok: true, status: 200, async json() { return { ok: true, summary: 'Đã ghi nhận chỉ đạo' }; } };
+      }
+      if (url.startsWith('/api/status')) {
+        return {
+          ok: true, status: 200,
+          async json() {
+            return {
+              factory: { running: false, pid: null }, waiting: 0,
+              stages: ['1','2','3','4','5','6','7'], log: [], agents: [], now: '2026-11-23T10:05:00Z', standards: 0,
+              projects: [
+                { slug: 'p-esc', code: 'PYH-003', title: 'Men gan', state: 'medically_approved', state_label: 'Chờ ý kiến bác sĩ', stage: 4, gate: null, paused: false, revision: '001', blocked: 'Hết lượt sửa', doctor_question: escQuestion },
+                { slug: 'p-unhandled', code: 'PYH-004', title: 'Vitamin C', state: 'draft_ready', state_label: 'Bị chặn', stage: 2, gate: null, paused: false, revision: '001', blocked: 'Lỗi viết kịch bản', doctor_question: null },
+              ],
+            };
+          },
+        };
+      }
+      if (url.startsWith('/api/overview')) {
+        return {
+          ok: true, status: 200,
+          async json() {
+            return {
+              tiles: { running: 0, waiting_doctor: 1, done_7d: 0, done_30d: 0, avg_days_topic_to_video: 0, models_resting: 0 },
+              decisions: [{
+                kind: 'doctor_question', question_kind: 'escalation', slug: 'p-esc', code: 'PYH-003',
+                title: 'Men gan', revision: '001', question_id: 'esc-001', question: escQuestion.question, count: 3,
+              }],
+              projects: [
+                { slug: 'p-esc', code: 'PYH-003', title: 'Men gan', state: 'medically_approved', revision: '001', blocked: 'Hết lượt sửa', gate: null, paused: false, doctor_question: escQuestion },
+                { slug: 'p-unhandled', code: 'PYH-004', title: 'Vitamin C', state: 'draft_ready', revision: '001', blocked: 'Lỗi viết kịch bản', gate: null, paused: false, doctor_question: null },
+              ],
+              resting: [],
+            };
+          },
+        };
+      }
+      if (url.startsWith('/api/company')) return { ok: true, status: 200, async json() { return { roles: [], production_running: [], production: { work_state: 'idle' } }; } };
+      if (url.startsWith('/api/activity')) return { ok: true, status: 200, async json() { return { items: [] }; } };
+      if (url.startsWith('/api/progress')) return { ok: true, status: 200, async json() { return { phases: [], doing: [], total: 0, done: 0 }; } };
+      return { ok: true, status: 200, async json() { return {}; } };
+    });
+
+    await pyh.refresh();
+    const decEl = doc.getElementById('decisions');
+    const escCard = decEl.querySelector('[data-esc-card="p-esc"]');
+    assert(escCard && escCard.textContent.includes('Trình cấp trên'), 'escalation card rendered in Việc của bác sĩ');
+    assert(escCard.querySelectorAll('[data-esc-opt]').length === 3, 'escalation card renders 3 option buttons');
+    const ta = escCard.querySelector('[data-esc-text="p-esc"]');
+    assert(ta, 'escalation card renders free-text directive textarea');
+    ta.value = 'Ưu tiên sửa xong sớm';
+    await escCard.querySelector('[data-esc-opt="retry_repair_cycle"]').onclick();
+    assert(posts.some(p => p.url === '/api/project/p-esc/answer-question' && p.body.option_id === 'retry_repair_cycle' && p.body.text === 'Ưu tiên sửa xong sớm'), 'escalation option posts answer-question');
+
+    const startReminder = decEl.querySelector('#btn-todo-start-factory');
+    assert(startReminder && startReminder.textContent.includes('Bật xưởng xử lý ngay'), 'stopped factory reminder button rendered when blocked unhandled');
+    await startReminder.onclick();
+    assert(posts.some(p => p.url === '/api/factory/start'), 'reminder button starts factory');
+    ''')
