@@ -441,3 +441,8 @@ phases:
     status: done
     owner: agy (visual-sampler + factory-fixer + verifier)
     note: 'Thêm sceneEnvelope.ts (smoothstep cubic, hook_open/shared_continuation/scene_cut/chapter_enter, data-chapter-bridge), ép nền sáng #F7F4EC trên youtube_long, làm mượt PresenterMascot continuation & WipeTransitions 14f; sửa music.py (48s pt-offload-v2, _prepare_seamless_loop_wav, vocal-pocket EQ, sidechain-v2 release=950), generate.py (raised-cosine 2s), sfx.py (cc0-bed-sidechain-v2 post-duck). Kiểm tuần tự: tsc exit 0, vitest 53/429, ruff 0, pytest 130/130, diff --check sạch; dựng thật PYH-003 (0 gọi Vibi, 9/9 SHA256 y khoa nguyên vẹn): music.wav 48s head/tail 1790/2047.6 (-25.25/-24.08 dBFS), narration -13.98 LUFS, video/CL01..03 faststart, S06/S12 nền [246,243,235].'
+  - id: R4.11
+    title: Nâng cấp hình giải phẫu mở NIAID/Servier/DBCLS/Reactome, bố cục 2 cột phiếu minh họa & chặn revise_product mồ côi asset
+    status: done
+    owner: agy (factory-fixer + visual-sampler + verifier)
+    note: 'Stage library/medanim/*/assets/* vào Remotion public_dir & hash vào renderer_identity() (remotion.py), rmtree_long_path (files.py/produce.py); sửa snake_case visual_style/visual_takeaway trong types.ts; thêm ScientificHepaticArtwork.tsx, SplitClinicalWorksheetStage.tsx, credit NIAID/Servier/DBCLS/Reactome trên OutroScene và ép ScaleZoomStage 16:9; chặn _check_storyboard_repair xóa mất tham chiếu tới manifest (product_review.py). Kiểm tuần tự: tsc exit 0, vitest 54/434, ruff 0, pytest 143/143, diff --check sạch; khôi phục S37 lab-slip.png trên PYH-003 (9/9 SHA256 y khoa khớp), dựng thật video.mp4 90.5 MB (0 gọi Vibi, 0 ACE-Step), soi đủ 8 khung S01/S02/S06/S08/S11/S20/S37/S36 sắc nét, nền #F7F4EC.'
