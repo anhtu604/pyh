@@ -171,3 +171,50 @@ def test_clips_preserve_sfx_scene_offsets(tmp_path, monkeypatch):
             for event in json.loads(events_path.read_text()):
                 original = next(e for e in manifest['sfx'] if e['scene'] == event['scene'] and e['id'] == event['id'])
                 assert event['at'] == original['at']
+
+
+@pytest.mark.skipif(not shutil.which('ffmpeg'), reason='ffmpeg required')
+def test_mix_sfx_with_music_ducks_first_and_overlays_sfx_post_duck(tmp_path):
+    from healthvideo.audio.sfx import SFX_VERSION, mix_sfx
+
+    assert SFX_VERSION == 'cc0-bed-sidechain-v2'
+    voice = tmp_path / 'voice.wav'
+    bed = tmp_path / 'music.wav'
+    with wave.open(str(voice), 'wb') as f:
+        f.setparams((2, 2, 48000, 0, 'NONE', 'not compressed'))
+        f.writeframes(
+            b''.join(
+                struct.pack('<hh', *([int(5000 * math.sin(i * 2 * math.pi * 220 / 48000))] * 2))
+                for i in range(48000 * 5)
+            )
+        )
+    with wave.open(str(bed), 'wb') as f:
+        f.setparams((2, 2, 48000, 0, 'NONE', 'not compressed'))
+        f.writeframes(
+            b''.join(
+                struct.pack('<hh', *([int(6000 * math.sin(i * 2 * math.pi * 330 / 48000))] * 2))
+                for i in range(48000 * 5)
+            )
+        )
+
+    out_no_sfx = tmp_path / 'no-sfx.wav'
+    out_with_sfx = tmp_path / 'with-sfx.wav'
+    cache = tmp_path / 'cache'
+    events = [{'scene': 'S01', 'id': 'chime-soft', 'at': 0, 'time': 0, 'volume': .3}]
+    mix_sfx(voice, [], out=out_no_sfx, music=bed, cache_dir=cache)
+    mix_sfx(voice, events, out=out_with_sfx, music=bed, cache_dir=cache)
+
+    def read_samples(path):
+        with wave.open(str(path), 'rb') as f:
+            raw = f.readframes(f.getnframes())
+            return f.getnframes(), f.getnchannels(), struct.unpack('<' + 'h' * (len(raw) // 2), raw)
+
+    frames_a, ch_a, s_no_sfx = read_samples(out_no_sfx)
+    frames_b, ch_b, s_with_sfx = read_samples(out_with_sfx)
+    assert frames_a == frames_b == 48000 * 5
+    assert ch_a == ch_b == 2
+    # SFX overlaid post-duck adds audible energy near t=0..0.5s without disturbing tail >= 2.5s.
+    head_diff = math.sqrt(sum((b - a) ** 2 for a, b in zip(s_no_sfx[:48000], s_with_sfx[:48000])) / 48000)
+    tail_diff = math.sqrt(sum((b - a) ** 2 for a, b in zip(s_no_sfx[48000 * 6:], s_with_sfx[48000 * 6:])) / 48000)
+    assert head_diff > 30.0
+    assert tail_diff < 5.0

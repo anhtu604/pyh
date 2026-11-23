@@ -58,7 +58,7 @@ export const WipeTransitions: React.FC<WipeTransitionsProps> = ({
   const {width, isVertical, u} = useMotionScale();
 
   if (overlay) {
-    if (frame >= 44) {
+    if (frame >= 14) {
       return (
         <AbsoluteFill
           data-motion="wipe-transitions"
@@ -67,33 +67,22 @@ export const WipeTransitions: React.FC<WipeTransitionsProps> = ({
         />
       );
     }
+    const t = smooth(frame / 14);
     return (
       <AbsoluteFill
         data-motion="wipe-transitions"
         style={{pointerEvents: 'none', overflow: 'hidden'}}
       >
-        {Array.from({length: STRIPS}, (_, i) => {
-          const deg = blindAngleAt(frame, i, 0);
-          const progress = clamp01(deg / 180);
-          return (
-            <div
-              key={i}
-              data-blind-strip={i}
-              style={{
-                position: 'absolute',
-                left: `${(i * 100) / STRIPS}%`,
-                top: 0,
-                bottom: 0,
-                width: `${100 / STRIPS}%`,
-                backgroundColor: brand.navy,
-                borderRight: `${u(2)}px solid ${brand.teal}`,
-                transformOrigin: '50% 50%',
-                transform: `scaleX(${(1 - progress).toFixed(3)})`,
-                opacity: 1 - progress,
-              }}
-            />
-          );
-        })}
+        <div
+          data-wipe-curtain="true"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            backgroundColor: brand.off_white,
+            borderLeft: `${Math.max(4, Math.round(u(4)))}px solid ${brand.teal}`,
+            transform: `translateX(${(t * 100).toFixed(2)}%)`,
+          }}
+        />
       </AbsoluteFill>
     );
   }

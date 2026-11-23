@@ -2,14 +2,16 @@ import React from 'react';
 import {Img, interpolate, staticFile, useCurrentFrame} from 'remotion';
 import {Captions} from '../components/Captions';
 import {evidenceFrame, useLayout} from '../layout';
+import {SceneEnvelopeWrapper, type SceneTransitionProps} from '../motion/sceneEnvelope';
 import type {Scene} from '../types';
 import {highlightImageLayout, highlightObjectFit, localHighlightRect} from './highlightGeometry';
 
 type EvidenceHighlightSceneProps = {
   scene: Scene;
+  transition?: SceneTransitionProps;
 };
 
-export const EvidenceHighlightScene: React.FC<EvidenceHighlightSceneProps> = ({scene}) => {
+export const EvidenceHighlightScene: React.FC<EvidenceHighlightSceneProps> = ({scene, transition}) => {
   const frame = useCurrentFrame();
   const layout = useLayout();
   const highlight = scene.evidence_highlight;
@@ -24,7 +26,7 @@ export const EvidenceHighlightScene: React.FC<EvidenceHighlightSceneProps> = ({s
     extrapolateRight: 'clamp',
   });
 
-  return (
+  const content = (
     <>
       <Img
         src={staticFile(highlight.image)}
@@ -44,4 +46,5 @@ export const EvidenceHighlightScene: React.FC<EvidenceHighlightSceneProps> = ({s
       <Captions text={scene.narration} words={scene.words} durationInFrames={scene.duration_frames} />
     </>
   );
+  return transition ? <SceneEnvelopeWrapper transition={transition}>{content}</SceneEnvelopeWrapper> : content;
 };

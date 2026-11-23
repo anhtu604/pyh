@@ -12,6 +12,12 @@ import {AuthoredStep, AuthoredWorksheet, panelRows} from '../components/Authored
 import {useVisualStyle} from '../scalezoom/context';
 import {ScaleZoomStage} from '../scalezoom/ScaleZoomStage';
 import {IsoInfographicStage} from '../isoinfo/IsoInfographicStage';
+import {
+  ChapterBridgeBar,
+  computeSceneEnvelope,
+  SceneEnvelopeWrapper,
+  type SceneTransitionProps,
+} from '../motion/sceneEnvelope';
 
 export type MechanismKind = 'anatomy' | 'process' | 'comparison' | 'timelapse';
 /** Only resolved alignment cues replace the legacy continuous animation. */
@@ -85,7 +91,13 @@ export const mechanismSequenceFramings = (scenes: readonly Scene[]): (number | u
   });
 };
 
-export const MechanismScene: React.FC<{scene: Scene; kind: MechanismKind; visualStyle?: VisualStyle}> = ({scene, kind, visualStyle}) => {
+export const MechanismScene: React.FC<{
+  scene: Scene;
+  kind: MechanismKind;
+  visualStyle?: VisualStyle;
+  transition?: SceneTransitionProps;
+  forceLightCanvas?: boolean;
+}> = ({scene, kind, visualStyle, transition, forceLightCanvas}) => {
   const frame = useCurrentFrame();
   const framingIndex = useContext(MechanismCameraContext);
   const contextStyle = useVisualStyle();
@@ -97,14 +109,20 @@ export const MechanismScene: React.FC<{scene: Scene; kind: MechanismKind; visual
   const shift = (box: Box) => hasSteps ? {...box, top: box.top + 150, height: box.height - 150} : box;
   const layout = {...original, subject: shift(original.subject), comparison: original.comparison.map(shift)};
   if (!scene.anatomy) throw new Error(`${scene.visual} requires anatomy`);
-  const light = scene.visual_assets?.some((asset) => asset.role === 'mascot') ?? false;
+  const light = forceLightCanvas ?? (scene.visual_assets?.some((asset) => asset.role === 'mascot') ?? false);
   const anatomy = scene.anatomy;
   const cueProgress = anatomyCueProgress(scene, frame);
+  const env = computeSceneEnvelope(frame, transition);
+  const envelopeStyle = transition && transition.durationFrames >= 45
+    ? {opacity: env.opacity, transform: env.transform}
+    : {};
   if (effectiveStyle === 'scale_zoom' && (kind === 'anatomy' || kind === 'process') && !panelRows(scene, 3).length) {
-    return <ScaleZoomStage scene={scene} kind={kind} cueProgress={cueProgress} />;
+    const stage = <ScaleZoomStage scene={scene} kind={kind} cueProgress={cueProgress} />;
+    return transition ? <SceneEnvelopeWrapper transition={transition}>{stage}</SceneEnvelopeWrapper> : stage;
   }
   if (effectiveStyle === 'iso_infographic' && (kind === 'anatomy' || kind === 'process') && !panelRows(scene, 3).length) {
-    return <IsoInfographicStage scene={scene} kind={kind} cueProgress={cueProgress} />;
+    const stage = <IsoInfographicStage scene={scene} kind={kind} cueProgress={cueProgress} />;
+    return transition ? <SceneEnvelopeWrapper transition={transition}>{stage}</SceneEnvelopeWrapper> : stage;
   }
   const Organ = ANATOMY_COMPONENTS[anatomy.subject];
   if (!Organ) throw new Error(`Unsupported anatomy subject: ${anatomy.subject}`);
@@ -129,12 +147,13 @@ export const MechanismScene: React.FC<{scene: Scene; kind: MechanismKind; visual
   const relative = (box: typeof layout.subject) => ({...box, left: box.left - viewport.left, top: box.top - viewport.top});
   const caption = frameLayout.captions;
   // A process can be a clinical history worksheet rather than moving biological tissue.
-  if (panelRows(scene, 3).length) return <AbsoluteFill style={{backgroundColor: brand.off_white}}>
+  if (panelRows(scene, 3).length) return <AbsoluteFill style={{backgroundColor: brand.off_white, ...envelopeStyle}}>
     <AuthoredWorksheet scene={scene} frame={frame}/>
-    <MascotGuide scene={scene}/>
+    <MascotGuide scene={scene} continuation={transition?.mascotContinuation} transition={transition}/>
     <Captions text={scene.narration} words={scene.words} durationInFrames={scene.duration_frames}/>
+    <ChapterBridgeBar bridge={env.bridge} />
   </AbsoluteFill>;
-  return <AbsoluteFill style={{backgroundColor: light ? brand.off_white : brand.night, color: light ? brand.navy : brand.off_white}}>
+  return <AbsoluteFill style={{backgroundColor: light ? brand.off_white : brand.night, color: light ? brand.navy : brand.off_white, ...envelopeStyle}}>
     <div data-mechanism-subject-region="true" style={{...viewport, position: 'absolute', overflow: 'hidden'}}>
     <AbsoluteFill data-mechanism-camera="true" style={{transform: `translate(${camera.x}%, ${camera.y}%) scale(${camera.zoom})`, transformOrigin: camera.origin}} data-framing={camera.framing}>
       {kind === 'comparison' ? <div style={{position: 'absolute', inset: 0, display: 'flex', flexDirection: layout.axis}}>
@@ -167,11 +186,12 @@ export const MechanismScene: React.FC<{scene: Scene; kind: MechanismKind; visual
     </div>
     {hasSteps ? <AuthoredStep scene={scene} frame={frame} box={{left: original.subject.left, top: original.subject.top,
       width: original.subject.width, height: 134}}/> : null}
-    <MascotGuide scene={scene} />
+    <MascotGuide scene={scene} continuation={transition?.mascotContinuation} transition={transition} />
     {shouldRenderCaptions(frameLayout) ? (
       <div data-mechanism-caption-band="true" style={{position: 'absolute', left: caption.left, bottom: caption.bottom,
         width: caption.width, height: caption.height, backgroundColor: CAPTION_BACKGROUND_COLOR, borderRadius: 16}} />
     ) : null}
     <Captions text={scene.narration} words={scene.words} durationInFrames={scene.duration_frames} />
+    <ChapterBridgeBar bridge={env.bridge} />
   </AbsoluteFill>;
 };

@@ -5,6 +5,7 @@ import {isReverseLogoPath, logoBadgeSpec} from './logoContrast';
 import {slowDriftTransform} from './slowDrift';
 import {LAYOUTS, useLayout} from '../layout';
 import type {FrameLayout} from '../layout';
+import {computeSceneEnvelope, type SceneTransitionProps} from '../motion/sceneEnvelope';
 import type {VisualAssetRef} from '../types';
 
 export type VisualAssetBox = {height: number; left: number; top: number; width: number};
@@ -24,12 +25,18 @@ export const VisualAsset: React.FC<{
   outro?: boolean;
   box?: VisualAssetBox;
   durationFrames?: number;
-}> = ({asset, outro = false, box: overrideBox, durationFrames}) => {
+  continuation?: boolean;
+  transition?: SceneTransitionProps;
+}> = ({asset, outro = false, box: overrideBox, durationFrames, continuation, transition}) => {
   const frame = useCurrentFrame();
   const layout = useLayout();
   const box = overrideBox ?? visualAssetBox(asset, outro, layout);
-  if (asset.role === 'mascot') return <PresenterMascot asset={asset} box={box} />;
-  const opacity = interpolate(frame, [0, 10], [0, 1], {extrapolateRight: 'clamp'});
+  if (asset.role === 'mascot') {
+    return <PresenterMascot asset={asset} box={box} continuation={continuation} transition={transition} />;
+  }
+  const env = transition ? computeSceneEnvelope(frame, transition) : null;
+  const baseOpacity = interpolate(frame, [0, 10], [0, 1], {extrapolateRight: 'clamp'});
+  const opacity = env ? baseOpacity * env.opacity : baseOpacity;
   const label = `PYH ${asset.role} ${asset.pose ?? ''}`.trim();
 
   if (asset.role === 'brand') {
@@ -53,6 +60,7 @@ export const VisualAsset: React.FC<{
           alignItems: 'center',
           justifyContent: 'center',
           opacity,
+          transform: env?.transform,
         }}
       >
         <Img
@@ -71,7 +79,7 @@ export const VisualAsset: React.FC<{
       <div
         aria-label={label}
         data-slow-drift="true"
-        style={{...box, overflow: 'hidden', position: 'absolute'}}
+        style={{...box, overflow: 'hidden', position: 'absolute', transform: env?.transform}}
       >
         <Img
           src={staticFile(asset.path)}
@@ -92,7 +100,7 @@ export const VisualAsset: React.FC<{
     <Img
       aria-label={label}
       src={staticFile(asset.path)}
-      style={{...box, objectFit: 'contain', opacity, position: 'absolute'}}
+      style={{...box, objectFit: 'contain', opacity, position: 'absolute', transform: env?.transform}}
     />
   );
 };

@@ -13,6 +13,7 @@ from tempfile import TemporaryDirectory
 import yaml
 
 from healthvideo.audio.music import (
+    MIX_VERSION,
     MUSIC_DB,
     _command,
     _wav_info,
@@ -23,7 +24,7 @@ from healthvideo.domain.license_ledger import LicenseEntry
 from healthvideo.storage.files import canonical_json_hash, sha256_file
 
 SFX_ROOT = Path(__file__).resolve().parents[3] / 'assets/sfx'
-SFX_VERSION = 'cc0-bed-sidechain-v1'
+SFX_VERSION = 'cc0-bed-sidechain-v2'
 
 
 def load_catalog(root: Path = SFX_ROOT) -> dict[str, dict]:
@@ -122,17 +123,19 @@ def sfx_identity(board, root: Path) -> dict:
 
 def mix_sfx(voice: Path, events: list[dict], *, out: Path, music: Path | None = None,
             cache_dir: Path | None = None, runner=subprocess.run) -> Path:
-    """Premix attenuated music and quiet SFX, then duck the entire bed under speech.
-
-    Catalog RMS is -26 dBFS, then cue volume is 0.15–0.4. Unlike the old music
-    path, gain is applied to music BEFORE premixing; ducking uses unity bed gain.
-    """
+    """Duck music under voice first, then overlay softened SFX cues post-duck."""
     catalog = load_catalog()
     frames, rate, _ = _wav_info(voice)
     duration = frames / rate
-    key = canonical_json_hash({'version': SFX_VERSION, 'voice': sha256_file(voice), 'events': events,
-                                   'files': {e['id']: catalog[e['id']]['sha256'] for e in events},
-                                   'music': sha256_file(music) if music else None, 'music_db': MUSIC_DB})
+    key = canonical_json_hash({
+        'version': SFX_VERSION,
+        'mix_version': MIX_VERSION,
+        'voice': sha256_file(voice),
+        'events': events,
+        'files': {e['id']: catalog[e['id']]['sha256'] for e in events},
+        'music': sha256_file(music) if music else None,
+        'music_db': MUSIC_DB,
+    })
     cache = cache_dir if cache_dir is not None else shared_repo_root() / 'cache/sfx'
     cache.mkdir(parents=True, exist_ok=True)
     cached, receipt = cache / f'{key}.wav', cache / f'{key}.json'
@@ -145,28 +148,43 @@ def mix_sfx(voice: Path, events: list[dict], *, out: Path, music: Path | None = 
     if not valid:
         with TemporaryDirectory(prefix='.sfx-', dir=cache) as temporary:
             temp = Path(temporary)
-            argv = ['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y']
-            if music:
-                argv += ['-stream_loop', '-1', '-i', str(music)]
-                filters = [f'[0:a]volume={MUSIC_DB}dB,apad,atrim=duration={duration:.9f}[base]']
-            else:
-                argv += ['-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo']
-                filters = [f'[0:a]atrim=duration={duration:.9f}[base]']
-            labels = ['[base]']
-            for index, event in enumerate(events, 1):
-                argv += ['-i', str(SFX_ROOT / catalog[event['id']]['file'])]
-                samples = round(event['time'] * 48000)
-                filters.append(f'[{index}:a]volume={event["volume"]},adelay={samples}S:all=1[e{index}]')
-                labels.append(f'[e{index}]')
-            filters.append(''.join(labels) + f'amix=inputs={len(labels)}:duration=first:normalize=0[bed]')
-            filter_path = temp / 'filters.txt'
-            filter_path.write_text(';'.join(filters), encoding='utf-8')
-            bed = temp / 'bed.wav'
-            _command(argv + ['-filter_complex_script', str(filter_path), '-map', '[bed]',
-                             '-t', f'{duration:.9f}', '-ar', '48000', '-ac', '2',
-                             '-c:a', 'pcm_s16le', str(bed)], runner, 'SFX premix')
+            base_input = voice
+            if music is not None:
+                ducked = temp / 'ducked.wav'
+                mix_with_ducking(voice, music, out=ducked, runner=runner)
+                base_input = ducked
             mixed = temp / 'mixed.wav'
-            mix_with_ducking(voice, bed, out=mixed, music_db=0, runner=runner)
+            if music is not None and not events:
+                shutil.copyfile(base_input, mixed)
+            else:
+                argv = ['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-i', str(base_input)]
+                filters = [f'[0:a]aformat=sample_rates=48000:channel_layouts=stereo,atrim=duration={duration:.9f}[base]']
+                labels = ['[base]']
+                for index, event in enumerate(events, 1):
+                    argv += ['-i', str(SFX_ROOT / catalog[event['id']]['file'])]
+                    samples = round(event['time'] * 48000)
+                    filters.append(
+                        f'[{index}:a]aformat=sample_rates=48000:channel_layouts=stereo,'
+                        f'volume={event["volume"] * 0.55:.4f},lowpass=f=7500,'
+                        f'afade=t=in:st=0:d=0.015,adelay={samples}S:all=1[e{index}]'
+                    )
+                    labels.append(f'[e{index}]')
+                filters.append(
+                    ''.join(labels)
+                    + f'amix=inputs={len(labels)}:duration=first:normalize=0,'
+                    + f'apad,atrim=duration={duration:.9f}[mixed]'
+                )
+                filter_path = temp / 'filters.txt'
+                filter_path.write_text(';'.join(filters), encoding='utf-8')
+                _command(
+                    argv + [
+                        '-filter_complex_script', str(filter_path), '-map', '[mixed]',
+                        '-t', f'{duration:.9f}', '-ar', '48000', '-ac', '2',
+                        '-c:a', 'pcm_s16le', str(mixed),
+                    ],
+                    runner,
+                    'SFX mix',
+                )
             digest = sha256_file(mixed)
             os.replace(mixed, cached)
             receipt.write_text(json.dumps({'sha256': digest}), encoding='utf-8')

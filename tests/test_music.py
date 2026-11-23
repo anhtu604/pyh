@@ -180,3 +180,65 @@ def test_mix_rejects_ducking_beyond_ffmpeg_threshold_range(tmp_path):
     with pytest.raises(ValueError, match="Ducking"):
         music.mix_with_ducking(tmp_path / "missing.wav", tmp_path / "bed.wav",
                                out=tmp_path / "mix.wav", duck_db=-40)
+
+
+def test_prepare_seamless_loop_trims_silent_tail_and_crossfades(tmp_path):
+    src = tmp_path / "raw_music.wav"
+    dst = tmp_path / "loop_music.wav"
+    rate = 48000
+    frames: list[int] = []
+    # 0.5s silent intro + 7.5s steady tone + 2.0s silent tail = 10.0s
+    frames.extend([0, 0] * int(0.5 * rate))
+    for i in range(int(7.5 * rate)):
+        val = int(8000 * math.sin(2 * math.pi * 330 * i / rate))
+        frames.extend((val, val))
+    frames.extend([0, 0] * int(2.0 * rate))
+    with wave.open(str(src), "wb") as audio:
+        audio.setparams((2, 2, rate, 0, "NONE", "not compressed"))
+        audio.writeframes(struct.pack(f"<{len(frames)}h", *frames))
+
+    music._prepare_seamless_loop_wav(src, dst)
+    with wave.open(str(dst), "rb") as audio:
+        out_frames = audio.getnframes()
+        raw = audio.readframes(out_frames)
+    assert int(3.5 * rate) <= out_frames < int(9.0 * rate)
+    samples = struct.unpack(f"<{len(raw) // 2}h", raw)[::2]
+    head = samples[: rate // 2]
+    tail = samples[-rate // 2 :]
+    head_rms = math.sqrt(sum(s * s for s in head) / len(head))
+    tail_rms = math.sqrt(sum(s * s for s in tail) / len(tail))
+    assert head_rms > 2000
+    assert tail_rms > 2000
+    assert 0.5 <= tail_rms / head_rms <= 1.5
+
+
+def test_mix_with_ducking_uses_vocal_pocket_eq_release_950_and_afade_on_long_audio(tmp_path):
+    voice = tmp_path / "voice5s.wav"
+    bed = tmp_path / "bed5s.wav"
+    out = tmp_path / "out5s.wav"
+    write_wav(voice, 5.0, channels=1)
+    write_wav(bed, 5.0, channels=2)
+    seen: list[list[str]] = []
+
+    def runner(argv, **kwargs):
+        seen.append(argv)
+        write_wav(Path(argv[-1]), 5.0, channels=2)
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    music.mix_with_ducking(voice, bed, out=out, runner=runner)
+    assert len(seen) == 1
+    fc = seen[0][seen[0].index("-filter_complex") + 1]
+    for expected in (
+        "highpass=f=65",
+        "highpass=f=90",
+        "equalizer=f=2200:t=q:w=1.2:g=-4.5",
+        "lowpass=f=10500",
+        "afade=t=in:st=0:d=1.2",
+        "afade=t=out:st=2.800000:d=2.0",
+        "attack=35:release=950:knee=6:detection=rms",
+    ):
+        assert expected in fc
+    assert music.MUSIC_DB == -20.0
+    assert music.DUCK_DB == -12.0
+    assert music.MUSIC_SECONDS == 48.0
+    assert music.MIX_VERSION == "sidechain-v2"

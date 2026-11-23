@@ -6,11 +6,13 @@ import {Captions} from '../components/Captions';
 import {textEntrances} from '../components/entrances';
 import {slowDriftTransform} from '../components/slowDrift';
 import {useLayout} from '../layout';
+import {SceneEnvelopeWrapper, type SceneTransitionProps} from '../motion/sceneEnvelope';
 import type {Scene} from '../types';
 import {AuthoredWorksheet, panelRows} from '../components/AuthoredPanels';
 
 type WhiteboardSceneProps = {
   scene: Scene;
+  transition?: SceneTransitionProps;
 };
 
 export const WHITEBOARD_REVEAL_MIN_FRAMES = 9; // 0.3s @ 30fps
@@ -45,7 +47,7 @@ export const whiteboardFontSize = (text: string, width: number, height: number, 
   return 1;
 };
 
-export const WhiteboardScene: React.FC<WhiteboardSceneProps> = ({scene}) => {
+export const WhiteboardScene: React.FC<WhiteboardSceneProps> = ({scene, transition}) => {
   const frame = useCurrentFrame();
   const layout = useLayout();
   const dashOffset = interpolate(frame, [0, 30], [1, 0], {
@@ -64,17 +66,20 @@ export const WhiteboardScene: React.FC<WhiteboardSceneProps> = ({scene}) => {
   const drift = slowDriftTransform(frame, scene.duration_frames);
   const captionVariant = scene.words?.length ? 'shorts' : undefined;
 
-  if (panelRows(scene, 3).length) return <>
-    <AuthoredWorksheet scene={scene} frame={frame}/>
-    <Captions variant={captionVariant} hasMascot={hasMascot} text={scene.narration} words={scene.words} durationInFrames={scene.duration_frames}/>
-  </>;
+  if (panelRows(scene, 3).length) {
+    const content = <>
+      <AuthoredWorksheet scene={scene} frame={frame}/>
+      <Captions variant={captionVariant} hasMascot={hasMascot} text={scene.narration} words={scene.words} durationInFrames={scene.duration_frames}/>
+    </>;
+    return transition ? <SceneEnvelopeWrapper transition={transition}>{content}</SceneEnvelopeWrapper> : content;
+  }
 
   const isPortrait = layout.frame.height > layout.frame.width;
   const ruleY = textBox.top - 28;
   const ruleLeft = textBox.left + (isPortrait ? 48 : 80);
   const ruleRight = textBox.left + textBox.width - (isPortrait ? 48 : 80);
 
-  return (
+  const content = (
     <>
       {!hasIllustration ? <svg
         aria-label="Nét vẽ whiteboard"
@@ -169,4 +174,6 @@ export const WhiteboardScene: React.FC<WhiteboardSceneProps> = ({scene}) => {
       <Captions variant={captionVariant} hasMascot={hasMascot} text={scene.narration} words={scene.words} durationInFrames={scene.duration_frames} />
     </>
   );
+
+  return transition ? <SceneEnvelopeWrapper transition={transition}>{content}</SceneEnvelopeWrapper> : content;
 };

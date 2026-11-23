@@ -8,7 +8,9 @@ import {OutroScene} from './scenes/OutroScene';
 import {WhiteboardScene} from './scenes/WhiteboardScene';
 import {StatGaugeScene} from './scenes/StatGaugeScene';
 import {KineticTermScene} from './scenes/KineticTermScene';
+import {brand} from './anatomy/palette';
 import {SceneMotionOverlay} from './motion/SceneMotionOverlay';
+import {sceneTransitionPlan} from './motion/sceneEnvelope';
 import {VisualAsset} from './components/VisualAsset';
 import {CAPTION_BACKGROUND_COLOR, CAPTION_TEXT_COLOR} from './components/Captions';
 import {LAYOUTS, LayoutContext} from './layout';
@@ -42,40 +44,48 @@ export const activeSceneIndex = (scenes: SceneTiming[], frame: number): number =
 export const HealthVideo: React.FC<RenderInput> = (rawInput) => {
   const {audio_file, format_profile, scenes, youtube_cta, visualStyle} = parseRenderInput(rawInput);
   const cameraFramings = mechanismSequenceFramings(scenes);
+  const forceLightCanvas = format_profile === 'youtube_long';
 
   return (
     <LayoutContext.Provider value={LAYOUTS[format_profile]}>
-    <AbsoluteFill style={{backgroundColor: CAPTION_BACKGROUND_COLOR, color: CAPTION_TEXT_COLOR}}>
+    <AbsoluteFill style={{backgroundColor: forceLightCanvas ? brand.off_white : CAPTION_BACKGROUND_COLOR, color: CAPTION_TEXT_COLOR}}>
       <Audio src={staticFile(audio_file)} />
       {scenes.map((scene, index) => {
         const motion = effectiveSceneMotion(scene, visualStyle);
+        const transition = sceneTransitionPlan(scenes, index);
         return (
         <Sequence key={scene.id} from={scene.start_frame} durationInFrames={scene.duration_frames}>
           {scene.visual_assets.filter((asset) => asset.role === 'whiteboard').map((asset) => (
-            <VisualAsset asset={asset} outro={scene.visual === 'brand_outro'} durationFrames={scene.duration_frames} key={asset.path} />
+            <VisualAsset asset={asset} outro={scene.visual === 'brand_outro'} durationFrames={scene.duration_frames} transition={transition} key={asset.path} />
           ))}
-          {scene.visual === 'anatomy_animation' ? <MechanismCameraContext.Provider value={cameraFramings[index]}><AnatomyScene scene={scene} visualStyle={visualStyle} /></MechanismCameraContext.Provider>
-          : scene.visual === 'process_animation' ? <MechanismCameraContext.Provider value={cameraFramings[index]}><ProcessScene scene={scene} visualStyle={visualStyle} /></MechanismCameraContext.Provider>
-          : scene.visual === 'comparison' ? <MechanismCameraContext.Provider value={cameraFramings[index]}><ComparisonScene scene={scene} /></MechanismCameraContext.Provider>
-          : scene.visual === 'timelapse' ? <MechanismCameraContext.Provider value={cameraFramings[index]}><TimelapseScene scene={scene} /></MechanismCameraContext.Provider>
+          {scene.visual === 'anatomy_animation' ? <MechanismCameraContext.Provider value={cameraFramings[index]}><AnatomyScene scene={scene} visualStyle={visualStyle} transition={transition} forceLightCanvas={forceLightCanvas} /></MechanismCameraContext.Provider>
+          : scene.visual === 'process_animation' ? <MechanismCameraContext.Provider value={cameraFramings[index]}><ProcessScene scene={scene} visualStyle={visualStyle} transition={transition} forceLightCanvas={forceLightCanvas} /></MechanismCameraContext.Provider>
+          : scene.visual === 'comparison' ? <MechanismCameraContext.Provider value={cameraFramings[index]}><ComparisonScene scene={scene} transition={transition} forceLightCanvas={forceLightCanvas} /></MechanismCameraContext.Provider>
+          : scene.visual === 'timelapse' ? <MechanismCameraContext.Provider value={cameraFramings[index]}><TimelapseScene scene={scene} transition={transition} forceLightCanvas={forceLightCanvas} /></MechanismCameraContext.Provider>
           : scene.visual === 'brand_outro' ? (
-            <OutroScene scene={scene} />
+            <OutroScene scene={scene} transition={transition} />
           ) : scene.visual === 'evidence_highlight' ? (
-            <EvidenceHighlightScene scene={scene} />
+            <EvidenceHighlightScene scene={scene} transition={transition} />
           ) : scene.visual === 'source_card' ? (
-            <SourceCardScene scene={scene} />
+            <SourceCardScene scene={scene} transition={transition} />
           ) : scene.visual === 'chart' && scene.visual_assets.some((asset) => asset.role === 'chart') ? (
-            <ChartScene scene={scene} />
+            <ChartScene scene={scene} transition={transition} />
           ) : scene.visual === 'stat_gauge' ? (
-            <StatGaugeScene scene={scene} />
+            <StatGaugeScene scene={scene} transition={transition} />
           ) : scene.visual === 'kinetic_term' ? (
-            <KineticTermScene scene={scene} />
+            <KineticTermScene scene={scene} transition={transition} />
           ) : (
-            <WhiteboardScene scene={scene} />
+            <WhiteboardScene scene={scene} transition={transition} />
           )}
           {scene.visual_assets.filter((asset) => asset.role === 'brand' || asset.role === 'mascot' &&
             !isMechanismVisual(scene.visual)).map((asset) => (
-            <VisualAsset asset={asset} outro={scene.visual === 'brand_outro'} key={asset.path} />
+            <VisualAsset
+              asset={asset}
+              outro={scene.visual === 'brand_outro'}
+              continuation={asset.role === 'mascot' ? transition.mascotContinuation : undefined}
+              transition={transition}
+              key={asset.path}
+            />
           ))}
           {motion ? <SceneMotionOverlay motion={motion} narration={scene.narration} /> : null}
         </Sequence>

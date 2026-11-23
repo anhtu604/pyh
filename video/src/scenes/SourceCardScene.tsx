@@ -4,6 +4,7 @@ import {Captions} from '../components/Captions';
 import {LONG_SCENE_SECONDS} from '../components/slowDrift';
 import {FONT_FAMILY} from '../fonts';
 import {useLayout} from '../layout';
+import {SceneEnvelopeWrapper, type SceneTransitionProps} from '../motion/sceneEnvelope';
 import type {Scene} from '../types';
 import {AuthoredStep, panelRows} from '../components/AuthoredPanels';
 
@@ -165,7 +166,7 @@ export const sourceCardScale = (card: Card, inner: {width: number; height: numbe
   return 0.3;
 };
 
-export const SourceCardScene: React.FC<{scene: Scene}> = ({scene}) => {
+export const SourceCardScene: React.FC<{scene: Scene; transition?: SceneTransitionProps}> = ({scene, transition}) => {
   const frame = useCurrentFrame();
   const layout = useLayout();
   const card = scene.source_card;
@@ -203,7 +204,7 @@ export const SourceCardScene: React.FC<{scene: Scene}> = ({scene}) => {
     })
     : 1;
 
-  return <>
+  const content = <>
     <article aria-label="Thẻ nguồn" style={{
       position: 'absolute', left: box.left, top: box.top, width: box.width, height: box.height,
       boxSizing: 'border-box', padding: box.padding, overflow: 'hidden',
@@ -255,4 +256,5 @@ export const SourceCardScene: React.FC<{scene: Scene}> = ({scene}) => {
     </article>
     {!duplicateNarration ? <Captions text={scene.narration} words={scene.words} durationInFrames={scene.duration_frames} /> : null}
   </>;
+  return transition ? <SceneEnvelopeWrapper transition={transition}>{content}</SceneEnvelopeWrapper> : content;
 };

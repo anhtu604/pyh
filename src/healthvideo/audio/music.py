@@ -6,20 +6,22 @@ import math
 import os
 import shutil
 import subprocess
+import sys
 import wave
+from array import array
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from healthvideo.process import run_with_deadline, timeout_diagnostic
 
 MUSIC_PYTHON_ENV = "HEALTHVIDEO_MUSIC_PYTHON"
-MODEL_ID = "ace-step-1.5/acestep-v15-turbo+acestep-5Hz-lm-1.7B:pt-offload-v1"
+MODEL_ID = "ace-step-1.5/acestep-v15-turbo+acestep-5Hz-lm-1.7B:pt-offload-v2"
 DEFAULT_MOOD = "calm curious documentary"
-MUSIC_SECONDS = 30.0
+MUSIC_SECONDS = 48.0
 MUSIC_SEED = 42
 MUSIC_DB = -20.0
 DUCK_DB = -12.0
-MIX_VERSION = "sidechain-v1"
+MIX_VERSION = "sidechain-v2"
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MUSIC_TIMEOUT = 30 * 60  # Includes cold model loading/offloading on the local GPU.
 MIX_TIMEOUT = 15 * 60
@@ -133,6 +135,78 @@ def generate_music(
     return out
 
 
+def _prepare_seamless_loop_wav(source: Path, dest: Path) -> Path:
+    """Trim silent head/tail and crossfade into a seamless loop using pure Python wave/array."""
+    with wave.open(str(source), "rb") as audio:
+        channels = audio.getnchannels()
+        sampwidth = audio.getsampwidth()
+        rate = audio.getframerate()
+        nframes = audio.getnframes()
+        raw = audio.readframes(nframes)
+    if sampwidth != 2 or rate <= 0 or channels <= 0 or nframes / rate < 4.0:
+        shutil.copyfile(source, dest)
+        return dest
+
+    pcm = array("h")
+    pcm.frombytes(raw)
+    if sys.byteorder != "little":
+        pcm.byteswap()
+
+    win_frames = max(1, rate // 10)
+    win_samples = win_frames * channels
+    num_windows = nframes // win_frames
+    start_frame = 0
+    end_frame = nframes
+    if num_windows >= 6:
+        rms_list: list[float] = []
+        for w in range(num_windows):
+            offset = w * win_samples
+            chunk = pcm[offset : offset + win_samples]
+            rms_list.append(math.sqrt(sum(s * s for s in chunk) / len(chunk)))
+        nonzero = sorted(r for r in rms_list if r > 0.0)
+        if nonzero:
+            median_rms = nonzero[len(nonzero) // 2]
+            thresh = 0.08 * median_rms
+            min_frames = max(1, min(nframes, round(3.5 * rate)))
+            min_windows = max(1, min(num_windows, math.ceil(min_frames / win_frames)))
+            start_win = 0
+            while start_win < num_windows - min_windows and rms_list[start_win] < thresh:
+                start_win += 1
+            end_win = num_windows
+            while end_win > start_win + min_windows and rms_list[end_win - 1] < thresh:
+                end_win -= 1
+            start_frame = start_win * win_frames
+            end_frame = min(nframes, end_win * win_frames)
+
+    body = pcm[start_frame * channels : end_frame * channels]
+    body_frames = end_frame - start_frame
+    fade_frames = min(96000, body_frames // 4)
+    if fade_frames >= 1:
+        head_pre = body[: fade_frames * channels]
+        out_pcm = array("h", body[fade_frames * channels :])
+        out_frames = body_frames - fade_frames
+        tail_offset = (out_frames - fade_frames) * channels
+        step = (math.pi / 2.0) / fade_frames
+        for k in range(fade_frames):
+            cos_w = math.cos(k * step) ** 2
+            sin_w = 1.0 - cos_w
+            base_idx = tail_offset + k * channels
+            pre_idx = k * channels
+            for c in range(channels):
+                mixed_sample = round(out_pcm[base_idx + c] * cos_w + head_pre[pre_idx + c] * sin_w)
+                out_pcm[base_idx + c] = max(-32768, min(32767, mixed_sample))
+    else:
+        out_pcm = body
+
+    if sys.byteorder != "little":
+        out_pcm.byteswap()
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(dest), "wb") as out_audio:
+        out_audio.setparams((channels, 2, rate, 0, "NONE", "not compressed"))
+        out_audio.writeframes(out_pcm.tobytes())
+    return dest
+
+
 def mix_with_ducking(
     narration: Path, music: Path, *, out: Path, music_db: float = MUSIC_DB,
     duck_db: float = DUCK_DB, runner=subprocess.run,
@@ -151,19 +225,34 @@ def mix_with_ducking(
     duration = frames / rate
     threshold = 0.1 * 10 ** (duck_db / (20 * 0.75))
     ratio = 1 if duck_db == 0 else 4
+    if duration >= 4.0:
+        fade_out_start = max(0.0, duration - 2.2)
+        voice_chain = "[0:a]aformat=sample_rates=48000:channel_layouts=stereo,highpass=f=65,asplit=2[voice][sc];"
+        bed_chain = (
+            f"[1:a]aformat=sample_rates=48000:channel_layouts=stereo,"
+            f"highpass=f=90,equalizer=f=2200:t=q:w=1.2:g=-4.5,lowpass=f=10500,"
+            f"volume={music_db}dB,"
+            f"afade=t=in:st=0:d=1.2,afade=t=out:st={fade_out_start:.6f}:d=2.0[bed];"
+        )
+    else:
+        voice_chain = "[0:a]aformat=sample_rates=48000:channel_layouts=stereo,asplit=2[voice][sc];"
+        bed_chain = f"[1:a]aformat=sample_rates=48000:channel_layouts=stereo,volume={music_db}dB[bed];"
     filters = (
-        "[0:a]aformat=sample_rates=48000:channel_layouts=stereo,asplit=2[voice][sc];"
-        f"[1:a]aformat=sample_rates=48000:channel_layouts=stereo,volume={music_db}dB[bed];"
-        f"[bed][sc]sidechaincompress=threshold={threshold:.9f}:ratio={ratio}:attack=20:release=300:detection=rms[ducked];"
-        f"[voice][ducked]amix=inputs=2:duration=first:normalize=0,"
-        f"apad,atrim=duration={duration:.9f}[mixed]"
+        voice_chain
+        + bed_chain
+        + f"[bed][sc]sidechaincompress=threshold={threshold:.9f}:ratio={ratio}:"
+        + "attack=35:release=950:knee=6:detection=rms[ducked];"
+        + "[voice][ducked]amix=inputs=2:duration=first:normalize=0,"
+        + f"apad,atrim=duration={duration:.9f}[mixed]"
     )
     out.parent.mkdir(parents=True, exist_ok=True)
     with TemporaryDirectory(prefix=".music-mix-", dir=out.parent) as temporary:
+        loop_music = Path(temporary) / "music-loop.wav"
+        _prepare_seamless_loop_wav(music, loop_music)
         staged = Path(temporary) / "mixed.wav"
         _command([
             "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
-            "-i", str(narration), "-stream_loop", "-1", "-i", str(music),
+            "-i", str(narration), "-stream_loop", "-1", "-i", str(loop_music),
             "-filter_complex", filters, "-map", "[mixed]", "-t", f"{duration:.9f}",
             "-ar", "48000", "-ac", "2", "-c:a", "pcm_s16le", str(staged),
         ], runner, "FFmpeg music ducking")

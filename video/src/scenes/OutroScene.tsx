@@ -3,6 +3,7 @@ import {AbsoluteFill, interpolate, useCurrentFrame} from 'remotion';
 import {brand} from '../anatomy/palette';
 import {FONT_FAMILY} from '../fonts';
 import {useLayout} from '../layout';
+import {computeSceneEnvelope, type SceneTransitionProps} from '../motion/sceneEnvelope';
 import type {Scene} from '../types';
 
 export const OUTRO_LINE_HEIGHT = 1.35;
@@ -46,16 +47,19 @@ export const outroFontSize = (text: string, width: number, height: number, prefe
   return MIN_OUTRO_FONT_SIZE;
 };
 
-export const OutroScene: React.FC<{scene: Scene}> = ({scene}) => {
+export const OutroScene: React.FC<{scene: Scene; transition?: SceneTransitionProps}> = ({scene, transition}) => {
   const frame = useCurrentFrame();
   const layout = useLayout();
   const isLandscape = layout.frame.width >= layout.frame.height;
-  const opacity = interpolate(frame, [0, 12], [0, 1], {extrapolateRight: 'clamp'});
+  const baseOpacity = interpolate(frame, [0, 12], [0, 1], {extrapolateRight: 'clamp'});
+  const env = computeSceneEnvelope(frame, transition);
+  const envelopeOpacity = transition && transition.durationFrames >= 45 ? env.opacity : baseOpacity;
+  const envelopeTransform = transition && transition.durationFrames >= 45 ? env.transform : undefined;
   if (isLandscape) {
     const brandBox = layout.assets.outroBrand;
     const accentWidth = 180;
     return (
-      <AbsoluteFill data-outro-landscape="true" style={{backgroundColor: '#FFFDF7'}}>
+      <AbsoluteFill data-outro-landscape="true" style={{backgroundColor: '#FFFDF7', opacity: envelopeOpacity, transform: envelopeTransform}}>
         <div
           data-outro-accent="true"
           style={{
@@ -66,7 +70,7 @@ export const OutroScene: React.FC<{scene: Scene}> = ({scene}) => {
             height: 6,
             borderRadius: 3,
             backgroundColor: brand.teal,
-            opacity,
+            opacity: baseOpacity,
           }}
         />
       </AbsoluteFill>
@@ -75,7 +79,7 @@ export const OutroScene: React.FC<{scene: Scene}> = ({scene}) => {
   const t = layout.outroText;
   const fontSize = outroFontSize(scene.narration, t.width, t.height, t.fontSize);
   return (
-    <AbsoluteFill style={{backgroundColor: '#FFFDF7'}}>
+    <AbsoluteFill style={{backgroundColor: '#FFFDF7', opacity: envelopeOpacity, transform: envelopeTransform}}>
       <div
         data-outro-text="true"
         style={{
@@ -95,7 +99,7 @@ export const OutroScene: React.FC<{scene: Scene}> = ({scene}) => {
           fontSize,
           lineHeight: OUTRO_LINE_HEIGHT,
           color: '#202124',
-          opacity,
+          opacity: baseOpacity,
         }}
       >
         <span>{scene.narration}</span>
