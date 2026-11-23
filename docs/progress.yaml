@@ -451,9 +451,9 @@ phases:
   tasks:
   - id: R5.1
     title: Đo chuẩn video mẫu (Xấu Vê Nờ, TikTok infographic, kênh thành công) bằng khung hình + phụ đề thật
-    status: doing
+    status: done
     owner: codex
-    note: 'agy lỗi quyền + 503 quá tải, chuyển codex. Bác sĩ 2026-11-23 chê sản phẩm như slide; agy xem thật 10-15 video, đo nhịp cảnh, chữ trên hình, cấu trúc lời; chỉ viết tài liệu.'
+    note: 'Xong (docs/reference/2026-11-23-reference-benchmark.md): 23 video; Xấu Vê Nờ đổi hình trung vị 2,2-2,7s, 0 chữ trên hình, lời 255-280 tiếng/phút, ảnh tĩnh + pan/zoom là đủ. agy lỗi quyền + 503 quá tải, chuyển codex. Bác sĩ 2026-11-23 chê sản phẩm như slide; agy xem thật 10-15 video, đo nhịp cảnh, chữ trên hình, cấu trúc lời; chỉ viết tài liệu.'
   - id: R5.2
     title: Kiểm toán khoảng cách xưởng ↔ mẫu (schema phân cảnh, hình, agent, model, token/thời gian)
     status: done
