@@ -461,9 +461,9 @@ phases:
     note: 'docs/reference/2026-11-23-factory-gap-audit.md: bảng + thẻ nguồn chiếm 53,56% thời lượng PYH-003, 31 cảnh trung bình 14,8s, 5 ảnh FLUX; quota hình 15-25%/55-70% và route tab→phiếu là nguyên nhân chính; 24 vòng product review đều chưa đạt; đề xuất giữ model, cắt vòng lặp.'
   - id: R5.4
     title: Hoạt ảnh y khoa làm đặc trưng kênh (giải phẫu, sinh lý, sinh lý bệnh, GPB, mô phôi, vi sinh)
-    status: doing
+    status: done
     owner: codex
-    note: 'Bác sĩ 2026-11-23 chọn hoạt ảnh y khoa làm đặc trưng; codex xem mẫu thật, kiểm thư viện medanim, so 2-3 cách sản xuất theo chất lượng/thời gian/chi phí.'
+    note: 'Xong (docs/reference/2026-11-23-medanim-signature.md): xem 7 kênh (Nucleus, Zack, Osmosis, Kurzgesagt, TED-Ed, Armando, HayHo); chọn rig 2D vector Remotion làm nền, 3D chọn lọc; 26 hoạt ảnh lõi, đợt đầu 6. Bác sĩ 2026-11-23 chọn hoạt ảnh y khoa làm đặc trưng; codex xem mẫu thật, kiểm thư viện medanim, so 2-3 cách sản xuất theo chất lượng/thời gian/chi phí.'
   - id: R5.3
     title: Thiết kế chuẩn mới (spec) và kế hoạch thực hiện, bác sĩ duyệt hướng
     status: todo
