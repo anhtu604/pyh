@@ -884,3 +884,50 @@ def test_surgical_repair_blocks_m64_outro_regression_and_supports_leader_guidanc
     with pytest.raises(ValueError, match='medical artifact is locked'):
         pr.check_repair(project, before_restore)
     script_path.write_bytes(orig_script)
+
+
+def test_check_repair_rejects_orphaning_manifest_visual_asset(tmp_path):
+    project = _approved_production_project(tmp_path)
+    rev = project / REV
+    sb_path = rev / 'storyboard/storyboard.yaml'
+    sb = read_yaml(sb_path)
+    manifest_assets = {a['path'] for a in read_yaml(rev / 'assets/asset-manifest.yaml')['assets']}
+    ref_counts: dict[str, int] = {}
+    for s in sb['scenes']:
+        for ref in s.get('visual_assets') or ():
+            ref_counts[ref['path']] = ref_counts.get(ref['path'], 0) + 1
+    target_scene, removed_path = next(
+        (s, ref['path'])
+        for s in sb['scenes']
+        for ref in (s.get('visual_assets') or ())
+        if ref['path'] in manifest_assets and ref_counts[ref['path']] == 1
+    )
+    target_sid = target_scene['id']
+
+    _report(
+        project,
+        scores={**dict.fromkeys(pr.CRITERIA, 8), 'nhip_dung': 5},
+        issues=[{
+            'at': target_sid,
+            'criterion': 'nhip_dung',
+            'problem': 'Anh de chu.',
+            'fix': 'Chinh bo cuc.',
+            'fixable': True,
+        }],
+    )
+    pr.record_review(project, pr.render_hash(project))
+    before = pr.repair_files(project)
+
+    edited_sb = read_yaml(sb_path)
+    for scene in edited_sb['scenes']:
+        if scene['id'] == target_sid:
+            scene['visual_assets'] = [
+                ref for ref in scene['visual_assets'] if ref['path'] != removed_path
+            ]
+    write_yaml_atomic(sb_path, edited_sb)
+
+    with pytest.raises(
+        ValueError,
+        match=f'visual asset is not referenced by storyboard: {removed_path}',
+    ):
+        pr.check_repair(project, before)

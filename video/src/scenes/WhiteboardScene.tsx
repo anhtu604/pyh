@@ -7,6 +7,7 @@ import {textEntrances} from '../components/entrances';
 import {slowDriftTransform} from '../components/slowDrift';
 import {useLayout} from '../layout';
 import {SceneEnvelopeWrapper, type SceneTransitionProps} from '../motion/sceneEnvelope';
+import {SplitClinicalWorksheetStage} from '../medanim/SplitClinicalWorksheetStage';
 import type {Scene} from '../types';
 import {AuthoredWorksheet, panelRows} from '../components/AuthoredPanels';
 
@@ -67,6 +68,9 @@ export const WhiteboardScene: React.FC<WhiteboardSceneProps> = ({scene, transiti
   const captionVariant = scene.words?.length ? 'shorts' : undefined;
 
   if (panelRows(scene, 3).length) {
+    if (hasIllustration) {
+      return <SplitClinicalWorksheetStage scene={scene} transition={transition} />;
+    }
     const content = <>
       <AuthoredWorksheet scene={scene} frame={frame}/>
       <Captions variant={captionVariant} hasMascot={hasMascot} text={scene.narration} words={scene.words} durationInFrames={scene.duration_frames}/>

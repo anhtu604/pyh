@@ -18,6 +18,12 @@ import {
   SceneEnvelopeWrapper,
   type SceneTransitionProps,
 } from '../motion/sceneEnvelope';
+import {
+  isScientificHepaticSubject,
+  ScientificHepaticArtwork,
+} from '../medanim/ScientificHepaticArtwork';
+import {SplitClinicalWorksheetStage} from '../medanim/SplitClinicalWorksheetStage';
+import {FONT_FAMILY} from '../fonts';
 
 export type MechanismKind = 'anatomy' | 'process' | 'comparison' | 'timelapse';
 /** Only resolved alignment cues replace the legacy continuous animation. */
@@ -117,7 +123,14 @@ export const MechanismScene: React.FC<{
     ? {opacity: env.opacity, transform: env.transform}
     : {};
   if (effectiveStyle === 'scale_zoom' && (kind === 'anatomy' || kind === 'process') && !panelRows(scene, 3).length) {
-    const stage = <ScaleZoomStage scene={scene} kind={kind} cueProgress={cueProgress} />;
+    const stage = (
+      <ScaleZoomStage
+        scene={scene}
+        kind={kind}
+        cueProgress={cueProgress}
+        forceLightCanvas={forceLightCanvas}
+      />
+    );
     return transition ? <SceneEnvelopeWrapper transition={transition}>{stage}</SceneEnvelopeWrapper> : stage;
   }
   if (effectiveStyle === 'iso_infographic' && (kind === 'anatomy' || kind === 'process') && !panelRows(scene, 3).length) {
@@ -147,12 +160,97 @@ export const MechanismScene: React.FC<{
   const relative = (box: typeof layout.subject) => ({...box, left: box.left - viewport.left, top: box.top - viewport.top});
   const caption = frameLayout.captions;
   // A process can be a clinical history worksheet rather than moving biological tissue.
-  if (panelRows(scene, 3).length) return <AbsoluteFill style={{backgroundColor: brand.off_white, ...envelopeStyle}}>
-    <AuthoredWorksheet scene={scene} frame={frame}/>
-    <MascotGuide scene={scene} continuation={transition?.mascotContinuation} transition={transition}/>
-    <Captions text={scene.narration} words={scene.words} durationInFrames={scene.duration_frames}/>
-    <ChapterBridgeBar bridge={env.bridge} />
-  </AbsoluteFill>;
+  if (panelRows(scene, 3).length) {
+    if (effectiveStyle === 'scale_zoom' || forceLightCanvas) {
+      return <SplitClinicalWorksheetStage scene={scene} transition={transition} />;
+    }
+    return <AbsoluteFill style={{backgroundColor: brand.off_white, ...envelopeStyle}}>
+      <AuthoredWorksheet scene={scene} frame={frame}/>
+      <MascotGuide scene={scene} continuation={transition?.mascotContinuation} transition={transition}/>
+      <Captions text={scene.narration} words={scene.words} durationInFrames={scene.duration_frames}/>
+      <ChapterBridgeBar bridge={env.bridge} />
+    </AbsoluteFill>;
+  }
+  if (
+    (kind === 'comparison' || kind === 'timelapse') &&
+    (effectiveStyle === 'scale_zoom' || forceLightCanvas) &&
+    isScientificHepaticSubject(anatomy.subject)
+  ) {
+    const isVertical = frameLayout.frame.height > frameLayout.frame.width;
+    const hasMascot = Boolean(scene.visual_assets?.some((asset) => asset.role === 'mascot'));
+    const header = scene.visualTakeaway ?? scene.on_screen_text;
+    const stageBox: Box = isVertical
+      ? {left: 44, top: header ? 148 : 64, width: frameLayout.frame.width - 88, height: 1120}
+      : {
+          left: hasMascot ? 280 : 120,
+          top: header ? 124 : 56,
+          width: frameLayout.frame.width - (hasMascot ? 340 : 240),
+          height: header ? 880 : 940,
+        };
+    return (
+      <AbsoluteFill
+        data-scientific-stage={kind}
+        style={{backgroundColor: brand.off_white, color: brand.navy, ...envelopeStyle}}
+      >
+        {header ? (
+          <div
+            data-scalezoom-takeaway="true"
+            style={{
+              position: 'absolute',
+              left: isVertical ? 36 : 44,
+              top: 28,
+              maxWidth: isVertical ? frameLayout.frame.width - 72 : 1280,
+              padding: '12px 22px 14px',
+              borderRadius: 12,
+              backgroundColor: brand.off_white,
+              border: `2px solid ${brand.teal}`,
+              fontFamily: FONT_FAMILY,
+              fontSize: isVertical ? 24 : 26,
+              fontWeight: 800,
+              color: brand.navy,
+              zIndex: 6,
+            }}
+          >
+            {header}
+          </div>
+        ) : null}
+        <div style={{...stageBox, position: 'absolute'}}>
+          <ScientificHepaticArtwork
+            subject={anatomy.subject}
+            mode={kind}
+            state={kind === 'timelapse' ? 'diseased' : anatomy.state}
+            severity={severity}
+            cueProgress={cueProgress}
+            lightBackground
+            durationFrames={scene.duration_frames}
+          />
+        </div>
+        <MascotGuide scene={scene} continuation={transition?.mascotContinuation} transition={transition} />
+        {shouldRenderCaptions(frameLayout) && !scene.words?.length ? (
+          <div
+            data-mechanism-caption-band="true"
+            style={{
+              position: 'absolute',
+              left: caption.left,
+              bottom: caption.bottom,
+              width: caption.width,
+              height: caption.height,
+              backgroundColor: CAPTION_BACKGROUND_COLOR,
+              borderRadius: 16,
+            }}
+          />
+        ) : null}
+        <Captions
+          variant={scene.words?.length ? 'shorts' : undefined}
+          hasMascot={hasMascot}
+          text={scene.narration}
+          words={scene.words}
+          durationInFrames={scene.duration_frames}
+        />
+        <ChapterBridgeBar bridge={env.bridge} />
+      </AbsoluteFill>
+    );
+  }
   return <AbsoluteFill style={{backgroundColor: light ? brand.off_white : brand.night, color: light ? brand.navy : brand.off_white, ...envelopeStyle}}>
     <div data-mechanism-subject-region="true" style={{...viewport, position: 'absolute', overflow: 'hidden'}}>
     <AbsoluteFill data-mechanism-camera="true" style={{transform: `translate(${camera.x}%, ${camera.y}%) scale(${camera.zoom})`, transformOrigin: camera.origin}} data-framing={camera.framing}>

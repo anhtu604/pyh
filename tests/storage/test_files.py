@@ -269,3 +269,21 @@ def test_replace_with_retry_survives_eight_transient_windows_locks(
     assert attempts == 9
     assert sleeps == list(files._REPLACE_RETRY_DELAYS[1:9])
     assert destination.read_text(encoding="utf-8") == "new\n"
+
+
+def test_rmtree_long_path_removes_deep_directory_tree(tmp_path: Path) -> None:
+    import os
+
+    root_dir = tmp_path / "deep-root"
+    deep_dir = root_dir / ("a" * 120) / ("b" * 120)
+    deep_file = deep_dir / "nested-asset.svg"
+    deep_str = files._win_long_path(deep_file)
+    assert len(str(deep_file.resolve())) > 260
+    os.makedirs(os.path.dirname(deep_str), exist_ok=True)
+    with open(deep_str, "w", encoding="utf-8") as handle:
+        handle.write("<svg/>")
+    assert os.path.isfile(deep_str)
+
+    files.rmtree_long_path(root_dir)
+    assert not root_dir.exists()
+    assert not os.path.exists(deep_str)

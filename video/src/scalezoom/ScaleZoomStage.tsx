@@ -38,6 +38,10 @@ import {
   SingleLabelOverlay,
   type LabelCandidate,
 } from './SingleLabel';
+import {
+  isScientificHepaticSubject,
+  ScientificHepaticArtwork,
+} from '../medanim/ScientificHepaticArtwork';
 
 export type ScaleZoomStageProps = {
   scene: Scene;
@@ -45,6 +49,8 @@ export type ScaleZoomStageProps = {
   cueProgress?: Record<string, number>;
   /** Corner placement for the compact Style A mascot guide (defaults to 'left'). */
   mascotSide?: 'left' | 'right';
+  /** Keep light off_white canvas across all zoom levels in 16:9 full videos to avoid dark flashes. */
+  forceLightCanvas?: boolean;
 };
 
 const HEPATIC_CELL_SUBJECTS: ReadonlySet<AnatomySubject> = new Set([
@@ -94,6 +100,7 @@ export const ScaleZoomStage: React.FC<ScaleZoomStageProps> = ({
   kind,
   cueProgress,
   mascotSide = 'left',
+  forceLightCanvas = false,
 }) => {
   const frame = useCurrentFrame();
   const frameLayout = useLayout();
@@ -182,8 +189,9 @@ export const ScaleZoomStage: React.FC<ScaleZoomStageProps> = ({
     : 0;
   const layerTransition = computeLayerTransition(layerTransitionT);
 
-  const activeSurface =
-    isLayerTransition && !layerTransition.handedOff
+  const activeSurface = forceLightCanvas
+    ? 'off_white'
+    : isLayerTransition && !layerTransition.handedOff
       ? resolveScaleSurface(state.previousLevel)
       : state.surface;
   const bgHex = surfaceBackgroundHex(activeSurface);
@@ -477,14 +485,25 @@ export const ScaleZoomStage: React.FC<ScaleZoomStageProps> = ({
                 filter: flatShadowFilter,
               }}
             >
-              <Organ
-                state={anatomy.state}
-                severity={severity}
-                emphasizeFlow={kind === 'process'}
-                lightBackground={lightSurface}
-                cueProgress={cueProgress}
-                visibleLabels={[]}
-              />
+              {isScientificHepaticSubject(anatomy.subject) ? (
+                <ScientificHepaticArtwork
+                  subject={anatomy.subject}
+                  state={anatomy.state}
+                  severity={severity}
+                  cueProgress={cueProgress}
+                  lightBackground={lightSurface}
+                  durationFrames={scene.duration_frames}
+                />
+              ) : (
+                <Organ
+                  state={anatomy.state}
+                  severity={severity}
+                  emphasizeFlow={kind === 'process'}
+                  lightBackground={lightSurface}
+                  cueProgress={cueProgress}
+                  visibleLabels={[]}
+                />
+              )}
             </div>
           </AbsoluteFill>
         ) : null}
@@ -518,6 +537,15 @@ export const ScaleZoomStage: React.FC<ScaleZoomStageProps> = ({
                   state={anatomy.state}
                   severity={severity}
                   lightBackground={lightSurface}
+                />
+              ) : isScientificHepaticSubject('hepatocyte_sinusoid_unit') ? (
+                <ScientificHepaticArtwork
+                  subject="hepatocyte_sinusoid_unit"
+                  state={anatomy.state}
+                  severity={severity}
+                  cueProgress={cueProgress}
+                  lightBackground={lightSurface}
+                  durationFrames={scene.duration_frames}
                 />
               ) : (
                 <IncomingCellOrgan

@@ -297,4 +297,67 @@ describe('HealthVideo visual asset layer', () => {
     expect(html).toContain('data-motion="wipe-transitions"');
     expect(html).toContain('điểm chính');
   });
+
+  it('normalizes snake_case visual_style and visual_takeaway into ScaleZoomStage, scientific comparison, and split clinical worksheet', () => {
+    const props = parseRenderInput({
+      title: 'Snake case PYH-003',
+      audio_file: 'audio/silence.wav',
+      visual_style: 'scale_zoom',
+      format_profile: 'youtube_long',
+      width: 1920,
+      height: 1080,
+      scenes: [
+        {
+          schema_version: '1.0',
+          id: 'S01',
+          start_frame: 0,
+          duration_frames: 120,
+          narration: 'Men nằm trong tế bào gan có thể thoát sang máu.',
+          visual_takeaway: 'Men nằm trong tế bào gan thoát sang dòng máu khi tổn thương.',
+          visual: 'anatomy_animation',
+          anatomy: {subject: 'hepatocyte_sinusoid_unit', state: 'diseased', severity: 0.5, motion: 'leak'},
+          motion: {emphasis: 'marker-underline-title', emphasis_text: 'tế bào gan'},
+          visual_assets: [],
+        },
+        {
+          schema_version: '1.0',
+          id: 'S02',
+          start_frame: 120,
+          duration_frames: 120,
+          narration: 'Đừng tự ngưng thuốc kê đơn.',
+          on_screen_text: 'Thuốc kê đơn: không tự ngưng',
+          visual_takeaway: 'Giữ nguyên thuốc kê đơn tới khi bác sĩ rà soát.',
+          visual: 'process_animation',
+          anatomy: {subject: 'liver_organ', state: 'normal', severity: 0, motion: 'overview'},
+          entrances: [
+            {text: 'Thuốc kê đơn\tMỡ máu / huyết áp\tKhông tự bỏ ngang', start_frame: 0},
+          ],
+          motion: {emphasis: 'marker-underline-title', emphasis_text: 'đừng'},
+          visual_assets: [{path: 'assets/illustrations/prescription-review.png', role: 'whiteboard'}],
+        },
+        {
+          schema_version: '1.0',
+          id: 'S11',
+          start_frame: 240,
+          duration_frames: 120,
+          narration: 'So sánh tế bào lành và tế bào tổn thương.',
+          visual_takeaway: 'So sánh trực quan tế bào bình thường và tổn thương.',
+          visual: 'comparison',
+          anatomy: {subject: 'hepatocyte_sinusoid_unit', state: 'diseased', severity: 0.7, motion: 'compare'},
+          visual_assets: [],
+        },
+      ],
+    });
+    expect(props.visualStyle).toBe('scale_zoom');
+    expect(props.scenes[0].visualTakeaway).toBe('Men nằm trong tế bào gan thoát sang dòng máu khi tổn thương.');
+
+    const html = renderToStaticMarkup(<HealthVideo {...props} />);
+    expect(html).toContain('data-scalezoom-stage="true"');
+    expect(html).toContain('data-scalezoom-takeaway="true"');
+    expect(html).toContain('data-split-clinical-stage="true"');
+    expect(html).toContain('data-split-visual="flux"');
+    expect(html).toContain('data-scientific-stage="comparison"');
+    expect(html).toContain('data-scientific-artwork="hepatocyte_sinusoid_unit"');
+    expect(html).not.toContain('data-motion="marker-underline-title"');
+  });
 });

@@ -9,7 +9,7 @@ import json
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 
 import yaml
@@ -1071,6 +1071,22 @@ def _check_storyboard_repair(
     manifest = load_asset_manifest(assets_path) if assets_path.is_file() else None
     if manifest is not None:
         validate_asset_manifest(root, manifest)
+        manifest_paths = {PurePosixPath(a.path).as_posix() for a in manifest.assets}
+        before_refs = {
+            PurePosixPath(ref['path']).as_posix()
+            for scene in before_data.get('scenes', [])
+            if isinstance(scene, Mapping)
+            for ref in (scene.get('visual_assets') or ())
+            if isinstance(ref, Mapping) and isinstance(ref.get('path'), str)
+        }
+        after_refs = {
+            PurePosixPath(ref.path).as_posix()
+            for s in storyboard.scenes
+            for ref in s.visual_assets
+        }
+        orphaned = sorted((before_refs & manifest_paths) - after_refs)
+        if orphaned:
+            raise ValueError(f'visual asset is not referenced by storyboard: {orphaned[0]}')
     if (root / 'explainer/explainer.yaml').is_file():
         _validate_storyboard_explainer_bindings(root, storyboard)
     if script is not None:

@@ -25,11 +25,10 @@ import type {RenderInput, Scene, SceneMotion, SceneTiming, VisualStyle} from './
 
 const effectiveSceneMotion = (scene: Scene, visualStyle?: VisualStyle): SceneMotion | null | undefined => {
   if (!scene.motion) return scene.motion;
-  const usesScaleZoomStage =
+  const hidesUnderlineTitle =
     visualStyle === 'scale_zoom' &&
-    (scene.visual === 'anatomy_animation' || scene.visual === 'process_animation') &&
-    !panelRows(scene, 3).length;
-  if (!usesScaleZoomStage || scene.motion.emphasis !== 'marker-underline-title') {
+    (isMechanismVisual(scene.visual) || panelRows(scene, 3).length > 0);
+  if (!hidesUnderlineTitle || scene.motion.emphasis !== 'marker-underline-title') {
     return scene.motion;
   }
   if (!scene.motion.transition_in) return null;
@@ -60,8 +59,8 @@ export const HealthVideo: React.FC<RenderInput> = (rawInput) => {
           ))}
           {scene.visual === 'anatomy_animation' ? <MechanismCameraContext.Provider value={cameraFramings[index]}><AnatomyScene scene={scene} visualStyle={visualStyle} transition={transition} forceLightCanvas={forceLightCanvas} /></MechanismCameraContext.Provider>
           : scene.visual === 'process_animation' ? <MechanismCameraContext.Provider value={cameraFramings[index]}><ProcessScene scene={scene} visualStyle={visualStyle} transition={transition} forceLightCanvas={forceLightCanvas} /></MechanismCameraContext.Provider>
-          : scene.visual === 'comparison' ? <MechanismCameraContext.Provider value={cameraFramings[index]}><ComparisonScene scene={scene} transition={transition} forceLightCanvas={forceLightCanvas} /></MechanismCameraContext.Provider>
-          : scene.visual === 'timelapse' ? <MechanismCameraContext.Provider value={cameraFramings[index]}><TimelapseScene scene={scene} transition={transition} forceLightCanvas={forceLightCanvas} /></MechanismCameraContext.Provider>
+          : scene.visual === 'comparison' ? <MechanismCameraContext.Provider value={cameraFramings[index]}><ComparisonScene scene={scene} visualStyle={visualStyle} transition={transition} forceLightCanvas={forceLightCanvas} /></MechanismCameraContext.Provider>
+          : scene.visual === 'timelapse' ? <MechanismCameraContext.Provider value={cameraFramings[index]}><TimelapseScene scene={scene} visualStyle={visualStyle} transition={transition} forceLightCanvas={forceLightCanvas} /></MechanismCameraContext.Provider>
           : scene.visual === 'brand_outro' ? (
             <OutroScene scene={scene} transition={transition} />
           ) : scene.visual === 'evidence_highlight' ? (

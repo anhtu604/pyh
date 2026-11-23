@@ -268,3 +268,60 @@ def test_is_real_render_runner_detects_mocked_cli_or_factory_deps(monkeypatch) -
 
     monkeypatch.setattr(factory_deps, "resolve_pnpm_argv", lambda args: ["mock", *args])
     assert produce._is_real_render_runner(factory_deps._run_render_argv) is False
+
+
+def test_stage_medanim_assets_identity_and_bundle_sync(tmp_path: Path, monkeypatch) -> None:
+    from healthvideo.render import remotion
+    from healthvideo.storage.files import sha256_file
+
+    repo_root = Path(__file__).resolve().parents[2]
+    src_svg = repo_root / "library/medanim/liver-enzyme-leak/assets/niaid-liver-230.svg"
+    assert src_svg.is_file()
+
+    # 1. stage_fonts=False stays strictly read-only.
+    dry_pub = tmp_path / "dry-pub"
+    dry_pub.mkdir()
+    remotion.build_render_argv(tmp_path / "i.json", tmp_path / "o.mp4", dry_pub, stage_fonts=False)
+    assert list(dry_pub.iterdir()) == []
+
+    # 2. stage_fonts=True stages medanim assets into public_dir/medanim/<id>/ with exact sha256.
+    pub = tmp_path / "pub"
+    pub.mkdir()
+    remotion.build_render_argv(tmp_path / "i.json", tmp_path / "o.mp4", pub, stage_fonts=True)
+    staged_svg = pub / "medanim/liver-enzyme-leak/niaid-liver-230.svg"
+    assert staged_svg.is_file()
+    assert sha256_file(staged_svg) == sha256_file(src_svg)
+
+    pub_bundle = tmp_path / "pub-bundle"
+    pub_bundle.mkdir()
+    remotion.build_bundle_argv(pub_bundle, tmp_path / "out-bundle", stage_fonts=True)
+    assert sha256_file(pub_bundle / "medanim/liver-enzyme-leak/niaid-liver-230.svg") == sha256_file(src_svg)
+
+    # 3. sync_bundle_public copies public_dir/medanim/... into bundle_dir/public/medanim/...
+    bundle_dir = tmp_path / "bundle"
+    bundle_dir.mkdir()
+    (bundle_dir / "index.html").write_text("<html></html>", encoding="utf-8")
+    remotion.sync_bundle_public(pub, bundle_dir)
+    synced_svg = bundle_dir / "public/medanim/liver-enzyme-leak/niaid-liver-230.svg"
+    assert synced_svg.is_file()
+    assert sha256_file(synced_svg) == sha256_file(src_svg)
+
+    # 4. renderer_identity reflects changes in library/medanim/*/assets/* while keeping the 4 keys.
+    fake_repo = tmp_path / "fake-repo"
+    (fake_repo / "src/healthvideo/render").mkdir(parents=True)
+    (fake_repo / "video/src").mkdir(parents=True)
+    (fake_repo / "video/public/fonts").mkdir(parents=True)
+    (fake_repo / "video/src/index.ts").write_text("export {};", encoding="utf-8")
+    (fake_repo / "video/package.json").write_text('{"dependencies":{"remotion":"4.0.522"}}', encoding="utf-8")
+    (fake_repo / "video/public/fonts/font.woff2").write_bytes(b"font")
+    med_asset = fake_repo / "library/medanim/liver-enzyme-leak/assets/niaid-liver-230.svg"
+    med_asset.parent.mkdir(parents=True)
+    med_asset.write_text("<svg>v1</svg>", encoding="utf-8")
+
+    monkeypatch.setattr(remotion, "__file__", str(fake_repo / "src/healthvideo/render/remotion.py"))
+    id1 = remotion.renderer_identity()
+    assert set(id1.keys()) == {"name", "package_version", "source_sha256", "fonts_sha256"}
+    med_asset.write_text("<svg>v2</svg>", encoding="utf-8")
+    id2 = remotion.renderer_identity()
+    assert id2["source_sha256"] != id1["source_sha256"]
+    assert id2["fonts_sha256"] == id1["fonts_sha256"]

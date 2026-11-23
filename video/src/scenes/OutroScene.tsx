@@ -73,6 +73,23 @@ export const OutroScene: React.FC<{scene: Scene; transition?: SceneTransitionPro
             opacity: baseOpacity,
           }}
         />
+        <div
+          data-outro-credits="true"
+          style={{
+            position: 'absolute',
+            left: 120,
+            right: 120,
+            bottom: 36,
+            textAlign: 'center',
+            fontFamily: FONT_FAMILY,
+            fontSize: 18,
+            fontWeight: 600,
+            color: brand.charcoal,
+            opacity: baseOpacity * 0.78,
+          }}
+        >
+          Hình giải phẫu: NIAID NIH BioArt (PD) · Servier Medical Art · DBCLS · Reactome (CC BY 4.0)
+        </div>
       </AbsoluteFill>
     );
   }

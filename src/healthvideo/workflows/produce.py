@@ -87,6 +87,7 @@ from healthvideo.storage.files import (
     canonical_json_hash,
     read_yaml,
     replace_directory_atomic,
+    rmtree_long_path,
     sha256_file,
     write_yaml_atomic,
 )
@@ -947,9 +948,9 @@ def _produce_v2_inner(
                                     f"Remotion render did not create output: {staged_output}"
                                 )
                 finally:
-                    shutil.rmtree(staged_bundle_dir, ignore_errors=True)
+                    rmtree_long_path(staged_bundle_dir)
                     if bundle_dir is not None and bundle_dir != staged_bundle_dir:
-                        shutil.rmtree(bundle_dir, ignore_errors=True)
+                        rmtree_long_path(bundle_dir)
         if is_mp4_container(staged_output) or (_is_real_render_runner(runner) and shutil.which("ffprobe") is not None):
             media_probe = probe_video_streams(
                 staged_output,
@@ -1063,10 +1064,10 @@ def _produce_v2_inner(
             _production_project(layout, project, input_hash, hold=hold).model_dump(mode="json"),
         )
     except Exception:
-        shutil.rmtree(staging_dir, ignore_errors=True)
+        rmtree_long_path(staging_dir)
         raise
     else:
-        shutil.rmtree(staging_dir, ignore_errors=True)
+        rmtree_long_path(staging_dir)
     return output
 
 

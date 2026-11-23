@@ -189,7 +189,7 @@ export type KineticTerm = z.input<typeof KineticTermSchema>;
 export const VisualStyleSchema = z.enum(['scale_zoom', 'iso_infographic', 'whiteboard']);
 export type VisualStyle = z.infer<typeof VisualStyleSchema>;
 
-export const SceneSchema = z
+const BaseSceneSchema = z
   .object({
     schema_version: z.string().default('1.0'),
     id: z.string(),
@@ -310,7 +310,17 @@ export const SceneSchema = z
     }
   });
 
-export const RenderInputSchema = z.object({
+export const SceneSchema = z.preprocess((raw) => {
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    const rec = raw as Record<string, unknown>;
+    if (rec.visualTakeaway === undefined && rec.visual_takeaway != null) {
+      return {...rec, visualTakeaway: rec.visual_takeaway};
+    }
+  }
+  return raw;
+}, BaseSceneSchema);
+
+const BaseRenderInputSchema = z.object({
   schema_version: z.string().default('1.0'),
   title: z.string(),
   audio_file: z.string(),
@@ -360,12 +370,22 @@ export const RenderInputSchema = z.object({
   });
 });
 
+export const RenderInputSchema = z.preprocess((raw) => {
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    const rec = raw as Record<string, unknown>;
+    if (rec.visualStyle === undefined && rec.visual_style != null) {
+      return {...rec, visualStyle: rec.visual_style};
+    }
+  }
+  return raw;
+}, BaseRenderInputSchema);
+
 export type EvidenceHighlight = z.input<typeof EvidenceHighlightSchema>;
 export type SourceCard = z.input<typeof SourceCardSchema>;
 export type VisualAssetRef = z.input<typeof VisualAssetRefSchema>;
-export type Scene = z.input<typeof SceneSchema>;
+export type Scene = z.input<typeof BaseSceneSchema>;
 export type SceneTiming = Pick<Scene, 'id' | 'start_frame' | 'duration_frames'>;
-export type RenderInput = z.output<typeof RenderInputSchema>;
+export type RenderInput = z.output<typeof BaseRenderInputSchema>;
 
 export const parseRenderInput = (value: unknown): RenderInput =>
   RenderInputSchema.parse(value);

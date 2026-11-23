@@ -205,6 +205,23 @@ export const SourceCardScene: React.FC<{scene: Scene; transition?: SceneTransiti
     : 1;
 
   const content = <>
+    {landscape ? (
+      <div
+        data-source-card-eyebrow="true"
+        style={{
+          position: 'absolute',
+          left: box.left + 4,
+          top: box.top - 40,
+          fontFamily: FONT_FAMILY,
+          fontSize: 20,
+          fontWeight: 800,
+          letterSpacing: 1.2,
+          color: '#118577',
+        }}
+      >
+        NGUỒN Y VĂN ĐỐI CHIẾU
+      </div>
+    ) : null}
     <article aria-label="Thẻ nguồn" style={{
       position: 'absolute', left: box.left, top: box.top, width: box.width, height: box.height,
       boxSizing: 'border-box', padding: box.padding, overflow: 'hidden',

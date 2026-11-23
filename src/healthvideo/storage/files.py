@@ -191,6 +191,19 @@ def write_yaml_atomic(path: Path, data: Mapping[str, Any]) -> None:
     )
 
 
+def _win_long_path(path: Path) -> str:
+    """Prefix extended-length Windows path so rmtree survives paths beyond MAX_PATH."""
+    resolved = os.path.abspath(os.fspath(path))
+    if os.name == "nt" and not resolved.startswith("\\\\?\\"):
+        return "\\\\?\\UNC\\" + resolved[2:] if resolved.startswith("\\\\") else "\\\\?\\" + resolved
+    return resolved
+
+
+def rmtree_long_path(path: Path) -> None:
+    """Remove a directory tree cleanly even when nested paths exceed Windows MAX_PATH."""
+    shutil.rmtree(_win_long_path(path), ignore_errors=True)
+
+
 def replace_directory_atomic(source_dir: Path, destination_dir: Path) -> None:
     """Publish a staged directory with one rename, replacing what is there.
 
@@ -219,7 +232,7 @@ def replace_directory_atomic(source_dir: Path, destination_dir: Path) -> None:
                 promotion_error, restore_error, superseded
             ) from promotion_error
         raise
-    shutil.rmtree(superseded, ignore_errors=True)
+    rmtree_long_path(superseded)
 
 
 def recover_directory_promotion(destination_dir: Path) -> None:

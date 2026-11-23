@@ -8,17 +8,83 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from healthvideo.process import resolve_pnpm_argv, run_with_deadline
-from healthvideo.storage.files import canonical_json_hash, sha256_file
+from healthvideo.storage.files import canonical_json_hash, rmtree_long_path, sha256_file
 
 RemotionRunner = Callable[[list[str]], int]
 BUNDLE_TIMEOUT_SECONDS = 300
 DEFAULT_WINDOWS_GL = "angle"
 FALLBACK_GL = "swiftshader"
 _SKIP_PUBLIC_ROOTS = frozenset({".remotion-bundle", "renders"})
+_MEDANIM_MEDIA_SUFFIXES = frozenset({".svg", ".png", ".jpg", ".jpeg", ".webp"})
 
 _ACTIVE_BUNDLE_STATE: contextvars.ContextVar[dict[str, object] | None] = contextvars.ContextVar(
     "pyh_remotion_active_bundle", default=None,
 )
+
+
+def _fs_path(path: Path) -> str:
+    """Return an extended-length Windows path when approaching MAX_PATH."""
+    resolved = str(path.resolve())
+    if os.name == "nt" and len(resolved) >= 240 and not resolved.startswith("\\\\?\\"):
+        return "\\\\?\\UNC\\" + resolved[2:] if resolved.startswith("\\\\") else "\\\\?\\" + resolved
+    return resolved
+
+
+def _copy_if_newer(src: Path, dst: Path) -> None:
+    """Copy ``src`` to ``dst`` only when missing, size differs, or ``src`` is newer."""
+    dst_fs = _fs_path(dst)
+    src_fs = _fs_path(src)
+    if os.path.isfile(dst_fs):
+        try:
+            src_stat = os.stat(src_fs)
+            dst_stat = os.stat(dst_fs)
+            if src_stat.st_size == dst_stat.st_size and dst_stat.st_mtime_ns >= src_stat.st_mtime_ns:
+                return
+        except OSError:
+            pass
+    os.makedirs(os.path.dirname(dst_fs), exist_ok=True)
+    shutil.copy2(src_fs, dst_fs)
+
+
+def _iter_medanim_assets(repository_root: Path) -> Iterator[tuple[str, Path, Path]]:
+    """Yield ``(anim_id, assets_dir, asset_path)`` for non-symlink media under ``library/medanim``."""
+    medanim_root = repository_root / "library" / "medanim"
+    if not medanim_root.is_dir() or medanim_root.is_symlink():
+        return
+    for anim_dir in sorted(medanim_root.iterdir(), key=lambda p: p.name):
+        if anim_dir.name.startswith(".") or anim_dir.is_symlink() or not anim_dir.is_dir():
+            continue
+        assets_dir = anim_dir / "assets"
+        if assets_dir.is_symlink() or not assets_dir.is_dir():
+            continue
+        for asset in sorted(assets_dir.rglob("*"), key=lambda p: p.as_posix()):
+            if asset.is_symlink() or not asset.is_file():
+                continue
+            rel_parts = asset.relative_to(assets_dir).parts
+            if any(part.startswith(".") for part in rel_parts):
+                continue
+            if asset.suffix.lower() not in _MEDANIM_MEDIA_SUFFIXES:
+                continue
+            yield anim_dir.name, assets_dir, asset
+
+
+def stage_medanim_assets(repository_root: Path, public_dir: Path) -> None:
+    """Stage open medical animation media from ``library/medanim/*/assets`` into ``public_dir/medanim``."""
+    resolved_public = public_dir.resolve()
+    for anim_id, assets_dir, asset in _iter_medanim_assets(repository_root):
+        rel = asset.relative_to(assets_dir)
+        _copy_if_newer(asset, resolved_public / "medanim" / anim_id / rel)
+
+
+def _stage_public_assets(repository_root: Path, public_dir: Path) -> None:
+    resolved_public = public_dir.resolve()
+    builtin_public = (repository_root / "video" / "public").resolve()
+    fonts_dir = repository_root / "video" / "public" / "fonts"
+    target_fonts = resolved_public / "fonts"
+    if fonts_dir.is_dir() and target_fonts != fonts_dir.resolve():
+        shutil.copytree(fonts_dir, target_fonts, dirs_exist_ok=True)
+    if resolved_public != builtin_public:
+        stage_medanim_assets(repository_root, resolved_public)
 
 
 def renderer_identity() -> dict[str, str]:
@@ -39,6 +105,8 @@ def renderer_identity() -> dict[str, str]:
     }
     if not source_hashes:
         raise FileNotFoundError("Remotion renderer source is missing")
+    for anim_id, assets_dir, asset in _iter_medanim_assets(repository_root):
+        source_hashes[f"medanim/{anim_id}/{asset.relative_to(assets_dir).as_posix()}"] = sha256_file(asset)
     fonts_dir = video_dir / "public" / "fonts"
     font_hashes = {
         path.relative_to(fonts_dir).as_posix(): sha256_file(path)
@@ -73,17 +141,7 @@ def sync_bundle_public(public_dir: Path, bundle_dir: Path) -> None:
             continue
         if item.suffix.lower() in {".mp4", ".tmp"}:
             continue
-        target = dst_root / rel
-        if target.is_file():
-            try:
-                src_stat = item.stat()
-                dst_stat = target.stat()
-                if src_stat.st_size == dst_stat.st_size and src_stat.st_mtime_ns <= dst_stat.st_mtime_ns:
-                    continue
-            except OSError:
-                pass
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(item, target)
+        _copy_if_newer(item, dst_root / rel)
 
 
 def build_bundle_argv(
@@ -94,10 +152,8 @@ def build_bundle_argv(
 ) -> list[str]:
     """Build the argv to bundle the Remotion composition once for reuse across clips/chapters."""
     repository_root = Path(__file__).resolve().parents[3]
-    fonts_dir = repository_root / "video" / "public" / "fonts"
-    target_fonts = public_dir.resolve() / "fonts"
-    if stage_fonts and fonts_dir.is_dir() and target_fonts != fonts_dir.resolve():
-        shutil.copytree(fonts_dir, target_fonts, dirs_exist_ok=True)
+    if stage_fonts:
+        _stage_public_assets(repository_root, public_dir)
     return [
         "pnpm",
         "--dir",
@@ -122,7 +178,7 @@ def create_bundle(
 ) -> Path | None:
     """Build a reusable Remotion bundle in ``out_dir``; return ``out_dir`` when valid."""
     if out_dir.exists():
-        shutil.rmtree(out_dir, ignore_errors=True)
+        rmtree_long_path(out_dir)
     argv = build_bundle_argv(public_dir, out_dir, stage_fonts=stage_fonts)
     if runner is not None:
         code = runner(argv)
@@ -145,7 +201,7 @@ def create_bundle(
     if out_dir.is_file():
         out_dir.unlink(missing_ok=True)
     elif out_dir.is_dir():
-        shutil.rmtree(out_dir, ignore_errors=True)
+        rmtree_long_path(out_dir)
     return None
 
 
@@ -212,10 +268,8 @@ def build_render_argv(
         hardware_acceleration = raw_hw if isinstance(raw_hw, str) and raw_hw else None
 
     repository_root = Path(__file__).resolve().parents[3]
-    fonts_dir = repository_root / "video" / "public" / "fonts"
-    target_fonts = public_dir.resolve() / "fonts"
-    if stage_fonts and target_fonts != fonts_dir.resolve():
-        shutil.copytree(fonts_dir, target_fonts, dirs_exist_ok=True)
+    if stage_fonts:
+        _stage_public_assets(repository_root, public_dir)
     if render_bundle_ready(bundle_dir):
         assert bundle_dir is not None
         sync_bundle_public(public_dir, bundle_dir)
