@@ -466,9 +466,9 @@ phases:
     note: 'Xong (docs/reference/2026-11-23-medanim-signature.md): xem 7 kênh (Nucleus, Zack, Osmosis, Kurzgesagt, TED-Ed, Armando, HayHo); chọn rig 2D vector Remotion làm nền, 3D chọn lọc; 26 hoạt ảnh lõi, đợt đầu 6. Bác sĩ 2026-11-23 chọn hoạt ảnh y khoa làm đặc trưng; codex xem mẫu thật, kiểm thư viện medanim, so 2-3 cách sản xuất theo chất lượng/thời gian/chi phí.'
   - id: R5.5
     title: Làm thử 98 giây đầu PYH-003 theo chuẩn mới (nhân vật kể chuyện, mỗi câu một hình)
-    status: done
+    status: doing
     owner: codex
-    note: 'Bản thử cache/r5-proto/prototype-90s.mp4 (nhánh r5-5, chưa vào master): mascot làm nhân vật, 33 shot trung vị 3s, 3 nền FLUX, render 278s, 0 gọi Vibi; chờ bác sĩ xem. Bác sĩ 2026-11-23 chọn làm thử trước khi sửa xưởng; giữ nguyên lời đọc đã duyệt, 0 gọi Vibi, chỉ làm lại hình ngoài xưởng.'
+    note: 'Vòng sửa 2 (bác sĩ: phông nền vô tri, hình chưa hợp): 5-6 bối cảnh thật (bếp, nhà thuốc, phòng khám, xưởng), đồ vật trong cảnh, mascot có bóng/hành động. Bản thử 1 cache/r5-proto/prototype-90s.mp4 (nhánh r5-5, chưa vào master): mascot làm nhân vật, 33 shot trung vị 3s, 3 nền FLUX, render 278s, 0 gọi Vibi; chờ bác sĩ xem. Bác sĩ 2026-11-23 chọn làm thử trước khi sửa xưởng; giữ nguyên lời đọc đã duyệt, 0 gọi Vibi, chỉ làm lại hình ngoài xưởng.'
   - id: R5.6
     title: Làm lại hoạt ảnh men gan theo chuẩn một tác nhân - một thay đổi, gần như không chữ
     status: done
