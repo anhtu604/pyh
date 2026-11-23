@@ -68,6 +68,7 @@ APP_ID = 'healthvideo-dashboard'
 DEFAULT_PORT = 8765
 FALLBACK_PORT_END = 8775
 SERVER_STATE_FILE = 'cache/dashboard-server.json'
+TOKEN_FILE = 'cache/dashboard-token.txt'
 STUDIO_URL = 'http://localhost:3000'
 HTML_PATH = Path(__file__).with_name('dashboard.html')
 LOG_TAIL = 40
@@ -2702,6 +2703,20 @@ class _Handler(BaseHTTPRequestHandler):
             self._json(payload)
 
 
+def _load_or_create_token(root: Path) -> str:
+    path = root / TOKEN_FILE
+    if path.is_file():
+        try:
+            saved = path.read_text(encoding='utf-8').strip()
+        except OSError:
+            saved = ''
+        if saved:
+            return saved
+    generated = secrets.token_urlsafe(24)
+    write_text_atomic(path, generated)
+    return generated
+
+
 class DashboardServer(ThreadingHTTPServer):
     """HTTP server bound to loopback; actions never touch approval records."""
 
@@ -2720,7 +2735,7 @@ class DashboardServer(ThreadingHTTPServer):
                  actions: dict[str, Callable[..., str]] | None = None) -> None:
         hide_child_consoles()
         self.root = root.resolve()
-        self.token = token or secrets.token_urlsafe(24)
+        self.token = token or _load_or_create_token(self.root)
         self.agents = agents
         self.limiter = PinLimiter()
         self._studio_proc: object | None = None

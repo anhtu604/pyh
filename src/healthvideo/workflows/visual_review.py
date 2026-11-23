@@ -95,11 +95,48 @@ def validate_style_issues(row: dict) -> list[str]:
     return codes
 
 
+def has_current_contact_sheet(root: Path, data: dict | None = None) -> bool:
+    """Return True only when candidates.yaml lists existing contact sheet(s) matching sha256."""
+    if data is None:
+        index_path = root / CANDIDATES
+        if not index_path.is_file():
+            return False
+        data = read_yaml(index_path)
+    if not isinstance(data, dict):
+        return False
+    raw_sheets = data.get('contact_sheets')
+    if isinstance(raw_sheets, list) and raw_sheets:
+        sheets = raw_sheets
+    elif isinstance(data.get('contact_sheet'), dict):
+        sheets = [data['contact_sheet']]
+    else:
+        return False
+    for sheet in sheets:
+        if not isinstance(sheet, dict):
+            return False
+        rel = sheet.get('path')
+        digest = sheet.get('sha256')
+        if not isinstance(rel, str) or not rel.strip() or not isinstance(digest, str) or not digest.strip():
+            return False
+        try:
+            path = _safe_path(root, rel)
+        except ValueError:
+            return False
+        if not path.is_file() or sha256_file(path) != digest:
+            return False
+    return True
+
+
 def review_pending(project: Path) -> bool:
     if not (project / 'project.yaml').is_file():
         return False
     root = resolve_project_layout(project).artifact_root
-    return (root / CANDIDATES).is_file() and not review_complete(root)
+    if not (root / CANDIDATES).is_file():
+        return False
+    data = read_yaml(root / CANDIDATES)
+    if not has_current_contact_sheet(root, data):
+        return False
+    return not review_complete(root)
 
 
 def _report_selection_mismatches(data: dict, report: dict) -> list[str]:
@@ -672,8 +709,19 @@ def ensure_candidates(root: Path, board: Storyboard, manifest: AssetManifest, *,
     else:
         data = prior
         _check_candidates(root, data)
-        if (root / REPORT).is_file() and data.get('review_sha256') == sha256_file(root / REPORT):
-            mismatches = _report_selection_mismatches(data, read_yaml(root / REPORT))
+        report_file = root / REPORT
+        if (
+            report_file.is_file()
+            and data.get('review_sha256') != sha256_file(report_file)
+            and not has_current_contact_sheet(root, data)
+        ):
+            (root / 'reviews/visual').mkdir(parents=True, exist_ok=True)
+            _replace_atomic_with_retry(
+                report_file,
+                root / 'reviews/visual' / f'premature-review-{sha256_file(report_file)}.yaml',
+            )
+        if report_file.is_file() and data.get('review_sha256') == sha256_file(report_file):
+            mismatches = _report_selection_mismatches(data, read_yaml(report_file))
             if mismatches:
                 _archive_stale_selection(root, data, mismatches)
         _consume_report(root, data, board)

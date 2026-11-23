@@ -75,7 +75,7 @@ def test_index_embeds_token(server):
     srv, _, _ = server
     status, body = request(srv, 'GET', '/')
     assert status == 200
-    assert "const TOKEN = 'tok'" in body
+    assert "let TOKEN = 'tok'" in body or "const TOKEN = 'tok'" in body
     assert '__TOKEN__' not in body
     reopen_form = body.split('<form id="ops-reopen"', 1)[1].split('</form>', 1)[0]
     assert 'name="pin" type="password"' in reopen_form
@@ -2404,3 +2404,20 @@ def test_dashboard_server_does_not_shadow_existing_http_server_on_windows(tmp_pa
     finally:
         foreign.shutdown()
         foreign.server_close()
+
+
+def test_dashboard_server_persists_token_across_restarts(tmp_path) -> None:
+    srv1 = dashboard.DashboardServer(tmp_path, 0, agents=list, actions={})
+    try:
+        tok1 = srv1.token
+        token_file = tmp_path / 'cache/dashboard-token.txt'
+        assert token_file.is_file()
+        assert token_file.read_text(encoding='utf-8').strip() == tok1
+    finally:
+        srv1.server_close()
+
+    srv2 = dashboard.DashboardServer(tmp_path, 0, agents=list, actions={})
+    try:
+        assert srv2.token == tok1
+    finally:
+        srv2.server_close()

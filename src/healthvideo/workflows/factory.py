@@ -37,6 +37,36 @@ GATES = {
     WorkflowState.AWAITING_MEDICAL_REVIEW: 'medical',
     WorkflowState.AWAITING_VIDEO_REVIEW: 'video',
 }
+WAKEUP_STAMP_FILE = 'cache/xuong-wakeup.stamp'
+
+
+def wake_background(root: Path) -> Path:
+    """Touch the wakeup stamp so the background factory poll wakes within ~1s."""
+    stamp = root / WAKEUP_STAMP_FILE
+    write_text_atomic(stamp, datetime.now(UTC).isoformat(timespec='microseconds'))
+    return stamp
+
+
+def _wakeup_mtime_ns(root: Path) -> int | None:
+    try:
+        return (root / WAKEUP_STAMP_FILE).stat().st_mtime_ns
+    except OSError:
+        return None
+
+
+def _sleep_until_wakeup(root: Path, delay: float, *, sleep: Callable = time.sleep) -> None:
+    if sleep is not time.sleep:
+        sleep(delay)
+        return
+    initial = _wakeup_mtime_ns(root)
+    deadline = time.monotonic() + max(0.0, delay)
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        sleep(min(1.0, remaining))
+        if _wakeup_mtime_ns(root) != initial:
+            break
 
 
 def gate_for_project(path: Path, project: ProjectManifestV2) -> str | None:
@@ -429,7 +459,7 @@ def run_factory(root: Path, deps: RunDeps, *, interval: float = 120, once: bool 
                     logger.exception('Vòng xưởng thất bại; sẽ thử lại')
                 if once:
                     break
-                sleep(delay)
+                _sleep_until_wakeup(root, delay, sleep=sleep)
         except KeyboardInterrupt:
             logger.info('Xưởng đã dừng')
         finally:

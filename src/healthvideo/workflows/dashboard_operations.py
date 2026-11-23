@@ -14,6 +14,8 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
+import yaml
+
 from healthvideo.agents import RUNNING_MARKER, cancel_running_job
 from healthvideo.domain.asset_manifest import (
     load_asset_manifest,
@@ -236,6 +238,7 @@ def resume_project(root: Path, slug: str) -> dict:
             raise LookupError(f'Không tìm thấy dự án: {slug}')
         was_paused = paused_path.exists()
         paused_path.unlink(missing_ok=True)
+    factory.wake_background(root)
     return {
         'ok': True,
         'slug': slug,
@@ -509,6 +512,19 @@ def retry_project(
         api.clear_retry(root, slug)
         agent_hold.unlink(missing_ok=True)
         blocked_note.unlink(missing_ok=True)
+        if allow_repair_release:
+            repair_path = inside(root, log_dir / 'leader-repair.yaml')
+            if repair_path.is_file():
+                try:
+                    repair_data = read_yaml(repair_path)
+                except (OSError, TypeError, ValueError, yaml.YAMLError):
+                    repair_data = {}
+                if isinstance(repair_data, dict) and repair_data.get('phase') in {
+                    'needs_attention',
+                    'repair_failed',
+                }:
+                    repair_path.unlink(missing_ok=True)
+        factory.wake_background(root)
         return project_operations(root, slug)
 
 
@@ -665,7 +681,12 @@ def post_route(server, parts: list[str], body: dict) -> dict | None:
                 reason=str(body.get('reason', '')),
             )
         if parts[3] == 'retry':
-            return retry_project(server.root, parts[2], expected_revision=body.get('expected_revision'))
+            return retry_project(
+                server.root,
+                parts[2],
+                expected_revision=body.get('expected_revision'),
+                allow_repair_release=bool(body.get('force')),
+            )
         if parts[3] == 'reopen':
             if body.get('confirmed') is not True:
                 raise ValueError('Bác sĩ cần xác nhận mở lại trên app.')

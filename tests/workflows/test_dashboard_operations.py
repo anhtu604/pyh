@@ -429,6 +429,23 @@ def test_real_production_retry_integration_with_app_routes(project, monkeypatch)
         status, html = call('GET', '/')
         assert status == 200
         assert 'd.retry_status.retry_after' in html
+
+        # 4. POST retry with force=True clears agent-retry, blocked.txt, stuck leader-repair, and wakes xuong
+        logs = retry_file.parent
+        (logs / 'agent-retry.yaml').write_text('steps: {}', encoding='utf-8')
+        (logs / 'blocked.txt').write_text('visual_review lỗi', encoding='utf-8')
+        write_yaml_atomic(logs / 'leader-repair.yaml', {'phase': 'needs_attention', 'revision': '001'})
+        status, forced = call(
+            'POST',
+            f'/api/project/{project_dir.name}/retry',
+            {'expected_revision': '001', 'force': True},
+        )
+        assert status == 200, forced
+        assert not (logs / 'production-retry.yaml').exists()
+        assert not (logs / 'agent-retry.yaml').exists()
+        assert not (logs / 'blocked.txt').exists()
+        assert not (logs / 'leader-repair.yaml').exists()
+        assert (root / 'cache/xuong-wakeup.stamp').is_file()
     finally:
         srv.shutdown()
         srv.server_close()

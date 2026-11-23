@@ -95,7 +95,14 @@ from healthvideo.workflows.shorts_plan import SHORTS_PLAN_ARTIFACT, ShortsPlan
 from healthvideo.workflows.standards import prompt_block
 from healthvideo.workflows.storyboard_design import storyboard_validation_error
 from healthvideo.workflows.visual_review import prepare_stale_review, review_pending
-from healthvideo.workflows.voice_prep import VOICE_PREP_ARTIFACT, VoicePrepSheet
+from healthvideo.workflows.voice_prep import (
+    VOICE_PREP_ARTIFACT,
+    VoicePrepSheet,
+    try_auto_voice_prep,
+)
+from healthvideo.workflows.voice_prep import (
+    voice_prep_ready as default_voice_prep_ready,
+)
 
 StepKind = Literal[
     "create",
@@ -1663,6 +1670,12 @@ def _run_topic(
                         and not pending_change and not forced_step):
                     need_sb = not deps.storyboard_ready(project_dir)
                     need_vp = not deps.voice_prep_ready(project_dir)
+                    if need_vp and deps.voice_prep_ready is default_voice_prep_ready:
+                        try:
+                            if try_auto_voice_prep(project_dir, root=root) is not None:
+                                need_vp = not deps.voice_prep_ready(project_dir)
+                        except (OSError, TypeError, ValueError, yaml.YAMLError):
+                            pass
                     if deps.parallel_branches and need_sb and need_vp:
                         if steps_taken + 2 > max_steps_per_topic:
                             _mark_blocked(root, entry.slug, "vượt số bước", report)

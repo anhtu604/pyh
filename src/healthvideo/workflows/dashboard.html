@@ -1338,7 +1338,7 @@ html[data-theme="light"] .ws-iso-stage{background:radial-gradient(ellipse 62% 46
 </div>
 
 <script>
-const TOKEN = '__TOKEN__';
+let TOKEN = '__TOKEN__';
 const $ = (id) => document.getElementById(id);
 let state = null, overviewData = null, activityData = null, companyData = null, busy = false, logFull = false;
 let wsSelectedId = null, wsStationMap = new Map();
@@ -1421,11 +1421,27 @@ function toast(msg, err=false){
   const t=$('toast'); t.textContent=msg; t.className='toast show'+(err?' err':'');
   clearTimeout(t._h); t._h=setTimeout(()=>t.className='toast',4200);
 }
-async function postJson(path, body){
+async function refreshDashboardToken(){
+  const r = await fetch('/', {cache: 'no-store'});
+  if(!r.ok || typeof r.text !== 'function') return false;
+  const html = await r.text();
+  const m = html.match(/(?:const|let|var)\s+TOKEN\s*=\s*(['"])([^'"]+)\1/);
+  if(m && m[2] && m[2] !== '__TOKEN__'){
+    TOKEN = m[2];
+    return true;
+  }
+  return false;
+}
+async function postJson(path, body, _retried=false){
   const r=await fetch(path,{method:'POST',headers:{'X-Dashboard-Token':TOKEN,'Content-Type':'application/json'},
     body:body?JSON.stringify(body):undefined});
   const j=await r.json().catch(()=>({}));
-  if(r.status===403 && j.error==='forbidden') throw new Error('Phiên app đã thay đổi. Tải lại trang bằng Ctrl+F5, mở lại gói duyệt rồi nhập PIN.');
+  if(r.status===403 && (j.error==='forbidden' || !j.error)){
+    if(!_retried && await refreshDashboardToken().catch(()=>false)){
+      return postJson(path, body, true);
+    }
+    throw new Error('Phiên app đã thay đổi. Tải lại trang bằng Ctrl+F5, mở lại gói duyệt rồi nhập PIN.');
+  }
   if(!r.ok) throw new Error(j.error||('Lỗi '+r.status));
   return j;
 }
@@ -2258,16 +2274,23 @@ $('del-form').onsubmit = async e => {
   }
 };
 
+async function runRetryAndStart(slug, revision){
+  await postJson(`/api/project/${encodeURIComponent(slug)}/retry`, {expected_revision: revision, force: true});
+  if(!(state?.xuong?.running || state?.factory?.running)){
+    await postJson('/api/factory/start');
+  }
+  toast('Đã gỡ lỗi chặn và khởi chạy lại dự án!');
+}
+
 async function retryBlockedProject(button){
   if(busy) return;
   busy=true;
   button.disabled=true;
   try{
     const {retryProject, revision}=button.dataset;
-    await postJson(`/api/project/${encodeURIComponent(retryProject)}/retry`,{expected_revision:revision});
-    toast(state?.factory?.running?'Đã cho phép xưởng làm lại bước lỗi.':'Đã cho phép làm lại bước lỗi. Bật xưởng để tiếp tục.');
+    await runRetryAndStart(retryProject, revision);
   }catch(e){
-    toast(e.message,true);
+    toast(friendlyError(e.message) || e.message,true);
   }finally{
     busy=false;
     button.disabled=false;
@@ -3932,12 +3955,14 @@ function renderPv(){
   if(inResume) inResume.onclick=()=>resumeProject(b.slug,inResume);
   const inRetry=body.querySelector('#pv-inline-retry');
   if(inRetry) inRetry.onclick=async()=>{
+    if(busy) return;
+    busy=true; inRetry.disabled=true;
     try{
-      await postJson(`/api/project/${encodeURIComponent(b.slug)}/retry`,{expected_revision:b.revision});
-      toast('Đã cho phép làm lại bước lỗi.');
+      await runRetryAndStart(b.slug, b.revision);
       await refresh();
       await openProduct(b.slug,pvTab);
-    }catch(e){toast(e.message,true)}
+    }catch(e){toast(friendlyError(e.message) || e.message,true)}
+    finally{busy=false; inRetry.disabled=false}
   };
   body.querySelectorAll('[data-copy]').forEach(btn=>btn.onclick=()=>copyToClip(btn.dataset.copy));
   body.querySelectorAll('[data-cancel-job]').forEach(btn=>btn.onclick=async()=>{
@@ -3983,7 +4008,17 @@ function gotoClaim(id){
 }
 $('pv-back').onclick=closeProduct;
 $('pv-folder').onclick=()=>{if(pv) act(`/api/project/${encodeURIComponent(pv.slug)}/folder`)};
-$('pv-retry').onclick=async()=>{if(!pv) return; try{await postJson(`/api/project/${encodeURIComponent(pv.slug)}/retry`,{expected_revision:pv.revision}); toast('Đã cho phép làm lại bước lỗi.'); await refresh(); await openProduct(pv.slug,pvTab)}catch(e){toast(e.message,true)}};
+$('pv-retry').onclick=async()=>{
+  if(!pv || busy) return;
+  const btn=$('pv-retry');
+  busy=true; btn.disabled=true;
+  try{
+    await runRetryAndStart(pv.slug, pv.revision);
+    await refresh();
+    await openProduct(pv.slug,pvTab);
+  }catch(e){toast(friendlyError(e.message) || e.message,true)}
+  finally{busy=false; btn.disabled=false}
+};
 $('pv-delete').onclick=()=>{if(pv) openDeleteModal(pv.slug,pv.title)};
 $('pv-packet').onclick=async()=>{if(!pv) return; try{toast(await post(`/api/project/${encodeURIComponent(pv.slug)}/packet`))}catch(e){toast(e.message,true)}};
 $('pv-general').onclick=()=>{const p=$('chat-panel'); if(p) p.classList.add('open'); if(pv) updateChatContext({slug: pv.slug, revision: pv.revision, view: pvTab}); const inp=$('chat-input'); if(inp){inp.placeholder='Góp ý sửa sản phẩm này hoặc góp ý chung cho xưởng…'; inp.focus();}};

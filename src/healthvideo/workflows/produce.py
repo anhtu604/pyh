@@ -127,6 +127,7 @@ from healthvideo.workflows.visual_review import (
     CANDIDATES,
     apply_visual_fallbacks,
     ensure_candidates,
+    has_current_contact_sheet,
     prepare_contact_sheet,
     restore_locked_illustrations,
     review_complete,
@@ -177,6 +178,16 @@ def _is_real_render_runner(runner: Any) -> bool:
         and getattr(mod_pnpm, "__module__", "") == "healthvideo.process"
         and getattr(mod_pnpm, "__name__", "") == "resolve_pnpm_argv"
     )
+
+
+def _ensure_contact_sheet(artifact_root: Path) -> None:
+    if not (artifact_root / CANDIDATES).is_file():
+        return
+    reviewed = review_complete(artifact_root)
+    if not reviewed or not has_current_contact_sheet(artifact_root):
+        prepare_contact_sheet(artifact_root)
+    if reviewed:
+        prepare_contact_sheet(artifact_root, final=True)
 
 
 def _gpu_fallback_runner(base_runner: Runner) -> Runner:
@@ -640,10 +651,7 @@ def _produce_v2_inner(
     if cache_valid and rebuild_requested(layout.artifact_root):
         cache_valid = False
     if cache_valid:
-        if not review_complete(layout.artifact_root):
-            prepare_contact_sheet(layout.artifact_root)
-        elif (layout.artifact_root / CANDIDATES).is_file():
-            prepare_contact_sheet(layout.artifact_root, final=True)
+        _ensure_contact_sheet(layout.artifact_root)
         render_optional_thumbnail(layout.artifact_root, runner=runner)
         _promote_v2_video_qa_if_needed(
             layout.artifact_root,
@@ -1039,10 +1047,7 @@ def _produce_v2_inner(
                 expected_visual_budget=visual_budget_qa,
             )
         _promote_run(staging_dir, renders_dir)
-        if not review_complete(layout.artifact_root):
-            prepare_contact_sheet(layout.artifact_root)
-        elif (layout.artifact_root / CANDIDATES).is_file():
-            prepare_contact_sheet(layout.artifact_root, final=True)
+        _ensure_contact_sheet(layout.artifact_root)
         render_optional_thumbnail(layout.artifact_root, runner=runner)
         _promote_v2_video_qa_if_needed(
             layout.artifact_root,

@@ -835,3 +835,46 @@ def test_runner_prepares_stale_report_before_agent_prompt(tmp_path, monkeypatch)
     assert not (tmp_path / REPORT).exists()
     assert read_yaml(tmp_path / CANDIDATES)['stale_review_count'] == 1
     assert 'KEEP GATES' in prompt
+
+
+def test_visual_review_deadlock_guard_and_premature_report_archive(tmp_path: Path) -> None:
+    from healthvideo.workflows.visual_review import (
+        CANDIDATES,
+        REPORT,
+        ensure_candidates,
+        has_current_contact_sheet,
+        review_pending,
+    )
+
+    project = tmp_path / 'proj'
+    rev = project / 'revisions/001'
+    rev.mkdir(parents=True)
+    write_yaml_atomic(project / 'project.yaml', {
+        'schema_version': '2.0',
+        'slug': 'proj',
+        'active_revision': '001',
+        'state': 'medically_approved',
+    })
+    manifest = AssetManifest.model_validate({'assets': [illustration_record()]})
+    board = _board()
+    ensure_candidates(rev, board, manifest, generate=_generate)
+
+    # Without a rendered contact sheet, review_pending must return False so produce runs first.
+    assert has_current_contact_sheet(rev) is False
+    assert review_pending(project) is False
+
+    # A premature visual-review.yaml without a contact sheet must be archived instead of crashing produce.
+    write_yaml_atomic(rev / REPORT, {
+        'candidate_index_sha256': sha256_file(rev / CANDIDATES),
+        'inspected_images': [],
+        'scenes': [],
+    })
+    ensure_candidates(rev, board, manifest, generate=_generate)
+    assert not (rev / REPORT).exists()
+    assert list((rev / 'reviews/visual').glob('premature-review-*.yaml'))
+
+    # Once a current contact sheet exists on disk matching sha256, review_pending becomes True.
+    submit(rev)
+    (rev / REPORT).unlink()
+    assert has_current_contact_sheet(rev) is True
+    assert review_pending(project) is True

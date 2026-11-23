@@ -45,7 +45,7 @@ def _run_workshop_js(test_body: str, *, pre_storage: dict[str, str] | None = Non
         ' tabVideo, renderPv, wireVideoNle, pvBuildTimelineModel,'
         ' WS_AVATARS, wsIsoSvg, wsPersonSvg, wsPropSvg, wsGateEmptySvg,'
         ' pvFormatTc, pvParseJumpInput, stopPvVideoRuntime,'
-        ' updateChatContext, closeProduct,'
+        ' updateChatContext, closeProduct, postJson,'
         ' getVideoState: () => ({ pv, pvTab, chatCtx, pvVideoState }),'
         ' setVideoState: (patch) => {'
         '   if ("pv" in patch) pv = patch.pv;'
@@ -1551,4 +1551,137 @@ def test_overview_status_labels_friendly_errors_offline_and_mobile_chat():
     assert(chatPanel.classList.contains('open'), 'chat toggle opens chat drawer');
     doc.getElementById('btn-chat-close').onclick();
     assert(!chatPanel.classList.contains('open'), 'chat close closes chat drawer');
+    ''')
+
+
+def test_retry_force_auto_start_and_token_auto_refresh():
+    _run_workshop_js(r'''
+    const assert = (cond, msg) => { if (!cond) throw new Error(msg); };
+    const { pyh, doc, setFetchHandler } = ctx;
+
+    let factoryRunning = false;
+    let currentToken = 'fresh-server-token';
+    let staleOnce = true;
+    const calls = [];
+
+    const makeBundle = (blocked = 'ValueError: Visual review requires current rendered contact sheet') => ({
+      slug: 'pyh-003', code: 'PYH-003', title: 'Gan tổn thương',
+      state: 'medically_approved', state_label: 'Bị chặn · sản xuất',
+      gate: null, revision: '001', blocked, doctor_question: null,
+      media: [], timeline: [], draft: [], claims: [], records: [], lines: [], activity: [], feedback: [],
+    });
+
+    setFetchHandler(async (url, opts = {}) => {
+      const method = (opts && opts.method) || 'GET';
+      const headers = (opts && opts.headers) || {};
+      const body = opts && opts.body ? JSON.parse(opts.body) : null;
+      calls.push({ url, method, token: headers['X-Dashboard-Token'], body });
+
+      if (url === '/') {
+        return {
+          ok: true, status: 200,
+          async text() { return `<script>let TOKEN = '${currentToken}';</script>`; },
+        };
+      }
+      if (url === '/api/project/pyh-003/retry' && method === 'POST') {
+        if (staleOnce && headers['X-Dashboard-Token'] !== currentToken) {
+          staleOnce = false;
+          return { ok: false, status: 403, async json() { return { error: 'forbidden' }; } };
+        }
+        if (headers['X-Dashboard-Token'] !== currentToken) {
+          return { ok: false, status: 403, async json() { return { error: 'forbidden' }; } };
+        }
+        return { ok: true, status: 200, async json() { return { ok: true, message: 'OK' }; } };
+      }
+      if (url === '/api/factory/start' && method === 'POST') {
+        factoryRunning = true;
+        return { ok: true, status: 200, async json() { return { ok: true, message: 'Đã bật xưởng' }; } };
+      }
+      if (url === '/api/project/pyh-003/bundle') {
+        return { ok: true, status: 200, async json() { return makeBundle(); } };
+      }
+      if (url.startsWith('/api/status')) {
+        return {
+          ok: true, status: 200,
+          async json() {
+            return {
+              factory: { running: factoryRunning, pid: factoryRunning ? 999 : null },
+              waiting: 0,
+              stages: ['1','2','3','4','5','6','7'],
+              log: [], agents: [], now: '2026-11-23T09:00:00Z', standards: 0,
+              projects: [{
+                slug: 'pyh-003', code: 'PYH-003', title: 'Gan tổn thương',
+                state: 'medically_approved', state_label: 'Bị chặn · sản xuất',
+                stage: 4, gate: null, paused: false, revision: '001', comments: 0,
+                blocked: 'ValueError: Visual review requires current rendered contact sheet',
+                handler: { label: 'Kỹ sư sửa lỗi', kind: 'repair', reason: 'Visual review requires current rendered contact sheet' },
+              }],
+            };
+          },
+        };
+      }
+      if (url.startsWith('/api/overview')) {
+        return {
+          ok: true, status: 200,
+          async json() {
+            return {
+              tiles: { running: 0, waiting_doctor: 0, done_7d: 0, done_30d: 0, avg_days_topic_to_video: 0, models_resting: 0 },
+              decisions: [], projects: [{ slug: 'pyh-003', blocked: 'err', gate: null, paused: false }], resting: [],
+            };
+          },
+        };
+      }
+      if (url.startsWith('/api/company')) return { ok: true, status: 200, async json() { return { roles: [], production_running: [], production: { work_state: 'idle' } }; } };
+      if (url.startsWith('/api/activity')) return { ok: true, status: 200, async json() { return { items: [] }; } };
+      if (url.startsWith('/api/progress')) return { ok: true, status: 200, async json() { return { phases: [], doing: [], total: 0, done: 0 }; } };
+      return { ok: true, status: 200, async json() { return {}; } };
+    });
+
+    // 1. Overview "Làm lại" button: stale 403 triggers token refresh + transparent retry with force:true, then auto-starts stopped factory
+    await pyh.refresh();
+    const retryBtn = doc.getElementById('projects').querySelector('[data-retry-project="pyh-003"]');
+    assert(retryBtn, 'overview retry button rendered');
+    await retryBtn.onclick();
+
+    const retryPosts = calls.filter(c => c.url === '/api/project/pyh-003/retry');
+    assert(retryPosts.length === 2, '403 forbidden triggers exactly one transparent retry: ' + retryPosts.length);
+    assert(retryPosts[1].token === 'fresh-server-token', 'second retry uses refreshed token');
+    assert(retryPosts[1].body && retryPosts[1].body.force === true && retryPosts[1].body.expected_revision === '001', 'sends force:true and expected_revision');
+    assert(calls.some(c => c.url === '/'), 'fetched / to refresh CSRF token');
+    assert(calls.filter(c => c.url === '/api/factory/start').length === 1, 'auto-started stopped factory');
+    assert(doc.getElementById('toast').textContent === 'Đã gỡ lỗi chặn và khởi chạy lại dự án!', 'shows combined success toast');
+
+    // 2. #pv-retry & #pv-inline-retry when factory already running: sends force:true and does NOT call /api/factory/start again
+    doc.getElementById('pv').classList.add('show');
+    pyh.setVideoState({ pv: makeBundle(), pvTab: 'overview' });
+    pyh.renderPv();
+    await doc.getElementById('pv-retry').onclick();
+    assert(calls.filter(c => c.url === '/api/project/pyh-003/retry').length === 3, '#pv-retry posts retry');
+    assert(calls.filter(c => c.url === '/api/factory/start').length === 1, 'does not re-start already running factory');
+
+    await doc.getElementById('pv-body').querySelector('#pv-inline-retry').onclick();
+    assert(calls.filter(c => c.url === '/api/project/pyh-003/retry').length === 4, '#pv-inline-retry posts retry');
+    assert(calls.filter(c => c.url === '/api/factory/start').length === 1, 'still does not re-start running factory');
+
+    // 3. Real medical gate mismatch error surfaces cleanly via friendlyError without calling /api/factory/start
+    setFetchHandler(async (url, opts = {}) => {
+      if (url === '/api/project/pyh-003/retry') {
+        return { ok: false, status: 400, async json() { return { error: 'Tệp đã duyệt y khoa đã đổi; bác sĩ phải mở lại cổng y khoa.' }; } };
+      }
+      if (url === '/api/project/pyh-003/gate/decide') {
+        return { ok: false, status: 403, async json() { return { error: 'PIN sai.' }; } };
+      }
+      return { ok: true, status: 200, async json() { return {}; } };
+    });
+    await doc.getElementById('pv-retry').onclick();
+    assert(doc.getElementById('toast').textContent.includes('mở lại cổng y khoa'), 'real gate error surfaced in toast');
+
+    // 4. Non-forbidden 403 (e.g. wrong PIN) must NOT refresh token or retry
+    let pinErr = '';
+    try {
+      await pyh.postJson('/api/project/pyh-003/gate/decide', { pin: '000000' });
+    } catch (e) {
+      pinErr = e.message;
+    }
+    assert(pinErr === 'PIN sai.', 'wrong PIN 403 throws exact error without token refresh: ' + pinErr);
     ''')

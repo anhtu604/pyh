@@ -349,3 +349,59 @@ def test_cli_status_company_summary_and_coordinator_reply_topic(tmp_path: Path) 
         'topic': '{"slug": "abc", "title": "T", "question": "Q"}',
     })
     assert r3.topic == {'slug': 'abc', 'title': 'T', 'question': 'Q'}
+
+
+def test_factory_wakeup_stamp_interrupts_sleep_and_runner_auto_voice_prep(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    import time
+
+    from healthvideo.workflows import factory, runner, voice_prep
+
+    # 1. _sleep_until_wakeup exits early when cache/xuong-wakeup.stamp is touched.
+    sleeps: list[float] = []
+    factory.wake_background(tmp_path)
+
+    def fake_real_sleep(sec: float) -> None:
+        sleeps.append(sec)
+        factory.wake_background(tmp_path)
+
+    monkeypatch.setattr(time, 'sleep', fake_real_sleep)
+    factory._sleep_until_wakeup(tmp_path, 120.0, sleep=time.sleep)
+    assert sleeps == [1.0]
+
+    # 2. runner skips voice_prep agent invocation via 0-token try_auto_voice_prep when all terms are covered.
+    project = create_v2_project_fixture(tmp_path / 'projects', state=WorkflowState.DRAFT_READY)
+    slug = project.name
+    rev = project / REV
+    (rev / 'script/voice-prep.yaml').unlink(missing_ok=True)
+    write_yaml_atomic(rev / 'script/script.yaml', {
+        'schema_version': '2.0',
+        'title': 'Uống đủ nước mỗi ngày',
+        'lines': [
+            {'id': 'L01', 'text': 'Uống đủ nước giúp cơ thể khỏe mạnh hơn mỗi ngày.'},
+        ],
+    })
+    write_yaml_atomic(tmp_path / 'topics/queue.yaml', {
+        'version': 1,
+        'entries': [{'slug': slug, 'title': 'Nước', 'question': 'Q?', 'added': '2026-11-23'}],
+    })
+    invoked: list[str] = []
+
+    def fake_invoke(slots, prompt, **kwargs):
+        invoked.append(kwargs['step'])
+        return runner.AgentResult('fake', True, False, kwargs['log_dir'] / 'fake.log')
+
+    deps = runner.RunDeps(
+        create_project=lambda *_: project,
+        read_state=lambda p: WorkflowState(read_yaml(p / 'project.yaml')['state']),
+        reject_note=lambda _: None,
+        python_steps={},
+        changed_code_paths=lambda _: [],
+        invoke=fake_invoke,
+        storyboard_ready=lambda _: True,
+        voice_prep_ready=voice_prep.voice_prep_ready,
+    )
+    runner.run_queue(tmp_path, deps, once=True)
+    assert 'voice_prep' not in invoked
+    assert voice_prep.voice_prep_ready(project) is True
