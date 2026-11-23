@@ -42,6 +42,7 @@ from healthvideo.workflows import (
     scoped_review,
     script_review,
 )
+from healthvideo.workflows.gate_review import GateKind, resume_gate
 from healthvideo.workflows.production_retry import _sanitize_reason
 
 MAX_REPAIRS = 2
@@ -700,6 +701,35 @@ _DELEGATION_STEPS: dict[tuple[str, WorkflowState], str] = {
 }
 
 
+def _is_repair_production_side_state(layout) -> bool:
+    """Return True when ``needs_production_revision`` came from an automated repair delegation."""
+    if layout.manifest.state != WorkflowState.NEEDS_PRODUCTION_REVISION:
+        return False
+    side_state = layout.manifest.side_state
+    if side_state is None or side_state.reason_code != 'chat_change':
+        return False
+    pending_reqs = change_request.pending(layout.project_dir)
+    if not pending_reqs:
+        return False
+    return all(
+        (req.get('context') or {}).get('source') in {'leader-repair', 'doctor-escalation'}
+        for _, req in pending_reqs
+        if isinstance(req, dict)
+    )
+
+
+def _can_delegate_revise_product(layout, role: str | None) -> bool:
+    """Return True when a production-stage visual fix can safely route through ``revise_product``."""
+    if role not in {'editor', 'storyboard_director'}:
+        return False
+    if not (layout.artifact_root / product_review.LOG).is_file():
+        return False
+    return (
+        layout.manifest.state == WorkflowState.PRODUCTION_IN_PROGRESS
+        or _is_repair_production_side_state(layout)
+    )
+
+
 def _delegate_content_fix(
     root: Path,
     slug: str,
@@ -723,7 +753,9 @@ def _delegate_content_fix(
             'brief': plan.brief,
             'cause': plan.cause,
         }
-    if state in _PRODUCTION_STATES and role in {
+
+    use_revise_product = _can_delegate_revise_product(layout, role)
+    if not use_revise_product and state in _PRODUCTION_STATES and role in {
         'writer',
         'medical_expert',
         'storyboard_director',
@@ -737,34 +769,47 @@ def _delegate_content_fix(
             'cause': plan.cause,
         }
 
-    target_step = _DELEGATION_STEPS.get((role, state))
-    if target_step is None:
-        status = 'unsupported_state_for_editor' if role == 'editor' else f'unsupported_state_for_{role}'
-        return 'needs_attention', {
-            'role': role,
-            'status': status,
-            'requires_doctor_reopen': False,
-            'brief': plan.brief,
-            'cause': plan.cause,
-        }
+    if use_revise_product:
+        if state == WorkflowState.NEEDS_PRODUCTION_REVISION:
+            change_request.mark_applied(project_dir)
+            resume_gate(
+                project_dir,
+                GateKind.VIDEO,
+                target=WorkflowState.PRODUCTION_IN_PROGRESS,
+                now=now,
+            )
+        effective_role = 'editor'
+        target_step = 'revise_product'
+    else:
+        effective_role = role
+        target_step = _DELEGATION_STEPS.get((role, state))
+        if target_step is None:
+            status = 'unsupported_state_for_editor' if role == 'editor' else f'unsupported_state_for_{role}'
+            return 'needs_attention', {
+                'role': role,
+                'status': status,
+                'requires_doctor_reopen': False,
+                'brief': plan.brief,
+                'cause': plan.cause,
+            }
 
-    context = {'source': 'leader-repair', 'cause': plan.cause, 'revision': layout.manifest.active_revision}
-    if role == 'writer' and state == WorkflowState.DRAFT_READY:
-        change_request.request_change(project_dir, 'edit_script', plan.brief, context, now=now)
-    elif role == 'editor' and state == WorkflowState.PRODUCTION_IN_PROGRESS:
-        change_request.request_change(project_dir, 'edit_production', plan.brief, context, now=now)
-    elif role == 'medical_expert' and state in {
-        WorkflowState.DRAFT_READY,
-        WorkflowState.NEEDS_MEDICAL_REVISION,
-        WorkflowState.EVIDENCE_READY,
-    }:
-        _append_expert_question(project_dir, plan.brief, attempt)
+        context = {'source': 'leader-repair', 'cause': plan.cause, 'revision': layout.manifest.active_revision}
+        if role == 'writer' and state == WorkflowState.DRAFT_READY:
+            change_request.request_change(project_dir, 'edit_script', plan.brief, context, now=now)
+        elif role == 'editor' and state == WorkflowState.PRODUCTION_IN_PROGRESS:
+            change_request.request_change(project_dir, 'edit_production', plan.brief, context, now=now)
+        elif role == 'medical_expert' and state in {
+            WorkflowState.DRAFT_READY,
+            WorkflowState.NEEDS_MEDICAL_REVISION,
+            WorkflowState.EVIDENCE_READY,
+        }:
+            _append_expert_question(project_dir, plan.brief, attempt)
 
     guidance_path = root / 'topics/logs' / slug / 'leader-guidance.yaml'
     previous_guidance = guidance_path.read_bytes() if guidance_path.is_file() else None
     write_yaml_atomic(guidance_path, {
         'revision': layout.manifest.active_revision,
-        'role': role,
+        'role': effective_role,
         'step': target_step,
         'brief': plan.brief,
         'at': now.isoformat(),
@@ -779,7 +824,8 @@ def _delegate_content_fix(
         raise
 
     return 'retry_requested', {
-        'role': role,
+        'role': effective_role,
+        'step': target_step,
         'status': 'delegated',
         'requires_doctor_reopen': False,
         'brief': plan.brief,
@@ -945,12 +991,17 @@ def _escalate_to_supervisor(
     rec = record if isinstance(record, dict) else {}
     phase = str(rec.get('phase') or '')
     attempts_before = int(rec.get('attempts_before_incident') or 0)
+    answered_escalations = sum(
+        1 for item in doctor_questions.history(root, slug)
+        if item.get('kind') == 'escalation' and item.get('status') == 'answered'
+    )
     fp = 'escalation:' + canonical_json_hash({
         'revision': layout.manifest.active_revision,
         'state': layout.manifest.state.value,
         'reason': reason,
         'phase': phase,
         'attempts_before': attempts_before,
+        'answered_escalations': answered_escalations,
     })[:16]
     if existing is not None:
         if str(existing.get('kind') or '') != 'escalation':
@@ -1126,6 +1177,10 @@ def repair_once(
         'Nếu lỗi nằm ở nội dung, kịch bản, bằng chứng y khoa, phát âm, shorts hoặc dựng hình/storyboard thì dùng '
         'action=delegate và chọn delegate_role là writer, medical_expert, editor, '
         'storyboard_director, shorts_producer hoặc voice_director. '
+        'Nếu revision đã có reviews/product-review-log.yaml và lỗi nằm ở phần trình bày/hình storyboard '
+        '(như cảnh kết brand_outro M6.4, beat, bố cục, ngân sách hình, asset phi ngữ nghĩa) mà không đổi lời đọc/claim y khoa '
+        '— kể cả khi đang ở needs_production_revision do leader-repair trước đó — chọn action=delegate, delegate_role=editor '
+        'để định tuyến về revise_product sửa phần trình bày an toàn (không chọn hold đòi mở cổng y khoa). '
         'Nếu cần tài khoản, PIN hoặc thiếu dữ kiện để kết luận thì action=hold. '
         'action=retry chỉ khi đã có bằng chứng lỗi tạm thời được khắc phục. '
         'Trong vòng này chỉ đọc và ghi báo cáo.'

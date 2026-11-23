@@ -57,7 +57,7 @@ from healthvideo.workflows import (
     researcher,
     standards,
 )
-from healthvideo.workflows.gate_review import approve_gate, reject_gate
+from healthvideo.workflows.gate_review import approve_gate, reject_gate, resume_gate
 from healthvideo.workflows.script_review import (
     CRITERIA,
     CYCLE_LIMIT_REASON,
@@ -1340,6 +1340,12 @@ def _project_repair_summary(root: Path, slug: str, roles: dict[str, str]) -> dic
     if not record:
         return None
     phase = str(record.get('phase') or '')
+    blocked_exists = (
+        (root / 'topics' / 'logs' / slug / 'blocked.txt').is_file()
+        or (root / 'projects' / slug / 'blocked-reason.md').is_file()
+    )
+    if not blocked_exists and phase not in {'diagnosing', 'repairing', 'retry_requested', 'waiting_idle'}:
+        return None
     attempts = record.get('attempts') if isinstance(record.get('attempts'), int) else 0
     diag = record.get('diagnosis') if isinstance(record.get('diagnosis'), dict) else {}
     delegation = record.get('delegation') if isinstance(record.get('delegation'), dict) else {}
@@ -2945,6 +2951,17 @@ def answer_doctor_question(root: Path, slug: str, body: dict) -> dict:
                         for stale_key in ('phase', 'attention_reason', 'error', 'retry_after'):
                             rep.pop(stale_key, None)
                         write_yaml_atomic(repair_path, rep)
+                if (
+                    repair_service._is_repair_production_side_state(layout)
+                    and (layout.artifact_root / product_review.LOG).is_file()
+                ):
+                    change_request.mark_applied(layout.project_dir)
+                    resume_gate(
+                        layout.project_dir,
+                        GateKind.VIDEO,
+                        target=WorkflowState.PRODUCTION_IN_PROGRESS,
+                        now=datetime.now(UTC),
+                    )
                 dashboard_operations.retry_project(
                     root,
                     slug,
@@ -2970,6 +2987,17 @@ def answer_doctor_question(root: Path, slug: str, body: dict) -> dict:
                         WorkflowState.NEEDS_PRODUCTION_REVISION,
                     }:
                         change_request.request_change(layout.project_dir, 'edit_production', extra_text, ctx)
+                elif (
+                    repair_service._is_repair_production_side_state(layout)
+                    and (layout.artifact_root / product_review.LOG).is_file()
+                ):
+                    change_request.mark_applied(layout.project_dir)
+                    resume_gate(
+                        layout.project_dir,
+                        GateKind.VIDEO,
+                        target=WorkflowState.PRODUCTION_IN_PROGRESS,
+                        now=datetime.now(UTC),
+                    )
                 try:
                     dashboard_operations.retry_project(
                         root,

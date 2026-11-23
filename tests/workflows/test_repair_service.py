@@ -1405,3 +1405,81 @@ def test_repair_waiting_idle_reuses_diagnosis_and_escalates_on_stops(tmp_path, m
     blocked.unlink()
     assert repair.repair_once(tmp_path, project.name) == 'idle'
     assert doctor_questions.open_question(tmp_path, project.name) is None
+
+
+def test_delegate_post_product_review_routes_to_revise_product_and_escapes_needs_production_revision(
+    tmp_path, monkeypatch
+):
+    from healthvideo.workflows import change_request, product_review
+
+    monkeypatch.setattr(repair, '_active', lambda *args: False)
+    released = []
+    monkeypatch.setattr(repair, '_release', lambda root, slug: released.append((root, slug)))
+
+    for idx, (start_state, role) in enumerate([
+        (WorkflowState.PRODUCTION_IN_PROGRESS, 'storyboard_director'),
+        (WorkflowState.PRODUCTION_IN_PROGRESS, 'editor'),
+        (WorkflowState.NEEDS_PRODUCTION_REVISION, 'editor'),
+    ]):
+        root = tmp_path / f'post_pr_{idx}'
+        proj = _make_v2_project_in_state(root / 'projects', WorkflowState.PRODUCTION_IN_PROGRESS)
+        write_yaml_atomic(proj / 'revisions/001' / product_review.LOG, {'version': 1, 'submitted': 0, 'rounds': []})
+        if start_state == WorkflowState.NEEDS_PRODUCTION_REVISION:
+            change_request.request_change(
+                proj,
+                'edit_production',
+                'Restore outro',
+                {'source': 'leader-repair', 'revision': '001'},
+                now=datetime.now(UTC),
+            )
+            assert read_yaml(proj / 'project.yaml')['state'] == WorkflowState.NEEDS_PRODUCTION_REVISION.value
+
+        logs = root / 'topics/logs' / proj.name
+        logs.mkdir(parents=True, exist_ok=True)
+        (logs / 'blocked.txt').write_text('ValueError: M6.4 final scene must be nonmedical brand_outro', encoding='utf-8')
+        monkeypatch.setattr(
+            repair, '_ask',
+            lambda *args, _role=role: repair.Diagnosis(
+                action='delegate',
+                delegate_role=_role,
+                cause='S36 changed from brand_outro to whiteboard',
+                evidence=['blocked.txt'],
+                brief='Khoi phuc S36 ve brand_outro theo M6.4.',
+            ),
+        )
+        assert repair.repair_once(root, proj.name) == 'retry_requested'
+        assert read_yaml(proj / 'project.yaml')['state'] == WorkflowState.PRODUCTION_IN_PROGRESS.value
+        guidance = read_yaml(logs / 'leader-guidance.yaml')
+        assert guidance['step'] == 'revise_product'
+        assert guidance['role'] == 'editor'
+        assert 'S36' in guidance['brief']
+        assert not change_request.pending(proj)
+        assert (root, proj.name) in released
+
+
+def test_escalation_fingerprint_changes_after_answered_cycle_even_without_leader_repair(tmp_path, monkeypatch):
+    from healthvideo.workflows import doctor_questions
+
+    project = _make_v2_project_in_state(tmp_path / 'projects', WorkflowState.PRODUCTION_IN_PROGRESS)
+    logs = tmp_path / 'topics/logs' / project.name
+    logs.mkdir(parents=True)
+    (logs / 'blocked.txt').write_text('bước produce lỗi: M6.4 final scene must be nonmedical brand_outro', encoding='utf-8')
+    monkeypatch.setattr(repair, '_active', lambda *args: False)
+    monkeypatch.setattr(
+        repair, '_ask',
+        lambda *args: repair.Diagnosis(
+            action='hold', cause='Cần quyết định.', evidence=['blocked.txt'], brief='Can chi dao.',
+        ),
+    )
+
+    assert repair.repair_once(tmp_path, project.name) == 'needs_attention'
+    q1 = doctor_questions.open_question(tmp_path, project.name)
+    assert q1 is not None
+
+    doctor_questions.answer(tmp_path, project.name, q1['id'], option_id='retry_repair_cycle')
+    (logs / repair.REPORT).unlink(missing_ok=True)
+
+    assert repair.repair_once(tmp_path, project.name) == 'needs_attention'
+    q2 = doctor_questions.open_question(tmp_path, project.name)
+    assert q2 is not None and q2['id'] != q1['id']
+    assert q2['fingerprint'] != q1['fingerprint']

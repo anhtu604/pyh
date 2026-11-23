@@ -18,7 +18,9 @@ SAMPLE_INTERVAL_S = 0.5
 STATIC_THRESHOLD = 0.6
 STATIC_LIMIT_S = 6.0
 DATA_LIMIT_S = 10.0
+OUTRO_LIMIT_S = 15.0
 DATA_VISUALS = frozenset({"source_card", "evidence_highlight", "chart", "stat_gauge"})
+OUTRO_VISUALS = frozenset({"brand_outro"})
 WIDTH, HEIGHT = 160, 90
 
 
@@ -73,7 +75,13 @@ def build_motion_report(
             left, right = max(run["start_s"], start), min(run["end_s"], end)
             if right <= left:
                 continue
-            limit = DATA_LIMIT_S if visual in DATA_VISUALS else STATIC_LIMIT_S
+            limit = (
+                OUTRO_LIMIT_S
+                if visual in OUTRO_VISUALS
+                else DATA_LIMIT_S
+                if visual in DATA_VISUALS
+                else STATIC_LIMIT_S
+            )
             exceeded = right - left > limit
             if exceeded:
                 violations.add(sid)
@@ -90,7 +98,7 @@ def build_motion_report(
         "schema_version": "1.0", "video_sha256": video_sha256,
         "sample_interval_s": sample_interval_s, "threshold": threshold,
         "limits": {"default_s": STATIC_LIMIT_S, "data_s": DATA_LIMIT_S,
-                   "data_visuals": sorted(DATA_VISUALS)},
+                   "outro_s": OUTRO_LIMIT_S, "data_visuals": sorted(DATA_VISUALS)},
         "static_runs": runs,
         "max_static_s": max((run["duration_s"] for run in runs), default=0.0),
         "passed": not violations, "scenes_with_violation": sorted(violations),

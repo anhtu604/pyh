@@ -2518,3 +2518,26 @@ def test_overview_includes_repair_retry_after_and_escalation_actions(tmp_path, m
         'expected_revision': '001',
     })
     assert (logs / 'paused.yaml').is_file()
+
+
+def test_repair_summary_hides_stale_interrupted_when_project_not_blocked(tmp_path):
+    from healthvideo.storage.files import write_yaml_atomic
+
+    roles = dashboard._role_names()
+    logs = tmp_path / 'topics/logs/topic-a'
+    logs.mkdir(parents=True)
+    write_yaml_atomic(logs / 'leader-repair.yaml', {
+        'revision': '001',
+        'phase': 'interrupted',
+        'attempts': 0,
+        'error': 'Tiến trình chẩn đoán lỗi bị gián đoạn trước khi hoàn tất; đã hoàn lượt.',
+    })
+    assert dashboard._project_repair_summary(tmp_path, 'topic-a', roles) is None
+
+    write_yaml_atomic(logs / 'leader-repair.yaml', {
+        'revision': '001',
+        'phase': 'diagnosing',
+        'attempts': 1,
+    })
+    summary = dashboard._project_repair_summary(tmp_path, 'topic-a', roles)
+    assert summary is not None and summary['phase'] == 'diagnosing'

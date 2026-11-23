@@ -48,7 +48,7 @@ def test_report_maps_overlaps_and_applies_each_scene_limit():
 
 @pytest.mark.parametrize("visual,limit", [
     ("source_card", 10), ("evidence_highlight", 10), ("chart", 10),
-    ("stat_gauge", 10), ("process_animation", 6),
+    ("stat_gauge", 10), ("process_animation", 6), ("brand_outro", 15),
 ])
 def test_limits_are_strict_and_only_measure_overlap(visual, limit):
     report = motion.build_motion_report(
@@ -61,6 +61,23 @@ def test_limits_are_strict_and_only_measure_overlap(visual, limit):
         {"A": visual}, video_sha256="test",
     )
     assert report["scenes_with_violation"] == ["A"]
+
+
+def test_brand_outro_allows_twelve_seconds_static_and_flags_over_fifteen():
+    ok_report = motion.build_motion_report(
+        [0] * 24, timing(("S36", 0, 12)),
+        {"S36": "brand_outro"}, video_sha256="a" * 64,
+    )
+    assert ok_report["passed"]
+    assert ok_report["scenes_with_violation"] == []
+    assert ok_report["limits"]["outro_s"] == 15.0
+
+    bad_report = motion.build_motion_report(
+        [0] * 32, timing(("S36", 0, 16)),
+        {"S36": "brand_outro"}, video_sha256="a" * 64,
+    )
+    assert not bad_report["passed"]
+    assert bad_report["scenes_with_violation"] == ["S36"]
 
 
 @pytest.mark.skipif(not shutil.which("ffmpeg"), reason="ffmpeg not installed")

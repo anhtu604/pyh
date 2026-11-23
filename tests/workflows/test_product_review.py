@@ -817,3 +817,70 @@ def test_stale_render_invalidates_pending_and_requests_produce(tmp_path):
     assert pr.pending(project) is False
     assert pr.next_product_action(project, root=tmp_path) == 'produce'
     assert not (project / REV / pr.PENDING).exists()
+
+
+def test_surgical_repair_blocks_m64_outro_regression_and_supports_leader_guidance_restore(tmp_path):
+    project = _approved_production_project(tmp_path)
+    rev = project / REV
+    sb_path = rev / 'storyboard/storyboard.yaml'
+    sb_orig = read_yaml(sb_path)
+    outro_idx = len(sb_orig['scenes']) - 1
+    outro_sid = sb_orig['scenes'][outro_idx]['id']
+
+    _report(
+        project,
+        scores={**dict.fromkeys(pr.CRITERIA, 8), 'nhip_dung': 5},
+        issues=[{
+            'at': outro_sid,
+            'criterion': 'nhip_dung',
+            'problem': 'Outro tinh.',
+            'fix': 'Chinh outro.',
+            'fixable': True,
+        }],
+    )
+    pr.record_review(project, pr.render_hash(project))
+    before = pr.repair_files(project)
+
+    # 1. Converting final scene from brand_outro to whiteboard is rejected right away by check_repair.
+    bad_sb = read_yaml(sb_path)
+    bad_sb['scenes'][outro_idx]['visual'] = 'whiteboard'
+    bad_sb['scenes'][outro_idx]['on_screen_text'] = 'Thong tin tong hop'
+    bad_sb['scenes'][outro_idx]['visual_assets'] = []
+    write_yaml_atomic(sb_path, bad_sb)
+    with pytest.raises(ValueError, match='M6.4 final scene must be nonmedical brand_outro'):
+        pr.check_repair(project, before)
+
+    # 2. Simulate post-mark_submitted state with leader-guidance.yaml targeting revise_product:
+    # restoring outro back to brand_outro succeeds, while tampering narration/script remains blocked.
+    pr.mark_submitted(rev)
+    logs = tmp_path / 'topics/logs' / project.name
+    logs.mkdir(parents=True, exist_ok=True)
+    write_yaml_atomic(logs / 'leader-guidance.yaml', {
+        'revision': '001',
+        'role': 'editor',
+        'step': 'revise_product',
+        'brief': f'Khoi phuc {outro_sid} thanh brand_outro theo M6.4.',
+    })
+    assert outro_sid in pr.revision_notes(project)
+
+    before_restore = pr.repair_files(project)
+    restored_sb = read_yaml(sb_path)
+    restored_sb['scenes'][outro_idx]['visual'] = 'brand_outro'
+    restored_sb['scenes'][outro_idx]['visual_assets'] = sb_orig['scenes'][outro_idx]['visual_assets']
+    write_yaml_atomic(sb_path, restored_sb)
+    pr.check_repair(project, before_restore)
+    pr.finalize_product_repair(project, before_restore)
+
+    tamper_sb = read_yaml(sb_path)
+    tamper_sb['scenes'][outro_idx]['narration'] = 'Doi loi ket trai phep'
+    write_yaml_atomic(sb_path, tamper_sb)
+    with pytest.raises(ValueError, match='Repair scope violation'):
+        pr.check_repair(project, before_restore)
+    write_yaml_atomic(sb_path, restored_sb)
+
+    script_path = rev / 'script/script.yaml'
+    orig_script = script_path.read_bytes()
+    script_path.write_bytes(orig_script + b'\n# tamper\n')
+    with pytest.raises(ValueError, match='medical artifact is locked'):
+        pr.check_repair(project, before_restore)
+    script_path.write_bytes(orig_script)

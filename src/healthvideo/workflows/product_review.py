@@ -27,8 +27,13 @@ from healthvideo.domain.clip_plan import (
 )
 from healthvideo.domain.evidence import EvidenceClaim
 from healthvideo.domain.gate_review import GateApprovalRecord, GateKind
+from healthvideo.domain.hook_outro import validate_hook_outro
 from healthvideo.domain.script import Script
-from healthvideo.domain.storyboard import Storyboard
+from healthvideo.domain.storyboard import (
+    Storyboard,
+    validate_anatomy_subjects,
+    validate_style_a_mascot_poses,
+)
 from healthvideo.storage.explainer import read_explainer
 from healthvideo.storage.files import (
     canonical_json_hash,
@@ -86,7 +91,7 @@ _REBUILD_TEXT_RE = re.compile(
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-_SCENE_ID_RE = re.compile(r'\bS\d+\b')
+_SCENE_ID_RE = re.compile(r'\b(?:S\d+|HOOK|OUTRO)\b')
 _CLIP_ID_RE = re.compile(r'\bCL\d+\b')
 _LOCAL_VALUE_IMPORT_RE = re.compile(
     r"^\s*import\s+(?!type\b).*?\s+from\s+['\"](\./[^'\"]+)['\"]",
@@ -1005,9 +1010,19 @@ def _check_storyboard_repair(
             if before_scenes[sid].get(field) != after_scenes[sid].get(field):
                 raise ValueError(f'Repair scope violation: medical field {field} in scene {sid} is locked')
     storyboard = Storyboard.model_validate(after_data)
+    validate_anatomy_subjects(storyboard)
+    if style_a_active(root):
+        validate_style_a_mascot_poses(storyboard)
     script_path = root / 'script/script.yaml'
     ledger_path = root / 'evidence/ledger.yaml'
     script = Script.model_validate(read_yaml(script_path)) if script_path.is_file() else None
+    if script is not None:
+        validate_hook_outro(
+            script,
+            storyboard,
+            require_brand=script.format_profile == 'hook_outro_v1',
+            allow_line_references=True,
+        )
     if script is not None and ledger_path.is_file():
         resolve_citations(
             script,
@@ -1242,15 +1257,44 @@ def _check_video_src_repairs(
             raise ValueError('Repair scope violation: product target is locked')
 
 
+def _revise_product_guidance_brief(repo: Path, slug: str, active_revision: str) -> str:
+    """Return active Coordinator brief targeting ``revise_product`` for this revision, if any."""
+    path = repo / 'topics/logs' / slug / 'leader-guidance.yaml'
+    if not path.is_file():
+        return ''
+    try:
+        data = read_yaml(path)
+    except (OSError, TypeError, ValueError, yaml.YAMLError):
+        return ''
+    if not isinstance(data, Mapping):
+        return ''
+    if str(data.get('revision') or '') != active_revision or str(data.get('step') or '') != 'revise_product':
+        return ''
+    return str(data.get('brief') or '').strip()
+
+
 def check_repair(project: Path, before: dict[str, bytes]) -> None:
     """Verify surgical Station 12 repair stayed strictly within permitted product targets."""
     root = _root(project)
-    rounds = _cycle(root)
-    if not rounds:
-        return
-    latest = rounds[-1]
-    fixable_issues = [item for item in latest.get('issues', []) if item.get('fixable')]
+    layout = resolve_project_layout(project)
     repo = project.parent.parent
+    guidance_brief = _revise_product_guidance_brief(repo, project.name, layout.manifest.active_revision)
+    rounds = _cycle(root)
+    if not rounds and not guidance_brief:
+        return
+    if rounds:
+        latest = rounds[-1]
+    else:
+        all_rounds = _log(root)['rounds']
+        latest = all_rounds[-1] if all_rounds else {'issues': []}
+    fixable_issues = [item for item in latest.get('issues', []) if item.get('fixable')]
+    if guidance_brief:
+        fixable_issues.append({
+            'at': guidance_brief,
+            'criterion': 'mo_ket',
+            'fixable': True,
+            'edits': [],
+        })
     rev_prefix = root.relative_to(repo).as_posix()
     edits_by_path = _check_edit_targets(fixable_issues, rev_prefix)
     after = repair_files(project)
@@ -1272,6 +1316,8 @@ def check_repair(project: Path, before: dict[str, bytes]) -> None:
             raise ValueError('Repair scope violation: product target is locked')
 
     allowed_scenes = _allowed_scene_ids(latest.get('issues', []))
+    if guidance_brief:
+        allowed_scenes |= set(_SCENE_ID_RE.findall(guidance_brief))
     sb_key = f'{rev_prefix}/storyboard/storyboard.yaml'
     before_sb, after_sb = _check_storyboard_repair(
         project, root, before.get(sb_key), after.get(sb_key), allowed_scenes
@@ -1367,6 +1413,8 @@ def finalize_product_repair(project: Path, before: dict[str, bytes]) -> None:
 def mark_fix_attempted(project: Path) -> None:
     root = _root(project)
     log = _log(root)
+    if not log['rounds']:
+        return
     log['rounds'][-1]['fix_attempted'] = True
     write_yaml_atomic(root / LOG, {'version': 1, **log})
 
@@ -1384,9 +1432,25 @@ def mark_submitted(artifact_root: Path) -> None:
 def revision_notes(project: Path) -> str:
     """Render the fixable issues of the latest round as instructions for the fixer."""
     root = _root(project)
+    layout = resolve_project_layout(project)
+    repo = project.parent.parent
+    guidance_brief = _revise_product_guidance_brief(repo, project.name, layout.manifest.active_revision)
     rounds = _cycle(root)
-    if not rounds:
+    if not rounds and not guidance_brief:
         return ''
+    if not rounds:
+        all_rounds = _log(root)['rounds']
+        latest = all_rounds[-1] if all_rounds else {'round': 0, 'summary': '', 'issues': []}
+        allowed_scenes = sorted(_allowed_scene_ids(latest.get('issues', [])) | set(_SCENE_ID_RE.findall(guidance_brief)))
+        rows = [f'- Yêu cầu điều phối từ Leader: {guidance_brief}']
+        if allowed_scenes:
+            rows.append(
+                f"Cảnh được phép sửa trong storyboard/assets: {', '.join(allowed_scenes)}. "
+                'Giữ nguyên tuyệt đối các trường y khoa và xuất xứ '
+                '(id, script_line_id, narration, claim_id, chapter_id, source_marker, source_card, evidence_highlight), '
+                'không sửa script.yaml, ledger.yaml, explainer.yaml hay outline.yaml.'
+            )
+        return '\n'.join(rows)
     latest = rounds[-1]
     style_required = style_a_active(root)
     active_issues = [
@@ -1399,7 +1463,9 @@ def revision_notes(project: Path) -> str:
     if len(latest.get('decisions', [])) > MAX_DECISIONS:
         rows.append('Còn quá 5 điểm khó: tự xử lý các lỗi thuộc thẩm quyền; '
                     'không tự quyết điểm cần bác sĩ. Xếp điểm nặng nhất trước.')
-    allowed_scenes = sorted(_allowed_scene_ids(active_issues))
+    allowed_scenes = sorted(_allowed_scene_ids(active_issues) | (
+        set(_SCENE_ID_RE.findall(guidance_brief)) if guidance_brief else set()
+    ))
     if allowed_scenes:
         rows.append(
             f"Cảnh được phép sửa trong storyboard/assets: {', '.join(allowed_scenes)}. "
