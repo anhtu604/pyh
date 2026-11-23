@@ -446,3 +446,22 @@ phases:
     status: done
     owner: agy (factory-fixer + visual-sampler + verifier)
     note: 'Stage library/medanim/*/assets/* vào Remotion public_dir & hash vào renderer_identity() (remotion.py), rmtree_long_path (files.py/produce.py); sửa snake_case visual_style/visual_takeaway trong types.ts; thêm ScientificHepaticArtwork.tsx, SplitClinicalWorksheetStage.tsx, credit NIAID/Servier/DBCLS/Reactome trên OutroScene và ép ScaleZoomStage 16:9; chặn _check_storyboard_repair xóa mất tham chiếu tới manifest (product_review.py). Kiểm tuần tự: tsc exit 0, vitest 54/434, ruff 0, pytest 143/143, diff --check sạch; khôi phục S37 lab-slip.png trên PYH-003 (9/9 SHA256 y khoa khớp), dựng thật video.mp4 90.5 MB (0 gọi Vibi, 0 ACE-Step), soi đủ 8 khung S01/S02/S06/S08/S11/S20/S37/S36 sắc nét, nền #F7F4EC.'
+- id: R5
+  title: Nâng chất lượng sản phẩm theo kênh mẫu, chuẩn hoá agent và chọn model
+  tasks:
+  - id: R5.1
+    title: Đo chuẩn video mẫu (Xấu Vê Nờ, TikTok infographic, kênh thành công) bằng khung hình + phụ đề thật
+    status: doing
+    owner: agy
+    note: 'Bác sĩ 2026-11-23 chê sản phẩm như slide; agy xem thật 10-15 video, đo nhịp cảnh, chữ trên hình, cấu trúc lời; chỉ viết tài liệu.'
+  - id: R5.2
+    title: Kiểm toán khoảng cách xưởng ↔ mẫu (schema phân cảnh, hình, agent, model, token/thời gian)
+    status: doing
+    owner: codex
+    note: 'Đọc code + log thật, tìm vì sao đầu ra thành phiếu/bảng chữ nhỏ; đo token và thời gian từng vai; chỉ viết tài liệu.'
+  - id: R5.3
+    title: Thiết kế chuẩn mới (spec) và kế hoạch thực hiện, bác sĩ duyệt hướng
+    status: todo
+    owner: Claude
+    note: 'Sau R5.1 + R5.2.'
+
