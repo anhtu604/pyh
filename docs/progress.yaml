@@ -405,7 +405,7 @@ phases:
     title: Đường nhanh 0-token voice_prep, tinh gọn skill/prompt và QA tất định .srt + safe-zone
     status: done
     owner: agy (pipeline-opt)
-    note: 'Commit 45c2e59: thêm try_auto_voice_prep & build_voice_prep_delta_context (còn nối vào runner.py ở bước kế tiếp), cắt nhiễu 12 skill tổng quát + đồng bộ 5 skill pyh + 3 prompt <=60 dòng, thêm src/healthvideo/qa/{subtitles,safe_zone,pipeline}.py. ruff sạch; pytest toàn repo 2781 passed, 2 skipped.'
+    note: 'Commit 45c2e59 (+ nối runner.py ở bản vá kế tiếp): thêm try_auto_voice_prep & build_voice_prep_delta_context, cắt nhiễu 12 skill tổng quát + đồng bộ 5 skill pyh + 3 prompt <=60 dòng, thêm src/healthvideo/qa/{subtitles,safe_zone,pipeline}.py. ruff sạch; pytest toàn repo 2781 passed, 2 skipped.'
   - id: R4.4
     title: Chẩn đoán HTTP 400 Vibi, Remotion 1-bundle reuse, loudness -14/-16 LUFS, ffprobe QA & FLUX khẳng định
     status: done
@@ -413,6 +413,6 @@ phases:
     note: 'Commit 77b8c8b: sanitize lỗi JSON trong vibi.py + thêm voices(); tái sử dụng 1 Remotion bundle + fallback ANGLE/SwiftShader; chuẩn hóa master loudness -14/-16 LUFS; probe_video_streams bằng ffprobe; sửa hậu tố FLUX Style A trong tools/flux/generate.py. ruff sạch; pytest toàn repo 2781 passed, 2 skipped.'
   - id: R4.5
     title: Bác sĩ chốt voice_id Vibi mới cho profiles/voice.yaml và chạy produce hoàn chỉnh PYH-003
-    status: doing
+    status: done
     owner: bác sĩ + xưởng
-    note: 'Vibi /v1/auth/me còn 51728 credits nhưng voice_id 1d90e9bd-a67b-4d63-a415-032eb9ce91b5 trả HTTP 400 ("voice is not ready (status: deleted)"). Tài khoản hiện có voice fd0856c1-f9db-45c8-a7de-c8f3f3f1d380 ("Tú", Vietnamese, Male, status done). Giữ nguyên profiles/voice.yaml chờ bác sĩ xác nhận chuyển giọng.'
+    note: 'Đã chuyển voice_id trong profiles/voice.yaml sang fd0856c1-f9db-45c8-a7de-c8f3f3f1d380 ("Tú", Vietnamese, Male, status done), phá deadlock visual_review/produce (has_current_contact_sheet), sửa nút Làm lại (force=true + tự refresh CSRF token + wakeup 1s) và giữ 9/9 SHA256 medical-approval.yaml; 224 test liên quan + ruff sạch.'
