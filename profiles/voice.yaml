@@ -1,8 +1,8 @@
-# Giọng nhân bản của bác sĩ trên vibi.pro (MiniMax "lanhvcl"); cần VIBI_API_KEY trong .env.
+# Giọng nhân bản của bác sĩ trên vibi.pro (MiniMax "Tú"); cần VIBI_API_KEY trong .env.
 # Đổi model sang speech-2.8-turbo nếu muốn rẻ/nhanh hơn.
 provider: vibi_minimax
 model_id: speech-2.8-hd
-voice_id: 1d90e9bd-a67b-4d63-a415-032eb9ce91b5
+voice_id: fd0856c1-f9db-45c8-a7de-c8f3f3f1d380
 settings:
   speed: 1.0
   pitch: 0
