@@ -1060,3 +1060,28 @@ def test_transient_failures_propagate_as_retryable_exceptions(tmp_path, monkeypa
         produce_project(project, SilentTTS(), lambda argv: (_write_synthetic_output(argv), 0)[1], music=False)
     assert not isinstance(oom_info.value, ValueError)
     assert _is_transient_production_error(oom_info.value)
+
+
+def test_remotion_bundle_outside_staging_dir_and_cleaned_on_error(tmp_path, monkeypatch):
+    from healthvideo.workflows import produce
+
+    project = _v2_medically_approved_project(tmp_path)
+    seen: list[tuple[Path, Path]] = []
+
+    def failing_bundle(public_dir: Path, out_dir: Path, **kwargs):
+        seen.append((public_dir, out_dir))
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "partial.txt").write_text("leftover", encoding="utf-8")
+        raise RuntimeError("simulated bundle timeout")
+
+    monkeypatch.setenv("PYH_REMOTION_PREBUNDLE", "1")
+    monkeypatch.setattr(produce.remotion_module, "create_bundle", failing_bundle)
+
+    with pytest.raises(RuntimeError, match="simulated bundle timeout"):
+        produce_project(project, SilentTTS(), lambda _: 0, music=False)
+
+    assert len(seen) == 1
+    public_dir, out_dir = seen[0]
+    assert not out_dir.is_relative_to(public_dir)
+    assert out_dir.parent == public_dir.parent
+    assert not out_dir.exists()

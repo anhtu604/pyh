@@ -901,14 +901,15 @@ def _produce_v2_inner(
             else:
                 use_real_remotion = _is_real_render_runner(runner)
                 bundle_dir: Path | None = None
-                if use_real_remotion:
-                    bundle_dir = remotion_module.create_bundle(
-                        staging_dir, staging_dir / ".remotion-bundle",
-                    )
+                staged_bundle_dir = staging_dir.parent / f"{staging_dir.name}.remotion-bundle"
                 gl, hwaccel = default_windows_gl_options()
                 use_gpu_flags = use_real_remotion or bool(os.environ.get("PYH_REMOTION_GL"))
                 render_runner = _gpu_fallback_runner(runner)
                 try:
+                    if use_real_remotion:
+                        bundle_dir = remotion_module.create_bundle(
+                            staging_dir, staged_bundle_dir,
+                        )
                     with active_bundle(
                         bundle_dir,
                         gl=gl if use_gpu_flags else None,
@@ -946,8 +947,9 @@ def _produce_v2_inner(
                                     f"Remotion render did not create output: {staged_output}"
                                 )
                 finally:
-                    if bundle_dir is not None or (staging_dir / ".remotion-bundle").exists():
-                        shutil.rmtree(staging_dir / ".remotion-bundle", ignore_errors=True)
+                    shutil.rmtree(staged_bundle_dir, ignore_errors=True)
+                    if bundle_dir is not None and bundle_dir != staged_bundle_dir:
+                        shutil.rmtree(bundle_dir, ignore_errors=True)
         if is_mp4_container(staged_output) or (_is_real_render_runner(runner) and shutil.which("ffprobe") is not None):
             media_probe = probe_video_streams(
                 staged_output,
