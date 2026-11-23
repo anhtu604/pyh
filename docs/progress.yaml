@@ -436,3 +436,8 @@ phases:
     status: done
     owner: agy
     note: 'Đặt preload=auto + playsinline + controls + poster, mồi Frame 0 tại 0.02s (primeFirstFrame) và pendingSeek khi chuyển Clip, tách URL/trì hoãn filmstrip sau loadeddata, đưa .pv-nle-studio lên đầu tab Video; thêm -movflags +faststart vào build_concat_argv; 118 test UI/remotion/dashboard + ruff sạch.'
+  - id: R4.10
+    title: Làm mượt chuyển cảnh Style A (không nháy tối) & nhạc nền nối vòng êm, ducking không pumping, SFX post-duck
+    status: done
+    owner: agy (visual-sampler + factory-fixer + verifier)
+    note: 'Thêm sceneEnvelope.ts (smoothstep cubic, hook_open/shared_continuation/scene_cut/chapter_enter, data-chapter-bridge), ép nền sáng #F7F4EC trên youtube_long, làm mượt PresenterMascot continuation & WipeTransitions 14f; sửa music.py (48s pt-offload-v2, _prepare_seamless_loop_wav, vocal-pocket EQ, sidechain-v2 release=950), generate.py (raised-cosine 2s), sfx.py (cc0-bed-sidechain-v2 post-duck). Kiểm tuần tự: tsc exit 0, vitest 53/429, ruff 0, pytest 130/130, diff --check sạch; dựng thật PYH-003 (0 gọi Vibi, 9/9 SHA256 y khoa nguyên vẹn): music.wav 48s head/tail 1790/2047.6 (-25.25/-24.08 dBFS), narration -13.98 LUFS, video/CL01..03 faststart, S06/S12 nền [246,243,235].'
