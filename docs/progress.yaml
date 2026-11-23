@@ -464,6 +464,16 @@ phases:
     status: done
     owner: codex
     note: 'Xong (docs/reference/2026-11-23-medanim-signature.md): xem 7 kênh (Nucleus, Zack, Osmosis, Kurzgesagt, TED-Ed, Armando, HayHo); chọn rig 2D vector Remotion làm nền, 3D chọn lọc; 26 hoạt ảnh lõi, đợt đầu 6. Bác sĩ 2026-11-23 chọn hoạt ảnh y khoa làm đặc trưng; codex xem mẫu thật, kiểm thư viện medanim, so 2-3 cách sản xuất theo chất lượng/thời gian/chi phí.'
+  - id: R5.5
+    title: Làm thử 98 giây đầu PYH-003 theo chuẩn mới (nhân vật kể chuyện, mỗi câu một hình)
+    status: doing
+    owner: codex
+    note: 'Bác sĩ 2026-11-23 chọn làm thử trước khi sửa xưởng; giữ nguyên lời đọc đã duyệt, 0 gọi Vibi, chỉ làm lại hình ngoài xưởng.'
+  - id: R5.6
+    title: Làm lại hoạt ảnh men gan theo chuẩn một tác nhân - một thay đổi, gần như không chữ
+    status: doing
+    owner: agy
+    note: 'Đoạn S04 của bản thử; ghép vào R5.5 khi xong.'
   - id: R5.3
     title: Thiết kế chuẩn mới (spec) và kế hoạch thực hiện, bác sĩ duyệt hướng
     status: todo
