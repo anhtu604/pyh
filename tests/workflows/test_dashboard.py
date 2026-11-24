@@ -2545,3 +2545,57 @@ def test_repair_summary_hides_stale_interrupted_when_project_not_blocked(tmp_pat
     })
     summary = dashboard._project_repair_summary(tmp_path, 'topic-a', roles)
     assert summary is not None and summary['phase'] == 'diagnosing'
+
+
+def test_media_head_and_open_range_chunking_and_lite_bundle(tmp_path):
+    """HEAD /media returns 200+Accept-Ranges, open-ended Range caps at 4 MiB, and lite/tab bundle hides dot-revisions."""
+    from urllib.request import Request, urlopen
+
+    project = create_v2_project_fixture(tmp_path / 'projects', state='awaiting_medical_review')
+    rev_dir = project / 'revisions/001'
+    # Create a hidden staging dir that must be excluded from revisions
+    (project / 'revisions/.001.draft-abc123').mkdir(parents=True, exist_ok=True)
+    renders = rev_dir / 'renders'
+    renders.mkdir(parents=True, exist_ok=True)
+    mp4 = renders / 'video.mp4'
+    big_size = 5 * 1024 * 1024  # 5 MiB > 4 MiB chunk cap
+    mp4.write_bytes(b'\x00' * big_size)
+
+    with dashboard.DashboardServer(tmp_path, 0, token='tok-head') as server:
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            # 1. HEAD /media/.../video.mp4
+            req = Request(f'{server.url}media/{project.name}/video.mp4', method='HEAD')
+            with urlopen(req) as resp:
+                assert resp.status == 200
+                assert resp.headers.get('Accept-Ranges') == 'bytes'
+                assert resp.headers.get('Content-Type') == 'video/mp4'
+                assert int(resp.headers.get('Content-Length') or 0) == big_size
+                assert resp.read() == b''
+
+            # 2. Open-ended Range: bytes=0- caps at 4 MiB
+            req_r = Request(
+                f'{server.url}media/{project.name}/video.mp4',
+                headers={'Range': 'bytes=0-'},
+            )
+            with urlopen(req_r) as resp:
+                assert resp.status == 206
+                assert resp.headers.get('Content-Range') == f'bytes 0-{4 * 1024 * 1024 - 1}/{big_size}'
+                assert int(resp.headers.get('Content-Length') or 0) == 4 * 1024 * 1024
+
+            # 3. Lite bundle + lazy tab=video + hidden dot-dir excluded from revisions
+            with urlopen(f'{server.url}api/project/{project.name}/bundle?lite=1') as resp:
+                lite_data = json.loads(resp.read().decode('utf-8'))
+            assert lite_data['lite'] is True
+            assert lite_data['revisions'] == ['001']
+            assert lite_data['frame_inspector'] is None
+            assert lite_data['counts']['media'] == 1
+
+            with urlopen(f'{server.url}api/project/{project.name}/bundle?tab=video') as resp:
+                vid_data = json.loads(resp.read().decode('utf-8'))
+            assert vid_data['tab'] == 'video'
+            assert len(vid_data['media']) == 1
+            assert 'frame_inspector' in vid_data
+        finally:
+            server.shutdown()

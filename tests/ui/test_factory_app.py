@@ -1607,7 +1607,7 @@ def test_retry_force_auto_start_and_token_auto_refresh():
         factoryRunning = true;
         return { ok: true, status: 200, async json() { return { ok: true, message: 'Đã bật xưởng' }; } };
       }
-      if (url === '/api/project/pyh-003/bundle') {
+      if (url.startsWith('/api/project/pyh-003/bundle')) {
         return { ok: true, status: 200, async json() { return makeBundle(); } };
       }
       if (url.startsWith('/api/status')) {

@@ -333,6 +333,7 @@ STEP_LABELS: dict[str, str] = {
     'chat_deep': 'Đang phân tích chuyên sâu',
     'coordinator': 'Đang điều phối chat',
     'feedback_inbox': 'Đang phân tích ý kiến',
+    'repair': 'Tự sửa lỗi kỹ thuật',
 }
 
 
@@ -2225,12 +2226,209 @@ def _read_text(path: Path, limit: int = 20_000) -> str:
     return path.read_text(encoding='utf-8', errors='replace')[:limit] if path.is_file() else ''
 
 
-def review_bundle(root: Path, project_dir: Path, project: ProjectManifestV2) -> dict:
+def _fast_list_len(path: Path, key: str) -> int:
+    data = _safe_yaml(path)
+    items = data.get(key)
+    return len(items) if isinstance(items, list) else 0
+
+
+def review_bundle(
+    root: Path,
+    project_dir: Path,
+    project: ProjectManifestV2,
+    *,
+    lite: bool = False,
+    tab: str | None = None,
+) -> dict:
     """Everything the doctor needs to inspect or accept a topic, read straight from the active revision."""
     rev = project_dir / 'revisions' / project.active_revision
     logs_dir = root / 'topics' / 'logs' / project_dir.name
+
+    def _collect_media() -> list[dict]:
+        items: list[dict] = []
+        renders = rev / 'renders'
+        for rel, label in (('video.mp4', 'Video hoàn chỉnh'), ('audio/narration-voice.wav', 'Giọng đọc')):
+            if (renders / rel).is_file():
+                items.append({'label': label, 'url': f'/media/{project_dir.name}/{rel}', 'kind': rel.rsplit('.', 1)[1]})
+        for clip in sorted((renders / 'clips').glob('*.mp4')) if renders.is_dir() else []:
+            items.append({'label': f'Clip {clip.stem}', 'url': f'/media/{project_dir.name}/clips/{clip.name}', 'kind': 'mp4'})
+        return items
+
+    if tab:
+        if tab == 'sources':
+            ledger = _safe_yaml(rev / 'evidence/ledger.yaml')
+            raw_claims = ledger.get('claims')
+            claims = [{
+                'id': c.get('id'), 'text': c.get('text_public', ''), 'type': c.get('type'),
+                'sources': c.get('sources', []), 'applicability': c.get('applicability', ''),
+                'technical': c.get('text_technical', ''),
+                'support': [{'source_id': s.get('source_id'), 'locator': s.get('locator'), 'quote': s.get('quote')}
+                            for s in (c.get('support') if isinstance(c.get('support'), list) else [])
+                            if isinstance(s, dict)],
+            } for c in (raw_claims if isinstance(raw_claims, list) else []) if isinstance(c, dict)]
+            raw_records = ledger.get('records')
+            records = [{
+                'id': r.get('id'), 'title': r.get('title'), 'year': r.get('year'), 'journal': r.get('journal'),
+                'doi': r.get('doi'), 'pmid': r.get('pmid'), 'url': r.get('url'),
+            } for r in (raw_records if isinstance(raw_records, list) else []) if isinstance(r, dict)]
+            return {
+                'tab': 'sources',
+                'claims': claims,
+                'records': records,
+                'expert_brief': _safe_yaml(rev / 'evidence/expert-brief.yaml'),
+                'expert_brief_md': _read_text(rev / 'evidence/expert-brief.md', limit=40_000),
+                'research_meta': {
+                    'question': _safe_yaml(rev / 'evidence/question.yaml'),
+                    'search_log': _safe_yaml_any(rev / 'evidence/search-log.yaml'),
+                    'included_sources': _safe_yaml_any(rev / 'evidence/included-sources.yaml'),
+                    'excluded_sources': _safe_yaml_any(rev / 'evidence/excluded-sources.yaml'),
+                },
+            }
+        if tab == 'script':
+            script = _safe_yaml(rev / 'script/script.yaml')
+            voice_prep = _safe_yaml(rev / 'script/voice-prep.yaml')
+            vp_lines: dict[str, dict | str] = {}
+            if isinstance(voice_prep.get('lines'), list):
+                for vp in voice_prep['lines']:
+                    if isinstance(vp, dict) and vp.get('id'):
+                        vp_lines[str(vp['id'])] = vp.get('delivery') or vp
+            raw_lines = script.get('lines')
+            lines = [{
+                'id': line.get('id'), 'text': line.get('text', ''), 'purpose': line.get('purpose'),
+                'claim_id': line.get('claim_id'), 'source_marker': line.get('source_marker'),
+                'delivery': line.get('delivery') or vp_lines.get(str(line.get('id') or ''), ''),
+            } for line in (raw_lines if isinstance(raw_lines, list) else []) if isinstance(line, dict)]
+            return {
+                'tab': 'script',
+                'lines': lines,
+                'outline': _safe_yaml(rev / 'script/outline.yaml'),
+                'voice_prep': voice_prep,
+                'style_lint': _safe_json(rev / 'reviews/style-lint.json'),
+                'script_review': review_view(rev),
+                'script_review_rounds': _safe_yaml_any(rev / 'reviews/script-review-log.yaml'),
+            }
+        if tab == 'storyboard':
+            return {
+                'tab': 'storyboard',
+                'storyboard': _safe_yaml(rev / 'storyboard/storyboard.yaml'),
+                'clip_plan': _safe_yaml(rev / 'script/clip-plan.yaml') or _safe_yaml(rev / 'storyboard/clip-plan.yaml'),
+                'visual_review': _safe_yaml(rev / 'reviews/visual-review.yaml'),
+                'assets': _project_assets_view(root, project_dir.name),
+            }
+        if tab == 'video':
+            qa = _safe_json(rev / 'reviews/video-qa.json')
+            tl_rows = timeline(project_dir)
+            prod_rev = product_review.review_view(rev)
+            pron_qa = _summarize_pronunciation_qa(rev / 'reviews/pronunciation-qa.json')
+            frame_insp = _frame_inspector_payload(rev, project_dir.name, tl_rows, prod_rev, pron_qa)
+            raw_rounds = _safe_yaml_any(rev / 'reviews/product-review-log.yaml')
+            rounds_list = raw_rounds if isinstance(raw_rounds, list) else (
+                raw_rounds.get('rounds', []) if isinstance(raw_rounds, dict) else []
+            )
+            compact_rounds = [
+                {'round': r.get('round'), 'passed': r.get('passed'), 'summary': str(r.get('summary') or '')[:300]}
+                for r in rounds_list if isinstance(r, dict)
+            ]
+            return {
+                'tab': 'video',
+                'media': _collect_media(),
+                'thumbnail_url': _project_preview_url(project_dir, project),
+                'timeline': tl_rows,
+                'frame_inspector': frame_insp,
+                'product_review': prod_rev,
+                'product_review_rounds': compact_rounds,
+                'qa': {'status': qa.get('status'),
+                       'warnings': [*(qa.get('warnings') or []), *(qa.get('errors') or [])]},
+                'qa_detail': {'video_qa': qa, 'pronunciation_qa': pron_qa},
+            }
+        if tab == 'posts':
+            return {
+                'tab': 'posts',
+                'thumbnail_url': _project_preview_url(project_dir, project),
+                'posts': _safe_yaml(rev / 'posts/posts.yaml'),
+                'shorts_plan': _safe_yaml(rev / 'posts/shorts-plan.yaml'),
+            }
+        if tab == 'log':
+            return {
+                'tab': 'log',
+                'activity': activity(root, limit=50, slug=project_dir.name)['items'],
+                'repair': _safe_yaml(logs_dir / 'leader-repair.yaml'),
+                'cli_logs': _recent_cli_logs(root, project_dir.name),
+                'notes': _read_text(rev / 'reviews/medical-revision-notes.md'),
+                'feedback': [e for e in standards.load(root) if e.get('slug') == project_dir.name][::-1],
+            }
+
     is_paused = (logs_dir / 'paused.yaml').is_file()
     paused_info = _safe_yaml(logs_dir / 'paused.yaml') if is_paused else {}
+    media = _collect_media()
+    queue_entry: dict | None = None
+    try:
+        for item in load_queue(root):
+            if item.slug == project_dir.name:
+                queue_entry = item.model_dump(mode='json')
+                break
+    except (OSError, ValueError, TypeError, yaml.YAMLError):
+        queue_entry = None
+
+    revs_dir = project_dir / 'revisions'
+    revisions = (
+        sorted(p.name for p in revs_dir.iterdir() if p.is_dir() and not p.name.startswith('.'))
+        if revs_dir.is_dir() else [project.active_revision]
+    )
+    gate = factory.gate_for_project(project_dir, project)
+    open_q = doctor_questions.open_question(root, project_dir.name)
+    blocked = _blocked_note(root, project_dir, project)
+    label = STATE_LABELS.get(project.state, project.state.value)
+    state_label = (
+        'Chờ ý kiến bác sĩ'
+        if open_q is not None and not gate
+        else f'Tạm dừng · {STAGES[stage_index(project)].lower()}'
+        if is_paused and not gate
+        else f'Bị chặn · {STAGES[stage_index(project)].lower()}'
+        if blocked
+        else label
+    )
+
+    if lite:
+        posts_data = _safe_yaml(rev / 'posts/posts.yaml')
+        shorts_data = _safe_yaml(rev / 'posts/shorts-plan.yaml')
+        posts_count = len(posts_data.get('youtube_titles') or []) + len(shorts_data.get('clips') or [])
+        claims_count = _fast_list_len(rev / 'evidence/ledger.yaml', 'claims')
+        lines_count = _fast_list_len(rev / 'script/script.yaml', 'lines')
+        scenes_count = _fast_list_len(rev / 'storyboard/storyboard.yaml', 'scenes')
+        return {
+            'lite': True,
+            'slug': project_dir.name, 'title': factory.project_title(project_dir, project),
+            'code': project_codes(root)[project_dir.name],
+            'state': project.state.value, 'state_label': state_label,
+            'gate': gate, 'revision': project.active_revision,
+            'paused': is_paused, 'paused_info': paused_info, 'blocked': blocked,
+            'doctor_question': open_q,
+            'stage_index': stage_index(project), 'stages': list(STAGES), 'revisions': revisions,
+            'topic_card': _safe_yaml(rev / 'topic/card.yaml'),
+            'dossier': _safe_yaml(rev / 'topic/dossier.yaml'),
+            'queue_entry': queue_entry,
+            'counts': {
+                'claims': claims_count,
+                'lines': lines_count,
+                'scenes': scenes_count,
+                'media': len(media),
+                'posts': posts_count,
+            },
+            'lines': [], 'claims': [], 'records': [], 'media': media, 'frames': [],
+            'storyboard': {}, 'posts': {}, 'shorts_plan': {}, 'timeline': [], 'frame_inspector': None,
+            'thumbnail_url': _project_preview_url(project_dir, project),
+            'card': _gate_card_with_style(project_dir),
+            'video_stale': project.state in {WorkflowState.MEDICALLY_APPROVED, WorkflowState.PRODUCTION_IN_PROGRESS,
+                                             WorkflowState.AWAITING_MEDICAL_REVIEW, WorkflowState.DRAFT_READY},
+            'approvals': {
+                'medical': _safe_yaml(rev / 'reviews/medical-approval.yaml'),
+                'video': _safe_yaml(rev / 'reviews/video-approval.yaml'),
+            },
+            'running_jobs': [j for j in _active_running_jobs(root) if j.get('slug') == project_dir.name],
+            'draft': load_draft(root, project_dir.name),
+            'activity': [], 'cli_logs': [], 'feedback': [],
+        }
 
     script = _safe_yaml(rev / 'script/script.yaml')
     ledger = _safe_yaml(rev / 'evidence/ledger.yaml')
@@ -2264,13 +2462,7 @@ def review_bundle(root: Path, project_dir: Path, project: ProjectManifestV2) -> 
         'doi': r.get('doi'), 'pmid': r.get('pmid'), 'url': r.get('url'),
     } for r in (raw_records if isinstance(raw_records, list) else []) if isinstance(r, dict)]
 
-    media = []
     renders = rev / 'renders'
-    for rel, label in (('video.mp4', 'Video hoàn chỉnh'), ('audio/narration-voice.wav', 'Giọng đọc')):
-        if (renders / rel).is_file():
-            media.append({'label': label, 'url': f'/media/{project_dir.name}/{rel}', 'kind': rel.rsplit('.', 1)[1]})
-    for clip in sorted((renders / 'clips').glob('*.mp4')) if renders.is_dir() else []:
-        media.append({'label': f'Clip {clip.stem}', 'url': f'/media/{project_dir.name}/clips/{clip.name}', 'kind': 'mp4'})
     frames = []
     if (renders / 'frames').is_dir():
         for frame in sorted((renders / 'frames').glob('*.png')):
@@ -2281,33 +2473,6 @@ def review_bundle(root: Path, project_dir: Path, project: ProjectManifestV2) -> 
     storyboard = _safe_yaml(rev / 'storyboard/storyboard.yaml')
     qa = _safe_json(rev / 'reviews/video-qa.json')
 
-    queue_entry: dict | None = None
-    try:
-        for item in load_queue(root):
-            if item.slug == project_dir.name:
-                queue_entry = item.model_dump(mode='json')
-                break
-    except (OSError, ValueError, TypeError, yaml.YAMLError):
-        queue_entry = None
-
-    revs_dir = project_dir / 'revisions'
-    revisions = (
-        sorted(p.name for p in revs_dir.iterdir() if p.is_dir())
-        if revs_dir.is_dir() else [project.active_revision]
-    )
-    gate = factory.gate_for_project(project_dir, project)
-    open_q = doctor_questions.open_question(root, project_dir.name)
-    blocked = _blocked_note(root, project_dir, project)
-    label = STATE_LABELS.get(project.state, project.state.value)
-    state_label = (
-        'Chờ ý kiến bác sĩ'
-        if open_q is not None and not gate
-        else f'Tạm dừng · {STAGES[stage_index(project)].lower()}'
-        if is_paused and not gate
-        else f'Bị chặn · {STAGES[stage_index(project)].lower()}'
-        if blocked
-        else label
-    )
     tl_rows = timeline(project_dir)
     prod_rev = product_review.review_view(rev)
     pron_qa = _summarize_pronunciation_qa(rev / 'reviews/pronunciation-qa.json')
@@ -2691,7 +2856,9 @@ class _Handler(BaseHTTPRequestHandler):
                 self._json(timeline(project_dir))
             elif len(parts) == 4 and parts[:2] == ['api', 'project'] and parts[3] == 'bundle':
                 project_dir, project = self.server.project_dir(parts[2])
-                self._json(review_bundle(self.server.root, project_dir, project))
+                lite_flag = query.get('lite', [''])[0] in {'1', 'true', 'yes'}
+                tab_name = (query.get('tab', [''])[0] or '').strip() or None
+                self._json(review_bundle(self.server.root, project_dir, project, lite=lite_flag, tab=tab_name))
             elif len(parts) >= 4 and parts[0] == 'media' and parts[2] == 'review-sheet':
                 project_dir, project = self.server.project_dir(parts[1])
                 self._file(review_sheet_file(project_dir, project, '/'.join(parts[3:])))
@@ -2705,16 +2872,43 @@ class _Handler(BaseHTTPRequestHandler):
         except (OSError, ValueError) as error:
             self._json({'error': f'{type(error).__name__}: {error}'}, HTTPStatus.INTERNAL_SERVER_ERROR)
 
-    def _file(self, target: Path) -> None:
+    def do_HEAD(self) -> None:
+        if not self._host_ok():
+            self.send_response(HTTPStatus.FORBIDDEN)
+            self.end_headers()
+            return
+        path = unquote(self.path.split('?', 1)[0])
+        parts = [p for p in path.split('/') if p]
+        try:
+            if len(parts) >= 5 and parts[:2] == ['api', 'medanim'] and parts[3] == 'preview':
+                self._file(medanim_library.resolve_medanim_preview(self.server.root, parts[2], '/'.join(parts[4:])), head_only=True)
+            elif len(parts) >= 4 and parts[0] == 'media' and parts[2] == 'review-sheet':
+                project_dir, project = self.server.project_dir(parts[1])
+                self._file(review_sheet_file(project_dir, project, '/'.join(parts[3:])), head_only=True)
+            elif len(parts) >= 3 and parts[0] == 'media':
+                project_dir, project = self.server.project_dir(parts[1])
+                self._file(media_file(project_dir, project, '/'.join(parts[2:])), head_only=True)
+            else:
+                self.send_response(HTTPStatus.NOT_FOUND)
+                self.end_headers()
+        except (LookupError, OSError, ValueError):
+            self.send_response(HTTPStatus.NOT_FOUND)
+            self.end_headers()
+
+    def _file(self, target: Path, *, head_only: bool = False) -> None:
         """Stream a render file, honouring a single `bytes=` Range so video can seek."""
         size = target.stat().st_size
         start, end = 0, size - 1
         status = HTTPStatus.OK
+        max_open_chunk = 4 * 1024 * 1024  # 4 MiB cap on open-ended Range so 100 MB MP4 seeks stay snappy
         match = re.fullmatch(r'bytes=(\d*)-(\d*)', self.headers.get('Range', '').strip())
         if match and size and (match[1] or match[2]):
             if match[1]:
                 start = int(match[1])
-                end = min(int(match[2]), size - 1) if match[2] else size - 1
+                if match[2]:
+                    end = min(int(match[2]), size - 1)
+                else:
+                    end = min(start + max_open_chunk - 1, size - 1)
             else:
                 start = max(0, size - int(match[2]))
             if start > end or start >= size:
@@ -2734,6 +2928,8 @@ class _Handler(BaseHTTPRequestHandler):
         if status is HTTPStatus.PARTIAL_CONTENT:
             self.send_header('Content-Range', f'bytes {start}-{end}/{size}')
         self.end_headers()
+        if head_only:
+            return
         with target.open('rb') as stream:
             stream.seek(start)
             remaining = length
