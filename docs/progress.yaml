@@ -509,3 +509,9 @@ phases:
     status: done
     owner: agy
     note: 'Đã vào master: 6 component trong video/src/components/r5 (ScaleChain, ZoomChain, TakeawayCard, VnLabSheet, ReferenceDistribution, CreditCard), không import proto, không số liệu viết cứng; Vitest 15 đạt, tsc sạch. Chưa render thật: nối vào video ở R5.3.7.'
+
+  - id: R5.3.6
+    title: Rig đặc trưng men gan vào máu
+    status: doing
+    owner: agy
+    note: 'Cảnh cơ chế men trong tế bào → màng đổi → men vào máu, chạy theo mốc action đã căn, dùng hình có giấy phép, có bản 9:16.'
