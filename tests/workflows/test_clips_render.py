@@ -247,3 +247,35 @@ def test_clip_cta_registers_reverse_logo_and_selected_mascot(tmp_path, artwork_b
         assert asset["semantic"] is False
     assert assets[1]["kind"] == "flourish"
     assert assets[1]["storyboard_role"] == "brand"
+
+
+def test_r5_clip_render_input_preserves_profile_and_filters_used_assets(tmp_path: Path) -> None:
+    from healthvideo.render.quality import R5RuntimeStoryboard, resolve_r5_shots
+    from healthvideo.workflows.gate_review import (
+        load_r5_revision_assets,
+        snapshot_r5_assets,
+    )
+    from tests.e2e.test_r5_quality_offline import _synthetic_r5_project
+
+    project = _synthetic_r5_project(tmp_path)
+    revision = project / "revisions/001"
+    board = Storyboard.model_validate(read_yaml(revision / "storyboard/storyboard.yaml"))
+    snapshot_r5_assets(revision, board)
+    r5_assets = load_r5_revision_assets(revision, board)
+    resolved = resolve_r5_shots(
+        R5RuntimeStoryboard.model_validate({**board.model_dump(), "estimated": True})
+    )
+
+    # CL01 (S02..S06, 2340 frames) stays 9:16, preserves r5_v1, and binds only used R5 assets.
+    clip_scenes = resolved.scenes[1:6]
+    used_paths = {p for scene in clip_scenes for shot in scene.shots for p in shot.asset_paths}
+    filtered_assets = tuple(a for a in r5_assets if a.path in used_paths)
+    clip = clip_render_input(
+        resolved, clip_scenes, "audio/clips/CL01.wav", r5_assets=filtered_assets
+    )
+    assert (clip.format_profile, clip.width, clip.height) == ("vertical_clip", 1080, 1920)
+    assert clip.quality_profile == "r5_v1"
+    assert {a.path for a in clip.r5_assets} == used_paths
+    assert clip.scenes[0].id == "S02"
+    assert clip.scenes[0].start_frame == 0
+    assert clip.scenes[0].resolved_shots[0].component == "ZoomChain"

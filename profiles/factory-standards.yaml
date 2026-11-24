@@ -177,3 +177,34 @@ entries:
   evidence_hash: 61a1f75211a1531dd329f256460220032f6f1ef27b27f3117408d51901ce8b22
   scope: channel
 feedback_scope: Only chung and matching project slug; history preserved.
+quality_standards:
+- name: pyh_r5_quality_v1
+  profile: r5_v1
+  version: 1
+  scope: channel
+  accepted_at: '2026-11-24'
+  source: 'bác sĩ chốt 2026-11-24'
+  D1:
+    max_text_percent: 15
+    max_text_seconds: 6
+  D2:
+    story_median_seconds:
+    - 2.5
+    - 3.5
+    story_p90_max_seconds: 8
+    mechanism_median_seconds:
+    - 8
+    - 20
+    action_step_seconds:
+    - 3
+    - 6
+    long_shot_seconds: 20
+    long_shot_min_steps: 3
+    hard_experimental: true
+  D3:
+    missing_update_policy: disclose_latest_source_and_search_date_without_inventing_update
+  D4:
+    script_review_rounds: 2
+    visual_review_rounds: 3
+    product_review_rounds: 3
+    exhausted_policy: stop_and_present_to_doctor

@@ -77,3 +77,43 @@ def test_medical_packet_shows_outline_and_clips(tmp_path: Path) -> None:
     html = render_medical_packet(_revision(project_dir))
     assert "Dàn ý chương" in html and "CH05" in html
     assert "Clip dọc 9:16" in html and "CL01" in html and "S01, S02" in html
+
+
+def test_r5_long_form_medical_gate_binds_license_snapshot_and_detects_stale_hash(
+    tmp_path: Path,
+) -> None:
+    from healthvideo.domain.storyboard import Storyboard
+    from healthvideo.workflows.draft import submit_draft, submit_medical_review
+    from healthvideo.workflows.gate_review import (
+        R5_LICENSE_LEDGER,
+        R5_USED_ASSETS,
+        snapshot_r5_assets,
+    )
+    from tests.e2e.test_r5_quality_offline import _synthetic_r5_project
+    from tests.helpers import write_critic_review_fixture
+
+    project_dir = _synthetic_r5_project(tmp_path)
+    revision = _revision(project_dir)
+    submit_draft(
+        project_dir,
+        revision / "script/script.yaml",
+        revision / "storyboard/storyboard.yaml",
+        revision / "assets/asset-manifest.yaml",
+    )
+    board = Storyboard.model_validate(read_yaml(revision / "storyboard/storyboard.yaml"))
+    snapshot_r5_assets(revision, board)
+    write_critic_review_fixture(project_dir, product=False)
+    submit_medical_review(project_dir)
+
+    record = approve_gate(project_dir, GateKind.MEDICAL, reviewer=REVIEWER, now=REVIEWED_AT)
+    assert {
+        "script/outline.yaml",
+        "script/clip-plan.yaml",
+        f"r5-byte:{R5_USED_ASSETS}",
+        f"r5-byte:{R5_LICENSE_LEDGER}",
+    } <= record.artifact_hashes.keys()
+
+    # Modifying an R5 licensed asset after Gate 1 makes approval stale and blocks production.
+    (revision / "assets/r5/organ-zoom.svg").write_text("<svg><tampered/></svg>", encoding="utf-8")
+    with pytest.raises(ValueError, match="current medical approval|stale"):
+        produce_project(project_dir, SilentTTS(), lambda argv: 0)

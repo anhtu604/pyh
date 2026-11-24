@@ -242,3 +242,44 @@ def test_youtube_long_still_requires_explainer_before_evidence_ready(tmp_path: P
     _explainer(project)
     _, manifest = build_evidence_ledger(project, [_claim()], [])
     assert manifest.state == WorkflowState.EVIDENCE_READY
+
+
+def test_r5_opt_in_runs_estimated_qa_and_rejects_tab_without_changing_files(tmp_path: Path) -> None:
+    project = _project(tmp_path, "explain_first_v1", "evidence_ready")
+    revision = project / "revisions/001"
+    _explainer(project, "C01")
+    script = read_yaml(revision / "script/script.yaml")
+    script["format_profile"] = "explain_first_v1"
+    line_ids = [line["id"] for line in script["lines"]]
+    board = read_yaml(revision / "storyboard/storyboard.yaml")
+    board["quality_profile"] = "r5_v1"
+    board["r5_contract"] = {
+        "questions": [
+            {
+                "id": f"Q{i}",
+                "text": script["lines"][0]["text"].split()[0],
+                "hook_line_id": line_ids[0],
+                "answer_line_ids": [line_ids[-1]],
+            }
+            for i in (1, 2)
+        ],
+        "blocks": [
+            {
+                "id": "B1",
+                "line_ids": line_ids,
+                "question_ids": ["Q1", "Q2"],
+                "takeaway_line_id": line_ids[-1],
+                "professional_update": True,
+            }
+        ],
+    }
+    board["scenes"][0]["on_screen_text"] = "ALT\t120 U/L"
+    script_file = tmp_path / "r5-script.yaml"
+    board_file = tmp_path / "r5-board.yaml"
+    write_yaml_atomic(script_file, script)
+    write_yaml_atomic(board_file, board)
+    before = {path: path.read_bytes() for path in project.rglob("*") if path.is_file()}
+
+    with pytest.raises(ValueError, match="tab|R5"):
+        submit_draft(project, script_file, board_file, revision / "assets/asset-manifest.yaml")
+    assert {path: path.read_bytes() for path in project.rglob("*") if path.is_file()} == before
