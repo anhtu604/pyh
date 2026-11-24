@@ -26,6 +26,7 @@ from healthvideo.visuals.flux import (
     illustration_recipe_hash,
     validate_illustration_png,
 )
+from healthvideo.workflows import review_budget
 
 CANDIDATES = 'reviews/visual/candidates.yaml'
 REPORT = 'reviews/visual-review.yaml'
@@ -266,10 +267,15 @@ def _fallback_subject(board: Storyboard, scenes: list[str]) -> str:
             else 'joint_fluid_urate_to_inflammation')
 
 
+@review_budget.serialized_record
 def _consume_report(root: Path, data: dict, board: Storyboard) -> None:
     report_path = root / REPORT
     if not report_path.is_file() or data.get('review_sha256') == sha256_file(report_path):
         return
+    budget_event = None
+    if review_budget.enabled(root):
+        budget_event = review_budget.report_event(
+            root, 'visual', report_path, allow_recorded=True)
     report = read_agent_yaml(report_path)
     if report.get('candidate_index_sha256') != sha256_file(root / CANDIDATES):
         raise ValueError('Visual review does not match current candidate index')
@@ -330,6 +336,8 @@ def _consume_report(root: Path, data: dict, board: Storyboard) -> None:
                not isinstance(row.get('layout_issues'), list) for row in rows):
             raise ValueError('Visual review requires a reason and layout_issues list')
         for row in rows:
+            if row.get('blocking_safety'):
+                raise ValueError(f'blocking_safety: {row["scene"]}; cần bác sĩ kiểm tra hình')
             validate_style_issues(row)
         selections = {row.get('selected') for row in rows}
         kinds = {row.get('decision') for row in rows}
@@ -352,6 +360,17 @@ def _consume_report(root: Path, data: dict, board: Storyboard) -> None:
             raise ValueError('Scenes sharing one asset must agree on select/reject and candidate')
     if decisions != report.get('scenes', []) or report.get('dropped_issues'):
         write_yaml_atomic(report_path, {**report, 'scenes': decisions})
+    if budget_event:
+        issues = [{'issue_id': canonical_json_hash({'scene': row['scene'], 'cause': cause}),
+                   'scene': row['scene'], 'criterion': cause,
+                   'blocking_safety': bool(row.get('blocking_safety'))}
+                  for row in decisions if row.get('decision') == 'reject' or row.get('blocking_safety')
+                  for cause in (row.get('layout_issues') or ['illustration_rejected'])]
+        review_budget.record_evidence(root, 'visual', budget_event,
+                                      {'issues': issues, 'scenes': decisions, 'passed': not issues},
+                                      result=True)
+        if issues:
+            review_budget.require_available(root, 'visual')
     data.pop('stale_review_count', None)
     data['review_sha256'] = sha256_file(report_path)
     # Keep every round and its reasons available to the physician.

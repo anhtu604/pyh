@@ -55,6 +55,14 @@ def _report(project: Path, score: int = 8, **changes) -> None:
 
 def _review(project: Path, score: int) -> dict:
     _report(project, score)
+    from healthvideo.workflows import review_budget
+
+    revision = project / 'revisions/001'
+    if review_budget.enabled(revision):
+        event = str(review_budget.review_budget_status(revision, 'script')['used'])
+        review_budget.consume_review_budget(revision, 'script', event)
+        review_budget.finish_attempt(revision, 'script', event, outcome='reported', detail='Fixture',
+                                     report=revision / REPORT)
     return record_review(project, script_hash(project))
 
 
@@ -689,3 +697,23 @@ def test_chat_step_boundary_writes_and_cleans_pid_token_marker(tmp_path):
         assert payload['process_token'] == process_token(os.getpid())
         assert isinstance(payload['started_at'], str) and payload['started_at']
     assert not marker.exists()
+
+
+def test_r5_reset_cannot_grant_new_review_budget(tmp_path):
+    from healthvideo.workflows import script_review
+    from healthvideo.workflows.review_budget import review_budget_status
+    project = _project(tmp_path)
+    revision = project / 'revisions/001'
+    write_yaml_atomic(revision / 'workflow/standards.yaml',
+                      {'quality_standard': {'profile': 'r5_v1'}})
+    for index in range(2):
+        _script(project, f'Changed line {index}')
+        _review(project, 6)
+        script_review.mark_submitted(revision)
+    for index in range(24):
+        script_review.reset_for_doctor_guidance(project, str(index))
+        script_review.mark_submitted(revision)
+        _script(project, f'Reset line {index}')
+        with pytest.raises(ValueError, match='budget'):
+            next_script_action(project, create_question=False)
+    assert review_budget_status(revision, 'script')['used'] == 2

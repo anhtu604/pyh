@@ -56,6 +56,14 @@ def _report(project: Path, score: int = 8, *, fixable: bool = True, **changes) -
 
 def _review(project: Path, score: int, **kwargs) -> dict:
     _report(project, score, **kwargs)
+    from healthvideo.workflows import review_budget
+
+    revision = project / 'revisions/001'
+    if review_budget.enabled(revision):
+        event = str(review_budget.review_budget_status(revision, 'product')['used'])
+        review_budget.consume_review_budget(revision, 'product', event)
+        review_budget.finish_attempt(revision, 'product', event, outcome='reported', detail='Fixture',
+                                     report=revision / pr.REPORT)
     return pr.record_review(project, pr.render_hash(project))
 
 
@@ -931,3 +939,48 @@ def test_check_repair_rejects_orphaning_manifest_visual_asset(tmp_path):
         match=f'visual asset is not referenced by storyboard: {removed_path}',
     ):
         pr.check_repair(project, before)
+
+
+def test_r5_product_twenty_four_resets_remain_bounded(tmp_path):
+    from healthvideo.workflows import product_review
+    from healthvideo.workflows.review_budget import review_budget_status
+    project = _project(tmp_path)
+    revision = project / 'revisions/001'
+    write_yaml_atomic(revision / 'workflow/standards.yaml',
+                      {'quality_standard': {'profile': 'r5_v1'}})
+    for index in range(3):
+        _render(project, index)
+        _review(project, 6, issues=[{'at': 'S02', 'criterion': key,
+                                  'issue_id': f'{index}-{key}', 'problem': 'Fixture issue',
+                                  'fix': 'Fixture repair', 'fixable': True}
+                                 for key in pr.CRITERIA])
+        product_review.mark_submitted(revision)
+    for index in range(24):
+        product_review.reset_cycle_for_rebuild(project, reason=f'reset-{index}')
+        _render(project, index + 10)
+        with pytest.raises(ValueError, match='budget'):
+            product_review.next_product_action(project, create_question=False)
+    assert review_budget_status(revision, 'product')['used'] == 3
+
+
+def test_r5_product_result_recovers_after_history_write_failure(tmp_path, monkeypatch):
+    from healthvideo.workflows.review_budget import review_budget_status
+
+    project = _project(tmp_path)
+    revision = project / REV
+    write_yaml_atomic(revision / 'workflow/standards.yaml',
+                      {'quality_standard': {'profile': 'r5_v1'}})
+    original = pr.write_yaml_atomic
+
+    def fail_history(path, value):
+        if path == revision / pr.LOG:
+            raise OSError('Fixture interrupted history write')
+        return original(path, value)
+
+    monkeypatch.setattr(pr, 'write_yaml_atomic', fail_history)
+    with pytest.raises(OSError):
+        _review(project, 8)
+    monkeypatch.setattr(pr, 'write_yaml_atomic', original)
+    assert pr.next_product_action(project, create_question=False) == 'submit_video'
+    assert len(read_yaml(revision / pr.LOG)['rounds']) == 1
+    assert review_budget_status(revision, 'product')['used'] == 1

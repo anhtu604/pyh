@@ -419,3 +419,217 @@ def test_runner_persists_shared_exception_classification(tmp_path, monkeypatch, 
     if returned_result and isinstance(error, PermissionError):
         assert 'sharing violation' in record['reason']
     assert bool(record['retry_after']) == (kind == 'transient')
+
+@pytest.fixture
+def critic_job(tmp_path, monkeypatch):
+    import json
+
+    from healthvideo.agents import ACTIVITY_FILE, AgentResult
+    from healthvideo.company import Company, ModelSlot, Role
+    from healthvideo.domain.queue import QueueEntry
+    from healthvideo.storage.files import write_yaml_atomic
+    from healthvideo.workflows import runner, script_review
+    from tests.helpers import create_v2_project_fixture
+
+    project = create_v2_project_fixture(tmp_path / 'projects')
+    revision = project / 'revisions/001'
+    (revision / script_review.LOG).unlink(missing_ok=True)
+    (revision / 'reviews/product-review-log.yaml').unlink(missing_ok=True)
+    write_yaml_atomic(revision / 'workflow/standards.yaml',
+                      {'quality_standard': {'profile': 'r5_v1'}})
+    (revision / 'renders').mkdir(exist_ok=True)
+    (revision / 'renders/render-manifest.json').write_text('{}', encoding='utf-8')
+    slots = (ModelSlot(cli='agy', model='maker-a'), ModelSlot(cli='codex', model='maker-b'),
+             ModelSlot(cli='agy', model='independent'))
+    roles = {}
+    for role_id, step, skill in [('script_critic', 'script_review', 'pyh-script-critic'),
+                                 ('product_critic', 'product_review', 'pyh-product-critic'),
+                                 ('art_director', 'visual_review', 'pyh-art-director')]:
+        roles[role_id] = Role(id=role_id, name=role_id, tier='hard', skills=(skill,),
+                              steps=(step,), models=slots)
+    company = Company(roles=roles, tiers={'hard': slots})
+    activity = tmp_path / ACTIVITY_FILE
+    activity.parent.mkdir(parents=True, exist_ok=True)
+    activity.write_text('\n'.join(json.dumps({'slug': project.name, 'role': role, 'ok': True,
+                         'cli': slot.cli, 'model': slot.model})
+                         for role, slot in zip(('writer', 'storyboard_director'), slots)) + '\n',
+                        encoding='utf-8')
+    calls = []
+
+    def invoke(chain, prompt, **kwargs):
+        calls.append(tuple(chain))
+        write_yaml_atomic(revision / 'reviews/script-review.yaml',
+                          {'scores': dict.fromkeys(script_review.CRITERIA, 8), 'summary': 'Fixture pass'})
+        return AgentResult('fixture', True, False, kwargs['log_dir'] / 'agent.log')
+
+    deps = runner.RunDeps(create_project=lambda *a: project,
+                          read_state=lambda _: WorkflowState.DRAFT_READY,
+                          reject_note=lambda _: None, python_steps={}, invoke=invoke,
+                          changed_code_paths=lambda _: [], company=company)
+    monkeypatch.setattr(runner, '_build_step_prompt', lambda *a, **kw: 'fixture prompt')
+    monkeypatch.setattr(runner, '_validate_agent_step_files', lambda *a: None)
+    monkeypatch.setattr(runner, 'agent_fingerprint', lambda *a: 'fixture-fingerprint')
+    monkeypatch.setattr(runner, 'agent_retry_status', lambda *a: {'allowed': True})
+    entry = QueueEntry(slug=project.name, title='Fixture', question='Fixture?', added='2026-11-24')
+
+    def run(step='script_review', *, invoke=None):
+        from dataclasses import replace
+
+        active = replace(deps, invoke=invoke) if invoke is not None else deps
+        return runner._run_agent_invocation(tmp_path, active, entry, project, runner.RunReport(),
+                    step=step, brief_context='fixture', log_dir=tmp_path / 'topics/logs' / project.name,
+                    defer_validation_record=True)
+
+    return project, revision, deps, slots, calls, run
+
+
+def test_r5_cooldown_probe_does_not_consume_budget(critic_job, monkeypatch):
+    from healthvideo.workflows import runner
+    from healthvideo.workflows.review_budget import review_budget_status
+
+    _, revision, _, _, calls, run = critic_job
+    monkeypatch.setattr(runner, 'agent_retry_status', lambda *a:
+                        {'allowed': False, 'retry_after': 'later', 'reason': 'cooldown'})
+    for _ in range(24):
+        assert run()[0] == 'blocked'
+    assert calls == []
+    assert review_budget_status(revision, 'script')['used'] == 0
+
+
+def test_r5_reservation_precedes_call_and_report_does_not_charge_again(critic_job):
+    from healthvideo.workflows import script_review
+    from healthvideo.workflows.review_budget import review_budget_status
+
+    project, revision, deps, slots, calls, run = critic_job
+    original = deps.invoke
+
+    def invoke(chain, prompt, **kwargs):
+        status = review_budget_status(revision, 'script')
+        assert status['used'] == 1
+        assert status['events'][0]['event_id']
+        assert tuple(chain) == (slots[2],)
+        return original(chain, prompt, **kwargs)
+
+    outcome = run(invoke=invoke)
+    assert outcome[0] == 'ok'
+    event_id = outcome[3]['review_event_id']
+    result = script_review.record_review(project, script_review.script_hash(project), event_id=event_id)
+    assert result['passed']
+    assert script_review.record_review(project, script_review.script_hash(project), event_id=event_id) == result
+    assert review_budget_status(revision, 'script')['used'] == 1
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize('r5', [True, False])
+def test_critic_with_no_independent_fallback_stops_before_budget(critic_job, r5):
+    from healthvideo.workflows.review_budget import review_budget_status
+
+    _, revision, deps, slots, calls, run = critic_job
+    deps.company.roles['script_critic'].models = slots[:2]
+    if not r5:
+        (revision / 'workflow/standards.yaml').unlink()
+    result = run()
+    assert result[0] == 'blocked'
+    assert 'No independent critic model' in result[3]['error']
+    assert calls == []
+    assert review_budget_status(revision, 'script')['used'] == 0
+
+
+@pytest.mark.parametrize(('step', 'stage', 'limit'), [
+    ('script_review', 'script', 2), ('product_review', 'product', 3), ('visual_review', 'visual', 3)])
+def test_r5_interrupted_calls_survive_twenty_four_resets(critic_job, step, stage, limit):
+    from healthvideo.workflows.review_budget import review_budget_status
+
+    _, revision, _, _, calls, run = critic_job
+
+    def fail(*args, **kwargs):
+        calls.append(kwargs['step'])
+        raise ConnectionError('fixture interrupted invocation')
+
+    for _ in range(24):
+        assert run(step, invoke=fail)[0] == 'blocked'
+    assert len(calls) == limit
+    status = review_budget_status(revision, stage)
+    assert status['used'] == limit
+    assert all(e['evidence']['outcome'] == 'failed' for e in status['events'])
+
+
+def test_legacy_invocations_do_not_create_quality_budget(critic_job):
+    from healthvideo.workflows.review_budget import LEDGER
+
+    _, revision, _, _, calls, run = critic_job
+    (revision / 'workflow/standards.yaml').unlink()
+    for _ in range(4):
+        assert run()[0] == 'ok'
+    assert len(calls) == 4
+    assert not (revision / LEDGER).exists()
+
+
+def test_context_building_is_read_only_for_quality_budget(critic_job):
+    from healthvideo.workflows import product_review, script_review, visual_review
+    from healthvideo.workflows.review_budget import LEDGER
+
+    project, revision, _, _, _, _ = critic_job
+    for _ in range(24):
+        script_review.incremental_context(project)
+        product_review.incremental_context(project)
+        visual_review.prepare_stale_review(revision)
+    assert not (revision / LEDGER).exists()
+
+
+def test_critic_adapter_without_exclude_support_receives_only_independent_slots(critic_job):
+    from healthvideo.agents import AgentResult
+
+    _, _, _, slots, calls, run = critic_job
+
+    def invoke(chain, prompt, *, cwd, log_dir, role, slug, step):
+        # Any adapter's fallback iterates a prefiltered chain, without maker slots.
+        assert tuple(chain) == (slots[2],)
+        calls.extend(chain)
+        return AgentResult('fixture', True, False, log_dir / 'agent.log')
+
+    assert run(invoke=invoke)[0] == 'ok'
+    assert calls == [slots[2]]
+
+
+def test_r5_model_quota_wait_does_not_reserve_quality_budget(critic_job):
+    from datetime import UTC, datetime, timedelta
+
+    from healthvideo.agents import QUOTA_FILE, QuotaBook
+    from healthvideo.workflows.review_budget import review_budget_status
+
+    project, revision, _, slots, calls, run = critic_job
+    root = project.parent.parent
+    quota = QuotaBook(root / QUOTA_FILE)
+    for slot in slots:
+        quota.rest(slot, datetime.now(UTC) + timedelta(hours=1), 'Fixture quota')
+    for _ in range(24):
+        assert run()[0] == 'waiting_model'
+    assert calls == []
+    assert review_budget_status(revision, 'script')['used'] == 0
+
+
+def test_r5_recovers_result_if_history_write_is_interrupted(critic_job, monkeypatch):
+    from healthvideo.storage.files import read_yaml
+    from healthvideo.workflows import script_review
+    from healthvideo.workflows.review_budget import review_budget_status
+
+    project, revision, _, _, _, run = critic_job
+    result = run()
+    event_id = result[3]['review_event_id']
+    original = script_review.write_yaml_atomic
+
+    def fail_history(path, value):
+        if path == revision / script_review.LOG:
+            raise OSError('Fixture interrupted canonical history write')
+        return original(path, value)
+
+    monkeypatch.setattr(script_review, 'write_yaml_atomic', fail_history)
+    with pytest.raises(OSError):
+        script_review.record_review(project, script_review.script_hash(project), event_id=event_id)
+    monkeypatch.setattr(script_review, 'write_yaml_atomic', original)
+    assert script_review.next_script_action(project, create_question=False) == 'submit_medical'
+    assert len(read_yaml(revision / script_review.LOG)['rounds']) == 1
+    assert script_review.record_review(project, script_review.script_hash(project), event_id=event_id)['passed']
+    assert len(read_yaml(revision / script_review.LOG)['rounds']) == 1
+    assert review_budget_status(revision, 'script')['used'] == 1

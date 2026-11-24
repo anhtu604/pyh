@@ -81,6 +81,7 @@ def reconcile(previous: dict | None, report: dict, location: str) -> dict:
     kept = []
     for item in report['issues']:
         prior = by_id.get(item['issue_id'])
+        safety = bool(item.get('blocking_safety') or (prior or {}).get('blocking_safety'))
         if prior is None and not item.get('blocking_safety'):
             report.setdefault('dropped_issues', []).append({
                 'issue': item, 'reason': 'New issue outside previously open issues'})
@@ -92,6 +93,8 @@ def reconcile(previous: dict | None, report: dict, location: str) -> dict:
             report.setdefault('dropped_issues', []).append({
                 'issue': item, 'reason': 'Changed location, criterion or repair scope; kept previous issue'})
             item = deepcopy(prior)
+        if safety:
+            item['blocking_safety'] = True
         if item.get('blocking_safety'):
             active.add(item['criterion'])
         kept.append(item)

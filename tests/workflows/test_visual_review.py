@@ -65,6 +65,14 @@ def submit(root, *, reject=False):
                     'layout_issues': [], 'new_prompt': 'red swollen big toe, no text' if reject else None}],
     })
 
+    from healthvideo.workflows import review_budget
+
+    if review_budget.enabled(root):
+        event = str(review_budget.review_budget_status(root, 'visual')['used'])
+        review_budget.consume_review_budget(root, 'visual', event)
+        review_budget.finish_attempt(root, 'visual', event, outcome='reported', detail='Fixture',
+                                     report=root / REPORT)
+
 
 @pytest.mark.parametrize('field', ['reason', 'layout_issues', 'style_issues', 'summary', 'overall', 'checked'])
 def test_corrupt_visual_review_is_not_consumed(tmp_path, field):
@@ -878,3 +886,48 @@ def test_visual_review_deadlock_guard_and_premature_report_archive(tmp_path: Pat
     (rev / REPORT).unlink()
     assert has_current_contact_sheet(rev) is True
     assert review_pending(project) is True
+
+
+def test_r5_visual_stops_repeated_rejection_before_fallback(tmp_path):
+    from healthvideo.workflows.review_budget import review_budget_status
+    from healthvideo.workflows.visual_review import ensure_candidates
+    write_yaml_atomic(tmp_path / 'workflow/standards.yaml',
+                      {'quality_standard': {'profile': 'r5_v1'}})
+    board = _board()
+    manifest = AssetManifest.model_validate({'assets': [illustration_record()]})
+    ensure_candidates(tmp_path, board, manifest, generate=_generate)
+    submit(tmp_path, reject=True)
+    ensure_candidates(tmp_path, board, manifest, generate=_generate)
+    submit(tmp_path, reject=True)
+    with pytest.raises(ValueError, match='budget'):
+        ensure_candidates(tmp_path, board, manifest, generate=_generate)
+    status = review_budget_status(tmp_path, 'visual')
+    assert status['used'] == 2
+    assert status['repeated_issues']
+
+
+def test_r5_visual_result_recovers_after_archive_write_failure(tmp_path, monkeypatch):
+    from healthvideo.workflows import visual_review
+    from healthvideo.workflows.review_budget import review_budget_status
+
+    write_yaml_atomic(tmp_path / 'workflow/standards.yaml',
+                      {'quality_standard': {'profile': 'r5_v1'}})
+    board = _board()
+    manifest = AssetManifest.model_validate({'assets': [illustration_record()]})
+    visual_review.ensure_candidates(tmp_path, board, manifest, generate=_generate)
+    submit(tmp_path)
+    original = visual_review.shutil.copyfile
+
+    def fail_archive(source, destination, **kwargs):
+        if source == tmp_path / visual_review.REPORT:
+            raise OSError('Fixture interrupted archive write')
+        return original(source, destination, **kwargs)
+
+    monkeypatch.setattr(visual_review.shutil, 'copyfile', fail_archive)
+    with pytest.raises(OSError):
+        visual_review.ensure_candidates(tmp_path, board, manifest, generate=_generate)
+    monkeypatch.setattr(visual_review.shutil, 'copyfile', original)
+    result = visual_review.ensure_candidates(tmp_path, board, manifest, generate=_generate)
+    assert result['assets'][0]['selected']
+    assert result['review_count'] == 1
+    assert review_budget_status(tmp_path, 'visual')['used'] == 1

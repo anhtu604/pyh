@@ -536,3 +536,12 @@ def test_product_repair_blocks_unflagged_scene_and_narration_and_allows_outro_wh
     write_yaml_atomic(sb_path, sb)
     with pytest.raises(ValueError, match='Repair scope violation'):
         pr.check_repair(project, before)
+
+
+def test_safety_issue_cannot_be_downgraded():
+    from healthvideo.workflows.scoped_review import reconcile
+    prior = {'scores': {'safe': 3}, 'issues': [
+        {'line': 'N01', 'criterion': 'safe', 'issue_id': 'safety', 'blocking_safety': True}]}
+    report = {'scores': {'safe': 8}, 'issues': [
+        {'line': 'N01', 'criterion': 'safe', 'issue_id': 'safety', 'blocking_safety': False}]}
+    assert reconcile(prior, report, 'line')['issues'][0]['blocking_safety'] is True

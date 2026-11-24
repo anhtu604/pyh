@@ -39,6 +39,7 @@ from healthvideo.workflows import (
     doctor_questions,
     factory,
     product_review,
+    review_budget,
     scoped_review,
     script_review,
 )
@@ -1101,7 +1102,7 @@ def repair_once(
             return 'waiting_retry'
         return 'idle'
     detail = blocked.read_text(encoding='utf-8', errors='replace')
-    if (script_review.CYCLE_LIMIT_REASON in detail
+    if ('Review budget exhausted:' in detail or script_review.CYCLE_LIMIT_REASON in detail
             or 'Trạm 07 cần hướng dẫn:' in detail or 'Trạm 12 cần hướng dẫn:' in detail
             or 'Trạm 12 chưa đạt' in detail
             or 'Storyboard cần hướng dẫn:' in detail or 'Góp ý y khoa chưa có vị trí:' in detail):
@@ -1153,6 +1154,20 @@ def repair_once(
         write_yaml_atomic(record_path, record)
         _escalate_to_supervisor(root, slug, layout, reason=reason, detail=detail, record=record)
         return 'exhausted'
+    diagnosis_event = None
+    diagnosis_stage = 'diagnosis:' + canonical_json_hash({'reason': reason})
+    if resumed_plan is None and review_budget.enabled(layout.artifact_root):
+        diagnosis_event = uuid4().hex
+        try:
+            review_budget.consume_review_budget(layout.artifact_root, diagnosis_stage, diagnosis_event)
+            review_budget.record_evidence(layout.artifact_root, diagnosis_stage, diagnosis_event,
+                                          {'incident': incident, 'reason': reason, 'outcome': 'diagnosing'})
+        except ValueError as exc:
+            record['phase'] = 'needs_attention'
+            record['attention_reason'] = str(exc)
+            write_yaml_atomic(record_path, record)
+            _escalate_to_supervisor(root, slug, layout, reason=reason, detail=str(exc), record=record)
+            return 'exhausted'
     # Keep diagnosis and engineer output separate from project approval artifacts.
     record.update(
         attempts=record.get('attempts', 0) + 1,
@@ -1197,6 +1212,10 @@ def repair_once(
         else:
             plan = _ask(root, slug, 'coordinator_senior', 'repair_diagnose', context,
                         work / 'diagnosis.yaml', Diagnosis, invoke)
+            if diagnosis_event:
+                review_budget.record_evidence(layout.artifact_root, diagnosis_stage, diagnosis_event,
+                                              {'cause': plan.cause, 'evidence': plan.evidence, 'outcome': 'diagnosed',
+                                               'incident': incident, 'report': str(work / 'diagnosis.yaml')})
             record['diagnosis'] = plan.model_dump(mode='json')
         if plan.action == 'hold':
             record['phase'] = 'needs_attention'

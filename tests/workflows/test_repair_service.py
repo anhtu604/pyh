@@ -1483,3 +1483,17 @@ def test_escalation_fingerprint_changes_after_answered_cycle_even_without_leader
     q2 = doctor_questions.open_question(tmp_path, project.name)
     assert q2 is not None and q2['id'] != q1['id']
     assert q2['fingerprint'] != q1['fingerprint']
+
+
+def test_r5_diagnosis_cannot_restart_sixty_times(job):
+    root, project, logs, _source, released, stages = job
+    revision = project / 'revisions/001'
+    write_yaml_atomic(revision / 'workflow/standards.yaml',
+                      {'quality_standard': {'profile': 'r5_v1'}})
+    run = lambda argv, **kwargs: CompletedProcess(argv, 1, '', 'failed regression')
+    for _ in range(60):
+        # Simulate recovery/reset of the old ephemeral incident counter.
+        (logs / repair.REPORT).unlink(missing_ok=True)
+        repair.repair_once(root, project.name, run=run)
+    assert sum(step == 'repair_diagnose' for _, step in stages) == 2
+    assert released == []

@@ -480,7 +480,7 @@ def test_maker_slots_for_critic_uses_latest_per_role_and_falls_back_to_primary_a
     assert set(excluded_a) == {slot_b, slot_a}
     assert [s for s in company.chain("script_critic") if s not in excluded_a] == [slot_c]
 
-    # (b) writer + storyboard_director occupy all models in script_critic's chain -> falls back to excluding only latest writer (slot_b)
+    # (b) writer + storyboard_director occupy all models in script_critic's chain -> excludes all maker models (no fallback to maker)
     company_two = Company(
         roles={
             "script_critic": Role(
@@ -500,9 +500,9 @@ def test_maker_slots_for_critic_uses_latest_per_role_and_falls_back_to_primary_a
     ]
     act_path.write_text("\n".join(json.dumps(r) for r in rows_b) + "\n", encoding="utf-8")
     excluded_b = _maker_slots_for_critic(tmp_path, "topic-b", "script_critic", company=company_two)
-    assert excluded_b == (slot_b,)
+    assert set(excluded_b) == {slot_b, slot_a}
     remaining_b = [s for s in company_two.chain("script_critic") if s not in excluded_b]
-    assert remaining_b == [slot_a]
+    assert remaining_b == []
 
 
 def test_maker_slots_for_critic_skips_malformed_rows_and_resets_after_critic(tmp_path: Path):

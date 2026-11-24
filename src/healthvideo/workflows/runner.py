@@ -18,8 +18,10 @@ import yaml
 
 from healthvideo.agents import (
     ACTIVITY_FILE,
+    QUOTA_FILE,
     AgentResult,
     AllAgentsExhausted,
+    QuotaBook,
     invoke_with_failover,
 )
 from healthvideo.company import (
@@ -57,6 +59,7 @@ from healthvideo.workflows import (
     doctor_questions,
     expert,
     product_review,
+    review_budget,
     rework,
 )
 from healthvideo.workflows.factory_standards import style_a_active
@@ -387,7 +390,8 @@ def _maker_slots_for_critic(
     critic_role: str,
     company: Company | None = None,
 ) -> tuple[ModelSlot, ...]:
-    maker_order = CRITIC_OF.get(critic_role, ())
+    maker_order = CRITIC_OF.get(critic_role,
+                               ('storyboard_director',) if critic_role == 'art_director' else ())
     maker_roles = set(maker_order)
     if not maker_roles:
         return ()
@@ -424,16 +428,6 @@ def _maker_slots_for_critic(
     if not latest_by_role:
         return ()
     excluded = tuple(dict.fromkeys(latest_by_role.values()))
-    active_company = company or load_company()
-    critic_chain = list(active_company.chain(critic_role))
-    excluded_identities = {slot.model_identity for slot in excluded}
-    if not [slot for slot in critic_chain if slot.model_identity not in excluded_identities]:
-        primary_role = maker_order[0]
-        primary_slot = latest_by_role.get(primary_role)
-        if primary_slot is not None and any(
-            slot.model_identity != primary_slot.model_identity for slot in critic_chain
-        ):
-            return (primary_slot,)
     return excluded
 
 
@@ -810,14 +804,12 @@ def _run_agent_invocation(
         if reviewing
         else ""
     )
-    if reviewing:
-        _quarantine_review(project_dir, step, log_dir)
     role = deps.company.role_for_step(step)
+    critic_step = step in {'script_review', 'visual_review', 'product_review'}
+    budget_root: Path | None = None
+    budget_event: str | None = None
+    budget_stage = step.removesuffix('_review')
     invoke_kwargs: dict[str, object] = {}
-    if reviewing and _invoke_supports_exclude(deps.invoke):
-        excluded = _maker_slots_for_critic(root, entry.slug, role.id, company=deps.company)
-        if excluded:
-            invoke_kwargs["exclude_slots"] = excluded
     checkpoint: dict[Path, bytes] = {}
     restore_repair: Callable[[], None] | None = None
     try:
@@ -861,16 +853,52 @@ def _run_agent_invocation(
                 for relative, raw in product_before.items():
                     (repo / relative).parent.mkdir(parents=True, exist_ok=True)
                     (repo / relative).write_bytes(raw)
-        result = deps.invoke(
-            deps.company.chain(role.id),
-            prompt,
-            cwd=root,
-            log_dir=log_dir,
-            role=role.id,
-            slug=entry.slug,
-            step=step,
-            **invoke_kwargs,
-        )
+        slots = deps.company.chain(role.id)
+        if critic_step:
+            excluded = _maker_slots_for_critic(root, entry.slug, role.id, company=deps.company)
+            identities = {slot.model_identity for slot in excluded}
+            slots = tuple(slot for slot in slots if slot.model_identity not in identities)
+            if not slots:
+                raise ValueError('No independent critic model remains after excluding maker models; stopped.')
+            if excluded and _invoke_supports_exclude(deps.invoke):
+                invoke_kwargs['exclude_slots'] = excluded
+            revision = (
+                resolve_project_layout(project_dir).artifact_root
+                if (project_dir / "project.yaml").is_file()
+                else project_dir
+            )
+            if reviewing or review_budget.enabled(revision):
+                _quarantine_review(project_dir, step, log_dir)
+            if review_budget.enabled(revision):
+                quota = QuotaBook(root / QUOTA_FILE)
+                now = datetime.now().astimezone()
+                if all(quota.resting(slot, now) for slot in slots):
+                    raise AllAgentsExhausted(quota.earliest_return(slots, now))
+                budget_root = revision
+                budget_event = uuid4().hex
+                review_budget.consume_review_budget(revision, budget_stage, budget_event)
+        try:
+            result = deps.invoke(
+                slots,
+                prompt,
+                cwd=root,
+                log_dir=log_dir,
+                role=role.id,
+                slug=entry.slug,
+                step=step,
+                **invoke_kwargs,
+            )
+        except BaseException as exc:
+            if budget_root is not None and budget_event is not None:
+                review_budget.finish_attempt(budget_root, budget_stage, budget_event,
+                                             outcome='failed', detail=_sanitize_reason(exc))
+            raise
+        if budget_root is not None and budget_event is not None:
+            review_budget.finish_attempt(
+                budget_root, budget_stage, budget_event,
+                outcome='reported' if result.ok else 'failed', detail=str(result.log_path),
+                report=budget_root / f'reviews/{step.replace("_", "-")}.yaml' if result.ok else None)
+
         for correction in range(2):
             if not (scoped_script or scoped_product or scoped_medical or scoped_storyboard):
                 if result.ok:
@@ -1026,7 +1054,8 @@ def _run_agent_invocation(
                 observed_fingerprint=observed_fp,
             )
     _record_code_changes(root, entry.slug, deps, report, before)
-    return "ok", result.log_path, reviewed_hash, {"fingerprint": fingerprint}
+    return "ok", result.log_path, reviewed_hash, {"fingerprint": fingerprint,
+                                                **({"review_event_id": budget_event} if budget_event else {})}
 
 
 def _record_agent_validation_failure(
@@ -1764,7 +1793,9 @@ def _run_topic(
                         record = (record_review if step == "script_review"
                                   else product_review.record_review)
                         try:
-                            record(project_dir, reviewed_hash)
+                            event_id = (invoke_meta or {}).get('review_event_id')
+                            record(project_dir, reviewed_hash,
+                                   **({'event_id': event_id} if event_id else {}))
                         except (OSError, ValueError) as exc:
                             reason = (
                                 f"{'chấm kịch bản' if step == 'script_review' else 'duyệt sản phẩm'} lỗi: {exc}"

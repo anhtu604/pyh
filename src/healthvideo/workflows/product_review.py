@@ -47,7 +47,7 @@ from healthvideo.storage.project_layout import resolve_project_layout
 from healthvideo.tts import pronunciation as pronunciation_module
 from healthvideo.tts.pronunciation import load_pronunciation_lexicon, pronunciation_hash
 from healthvideo.visuals.anatomy_library import LIBRARY_PATH, load_library
-from healthvideo.workflows import doctor_questions, scoped_review
+from healthvideo.workflows import doctor_questions, review_budget, scoped_review
 from healthvideo.workflows.citations import resolve_citations
 from healthvideo.workflows.decision_card import (
     MAX_DECISIONS,
@@ -400,8 +400,9 @@ def reset_cycle_for_rebuild(
     if log_path.is_file():
         log = _log(rev)
         if log['submitted'] < len(log['rounds']):
-            for old_round in log['rounds']:
-                old_round.pop('snapshot', None)
+            if not review_budget.enabled(rev):
+                for old_round in log['rounds']:
+                    old_round.pop('snapshot', None)
             log['submitted'] = len(log['rounds'])
             write_yaml_atomic(log_path, {'version': 1, **log})
     (rev / PENDING).unlink(missing_ok=True)
@@ -529,6 +530,15 @@ def next_product_action(
     root: Path | None = None,
     create_question: bool = True,
 ) -> ProductAction:
+    rev = _root(project)
+    review_budget.recover_results(rev)
+    if review_budget.enabled(rev):
+        history = _log(rev)['rounds']
+        current_pass = (history and history[-1].get('passed')
+                        and history[-1].get('render_sha256') == render_hash(project)
+                        and not render_is_stale(project))
+        if not current_pass:
+            review_budget.require_available(rev, 'product')
     if render_is_stale(project):
         if create_question:
             reset_cycle_for_rebuild(project, reason='stale_render')
@@ -623,6 +633,7 @@ def _has_doctor_video_gate_override(
 
 def require_passed_review(project: Path, *, root: Path | None = None) -> None:
     rev_root = _root(project)
+    review_budget.recover_results(rev_root)
     rounds = _log(rev_root)['rounds']
     if not rounds:
         raise ValueError('Trạm 12 chưa có kết quả kiểm định sản phẩm.')
@@ -636,13 +647,15 @@ def require_passed_review(project: Path, *, root: Path | None = None) -> None:
     _validated(report, allow_legacy=not style_required, style_required=style_required)
     if (
         len(report.decisions) <= MAX_DECISIONS
+        and not any(i.blocking_safety for i in report.issues)
         and _has_doctor_video_gate_override(project, latest, root=root)
     ):
         return
     blocking = criteria_for_revision(rev_root)
     if (latest.get('passed') is not True
             or any(report.scores[key] < PASS_SCORE for key in blocking)
-            or len(report.decisions) > MAX_DECISIONS):
+            or len(report.decisions) > MAX_DECISIONS
+            or any(i.blocking_safety for i in report.issues)):
         raise ValueError('Trạm 12 chưa đạt; chưa được nộp bác sĩ duyệt video.')
 
 
@@ -789,11 +802,19 @@ def _storyboard_related_video_src(
     return related
 
 
-def record_review(project: Path, reviewed_hash: str) -> dict:
+@review_budget.serialized_record
+def record_review(project: Path, reviewed_hash: str, *, event_id: str | None = None) -> dict:
     """Validate the critic's report, append it to the log and consume the report."""
     root = _root(project)
     if render_hash(project) != reviewed_hash:
         raise ValueError('Agent duyệt sản phẩm không được dựng lại hay sửa bản dựng.')
+    budget_event = None
+    if review_budget.enabled(root):
+        recorded = review_budget.recorded_result(root, 'product', event_id)
+        if recorded is not None:
+            return recorded
+        budget_event = review_budget.report_event(
+            root, 'product', root / REPORT, event_id=event_id)
     report_file = root / REPORT
     if not report_file.is_file():
         raise ValueError('Agent duyệt sản phẩm chưa ghi báo cáo (thiếu reviews/product-review.yaml).')
@@ -814,13 +835,18 @@ def record_review(project: Path, reviewed_hash: str) -> dict:
         'round': len(log['rounds']) + 1,
         'render_sha256': reviewed_hash,
         'passed': (all(score >= PASS_SCORE for key, score in report.scores.items() if key in blocking)
-                   and len(report.decisions) <= MAX_DECISIONS),
+                   and len(report.decisions) <= MAX_DECISIONS
+                   and not any(i.blocking_safety for i in report.issues)),
         **report.model_dump(mode='json'),
         'snapshot': snapshot(project, extra_paths=edit_paths),
     }
+    if budget_event:
+        entry['budget_event_id'] = budget_event
+        review_budget.record_evidence(root, 'product', budget_event, entry, result=True)
     log['rounds'].append(entry)
-    for old_round in log['rounds'][:-1]:
-        old_round.pop('snapshot', None)
+    if not review_budget.enabled(root):
+        for old_round in log['rounds'][:-1]:
+            old_round.pop('snapshot', None)
     write_yaml_atomic(root / LOG, {'version': 1, **log})
     report_file.unlink()
     return entry
@@ -1475,8 +1501,9 @@ def mark_fix_attempted(project: Path) -> None:
 def mark_submitted(artifact_root: Path) -> None:
     """A new submission starts a new review cycle; the latest score stays visible."""
     log = _log(artifact_root)
-    for old_round in log['rounds'][:-1]:
-        old_round.pop('snapshot', None)
+    if not review_budget.enabled(artifact_root):
+        for old_round in log['rounds'][:-1]:
+            old_round.pop('snapshot', None)
     log['submitted'] = len(log['rounds'])
     write_yaml_atomic(artifact_root / LOG, {'version': 1, **log})
     (artifact_root / PENDING).unlink(missing_ok=True)

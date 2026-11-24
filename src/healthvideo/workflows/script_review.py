@@ -13,7 +13,7 @@ from healthvideo.storage.files import (
     write_yaml_atomic,
 )
 from healthvideo.storage.project_layout import resolve_project_layout
-from healthvideo.workflows import doctor_questions, scoped_review
+from healthvideo.workflows import doctor_questions, review_budget, scoped_review
 from healthvideo.workflows.decision_card import (
     MAX_DECISIONS,
     Decision,
@@ -157,8 +157,14 @@ def next_script_action(
 ) -> ScriptAction:
     """Choose the next step for a draft_ready script from the recorded rounds."""
     artifact_root = _root(project)
+    review_budget.recover_results(artifact_root)
     log = _log(artifact_root)
     current = script_hash(project)
+    if review_budget.enabled(artifact_root):
+        all_rounds = _rounds(artifact_root)
+        if not (all_rounds and all_rounds[-1].get('passed')
+                and all_rounds[-1].get('script_sha256') == current):
+            review_budget.require_available(artifact_root, 'script')
     active = _rounds(artifact_root)[max(int(log.get('submitted', 0)),
                                         int(log.get('guidance_start', 0))):]
     stuck = scoped_review.stuck(active)
@@ -239,6 +245,7 @@ def next_script_action(
 
 
 def require_passed_review(project: Path) -> None:
+    review_budget.recover_results(_root(project))
     rounds = _rounds(_root(project))
     if not rounds:
         raise ValueError('Trạm 07 chưa có kết quả kiểm duyệt kịch bản.')
@@ -252,7 +259,8 @@ def require_passed_review(project: Path) -> None:
     _validated(report, {str(line.get('id')) for line in script.get('lines', [])})
     if (latest.get('passed') is not True
             or any(score < PASS_SCORE for score in report.scores.values())
-            or len(report.decisions) > MAX_DECISIONS):
+            or len(report.decisions) > MAX_DECISIONS
+            or any(i.blocking_safety for i in report.issues)):
         raise ValueError('Trạm 07 chưa đạt; chưa được nộp bác sĩ duyệt y khoa.')
 
 
@@ -282,12 +290,20 @@ def _validated(report: ScriptReviewReport, line_ids: set[str]) -> None:
         raise ValueError('Tiêu chí chưa đạt thiếu chỗ cần sửa: ' + ', '.join(missing))
 
 
-def record_review(project: Path, reviewed_hash: str) -> dict:
+@review_budget.serialized_record
+def record_review(project: Path, reviewed_hash: str, *, event_id: str | None = None) -> dict:
     """Validate the critic's report, append it to the log and consume the report."""
     root = _root(project)
     current = script_hash(project)
     if current != reviewed_hash:
         raise ValueError('Agent chấm điểm không được sửa kịch bản.')
+    budget_event = None
+    if review_budget.enabled(root):
+        recorded = review_budget.recorded_result(root, 'script', event_id)
+        if recorded is not None:
+            return recorded
+        budget_event = review_budget.report_event(
+            root, 'script', root / REPORT, event_id=event_id)
     report_file = root / REPORT
     if not report_file.is_file():
         raise ValueError('Agent chấm điểm chưa ghi báo cáo (thiếu reviews/script-review.yaml).')
@@ -319,10 +335,14 @@ def record_review(project: Path, reviewed_hash: str) -> dict:
         'round': len(rounds) + 1,
         'script_sha256': current,
         'passed': (all(score >= PASS_SCORE for score in report.scores.values())
-                   and len(report.decisions) <= MAX_DECISIONS),
+                   and len(report.decisions) <= MAX_DECISIONS
+                   and not any(i.blocking_safety for i in report.issues)),
         **report.model_dump(mode='json'),
         'snapshot': {'script/script.yaml': script_path(project).read_bytes().decode('utf-8')},
     }
+    if budget_event:
+        entry['budget_event_id'] = budget_event
+        review_budget.record_evidence(root, 'script', budget_event, entry, result=True)
     log = read_yaml(root / LOG) if (root / LOG).is_file() else {}
     log.pop('rewrite_pending_hash', None)
     write_yaml_atomic(root / LOG, {**log, 'version': 1, 'rounds': [*rounds, entry],
