@@ -340,7 +340,7 @@ def test_run_reviews_rewrites_with_notes_then_submits_without_approving(tmp_path
     report = run_queue(tmp_path, _deps(state, invoke))
 
     # The critic never starts on the writer's model.
-    assert calls == [('codex/gpt-6.1-terra', 'review'), ('codex/gpt-6.1-sol', 'draft'), ('codex/gpt-6.1-terra', 'review')]
+    assert calls == [('gpt-6.1-terra', 'review'), ('gpt-6.1-sol', 'draft'), ('gpt-6.1-terra', 'review')]
     assert state['submitted'] is True
     assert report.at_gate == [SLUG]
     assert report.blocked == []

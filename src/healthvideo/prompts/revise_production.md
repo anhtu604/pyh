@@ -8,28 +8,18 @@
 - Ghi chú bác sĩ: `{doctor_note}`
 - Ghi chú từ chối cổng video: `{reject_note}`
 
-## Việc cần làm
-1. Đọc kỹ ghi chú từ chối `{reject_note}` và file `*-rejected.yaml` mới nhất trong thư mục `reviews/video/` của revision hiện hành để xác định các lỗi hình ảnh, hoạt họa, nhịp dựng, phụ đề hoặc âm thanh cần chỉnh.
-2. Ở bước này chỉ được sửa component SVG trong `video/src/anatomy/` (kèm test). `storyboard.yaml`, `asset-manifest.yaml`, `clip-plan.yaml`, script, ledger và explainer đều nằm trong hash cổng y khoa: **không sửa** ở bước này.
-3. Nếu góp ý cần sửa bất kỳ tệp nào thuộc cổng y khoa, dừng, không sửa gì, ghi rõ trong báo cáo: "Cần bác sĩ chạy `review reopen --gate medical --changed <tệp> --resume-to draft_ready`" và liệt kê tệp + thay đổi dự kiến. Sau khi bác sĩ mở cổng, bước `draft` sẽ sửa và nộp lại.
-4. Nếu chỉ sửa component SVG, chạy `healthvideo step resume {project} --gate video --to production_in_progress`; lệnh này tự từ chối nếu tệp đã duyệt y khoa bị đổi.
-5. Khi sửa SVG: giữ phong cách sơ đồ tiếng Việt có leader line/mũi tên; tối đa 6 nhãn không chồng/cắt. Đọc `reviews/visual-review.yaml` và contact sheet để sửa lỗi nhìn thấy. Nếu cần đổi beat/subject/prompt FLUX (`docs/reference/image-prompting.md`), áp dụng mục 3 vì các trường này thuộc storyboard/manifest đã duyệt; không sửa lách cổng.
-6. Kỷ luật thợ dựng (`docs/superpowers/specs/2026-11-17-pyh-style-a-mascot-host.md` mục 5): chỉ sửa đúng lỗi bị nêu, tuyệt đối không tự thêm hiệu ứng, chuyển động hay mẫu motion ngoài bộ động tác nhận diện (dựng sơ đồ dần, vòng nhấn teal, gạch chân vàng, thẻ thuật ngữ, thẻ nguồn; tối đa 2 mẫu `video/src/motion` khác trong một chương) để "cho sinh động"; không bounce ở chuyển cảnh, zoom y khoa chỉ dùng kính lúp mục 3b (không cross-fade chồng mờ).
+## Việc cần làm (cùng phạm vi skill pyh-editor)
+1. Đọc active_revision, issue_id, ghi chú bác sĩ và reviews/visual-review.yaml hoặc vòng cuối reviews/product-review-log.yaml; mở ảnh tham chiếu và timing hiện hành.
+2. Chỉ sửa component R5 hoặc posts đúng path/component và dải dòng edits được giao, trong quyền HARD_RULES hiện hành; giữ nguyên từng byte ngoài dải, kể cả cùng file. Thiếu path/start_line/end_line thì trả coordinator, không tự suy quyền từ mã cảnh. Ngữ cảnh kề chỉ để kiểm ảnh hưởng.
+3. Khóa script, ledger/evidence, explainer, outline, storyboard/shot plan, manifest/license-ledger, clip-plan, voice-prep, shorts-plan và profiles; không sửa dù lỗi beat/nhịp/phát âm. Cần file khóa trả coordinator để giao đúng writer/medical_expert/storyboard_director/voice_director/shorts_producer qua mở lại và duyệt lại. Lỗi Python có bất biến trả repair_engineer bằng brief riêng.
+4. Đọc docs/reference/image-prompting.md chỉ để đối chiếu quyền nguồn; không sinh FLUX cơ chế, không tự vẽ cơ thể/cơ quan thay hình có phép. Mascot có sẵn chỉ câu chốt, vắng giải phẫu cận. 16:9 không phụ đề cháy chữ; 9:16 giữ phụ đề/highlight đúng timing.
+5. Kỷ luật thợ dựng theo spec phong cách 2026-11-17 mục 5: chỉ sửa lỗi đã giao, không thêm motion/bounce để “cho sinh động”. Giữ anchor/chuyển tầng/timing đã khóa, không cross-fade giả zoom. R5 tối đa 2 nhãn cơ chế đồng thời, mỗi nhãn ≤3 đơn vị cách trắng, thuật ngữ dài ghi ngoại lệ.
+6. Test component liên quan và posts-check nếu được giao posts phải đạt trong budget; báo file/dải dòng, lệnh/kết quả thật. Không tự render/TTS/nhạc, mở Studio, đổi hash/approval hoặc tự chấm đạt. Python dựng lại và critic độc lập chấm. Cùng issue mở hai lần hoặc hết budget thì dừng trình bác sĩ, không lặp dựng lại bản không đổi.
 
-## Lệnh được dùng
-- `healthvideo step resume {project} --gate video --to production_in_progress`
-- `healthvideo step draft {project} --script <path> --storyboard <path> --assets <path>`
-- `healthvideo status {project}`
+## Đầu ra và đích trả
+Chỉ component/posts đúng edits kèm test liên quan, hoặc brief nêu file khóa/thiếu dữ liệu cho coordinator. Không tạo báo cáo/schema mới. Ghi UTF-8 sạch dấu.
 
-## Đầu ra
-- Component SVG kèm test trong `video/src/anatomy/` đã sửa, hoặc báo cáo nêu tệp cần bác sĩ mở lại cổng y khoa
-- Trạng thái project được chuyển về sản xuất (chỉ khi không đụng tệp thuộc cổng y khoa)
+## Lệnh và xong khi
+Sau sửa hợp lệ, healthvideo step resume {project} --gate video --to production_in_progress và healthvideo status {project}; chỉ khi giữ nguyên đầu vào cổng y khoa. Nếu cần file khóa thì giữ chưa đạt, báo coordinator cho bác sĩ mở lại đúng luồng, không tự resume hoặc nhận đã sản xuất xong.
 
-## Xong khi
-- Trạng thái đạt `production_in_progress`, hoặc báo cáo đã nêu rõ tệp cần bác sĩ mở lại cổng y khoa; kiểm tra bằng `healthvideo status {project}`.
-
-## Đường dẫn revision hiện hành
-Đọc `active_revision` từ `{project}/project.yaml`; `<rev>` là giá trị đó.
-- `revisions/<rev>/script/script.yaml`, `revisions/<rev>/script/outline.yaml`, `revisions/<rev>/script/clip-plan.yaml`
-- `revisions/<rev>/storyboard/storyboard.yaml`, `revisions/<rev>/assets/asset-manifest.yaml`
-- `revisions/<rev>/evidence/ledger.yaml`, `revisions/<rev>/explainer/explainer.yaml`
+Quyền agent xưởng hiện tại vẫn theo HARD_RULES: chỉ ghi trong project được giao; ngoại lệ duy nhất là thêm SVG mới trong video/src/anatomy/ kèm test. Hợp đồng R5 không cấp quyền sửa component/thư viện dùng chung ngoài phạm vi đó; trả coordinator để lập brief kỹ thuật riêng. Nối hợp đồng R5 vào runner thuộc R5.3.9, gate theo quality_profile: r5_v1; không tự bật hành vi tương lai hoặc đổi revision legacy.

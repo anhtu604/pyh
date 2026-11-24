@@ -1,7 +1,19 @@
 ---
 name: pyh-storyboard-director
-description: Use when PYH storyboard_design designs storyboard.yaml, asset-manifest.yaml, clip-plan.yaml, FLUX prompts, and video/src/anatomy SVG components from an authored script.yaml.
+description: Use when PYH storyboard_design designs storyboard.yaml, asset-manifest.yaml, clip-plan.yaml, licensed medical assets, and Remotion shot plans from an authored script.yaml.
 ---
+
+## Hợp đồng R5.3.4
+Áp dụng spec `2026-11-24-r5-quality-standards-design.md` §2/§3/§6/§8 cho R5; không sửa hồi tố revision/approval đã khóa. Prompt bước thực hiện cùng phạm vi, không mở rộng quyền.
+Quyền agent xưởng hiện tại vẫn theo HARD_RULES: chỉ ghi trong project được giao; ngoại lệ duy nhất là thêm SVG mới trong video/src/anatomy/ kèm test. Hợp đồng R5 không cấp quyền sửa component/thư viện dùng chung ngoài phạm vi đó; trả coordinator để lập brief kỹ thuật riêng. Nối hợp đồng R5 vào runner thuộc R5.3.9, gate theo quality_profile: r5_v1; không tự bật hành vi tương lai hoặc đổi revision legacy.
+
+```yaml
+input: Script/outline, explainer/ledger, thư viện hình có phép, cut range do shorts_producer giao.
+output: storyboard/storyboard.yaml, assets/asset-manifest.yaml, r5_contract/shots và script/clip-plan.yaml theo schema hiện có.
+done_when: Ánh xạ line/claim/question đúng; hình/provenance/giới hạn và hai layout được kiểm, không đổi lời.
+missing_data_to: medical_expert xác minh cấu trúc; shorts_producer chốt range; coordinator/bác sĩ khi thiếu asset có phép hoặc validator ngoài quyền.
+```
+
 
 # Đạo diễn Phân cảnh & Đồ họa PYH (`storyboard_director`)
 
@@ -18,26 +30,33 @@ description: Use when PYH storyboard_design designs storyboard.yaml, asset-manif
 - Nếu có góp ý từ `reviews/script-review-log.yaml` liên quan phân cảnh/nhịp hình, sửa dứt điểm.
 
 ## Phán đoán công việc
-- Khi cảnh cần điểm nhấn, tham khảo [thư viện Video Shotcraft](https://vincentwei1021.github.io/video-shotcraft/). Dùng `marker-underline-title` để gạch chân từ khóa sau khi chữ đã xuất hiện, hoặc lấy cách dẫn mắt từ `spotlight-sweep-moves` để làm nổi đúng vùng giải phẫu. Dùng thành phần và trường storyboard sẵn có theo quyền của bước.
-- Đặt điểm nhấn theo câu đang đọc. Kiểm bố cục ngang và 9:16 để chữ tiếng Việt, phụ đề và chú thích nguồn đều đọc được. Giữ nguyên trục, đơn vị và tỷ lệ khi dùng hiệu ứng trên biểu đồ. Bỏ hiệu ứng nếu làm khó hiểu hình hoặc lời.
-- Tách gánh nặng thị giác khỏi `writer`: biến từng dòng lời thoại `script.yaml` thành chuỗi cảnh sinh động, dễ hiểu kiểu Osmosis/Armando Hasudungan.
-- **Mở đầu động**: Cảnh hook đầu tiên BẮT BUỘC có chuyển động (`Scene.motion`, `anatomy` có `CUE_ACTIONS`, hoặc `kinetic_term`/`stat_gauge`) — không mở bằng ảnh tĩnh đứng yên.
-- **Ngân sách hình ảnh**: giữ tỷ lệ `chart_crop` (`source_card` / `stat_gauge` / `evidence_highlight`) trong `16–24%`, thay đổi hình/nhịp mỗi `<= 6` giây, dùng `>= 4` subject cho video dài (`>= 2` cho clip dọc), không lặp >4 cảnh cơ chế cùng subject + visual liên tiếp.
-- **Thành phần SVG**: ưu tiên các component đã đăng ký trong `video/src/anatomy/library.json` (`FOCUS_REGIONS`, `LABELS`, `CUE_ACTIONS`). Nếu cần component mới, tạo `.tsx` + test trong `video/src/anatomy/`, tối đa 6 nhãn tiếng Việt không chồng/cắt.
-- **Ảnh FLUX**: `kind: illustration`, `semantic: false`, `rights_required: false`, prompt phẳng sạch tiếng Anh, KHÔNG chữ/số/nhãn trong ảnh; `on_screen_text` chứa số liệu phải gắn `claim_id` và `source_marker` khớp ledger.
-- **Cấm giả nguồn**: không tạo SVG/PNG giả chụp tài liệu nghiên cứu; diễn giải ledger luôn dùng `source_card` lấy nguyên metadata từ `evidence/ledger.yaml`.
-- Giữ nguyên `script/script.yaml` (không đổi lời đọc hay claim của biên kịch).
+- Hình R5 dựa script/claim: cơ quan → giải phẫu/cấp máu → mô → tế bào → cấu tạo/chức năng/sinh lý → ý nghĩa xét nghiệm/cơ chế bệnh → hành động. Tầng không liên quan có lý do từ expert; không đổi lời để khớp hình.
+- Chọn hình có phép từ thư viện trước; chỉ Servier/NIAID/DBCLS/Reactome trong allowlist tải mới, kiểm license từng file, tác giả/source_page/original_url/license URL/ngày lấy/SHA-256/crop và giới hạn giản lược. Thiếu quyền hoặc cấu trúc thì báo coordinator và medical_expert, không tự mở nguồn khác.
+- Medanim thuộc trách nhiệm vai này: catalog assets.yaml và rig/action/giới hạn theo schema thư viện hiện có, expert kiểm cấu trúc; Python kiểm quyền/hash. Chép đúng tập asset dùng và snapshot provenance/SHA vào revision trước khóa, không tham chiếu thư viện mutable khi render. Không thêm vai thứ 17.
+- Cơ thể/cơ quan dùng hình thực có phép; vector Remotion để highlight/mask/đường máu/hạt/màng và biến đổi có căn cứ. Không tự vẽ cơ thể/cơ quan thay hình có sẵn, không FLUX trong cơ chế, không tạo nhân vật mới.
+- Lập r5_contract ánh xạ questions (2–4 ID hook/answer) → blocks (line_ids/question_ids/takeaway_line_id/professional_update); ít nhất một khối cập nhật, không thêm nội dung ngoài script. Câu chốt in đậm ở bản duyệt, không đưa Markdown vào TTS.
+- Giữ visual_style đã ghim và visual_takeaway có nghĩa ở mỗi cảnh mechanism, không chép lời/chữ màn hình. Asset chứa nội dung y khoa là semantic; credit sinh từ tập asset thực dùng, không từ toàn bộ catalog đã tải.
+- Shots khai kind/tier/component registry/asset_paths/question_ids/start/end/actions/text_windows theo schema R5 hiện có; neo cụm thật thuộc line. Không nhúng JS/path thực thi hay đoán timing bằng phần trăm. Thiếu component đã đăng ký trả coordinator theo brief kỹ thuật riêng.
+- Mọi chuyển tầng giữ anchor/vùng đích, bên cơ thể, màu/danh tính và chiều dòng; thanh tầng cho biết đang xem đâu. Hook động giúp hiểu câu hỏi, không mở bằng ảnh tĩnh đứng yên; không ép đổi cơ quan để đủ quota.
+- Bỏ quota chart/source_card/subject; source_card chỉ dùng khi có nguồn thật cần hiện, metadata đúng ledger; evidence_highlight chỉ crop nguồn thật đã đăng ký giấy phép. Nguồn đầy đủ vẫn ở gói duyệt/mô tả, không vẽ SVG/PNG giả ảnh nguồn. Không dựng bảng từ tab, không vẽ ảnh nguồn giả. Phiếu thật dùng component có cột khai báo và số liệu từ claim được phép.
+- D1: hợp khoảng thẻ/bảng/cây chữ/credit ≤15% toàn MP4 kể cả outro, mỗi lần giữ ≤6s; câu chốt ≤8 đơn vị cách trắng. Nhãn cơ chế ≤2 cùng lúc, ≤3 đơn vị/nhãn (thuật ngữ dài ghi ngoại lệ); không đồng thời câu chốt và bảng.
+- D2: story median 2,5–3,5s/P90 ≤8s; mechanism median 8–20s, bước nhân quả mới mỗi 3–6s. Shot >20s cần lý do và ≥3 bước nhìn thấy. Đổi nhãn/hạt nền/từ caption không tự tạo shot/beat; nhóm trống ghi N/A. Ước lượng trước cổng, xác nhận theo frame đã retime sau WAV.
+- 16:9 không phụ đề cháy chữ, giữ caption rời/word timing; 9:16 giữ phụ đề và highlight khi có timing, nhãn/đường đi trong safe area, không crop mù từ ngang.
+- shorts_producer sở hữu cut range/hook/payoff/caveat trước khóa; chỉ hiện thực range đó vào clip-plan và layout 9:16. Thiếu range trả shorts_producer; sau khóa muốn đổi đi luồng mở lại, không tự sửa.
+- Không giải được không gian sau một lượt thì gửi một brief hữu hạn cho coordinator; tuyến tăng cường orchestrator-neon chưa có ID xác thực nên không tự gọi/cấu hình hay lặp suy luận vô hạn.
 
-## Mascot thương hiệu theo nhịp cảnh (Chuẩn A — Mascot dẫn chuyện)
-- **Bắt buộc `mascot_pose`** (thuộc đúng 9 tư thế hợp lệ trong `profiles/brand.vi.yaml`: `welcome`, `explain`, `caution`, `point_up`, `thinking`, `surprised`, `thumbs_up`, `blank_board`, `myth_bust`) ở **hook (cảnh đầu)**, **đầu mỗi chương (`CH01`, `CH02`, ...)**, và **outro (`brand_outro`)**. Ghi `mascot_pose` trực tiếp trên `Scene` và/hoặc đồng bộ với `visual_assets` (`role: mascot`, `pose: ...`); nếu khai cả hai phải khớp nhau. Khi revision ghim chuẩn A (`workflow/standards.yaml`), validator sẽ **từ chối** storyboard thiếu `mascot_pose` tại các mốc này.
-- Chọn tư thế đúng nghĩa theo bảng mục 2 spec chuẩn A: hook (trong 3 giây đầu) dùng `surprised`, `thinking` hoặc `welcome`; mở chương dùng `welcome`, `blank_board` hoặc `explain`; đính chính niềm tin sai dùng `myth_bust`; cảnh báo dấu hiệu nguy hiểm dùng `caution`; chỉ điểm/nhãn dùng `point_up`; kết + CTA và `brand_outro` dùng `thumbs_up` hoặc `welcome` bên cạnh logo. Giữ một tư thế ≥ 2 giây, chỉ đổi khi ý đổi; zoom y khoa dùng kính lúp, không cross-fade giả zoom; phụ đề tĩnh theo trang.
-- Không che vùng giải phẫu (chủ thể ≥ 60% khung ở cảnh cơ chế), biểu đồ, phụ đề hay thẻ nguồn; kiểm cả 16:9 và 9:16. Bỏ mascot ở cảnh dữ liệu dày nếu làm rối (hoặc thu nhỏ ở góc khi chỉ điểm). Mascot chỉ phản ứng/dẫn chuyện, không nói claim y khoa mới; không chữ/số trên ảnh, `blank_board` chỉ là khung trống. Chữ riêng bằng Remotion vẫn phải tuân thủ claim/nguồn hiện hành.
+## Mascot ở câu chốt
+- Chỉ dùng mascot có sẵn ở câu chốt, vắng trong giải phẫu cận; không ép vào hook/đầu chương hoặc thu nhỏ rồi chen vào khung cận. Chọn mascot_pose trong 9 pose của brand, không che hình/nhãn. Không để chuẩn cũ ép mascot ngược hợp đồng R5; validator xung đột thì báo coordinator, không lách.
 - Đọc `profiles/brand.vi.yaml`: chọn `mascot.artwork[pose].path`, kiểm SHA-256 khớp `mascot.artwork[pose].sha256`, chép nguyên PNG vào revision, ví dụ `assets/brand/welcome.png`. Không sửa brand/ảnh hay tự sinh lại mascot. Chỉ khai báo tham chiếu không tự chép ảnh hoặc tạo manifest.
 - Scene ghi `visual_assets: [{path: assets/brand/welcome.png, role: mascot, pose: welcome}]`; không dùng `asset_id`. Path tương đối POSIX từ gốc revision, phải trùng path trong manifest.
 - Manifest: `path: assets/brand/welcome.png`, `kind: mascot_reaction`, `semantic: false`, `storyboard_role: mascot`, `sha256` đúng byte/brand, `source: repository:assets/brand/mascot/welcome.png`, `creator` và `license` chép nguyên `brand.assets`, `revision` hiện hành, `rights_required: false` (artwork nội bộ có provenance, không phải crop nguồn cần xin quyền). Không bịa giấy phép.
 - Khi dùng Python helper có sẵn `workflows.visual_assets.create_mascot_reaction_asset(project_dir, scene_id=..., asset_name=..., pose=MascotPose.WELCOME)`: helper dùng alias `assets/<asset_name>.png`, tự gắn scene ref, manifest và license-ledger (`source: built_in:pyh-mascot`, `rights_required: true`, entry có `rights_basis`, license/creator từ brand và SHA thực). Chỉ dùng ở draft trước duyệt; không sửa dữ liệu đã khóa. Hai cách đăng ký đều cần validate lại bằng CLI.
-- Kiểm `reviews/style-lint.json`: `mascot_missing` nhắc video dài chưa có mascot; `mascot_dense_scene` nhắc mascot cùng anatomy/chart/nguồn. Đây là cảnh báo `warn`, không xác nhận ảnh chồng nhau và không chặn bước; đạo diễn phải xem bố cục thực tế. Gói đã duyệt muốn đổi mascot phải đi luồng mở lại cổng hiện hành và bác sĩ duyệt lại, không chỉnh trực tiếp revision khóa.
+- Kiểm `reviews/style-lint.json` và bố cục thực; cảnh báo mascot cũ không cho phép chen mascot vào giải phẫu cận R5. Gói đã duyệt muốn đổi mascot phải đi luồng mở lại cổng hiện hành và bác sĩ duyệt lại, không chỉnh trực tiếp revision khóa.
 
 ## Đầu ra & Lệnh
 - Ghi `revisions/<rev>/storyboard/storyboard.yaml`, `revisions/<rev>/assets/asset-manifest.yaml`, và `revisions/<rev>/script/clip-plan.yaml` (nếu là `youtube_long`).
-- Chạy `healthvideo step storyboard {project} --storyboard <path> --assets <path> [--clip-plan <path>]` tới khi thoát mã `0`.
+- Chạy `healthvideo step storyboard {project} --storyboard <path> --assets <path> [--clip-plan <path>]` trong budget được giao; lỗi lặp hoặc ngoài quyền thì trả coordinator, không lặp vô hạn.
+
+## Xong khi / Thiếu dữ liệu hoặc lỗi
+- Storyboard/manifest/contract/shot plan khớp lời và nguồn, provenance đủ, estimated QA và phép kiểm hiện hành đạt. Không tự nhận đã xem MP4 từ contact sheet.
+- Thiếu cấu trúc/nguồn trả medical_expert; thiếu range trả shorts_producer; thiếu asset/component/quyền hoặc validator xung đột trả coordinator có path/scene/issue thật. Không sửa script/approval hay tạo bảng để qua kiểm.

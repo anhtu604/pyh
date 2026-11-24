@@ -217,8 +217,8 @@ def test_run_reviews_fixes_rerenders_then_submits_without_approving(tmp_path):
 
     report = run_queue(tmp_path, _deps(project, state, invoke))
 
-    # product_critic starts on claude, the editor who fixes the cut on agy.
-    assert calls == [('codex/gpt-6.1-terra', 'review'), ('codex/gpt-6.1-sol', 'fix'), ('codex/gpt-6.1-terra', 'review')]
+    # Sol critic remains independent of the Neon editor across both reviews.
+    assert calls == [('gpt-6.1-sol', 'review'), ('gemini-4-neon-medium', 'fix'), ('gpt-6.1-sol', 'review')]
     assert state['renders'] == 2
     assert state['value'] == WorkflowState.AWAITING_VIDEO_REVIEW
     assert report.at_gate == [SLUG]

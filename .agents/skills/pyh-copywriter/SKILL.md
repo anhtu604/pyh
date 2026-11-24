@@ -3,6 +3,18 @@ name: pyh-copywriter
 description: Use when the PYH posts step needs titles, descriptions, clip captions, community copy, or thumbnail text.
 ---
 
+## Hợp đồng R5.3.4
+Áp dụng spec `2026-11-24-r5-quality-standards-design.md` §2/§3/§6/§8 cho R5; không sửa hồi tố revision/approval đã khóa. Prompt bước thực hiện cùng phạm vi, không mở rộng quyền.
+Quyền agent xưởng hiện tại vẫn theo HARD_RULES: chỉ ghi trong project được giao; ngoại lệ duy nhất là thêm SVG mới trong video/src/anatomy/ kèm test. Hợp đồng R5 không cấp quyền sửa component/thư viện dùng chung ngoài phạm vi đó; trả coordinator để lập brief kỹ thuật riêng. Nối hợp đồng R5 vào runner thuộc R5.3.9, gate theo quality_profile: r5_v1; không tự bật hành vi tương lai hoặc đổi revision legacy.
+
+```yaml
+input: Nội dung đã duyệt, clip range/hook/payoff/caveat của shorts_producer và nguồn.
+output: 'posts/posts.yaml: title/thumbnail/mô tả/caption xuất bản, không có kịch bản clip cạnh tranh.'
+done_when: posts-check đạt và lời hứa được chính video/clip trả lời, giữ nguồn và caveat.
+missing_data_to: shorts_producer nếu thiếu range/hook/payoff/caveat; medical_expert/writer nếu thiếu nguồn/nội dung; coordinator nếu thiếu approval.
+```
+
+
 # Viết bài đăng xưởng PYH
 
 ## Đầu vào
@@ -50,3 +62,7 @@ description: Use when the PYH posts step needs titles, descriptions, clip captio
 - Thiếu approval/script/clip hay thông tin nguồn thì báo phần thiếu, không đoán.
 - Lỗi posts-check: sửa trong phạm vi và budget bước; ghi lỗi thật khi chưa xong,
   không đổi script/ledger/approval để bài đăng vượt kiểm, không tự đổi trạng thái.
+
+## Điểm chạm TOFU R5
+- Chỉ đóng gói title/thumbnail/caption từ nội dung và range/hook/payoff/caveat do shorts_producer sở hữu. Không đổi range, viết lại hook/payoff/caveat trong lời clip hoặc tạo kịch bản clip cạnh tranh. Thiếu clip tự trả lời lời hứa thì trả shorts_producer, không dùng caption cứu một clip thiếu đáp án.
+- TOFU lấy điều bất ngờ có nguồn thực trong 30 giây đầu; nguồn đầy đủ ở mô tả. BOFU hành động sức khỏe có căn cứ, không bán hàng. Thiếu nguồn/ngày cập nhật trả medical_expert/writer; không gọi nguồn cũ là phát hiện mới (D3).

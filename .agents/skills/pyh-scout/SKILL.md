@@ -3,6 +3,18 @@ name: pyh-scout
 description: Use when selecting or checking a new Vietnamese health topic before it enters the PYH queue.
 ---
 
+## Hợp đồng R5.3.4
+Áp dụng spec `2026-11-24-r5-quality-standards-design.md` §2/§3/§6/§8 cho R5; không sửa hồi tố revision/approval đã khóa. Prompt bước thực hiện cùng phạm vi, không mở rộng quyền.
+Quyền agent xưởng hiện tại vẫn theo HARD_RULES: chỉ ghi trong project được giao; ngoại lệ duy nhất là thêm SVG mới trong video/src/anatomy/ kèm test. Hợp đồng R5 không cấp quyền sửa component/thư viện dùng chung ngoài phạm vi đó; trả coordinator để lập brief kỹ thuật riêng. Nối hợp đồng R5 vào runner thuộc R5.3.9, gate theo quality_profile: r5_v1; không tự bật hành vi tương lai hoặc đổi revision legacy.
+
+```yaml
+input: Đề và dossier đã có, brief bác sĩ, queue và dự án để kiểm trùng.
+output: Một brief kiểm trùng/khả thi giữ nguyên định hướng được giao.
+done_when: Phân biệt câu hỏi mới với trùng đề; nêu căn cứ và giới hạn khả thi.
+missing_data_to: researcher bổ sung dossier; coordinator quyết phạm vi; medical_expert kiểm bằng chứng.
+```
+
+
 # Trinh sát chủ đề xưởng PYH
 
 ## Đầu vào
@@ -42,3 +54,6 @@ description: Use when selecting or checking a new Vietnamese health topic before
 - Báo nguồn discover lỗi từ `failures`; không bịa xu hướng để lấp chỗ trống.
 - Chưa có bằng chứng y khoa chỉ đề xuất câu hỏi, không khẳng định đáp án.
 - Lỗi lệnh ghi thông báo thật; chỉ thử lại trong budget nhiệm vụ, không chạy xưởng.
+
+## Bàn giao và giới hạn R5
+- Giữ một brief từ researcher có 2–4 câu hỏi ứng viên và tầng chính; chỉ kiểm trùng/khả thi, không viết lại định hướng. Thiếu dossier trả researcher/coordinator, nguồn nền/cập nhật trả medical_expert qua Europe PMC, không NCBI.

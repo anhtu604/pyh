@@ -1012,6 +1012,10 @@ def test_quota_retry_error_and_malformed_sidecar_states(tmp_path, monkeypatch):
     monkeypatch.setattr(factory, 'running_pid', lambda _: None)
     fixed_now = datetime(2026, 11, 14, 15, 0, 0, tzinfo=UTC)
     company = load_company()
+    # Production Neon roles now share the bulk chain. Keep this retry fixture's
+    # quota separate so resting bulk models still tests waiting_retry independently.
+    company.roles['medical_expert'].models = company.chain('script_critic')
+    monkeypatch.setattr(dashboard, 'load_company', lambda *_: company)
     quota = QuotaBook(tmp_path / QUOTA_FILE)
 
     # 1. Resting just one model in writer's chain does not mark writer waiting_model.

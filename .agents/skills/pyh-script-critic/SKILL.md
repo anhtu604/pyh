@@ -3,6 +3,18 @@ name: pyh-script-critic
 description: Use when independently evaluating a PYH script at script_review before the doctor's medical gate.
 ---
 
+## Hợp đồng R5.3.4
+Áp dụng spec `2026-11-24-r5-quality-standards-design.md` §2/§3/§6/§8 cho R5; không sửa hồi tố revision/approval đã khóa. Prompt bước thực hiện cùng phạm vi, không mở rộng quyền.
+Quyền agent xưởng hiện tại vẫn theo HARD_RULES: chỉ ghi trong project được giao; ngoại lệ duy nhất là thêm SVG mới trong video/src/anatomy/ kèm test. Hợp đồng R5 không cấp quyền sửa component/thư viện dùng chung ngoài phạm vi đó; trả coordinator để lập brief kỹ thuật riêng. Nối hợp đồng R5 vào runner thuộc R5.3.9, gate theo quality_profile: r5_v1; không tự bật hành vi tương lai hoặc đổi revision legacy.
+
+```yaml
+input: Script, outline, ledger, brief, contract và issue/diff của revision hiện hành.
+output: 'reviews/script-review.yaml: sáu tiêu chí, issue có dòng thật, checked và decisions.'
+done_when: Từng mệnh đề được đối chiếu locator và từng câu hỏi có đáp án; báo cáo trung thực trong budget D4.
+missing_data_to: medical_expert khi thiếu claim/locator; writer sửa lời; coordinator trình bác sĩ khi hết budget.
+```
+
+
 # Kiểm duyệt kịch bản xưởng PYH
 
 ## Duyệt lại từng phần (ưu tiên hơn hướng dẫn đọc toàn bài bên dưới)
@@ -31,8 +43,7 @@ description: Use when independently evaluating a PYH script at script_review bef
 ## Phán đoán công việc
 - Đúng y khoa chưa đủ hay: người xem nào, lời hứa gì, điều mới nào,
   phần nào trả lời được lời hứa, CTA có hợp ý định không? Ánh xạ vào sáu key sẵn.
-- `giong_nguoi_that`: nói được thành tiếng, rõ với audience; không đọc nguồn,
-  phương pháp, năm/cơ quan hay ngôn ngữ quản trị bằng chứng vào lời đọc.
+- `giong_nguoi_that`: nói được thành tiếng với “bạn”, câu ngắn/cảnh đời thường; không đọc metadata máy móc. Khối cập nhật được nêu tên hướng dẫn/ngày hữu ích, không phạt vì có nguồn/ngày đúng chức năng.
 - `nhip_cau`: nhịp câu và chuỗi phát hiện/hệ quả dẫn tới payoff, không giậm chân,
   không lặp khuôn nêu ý → rào lại → đi khám. Hook phải được nội dung trả lời.
 - `khong_lap_y`: mỗi đoạn thêm ý; chỉ rõ đoạn định nghĩa/danh sách có thể cắt
@@ -46,6 +57,13 @@ description: Use when independently evaluating a PYH script at script_review bef
 - TOFU gợi khám phá; MOFU gỡ hiểu lầm/cân lựa chọn; BOFU thực hành, khám khi cần,
   tin/theo dõi kênh. Một tầng chính, có thể chạm tầng khác có chủ đích;
   không đòi đủ ba tầng hay bắt CTA thuốc/khám ở mọi video.
+- Kiểm ý nghĩa từng mệnh đề với claim + locator và mức đã đọc (Abstract không thành Fulltext); thiếu nguồn trả medical_expert. Kiểm mạch cơ quan → giải phẫu/cấp máu → mô → tế bào → cấu tạo/chức năng/sinh lý → xét nghiệm/cơ chế bệnh → hành động, lý do bỏ tầng.
+- Kiểm 2–4 câu hỏi ở hook, khối sâu gắn câu hỏi và câu chốt, recap trả đúng thứ tự/ID. Không trừ câu chốt/recap đúng chức năng như lặp ý. TOFU có bất ngờ có nguồn ≤30s (ước lượng trước WAV); BOFU hành động có căn cứ, không bán hàng.
+- D3: khối cập nhật có phạm vi, nguồn/ngày nguồn/ngày tìm, mức chắc chắn; thiếu nguồn mới thì công khai nguồn mới nhất tìm được và chưa có cập nhật đủ chắc, không bịa tính mới.
+
+## D4 — budget lời
+- Tối đa 2 lần chấm/revision (đầu + một lần sửa). Cùng issue còn mở hai lần liên tiếp thì dừng sớm, gom brief/bằng chứng cho coordinator trình bác sĩ. Hết budget dừng, giữ chưa đạt; không tự submit gate/duyệt.
+- Đếm bền theo revision/stage/issue_id/fingerprint; restart, failover, reset submitted, đổi hash/rerender không reset. Chỉ revision mới do bác sĩ yêu cầu nội dung/phạm vi rõ mới có budget mới. Sau vòng đầu kiểm diff/ảnh hưởng, vẫn báo nguy cơ an toàn mới; không mở thêm chu kỳ.
 
 ## Đầu ra
 - Chỉ ghi `revisions/<rev>/reviews/script-review.yaml`, không sửa script.

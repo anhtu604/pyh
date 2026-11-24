@@ -3,6 +3,18 @@ name: pyh-writer
 description: Use when writing or revising a PYH script at draft or revise_medical from an expert brief and verified ledger.
 ---
 
+## Hợp đồng R5.3.4
+Áp dụng spec `2026-11-24-r5-quality-standards-design.md` §2/§3/§6/§8 cho R5; không sửa hồi tố revision/approval đã khóa. Prompt bước thực hiện cùng phạm vi, không mở rộng quyền.
+Quyền agent xưởng hiện tại vẫn theo HARD_RULES: chỉ ghi trong project được giao; ngoại lệ duy nhất là thêm SVG mới trong video/src/anatomy/ kèm test. Hợp đồng R5 không cấp quyền sửa component/thư viện dùng chung ngoài phạm vi đó; trả coordinator để lập brief kỹ thuật riêng. Nối hợp đồng R5 vào runner thuộc R5.3.9, gate theo quality_profile: r5_v1; không tự bật hành vi tương lai hoặc đổi revision legacy.
+
+```yaml
+input: Ledger, expert brief, explainer, dossier và phạm vi sửa đã giao.
+output: script/script.yaml, script/outline.yaml và script/questions.yaml nếu thiếu claim.
+done_when: Lời nối 2–4 câu hỏi với khối sâu/câu chốt/cập nhật/đáp án; nộp draft-script hợp lệ, không tự duyệt.
+missing_data_to: medical_expert qua script/questions.yaml; coordinator nếu validator yêu cầu hình ngoài quyền writer.
+```
+
+
 # Biên kịch xưởng PYH
 
 ## Sửa từng phần (ưu tiên khi có gói issue mở)
@@ -40,17 +52,18 @@ description: Use when writing or revising a PYH script at draft or revise_medica
   Thử 2–3 hook trong scratch, chọn một vào kịch bản; không xuất cả ba vào script.
 - Hook rõ chủ đề, mở câu hỏi trả được bằng claim có sẵn. Không hứa bí mật,
   số gây sốc, trải nghiệm bác sĩ hay bệnh nhân thật nếu đầu vào không có.
-- Chọn cấu trúc phù hợp audience/intent; không mặc định pain → cơ chế → khám.
-  Tổ chức câu hỏi/tình huống → phát hiện → hệ quả → hành động khi phù hợp.
+- Mạch R5: cơ quan → giải phẫu/cấp máu → đơn vị mô → tế bào → cấu tạo/chức năng/sinh lý → ý nghĩa xét nghiệm/cơ chế bệnh → hành động. Tầng không liên quan ghi lý do, không thêm chi tiết để đủ tầng.
+- Hook nêu 2–4 câu hỏi có ID; mỗi khối sâu phục vụ câu hỏi và kết bằng câu chốt in đậm ở bản duyệt (không chèn Markdown vào text/delivery TTS). Cuối trả từng câu đúng thứ tự/ID. TOFU có điều bất ngờ có nguồn trong 30 giây đầu, ước lượng trước cổng và xác nhận sau WAV.
+- Có khối “cập nhật chuyên môn”: phạm vi, nguồn/ngày nguồn, ngày tìm và mức chắc chắn. D3: thiếu cập nhật mới thì nêu nguồn mới nhất tìm được và chưa có cập nhật đủ chắc; không gọi hướng dẫn cũ là phát hiện mới. Nói với “bạn”, cảnh đời thường, câu ngắn; không hy sinh chiều sâu để cắt nhanh.
+- Từng mệnh đề y khoa, kể cả câu chốt/cập nhật, phải có claim và locator đã đọc; Abstract chỉ hỗ trợ điều thực có trong abstract. Thiếu claim trả medical_expert, không tự tìm hay suy thành đã đọc toàn văn.
 - Mỗi đoạn tăng giá trị: giải được điều đang treo, mở hệ quả mới hoặc ví dụ
-  đời thường giúp hiểu. Cắt đoạn chỉ định nghĩa/danh sách, lặp lời hứa hoặc tóm lại.
+  đời thường giúp hiểu. Cắt liệt kê rời câu hỏi; giữ câu chốt và recap có nhiệm vụ trả lời.
 - Hài chỉ khi hợp đề tài, nhắm niềm tin sai chứ không nhắm người bệnh.
   Ẩn dụ/nhân hóa và cú bẻ lái chỉ dùng khi sáng rõ và đúng bằng chứng;
   không ép một ẩn dụ xuyên suốt hay bịa ngộ nhận để có twist.
 - Thuật ngữ lên màn hình khi cần; lời đọc tiếng Việt đời thường, câu dài ngắn xen nhau.
   Tự đọc thành tiếng để sửa chỗ vấp và giọng giáo trình, không tự nhận đã nghe TTS.
-- Không đọc tên nguồn, phương pháp, năm hay cơ quan vào lời thoại;
-  nguồn ở source_card/chữ nhỏ/bài đăng, giữ nguyên mức chắc chắn của claim.
+- Không đọc metadata nghiên cứu máy móc; khối cập nhật được gọi tên hướng dẫn và ngày khi giúp hiểu khác biệt chuyên môn. Nguồn đầy đủ ở gói duyệt/mô tả, source_card chỉ dùng khi có nguồn thật cần hiện, không phải hạn ngạch; giữ mức chắc chắn của claim.
 - Nối ý từ hệ quả; callback gần cuối chỉ khi trả lời mở đầu, không lặp đoạn trước.
   CTA theo intent: gợi nghĩ/thử quan sát/lưu/theo dõi, hoặc thực hành/khám khi phù hợp.
 - Câu kết dùng nguyên văn trong `profiles/doctor-feedback.yaml` mục `slug: chung` hiện hành,
@@ -58,17 +71,16 @@ description: Use when writing or revising a PYH script at draft or revise_medica
 
 ## Đầu ra
 - `writer` sở hữu `script/script.yaml` và `script/outline.yaml` (cùng `script/questions.yaml` khi cần chuyên gia bổ sung); `storyboard_director` chịu trách nhiệm thiết kế hình, sơ đồ dần, `mascot_pose`, nhịp `beats` và SVG ở bước `storyboard_design`.
-- Nộp `script.yaml` + `outline.yaml` qua `healthvideo step draft-script`, hoặc chỉ tạo khung `storyboard/storyboard.yaml`, `assets/asset-manifest.yaml` (và `script/clip-plan.yaml` nếu `youtube_long`) tối thiểu để qua validator `step draft`; không tự thiết kế SVG mới, FLUX prompt hay `mascot_pose`.
-- Đồng bộ lời/claim với khung storyboard nếu dùng `step draft`; giữ `delivery` bỏ thẻ bằng đúng `text`.
+- Nộp lời qua `healthvideo step draft-script`; không tạo khung storyboard/bảng/tab/manifest/clip-plan để qua validator. Hình do storyboard_director, range do shorts_producer; validator đòi hình thì trả coordinator. Giữ `delivery` bỏ thẻ bằng đúng `text`.
 - Giữ giới hạn runtime hiện hành: explain-first, 10–25 phút, 4–8 chương,
-  khung clip tối thiểu cắt từ cảnh sẵn đủ caveat; không tự coi đã bỏ validator.
+  clip dùng lời đã duyệt đủ caveat do shorts_producer chọn; không tự coi đã bỏ validator.
 - Dùng `youtube-scriptwriting` cho hook/through-line/payoff; bỏ tự research, Binge Loop,
   lời khuyên lặp ý và không dừng hỏi duyệt checkpoint. `short-form-video` chỉ dùng khi xử lý clip sẵn, không tạo composition hay tự render riêng.
-- Chỉ dùng lệnh của prompt bước: `step draft-script`, `step draft`, status, và resume đúng đích
+- Chỉ dùng lệnh của prompt bước: `step draft-script`, status, và resume đúng đích
   của `revise_medical`; không tự submit-medical, approve, TTS hay render.
 
 ## Xong khi
-- `step draft` hết lỗi, xử lý style-lint/nhận xét và status xác nhận `draft_ready`;
+- `step draft-script` hết lỗi, xử lý style-lint/nhận xét trong quyền lời và status xác nhận `draft_ready`;
   kiểm duyệt độc lập và cổng bác sĩ vẫn do xưởng thực hiện.
 
 ## Thiếu dữ liệu hoặc lỗi

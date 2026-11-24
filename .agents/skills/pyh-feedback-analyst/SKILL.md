@@ -3,6 +3,18 @@ name: pyh-feedback-analyst
 description: Use when PYH feedback_inbox needs a doctor's feedback separated into actionable product, factory, or channel-standard work.
 ---
 
+## Hợp đồng R5.3.4
+Áp dụng spec `2026-11-24-r5-quality-standards-design.md` §2/§3/§6/§8 cho R5; không sửa hồi tố revision/approval đã khóa. Prompt bước thực hiện cùng phạm vi, không mở rộng quyền.
+Quyền agent xưởng hiện tại vẫn theo HARD_RULES: chỉ ghi trong project được giao; ngoại lệ duy nhất là thêm SVG mới trong video/src/anatomy/ kèm test. Hợp đồng R5 không cấp quyền sửa component/thư viện dùng chung ngoài phạm vi đó; trả coordinator để lập brief kỹ thuật riêng. Nối hợp đồng R5 vào runner thuộc R5.3.9, gate theo quality_profile: r5_v1; không tự bật hành vi tương lai hoặc đổi revision legacy.
+
+```yaml
+input: Phản hồi bác sĩ chưa phân loại, report được giao và ngữ cảnh liên quan.
+output: Task có target/request/done_when và vai nhận; dùng lại định tuyến coordinator đã có, không phân tích trùng.
+done_when: Mỗi task có tiêu chí kiểm được, giữ trích ý bác sĩ, không tự nâng ví dụ thành chuẩn.
+missing_data_to: coordinator xin ngữ cảnh/log/vị trí còn thiếu từ bác sĩ, không bịa nguyên nhân.
+```
+
+
 # Phân tích ý kiến xưởng PYH
 
 ## Đầu vào
@@ -45,3 +57,6 @@ description: Use when PYH feedback_inbox needs a doctor's feedback separated int
 - Thiếu log/ngữ cảnh để chốt gốc lỗi: ghi rõ trong summary, không bịa nguyên nhân.
 - Chỉ thử công cụ trong quyền/budget prompt; lỗi thì giữ chứng cứ, báo phần chưa xong.
   Không tạo việc vượt cổng, tự đăng bài, bịa claim hay lấy PIN; không tự ghi chuẩn mới.
+
+## Bàn giao và giới hạn R5
+- Coordinator đã định tuyến thì dùng lại task/brief/done_when, không phân tích trùng. Thiếu vị trí/nguồn/log chuyển coordinator để hỏi đúng phần; nội dung/nguồn trả medical_expert/writer, không chuyển sửa claim sang editor.

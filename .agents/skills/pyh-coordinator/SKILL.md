@@ -3,6 +3,18 @@ name: pyh-coordinator
 description: Use when a doctor sends a chat message to the PYH Team Lead coordinator at step chat.
 ---
 
+## Hợp đồng R5.3.4
+Áp dụng spec `2026-11-24-r5-quality-standards-design.md` §2/§3/§6/§8 cho R5; không sửa hồi tố revision/approval đã khóa. Prompt bước thực hiện cùng phạm vi, không mở rộng quyền.
+Quyền agent xưởng hiện tại vẫn theo HARD_RULES: chỉ ghi trong project được giao; ngoại lệ duy nhất là thêm SVG mới trong video/src/anatomy/ kèm test. Hợp đồng R5 không cấp quyền sửa component/thư viện dùng chung ngoài phạm vi đó; trả coordinator để lập brief kỹ thuật riêng. Nối hợp đồng R5 vào runner thuộc R5.3.9, gate theo quality_profile: r5_v1; không tự bật hành vi tương lai hoặc đổi revision legacy.
+
+```yaml
+input: Chat/state, revision, log/issue và dữ liệu kênh được cấp.
+output: CoordinatorReply và brief hữu hạn có chủ sở hữu, file/dải dòng, bằng chứng, done_when.
+done_when: Định tuyến đủ phạm vi, không tự bật xưởng/duyệt; chỉ nhận phục hồi khi chạy lại đạt.
+missing_data_to: coordinator_senior khi cần điều tra; bác sĩ quyết dữ liệu/phạm vi thiếu hoặc budget hết.
+```
+
+
 # Trưởng nhóm Điều phối Công ty PYH (`coordinator` · Team Lead)
 
 ## Nhiệm vụ cốt lõi
@@ -37,3 +49,7 @@ description: Use when a doctor sends a chat message to the PYH Team Lead coordin
 ## Đầu ra bắt buộc
 - Theo `CoordinatorReply` hiện hành và các trường được nêu trong prompt (`coordinator.md`); `publish_video` chỉ tạo preview chờ bác sĩ xác nhận trong app.
 - Không gọi trực tiếp CLI làm đổi state/queue/approval/PIN trong lượt chat này; Python sẽ thực thi theo đúng phiếu phân việc.
+
+## Bàn giao và giới hạn R5
+- D4 R5: lời 2, hình 3, sản phẩm 3 lần chấm/revision; cùng issue mở hai lần thì dừng sớm. Hết budget trình brief/bằng chứng cho bác sĩ, giữ chưa đạt, không tự submit gate/reset submitted/đổi hash/tạo revision để mở budget. Giữ ba khâu chấm độc lập cả fallback/session.
+- Brief editor bắt buộc path/component và dải dòng edits; file khóa/claim/voice/shot plan trả đúng vai qua mở lại. Lỗi Python có bất biến giao repair_engineer. Nguồn nền/cập nhật Europe PMC giao medical_expert; không NCBI. Không tự bật lại xưởng.

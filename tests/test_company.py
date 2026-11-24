@@ -44,40 +44,38 @@ def test_critic_first_slot_differs_from_maker():
 
 def test_chain_uses_override_then_tier():
     company = load_company()
-    assert company.chain('script_critic')[0] == ModelSlot(cli='omniroute', model='codex/gpt-6.1-terra')
-    assert company.chain('writer')[0] == ModelSlot(cli='omniroute', model='codex/gpt-6.1-sol')
-    assert company.chain('medical_expert')[0] == ModelSlot(cli='omniroute', model='codex/gpt-6.1-terra')
-    assert all(any(slot.cli == 'omniroute' for slot in company.chain(role)) for role in company.roles)
+    assert company.chain('script_critic')[0] == ModelSlot(cli='codex', model='gpt-6.1-terra')
+    assert company.chain('writer')[0] == ModelSlot(cli='codex', model='gpt-6.1-sol')
+    assert company.chain('medical_expert')[0] == ModelSlot(cli='agy', model='gemini-4-neon-medium')
     assert company.chain('scout') == company.tiers['bulk']
 
 
-def test_every_role_prioritizes_explicit_non_claude_omniroute_models():
+def test_every_role_uses_verified_direct_models_and_safe_fallbacks():
     company = load_company()
-    for chain in company.tiers.values():
-        assert chain[0].cli == 'omniroute'
-        assert all(slot.cli != 'claude' and 'claude' not in slot.model.lower() for slot in chain)
-    for role in company.roles:
-        chain = company.chain(role)
-        assert chain[0].cli == 'omniroute', role
-        assert len({slot.model_identity for slot in chain if slot.cli == 'omniroute'}) == sum(
-            slot.cli == 'omniroute' for slot in chain
-        ), role
+    for chain in [*company.tiers.values(), *(company.chain(r) for r in company.roles)]:
+        assert chain[0].cli in {'agy', 'codex'}
+        assert len(set(chain)) == len(chain)
         for slot in chain:
-            assert slot.cli != 'claude' and 'claude' not in slot.model.lower(), role
-            assert 'orchestrator' not in slot.model and not slot.model.startswith('auto/'), role
+            assert slot.cli != 'claude'
+            assert not any(banned in slot.model.lower() for banned in (
+                'opus', 'astra', 'carbon-high', 'orchestrator', 'auto/',
+            ))
 
 
-def test_verified_model_families_are_used_and_visual_roles_keep_image_models():
+def test_r534_primary_assignment_and_critic_independence():
     company = load_company()
-    routed = {slot.model for role in company.roles for slot in company.chain(role) if slot.cli == 'omniroute'}
-    assert {'codex/gpt-6.1-sol', 'codex/gpt-6.1-terra', 'codex/gpt-6-luna',
-            'agy/gemini-4-hydrogen-medium', 'agy/gemini-3.8-flash-medium'} <= routed
-    # DeepSeek passes simple API calls but not the real Codex CLI tool loop yet.
-    assert not any('deepseek' in model for model in routed)
-    image_models = {'codex/gpt-6.1-terra', 'agy/gemini-4-hydrogen-medium',
-                    'agy/gemini-3.8-flash-medium'}
-    for role in ('art_director', 'product_critic'):
-        assert all(slot.model in image_models for slot in company.chain(role) if slot.cli == 'omniroute')
+    sol = {'writer', 'art_director', 'product_critic', 'coordinator_senior', 'repair_engineer'}
+    for role in company.roles:
+        expected = ('codex', 'gpt-6.1-sol') if role in sol else ('agy', 'gemini-4-neon-medium')
+        if role == 'script_critic':
+            expected = ('codex', 'gpt-6.1-terra')
+        assert company.chain(role)[0].model_identity == expected, role
+    for critic, makers in {**CRITIC_OF, 'art_director': ('storyboard_director',)}.items():
+        for maker in makers:
+            assert company.chain(critic)[0].model_identity != company.chain(maker)[0].model_identity
+            assert {slot.model_identity for slot in company.chain(critic)}.isdisjoint(
+                slot.model_identity for slot in company.chain(maker)
+            ), (critic, maker)
 
 
 def test_duplicate_step_rejected(tmp_path):
@@ -99,8 +97,7 @@ def test_bulk_roles_never_start_on_hard_tier():
     for role_id in ('copywriter', 'scout'):
         first = company.chain(role_id)[0]
         assert first in company.tiers['bulk']
-        # agy's Orchestrator sizes the model itself (2026-11-13); any other first slot stays light.
-        assert first.model == 'gemini-pro-orchestrator' or first not in company.tiers['hard']
+        assert first.model == 'gemini-4-neon-medium'
 
 
 def test_missing_agent_step_rejected(tmp_path):
@@ -282,3 +279,40 @@ def test_model_slot_is_frozen_and_hashable():
     assert {slot: True}[ModelSlot(cli='codex', model='gpt-6-astra')]
     with pytest.raises(ValueError):
         slot.model = 'changed'
+
+
+def test_r534_voice_is_pinned_without_replacement():
+    voice = yaml.safe_load((REPO_ROOT / 'profiles/voice.yaml').read_text(encoding='utf-8'))
+    assert voice['voice_id'] == 'c081d39a-4922-4c88-9615-78bb240337cd'
+    assert voice['settings']['speed'] == 1.18
+
+
+@pytest.mark.parametrize('role', sorted(load_company().roles))
+def test_r534_role_contract_has_completion_and_return_destination(role):
+    skill = 'pyh-' + role.replace('_', '-')
+    text = (REPO_ROOT / '.agents/skills' / skill / 'SKILL.md').read_text(encoding='utf-8')
+    contract = yaml.safe_load(text.split('```yaml\n', 1)[1].split('```', 1)[0])
+    assert set(contract) == {'input', 'output', 'done_when', 'missing_data_to'}
+    assert all(isinstance(value, str) and value.strip() for value in contract.values())
+
+
+@pytest.mark.parametrize('critic', ['script_critic', 'art_director', 'product_critic'])
+def test_r534_exhausted_independent_models_never_invoke_maker(tmp_path, critic):
+    from healthvideo.agents import invoke_with_failover
+
+    company = load_company()
+    calls = []
+
+    def forbidden_runner(*args, **kwargs):
+        calls.append(args)
+        raise AssertionError('No model call is allowed')
+
+    # Exhaust the actual configured chain, including proxy aliases of the same model.
+    with pytest.raises(ValueError, match='model độc lập'):
+        invoke_with_failover(
+            company.chain(critic), 'fixture only', cwd=tmp_path, log_dir=tmp_path / 'logs',
+            role=critic, slug='fixture', step='script_review',
+            exclude_slots=company.chain(critic),
+            runner=forbidden_runner,
+        )
+    assert calls == []

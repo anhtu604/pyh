@@ -8,18 +8,18 @@
 ## Nhận xét cần sửa
 {reject_note}
 
-## Việc cần làm
-1. Đọc `active_revision` trong `{project}/project.yaml`; `<rev>` là giá trị đó. Nhận xét đầy đủ ở `{project}/revisions/<rev>/reviews/product-review-log.yaml` (vòng cuối).
-2. Chỉ sửa phẫu thuật đúng các lỗi `fixable: true` trong phạm vi được phép:
-   - `video/src/anatomy/*`, `video/src/components/*`, `video/src/scenes/*` (theo `edits` nếu có, hoặc component anatomy của cảnh bị gắn cờ / component hiển thị & outro: `OutroScene.tsx`, `YouTubeEndCard.tsx`, `VisualAsset.tsx`, `logoContrast.ts`), kèm test; giữ sơ đồ tiếng Việt có leader line, tối đa 6 nhãn không chồng/cắt;
-   - `storyboard/storyboard.yaml`: CHỈ sửa các cảnh `Sxx` thuộc danh sách được phép (nhịp, beat, entrances, visual, anatomy, on_screen_text, mascot_pose); giữ nguyên từng chữ cảnh khác và metadata; tuyệt đối không đổi `id`, `script_line_id`, `narration`, `claim_id`, `chapter_id`, `source_marker`, `source_card`, `evidence_highlight`; tuyệt đối giữ cảnh cuối cùng có `visual: brand_outro` kèm tài sản `role: brand`/`mascot` hợp lệ theo luật M6.4 (không bao giờ đổi `brand_outro` sang `whiteboard` hay loại cảnh khác);
-   - `assets/asset-manifest.yaml` & `script/clip-plan.yaml`: chỉ sửa/thêm asset `semantic: false` cho cảnh được phép; không xóa hay đổi sha256 asset `semantic: true` hoặc `storyboard_role == 'brand'`;
-   - `script/voice-prep.yaml`: chỉ sửa khi có issue âm thanh/phát âm, giữ `script_hash` khớp `script/script.yaml`;
-   - `{project}/revisions/<rev>/posts/posts.yaml` (chạy `healthvideo step posts-check {project}` tới mã thoát `0`) & `posts/shorts-plan.yaml`.
-3. Khóa cứng tuyệt đối y khoa: KHÔNG sửa `script/script.yaml`, `evidence/*`, `explainer/*`, `assets/license-ledger.yaml`, `script/outline.yaml`.
-4. Kỷ luật thợ dựng (`docs/superpowers/specs/2026-11-17-pyh-style-a-mascot-host.md` mục 5): tuyệt đối không tự thêm hiệu ứng, chuyển động hay mẫu motion ngoài bộ động tác nhận diện (dựng sơ đồ dần, vòng nhấn teal, gạch chân vàng, thẻ thuật ngữ, thẻ nguồn; tối đa 2 mẫu khác trong một chương) để "cho sinh động"; không bounce ở chuyển cảnh, zoom y khoa dùng kính lúp mục 3b (không cross-fade chồng mờ).
-5. Bắt buộc ghi mọi file YAML bằng Python với `encoding='utf-8'` để không mất dấu tiếng Việt thành `'?'`.
-6. Không dựng video, không đổi trạng thái project. Python dựng lại ngay sau bước này và người duyệt sẽ chấm lại.
+## Việc cần làm (cùng phạm vi skill pyh-editor)
+1. Đọc active_revision, issue_id, ghi chú bác sĩ và reviews/visual-review.yaml hoặc vòng cuối reviews/product-review-log.yaml; mở ảnh tham chiếu và timing hiện hành.
+2. Chỉ sửa component R5 hoặc posts đúng path/component và dải dòng edits được giao, trong quyền HARD_RULES hiện hành; giữ nguyên từng byte ngoài dải, kể cả cùng file. Thiếu path/start_line/end_line thì trả coordinator, không tự suy quyền từ mã cảnh. Ngữ cảnh kề chỉ để kiểm ảnh hưởng.
+3. Khóa script, ledger/evidence, explainer, outline, storyboard/shot plan, manifest/license-ledger, clip-plan, voice-prep, shorts-plan và profiles; không sửa dù lỗi beat/nhịp/phát âm. Cần file khóa trả coordinator để giao đúng writer/medical_expert/storyboard_director/voice_director/shorts_producer qua mở lại và duyệt lại. Lỗi Python có bất biến trả repair_engineer bằng brief riêng.
+4. Đọc docs/reference/image-prompting.md chỉ để đối chiếu quyền nguồn; không sinh FLUX cơ chế, không tự vẽ cơ thể/cơ quan thay hình có phép. Mascot có sẵn chỉ câu chốt, vắng giải phẫu cận. 16:9 không phụ đề cháy chữ; 9:16 giữ phụ đề/highlight đúng timing.
+5. Kỷ luật thợ dựng theo spec phong cách 2026-11-17 mục 5: chỉ sửa lỗi đã giao, không thêm motion/bounce để “cho sinh động”. Giữ anchor/chuyển tầng/timing đã khóa, không cross-fade giả zoom. R5 tối đa 2 nhãn cơ chế đồng thời, mỗi nhãn ≤3 đơn vị cách trắng, thuật ngữ dài ghi ngoại lệ.
+6. Test component liên quan và posts-check nếu được giao posts phải đạt trong budget; báo file/dải dòng, lệnh/kết quả thật. Không tự render/TTS/nhạc, mở Studio, đổi hash/approval hoặc tự chấm đạt. Python dựng lại và critic độc lập chấm. Cùng issue mở hai lần hoặc hết budget thì dừng trình bác sĩ, không lặp dựng lại bản không đổi.
+
+## Đầu ra và đích trả
+Chỉ component/posts đúng edits kèm test liên quan, hoặc brief nêu file khóa/thiếu dữ liệu cho coordinator. Không tạo báo cáo/schema mới. Ghi UTF-8 sạch dấu.
 
 ## Xong khi
-- Mọi mục `fixable: true` đã sửa đúng phạm vi; test component đã sửa (nếu có) chạy qua.
+Các mục trong quyền đã sửa và test liên quan đạt, posts-check đạt nếu đổi posts; phần ngoài quyền trả coordinator có chứng cứ. Không tự đổi trạng thái; Python dựng và product_critic chấm lại trong D4 tối đa 3 lần, không reset budget.
+
+Quyền agent xưởng hiện tại vẫn theo HARD_RULES: chỉ ghi trong project được giao; ngoại lệ duy nhất là thêm SVG mới trong video/src/anatomy/ kèm test. Hợp đồng R5 không cấp quyền sửa component/thư viện dùng chung ngoài phạm vi đó; trả coordinator để lập brief kỹ thuật riêng. Nối hợp đồng R5 vào runner thuộc R5.3.9, gate theo quality_profile: r5_v1; không tự bật hành vi tương lai hoặc đổi revision legacy.

@@ -406,15 +406,13 @@ def test_factory_uses_moderate_models_and_critics_away_from_the_author():
     from healthvideo.workflows.factory_deps import default_run_deps
     company = default_run_deps(Path('.')).company
     for role in company.roles:
-        assert company.chain(role)[0].cli == 'omniroute', role
-    for step in ('draft', 'revise_medical', 'storyboard_design', 'chat_deep', 'repair'):
+        assert company.chain(role)[0].cli in {'agy', 'codex'}, role
+    for step in ('draft', 'revise_medical', 'visual_review', 'product_review', 'chat_deep', 'repair'):
         assert company.chain(company.role_for_step(step).id)[0].model_identity == ('codex', 'gpt-6.1-sol'), step
-    for role in ('coordinator', 'scout', 'copywriter', 'feedback_analyst'):
-        assert company.chain(role)[0].model_identity == ('codex', 'gpt-6-luna'), role
-    for role in ('researcher', 'art_director', 'shorts_producer', 'voice_director'):
-        assert company.chain(role)[0].model_identity == ('agy', 'gemini-4-hydrogen-medium'), role
-    for role in ('medical_expert', 'script_critic', 'product_critic'):
-        assert company.chain(role)[0].model_identity == ('codex', 'gpt-6.1-terra'), role
+    for role in ('coordinator', 'scout', 'copywriter', 'feedback_analyst', 'researcher',
+                 'medical_expert', 'storyboard_director', 'editor', 'shorts_producer', 'voice_director'):
+        assert company.chain(role)[0].model_identity == ('agy', 'gemini-4-neon-medium'), role
+    assert company.chain('script_critic')[0].model_identity == ('codex', 'gpt-6.1-terra')
     for role in company.roles:
         for slot in company.chain(role):
             assert 'opus' not in slot.model and 'astra' not in slot.model, (role, slot)

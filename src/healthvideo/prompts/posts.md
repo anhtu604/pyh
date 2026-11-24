@@ -47,3 +47,9 @@ bằng cắt bỏ điều kiện áp dụng. Không thêm trường schema hay t
 - `revisions/<rev>/posts/posts.yaml`
 - `revisions/<rev>/script/script.yaml`, `revisions/<rev>/script/outline.yaml`, `revisions/<rev>/script/clip-plan.yaml`
 - `revisions/<rev>/evidence/ledger.yaml`, `revisions/<rev>/reviews/medical-approval.yaml`
+
+## Điểm chạm TOFU R5 và đích trả
+Chỉ đóng gói title/thumbnail/caption từ range/hook/payoff/caveat do shorts_producer sở hữu; không chọn lại cut range hay tạo kịch bản/lời clip cạnh tranh. Chính clip phải có hook/đáp án/caveat từ lời đã qua cổng y khoa, không dùng caption cứu clip thiếu payoff. Thiếu range trả shorts_producer, thiếu nguồn/claim/ngày cập nhật trả medical_expert/writer, thiếu approval trả coordinator.
+TOFU lấy bất ngờ có nguồn thực trong 30 giây đầu; nguồn đầy đủ ở mô tả/gói duyệt, source_card chỉ dùng khi có nguồn thật cần hiện, không phải hạn ngạch. D3 không gọi nguồn cũ là nghiên cứu mới; BOFU hành động sức khỏe có căn cứ, không bán hàng. Prompt không mở rộng quyền trong skill pyh-copywriter.
+
+Quyền agent xưởng hiện tại vẫn theo HARD_RULES: chỉ ghi trong project được giao; ngoại lệ duy nhất là thêm SVG mới trong video/src/anatomy/ kèm test. Hợp đồng R5 không cấp quyền sửa component/thư viện dùng chung ngoài phạm vi đó; trả coordinator để lập brief kỹ thuật riêng. Nối hợp đồng R5 vào runner thuộc R5.3.9, gate theo quality_profile: r5_v1; không tự bật hành vi tương lai hoặc đổi revision legacy.

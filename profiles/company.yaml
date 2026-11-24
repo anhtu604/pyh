@@ -1,27 +1,17 @@
-# PYH Company 2.0: OmniRoute first, explicit models, no Claude (2026-11-16).
-# Live probes and limits: docs/reference/omniroute.md.
-# Codex direct is a fallback; routes using the same account may share quota.
+# R5.3.4: direct verified N/S routes; existing OmniRoute IDs only as fallback.
+# Direct/proxy aliases share model identity and may share account quota.
 tiers:
   hard:
-  - {cli: omniroute, model: codex/gpt-6.1-sol}
-  - {cli: omniroute, model: codex/gpt-6.1-terra}
-  - {cli: omniroute, model: agy/gemini-4-hydrogen-medium}
-  - {cli: omniroute, model: agy/gemini-3.8-flash-medium}
   - {cli: codex, model: gpt-6.1-sol}
-  - {cli: codex, model: gpt-6.1-terra}
+  - {cli: omniroute, model: codex/gpt-6.1-sol}
   medium:
-  - {cli: omniroute, model: codex/gpt-6.1-terra}
+  - {cli: agy, model: gemini-4-neon-medium}
   - {cli: omniroute, model: agy/gemini-4-hydrogen-medium}
   - {cli: omniroute, model: agy/gemini-3.8-flash-medium}
-  - {cli: omniroute, model: codex/gpt-6.1-sol}
-  - {cli: codex, model: gpt-6.1-terra}
-  - {cli: codex, model: gpt-6.1-sol}
   bulk:
-  - {cli: omniroute, model: codex/gpt-6-luna}
+  - {cli: agy, model: gemini-4-neon-medium}
   - {cli: omniroute, model: agy/gemini-4-hydrogen-medium}
   - {cli: omniroute, model: agy/gemini-3.8-flash-medium}
-  - {cli: codex, model: gpt-6-luna}
-  - {cli: codex, model: gpt-6.1-sol}
 roles:
   coordinator:
     name: Trưởng nhóm Điều phối
@@ -30,13 +20,6 @@ roles:
     steps:
     - chat
     tier: medium
-    models:
-    - {cli: omniroute, model: codex/gpt-6-luna}
-    - {cli: omniroute, model: agy/gemini-4-hydrogen-medium}
-    - {cli: omniroute, model: agy/gemini-3.8-flash-medium}
-    - {cli: omniroute, model: codex/gpt-6.1-terra}
-    - {cli: codex, model: gpt-6-luna}
-    - {cli: codex, model: gpt-6.1-terra}
   coordinator_senior:
     name: Điều phối viên trưởng · Chuyên sâu
     skills:
@@ -46,11 +29,8 @@ roles:
     - chat_deep
     tier: medium
     models:
-    - {cli: omniroute, model: codex/gpt-6.1-sol}
-    - {cli: omniroute, model: codex/gpt-6.1-terra}
-    - {cli: omniroute, model: agy/gemini-4-hydrogen-medium}
     - {cli: codex, model: gpt-6.1-sol}
-    - {cli: codex, model: gpt-6.1-terra}
+    - {cli: omniroute, model: codex/gpt-6.1-sol}
   researcher:
     name: Chuyên viên Nghiên cứu & Phân tích Kênh
     skills:
@@ -60,13 +40,6 @@ roles:
     - topic_research
     - channel_analytics
     tier: medium
-    models:
-    - {cli: omniroute, model: agy/gemini-4-hydrogen-medium}
-    - {cli: omniroute, model: codex/gpt-6.1-terra}
-    - {cli: omniroute, model: agy/gemini-3.8-flash-medium}
-    - {cli: omniroute, model: codex/gpt-6.1-sol}
-    - {cli: codex, model: gpt-6.1-terra}
-    - {cli: codex, model: gpt-6.1-sol}
   scout:
     name: Trinh sát chủ đề
     skills:
@@ -82,12 +55,6 @@ roles:
     steps:
     - research
     tier: medium
-    models:
-    - {cli: omniroute, model: codex/gpt-6.1-terra}
-    - {cli: omniroute, model: codex/gpt-6.1-sol}
-    - {cli: omniroute, model: agy/gemini-4-hydrogen-medium}
-    - {cli: codex, model: gpt-6.1-terra}
-    - {cli: codex, model: gpt-6.1-sol}
   writer:
     name: Biên kịch viral
     skills:
@@ -99,11 +66,8 @@ roles:
     - revise_medical
     tier: hard
     models:
-    - {cli: omniroute, model: codex/gpt-6.1-sol}
-    - {cli: omniroute, model: codex/gpt-6.1-terra}
-    - {cli: omniroute, model: agy/gemini-4-hydrogen-medium}
     - {cli: codex, model: gpt-6.1-sol}
-    - {cli: codex, model: gpt-6.1-terra}
+    - {cli: omniroute, model: codex/gpt-6.1-sol}
   storyboard_director:
     name: Đạo diễn Phân cảnh & Đồ họa
     skills:
@@ -113,13 +77,6 @@ roles:
     steps:
     - storyboard_design
     tier: medium
-    models:
-    - {cli: omniroute, model: codex/gpt-6.1-sol}
-    - {cli: omniroute, model: codex/gpt-6.1-terra}
-    - {cli: omniroute, model: agy/gemini-4-hydrogen-medium}
-    - {cli: omniroute, model: agy/gemini-3.8-flash-medium}
-    - {cli: codex, model: gpt-6.1-sol}
-    - {cli: codex, model: gpt-6.1-terra}
   voice_director:
     name: Đạo diễn Giọng đọc & Phiên âm
     skills:
@@ -127,12 +84,7 @@ roles:
     steps:
     - voice_prep
     tier: bulk
-    models:
-    - {cli: omniroute, model: agy/gemini-4-hydrogen-medium}
-    - {cli: omniroute, model: codex/gpt-6.1-terra}
-    - {cli: omniroute, model: agy/gemini-3.8-flash-medium}
-    - {cli: omniroute, model: codex/gpt-6.1-sol}
-    - {cli: codex, model: gpt-6.1-terra}
+  # Terra differs from writer Sol and storyboard Neon, including fallback aliases.
   script_critic:
     name: Kiểm duyệt kịch bản
     skills:
@@ -142,10 +94,9 @@ roles:
     - script_review
     tier: hard
     models:
-    - {cli: omniroute, model: codex/gpt-6.1-terra}
-    - {cli: omniroute, model: agy/gemini-4-hydrogen-medium}
-    - {cli: omniroute, model: agy/gemini-3.8-flash-medium}
     - {cli: codex, model: gpt-6.1-terra}
+    - {cli: omniroute, model: codex/gpt-6.1-terra}
+  # Sol reviews images independently of storyboard Neon.
   art_director:
     name: Đạo diễn hình
     skills:
@@ -154,10 +105,10 @@ roles:
     - visual_review
     tier: medium
     models:
-    - {cli: omniroute, model: agy/gemini-4-hydrogen-medium}
-    - {cli: omniroute, model: codex/gpt-6.1-terra}
-    - {cli: omniroute, model: agy/gemini-3.8-flash-medium}
+    - {cli: codex, model: gpt-6.1-sol}
+    - {cli: omniroute, model: codex/gpt-6.1-sol}
     - {cli: codex, model: gpt-6.1-terra}
+    - {cli: omniroute, model: codex/gpt-6.1-terra}
   editor:
     name: Thợ dựng
     skills:
@@ -168,12 +119,7 @@ roles:
     - revise_production
     - revise_product
     tier: medium
-    models:
-    - {cli: omniroute, model: codex/gpt-6.1-sol}
-    - {cli: omniroute, model: codex/gpt-6.1-terra}
-    - {cli: omniroute, model: agy/gemini-4-hydrogen-medium}
-    - {cli: codex, model: gpt-6.1-sol}
-    - {cli: codex, model: gpt-6.1-terra}
+  # Sol reviews independently of editor Neon; fallback remains separate.
   product_critic:
     name: Kiểm định sản phẩm
     skills:
@@ -183,10 +129,10 @@ roles:
     - product_review
     tier: hard
     models:
-    - {cli: omniroute, model: codex/gpt-6.1-terra}
-    - {cli: omniroute, model: agy/gemini-4-hydrogen-medium}
-    - {cli: omniroute, model: agy/gemini-3.8-flash-medium}
+    - {cli: codex, model: gpt-6.1-sol}
+    - {cli: omniroute, model: codex/gpt-6.1-sol}
     - {cli: codex, model: gpt-6.1-terra}
+    - {cli: omniroute, model: codex/gpt-6.1-terra}
   copywriter:
     name: Chiến lược Đóng gói & Bài đăng
     skills:
@@ -205,12 +151,6 @@ roles:
     steps:
     - shorts_plan
     tier: medium
-    models:
-    - {cli: omniroute, model: agy/gemini-4-hydrogen-medium}
-    - {cli: omniroute, model: codex/gpt-6.1-terra}
-    - {cli: omniroute, model: agy/gemini-3.8-flash-medium}
-    - {cli: omniroute, model: codex/gpt-6.1-sol}
-    - {cli: codex, model: gpt-6.1-terra}
   feedback_analyst:
     name: Phân tích ý kiến
     skills:
@@ -226,8 +166,5 @@ roles:
     - repair
     tier: medium
     models:
-    - {cli: omniroute, model: codex/gpt-6.1-sol}
-    - {cli: omniroute, model: codex/gpt-6.1-terra}
-    - {cli: omniroute, model: agy/gemini-4-hydrogen-medium}
     - {cli: codex, model: gpt-6.1-sol}
-    - {cli: codex, model: gpt-6.1-terra}
+    - {cli: omniroute, model: codex/gpt-6.1-sol}

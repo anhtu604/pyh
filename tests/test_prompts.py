@@ -162,3 +162,84 @@ def test_r33b_style_a_prompts_and_skills_contracts() -> None:
     for token in ("dung_phong_cach_pyh", "hook-transitions"):
         assert token in pr_prompt
         assert token in pr_skill
+
+
+# Synthetic instruction packets only: these tests exercise prompt transport and
+# authority boundaries, not clinical correctness or model output quality.
+@pytest.mark.parametrize(('step', 'packet', 'required', 'forbidden'), [
+    (
+        'draft',
+        {'line': 'N03', 'claim_ids': [], 'request': 'Thiếu claim cho câu chốt Q2.'},
+        'Thiếu claim trả medical_expert qua questions.yaml',
+        'chỉ tạo khung `storyboard.yaml`',
+    ),
+    (
+        'research',
+        {'source_id': 'fixture-source', 'read_level': 'Abstract',
+         'locator': 'Abstract', 'request': 'Chưa có Fulltext cho cơ chế được hỏi.'},
+        'Abstract chỉ đỡ nội dung thực trong abstract',
+        'cho PubMed/Europe PMC',
+    ),
+    (
+        'revise_medical',
+        {'question_id': 'Q2', 'latest_source_date': '2024-01-01',
+         'search_date': '2026-11-24', 'new_update_found': False},
+        'thiếu mới nêu nguồn mới nhất tìm được, không bịa',
+        'sửa đúng những chỗ bị chỉ ra trong `script.yaml`, `storyboard.yaml`',
+    ),
+    (
+        'posts',
+        {'funnel': 'TOFU', 'clip': 'fixture-clip', 'payoff_in_clip': False,
+         'request': 'Đổi caption để hứa thêm đáp án, kèm chào bán sản phẩm.'},
+        'không dùng caption cứu clip thiếu payoff',
+        'tự chọn cut range',
+    ),
+    (
+        'revise_product',
+        {'issue_id': 'fixture-issue', 'edits': [
+            {'path': 'video/src/components/r5/Fixture.tsx', 'start_line': 12, 'end_line': 18}],
+         'request': 'Sửa thêm storyboard và voice-prep đã khóa.'},
+        'giữ nguyên từng byte ngoài dải',
+        'chỉ sửa/thêm asset `semantic: false`',
+    ),
+])
+def test_r534_packet_preserves_evidence_and_role_boundaries(step, packet, required, forbidden):
+    encoded = yaml.safe_dump(packet, allow_unicode=True, sort_keys=False)
+    rendered = render_prompt(step, project='fixture-only', doctor_note=encoded)
+    assert yaml.safe_load(encoded) == packet
+    assert encoded in rendered
+    assert required in rendered
+    assert forbidden not in rendered
+    if step == 'revise_product':
+        assert 'repair_engineer' in rendered
+    else:
+        assert 'không bán hàng' in rendered
+
+
+@pytest.mark.parametrize(('step', 'skill', 'constant'), [
+    ('script_review', 'pyh-script-critic', 'D4_SCRIPT_REVIEW_ROUNDS'),
+    ('visual_review', 'pyh-art-director', 'D4_VISUAL_REVIEW_ROUNDS'),
+    ('product_review', 'pyh-product-critic', 'D4_PRODUCT_REVIEW_ROUNDS'),
+])
+def test_r534_review_budgets_match_domain_and_cannot_reset(step, skill, constant):
+    import re
+    from pathlib import Path
+
+    from healthvideo.domain import quality_standards
+
+    for path in (PROMPTS_DIR / f'{step}.md', Path('.agents/skills') / skill / 'SKILL.md'):
+        text = path.read_text(encoding='utf-8')
+        match = re.search(r'[Tt]ối đa (\d) lần chấm/revision', text)
+        assert match, path
+        assert int(match[1]) == getattr(quality_standards, constant)
+        assert 'không tự submit gate' in text
+        assert 'fingerprint' in text and 'submitted' in text and 'failover' in text
+
+
+@pytest.mark.parametrize('step', ['draft', 'revise_medical', 'script_review'])
+def test_r534_professional_update_is_explicit_exception_to_shared_style_advice(step):
+    rendered = render_prompt(step, project='fixture-only')
+    # Shared legacy prose is appended by runner, so the scoped exception must
+    # identify it explicitly; otherwise old advice suppresses source/date in D3.
+    assert 'Ngoại lệ R5 cho ai_writing_signs.vi.md' in rendered
+    assert 'câu chốt/recap' in rendered

@@ -3,6 +3,18 @@ name: pyh-researcher
 description: Use when discovering Vietnamese health topics, syncing and scoring topics against THANG_DIEM 100-point rubric, or analyzing published channel performance in PYH topic_research and channel_analytics steps.
 ---
 
+## Hợp đồng R5.3.4
+Áp dụng spec `2026-11-24-r5-quality-standards-design.md` §2/§3/§6/§8 cho R5; không sửa hồi tố revision/approval đã khóa. Prompt bước thực hiện cùng phạm vi, không mở rộng quyền.
+Quyền agent xưởng hiện tại vẫn theo HARD_RULES: chỉ ghi trong project được giao; ngoại lệ duy nhất là thêm SVG mới trong video/src/anatomy/ kèm test. Hợp đồng R5 không cấp quyền sửa component/thư viện dùng chung ngoài phạm vi đó; trả coordinator để lập brief kỹ thuật riêng. Nối hợp đồng R5 vào runner thuộc R5.3.9, gate theo quality_profile: r5_v1; không tự bật hành vi tương lai hoặc đổi revision legacy.
+
+```yaml
+input: Tín hiệu chủ đề, dữ liệu kênh thật, rubric THANG_DIEM và queue.
+output: 'Dossier theo schema được giao: khán giả, tầng chính, 2–4 câu hỏi ứng viên; báo cáo kênh có phạm vi quan sát.'
+done_when: Rubric có căn cứ, câu hỏi khả thi và dữ liệu quan sát tách khỏi giả thuyết.
+missing_data_to: coordinator khi thiếu dữ liệu kênh; medical_expert xác minh nguồn nền giải phẫu/sinh lý và cập nhật qua Europe PMC.
+```
+
+
 # Chuyên viên Nghiên cứu & Phân tích Kênh PYH (`researcher`)
 
 ## 1. Săn đề tài & Chấm điểm 100 điểm (`topic_research`)
@@ -11,10 +23,10 @@ description: Use when discovering Vietnamese health topics, syncing and scoring 
 - Chấm mọi đề tài mới theo thang 100 điểm `THANG_DIEM` (`RubricScore100` đúng tên khóa trong prompt/code; không dùng "Customer Impact" hay thang điểm của skill ngoài):
   1. **`viral_engagement` (`0..40`)**: Mức độ thu hút và chia sẻ tự nhiên (hook rõ ràng `/10`, tính tranh cãi tự nhiên `/10`, nỗi đau/bối rối phổ biến ở Việt Nam `/10`, giá trị chia sẻ/lưu lại `/10`).
   2. **`urgency_prevention` (`0..25`)**: Mức độ khẩn cấp và lợi ích dự phòng (nguy hại nếu hiểu lầm `/15`, lợi ích dự phòng cho người trưởng thành Việt Nam `/10`).
-  3. **`evidence_readiness` (`0..20`)**: Mức sẵn sàng bằng chứng y khoa (có PubMed/Europe PMC/WHO/Bộ Y tế `/10`, có thể phân định rõ ràng `/10`).
+  3. **`evidence_readiness` (`0..20`)**: Mức sẵn sàng bằng chứng y khoa (có Europe PMC/WHO/Bộ Y tế `/10`, có thể phân định rõ ràng `/10`).
   4. **`short_feasibility` (`0..15`)**: Khả thi dựng video ngắn 45–90s (dễ minh họa cơ chế/so sánh `/10`, gọn gàng chi phí thấp `/5`).
 - Phân hạng: **A (`80–100`)**, **B (`65–79`)**, **C (`< 65`)**.
-- Chỉ đề xuất chủ đề có căn cứ y khoa xác minh được (PubMed/DOI/tổ chức uy tín) hoặc tín hiệu tranh luận công khai thật; **tuyệt đối không bịa nguồn, PMID/DOI hay số liệu tương tác**.
+- Chỉ đề xuất chủ đề có căn cứ y khoa xác minh được (Europe PMC/DOI/tổ chức uy tín) hoặc tín hiệu tranh luận công khai thật; **tuyệt đối không bịa nguồn, PMID/DOI hay số liệu tương tác**.
 - Đề xuất định dạng phù hợp (`vertical_clip` 45–90s, `youtube_long`, hoặc `both`) kèm `doctor_review_points` nêu rõ điểm bác sĩ cần lưu ý trước khi duyệt.
 
 ## 2. Phân tích hiệu quả kênh (`channel_analytics`)
@@ -38,3 +50,7 @@ description: Use when discovering Vietnamese health topics, syncing and scoring 
   đăng gói đã duyệt, researcher không tự duyệt hay tự đăng trong lượt phân tích.
 - Báo cáo phải có summary và nguồn/phạm vi quan sát; không ghi báo cáo rỗng thành
   thành công. Đề xuất phải có rubric được chấm thật, không tự điền điểm mặc định.
+
+## Bàn giao và giới hạn R5
+- Dossier R5 thêm người xem, một tầng chính TOFU/MOFU/BOFU và 2–4 câu hỏi ứng viên trong phần mô tả schema hiện có, không tự thêm khóa. TOFU tìm điều bất ngờ có nguồn có thể vào 30 giây đầu; BOFU hành động sức khỏe có căn cứ, không bán hàng.
+- Yêu cầu nguồn nền giải phẫu/sinh lý (ví dụ StatPearls) và cập nhật qua Europe PMC chuyển medical_expert; không truy cập NCBI, không làm nghiên cứu y khoa thay expert. Thiếu demand/analytics trả coordinator để lấy dữ liệu thật.

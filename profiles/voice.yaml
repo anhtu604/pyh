@@ -1,10 +1,10 @@
 # Giọng nhân bản của bác sĩ trên vibi.pro (MiniMax "Tú"); cần VIBI_API_KEY trong .env.
-# Đổi model sang speech-2.8-turbo nếu muốn rẻ/nhanh hơn.
+# Anh Tu: thiếu voice_id đã ghim thì báo lỗi; không dùng giọng thay.
 provider: vibi_minimax
 model_id: speech-2.8-hd
 voice_id: c081d39a-4922-4c88-9615-78bb240337cd
 settings:
-  speed: 1.0
+  speed: 1.18
   pitch: 0
   vol: 1.0
 allowed_tags:
