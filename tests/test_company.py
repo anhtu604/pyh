@@ -46,17 +46,16 @@ def test_chain_uses_override_then_tier():
     company = load_company()
     assert company.chain('script_critic')[0] == ModelSlot(cli='codex', model='gpt-6.1-terra')
     assert company.chain('writer')[0] == ModelSlot(cli='codex', model='gpt-6.1-sol')
-    assert company.chain('medical_expert')[0] == ModelSlot(cli='agy', model='gemini-4-neon-medium')
+    assert company.chain('medical_expert')[0] == ModelSlot(cli='codex', model='gpt-6.1-sol')
     assert company.chain('scout') == company.tiers['bulk']
 
 
 def test_every_role_uses_verified_direct_models_and_safe_fallbacks():
     company = load_company()
     for chain in [*company.tiers.values(), *(company.chain(r) for r in company.roles)]:
-        assert chain[0].cli in {'agy', 'codex'}
+        assert chain[0].cli in {'agy', 'codex', 'claude'}
         assert len(set(chain)) == len(chain)
         for slot in chain:
-            assert slot.cli != 'claude'
             assert not any(banned in slot.model.lower() for banned in (
                 'opus', 'astra', 'carbon-high', 'orchestrator', 'auto/',
             ))
@@ -64,12 +63,20 @@ def test_every_role_uses_verified_direct_models_and_safe_fallbacks():
 
 def test_r534_primary_assignment_and_critic_independence():
     company = load_company()
-    sol = {'writer', 'art_director', 'product_critic', 'coordinator_senior', 'repair_engineer'}
+    sol = {'medical_expert', 'writer', 'storyboard_director', 'coordinator_senior', 'repair_engineer'}
+    claude = {'art_director', 'product_critic'}
     for role in company.roles:
-        expected = ('codex', 'gpt-6.1-sol') if role in sol else ('agy', 'gemini-4-neon-medium')
-        if role == 'script_critic':
+        if role in sol:
+            expected = ('codex', 'gpt-6.1-sol')
+        elif role in claude:
+            expected = ('claude', 'claude-sonnet-5-5')
+        elif role == 'script_critic':
             expected = ('codex', 'gpt-6.1-terra')
+        else:
+            expected = ('agy', 'gemini-4-neon-medium')
         assert company.chain(role)[0].model_identity == expected, role
+    for role in ('medical_expert', 'art_director', 'product_critic'):
+        assert ('codex', 'gpt-6.1-terra') in {slot.model_identity for slot in company.chain(role)}, role
     for critic, makers in {**CRITIC_OF, 'art_director': ('storyboard_director',)}.items():
         for maker in makers:
             assert company.chain(critic)[0].model_identity != company.chain(maker)[0].model_identity

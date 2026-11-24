@@ -406,17 +406,18 @@ def test_factory_uses_moderate_models_and_critics_away_from_the_author():
     from healthvideo.workflows.factory_deps import default_run_deps
     company = default_run_deps(Path('.')).company
     for role in company.roles:
-        assert company.chain(role)[0].cli in {'agy', 'codex'}, role
-    for step in ('draft', 'revise_medical', 'visual_review', 'product_review', 'chat_deep', 'repair'):
+        assert company.chain(role)[0].cli in {'agy', 'codex', 'claude'}, role
+    for step in ('research', 'draft', 'revise_medical', 'storyboard_design', 'chat_deep', 'repair'):
         assert company.chain(company.role_for_step(step).id)[0].model_identity == ('codex', 'gpt-6.1-sol'), step
+    for step in ('visual_review', 'product_review'):
+        assert company.chain(company.role_for_step(step).id)[0].model_identity == ('claude', 'claude-sonnet-5-5'), step
     for role in ('coordinator', 'scout', 'copywriter', 'feedback_analyst', 'researcher',
-                 'medical_expert', 'storyboard_director', 'editor', 'shorts_producer', 'voice_director'):
+                 'editor', 'shorts_producer', 'voice_director'):
         assert company.chain(role)[0].model_identity == ('agy', 'gemini-4-neon-medium'), role
     assert company.chain('script_critic')[0].model_identity == ('codex', 'gpt-6.1-terra')
     for role in company.roles:
         for slot in company.chain(role):
-            assert 'opus' not in slot.model and 'astra' not in slot.model, (role, slot)
-            assert slot.cli != 'claude' and 'claude' not in slot.model, (role, slot)
+            assert 'opus' not in slot.model and 'astra' not in slot.model and 'carbon-high' not in slot.model, (role, slot)
     for critic_id, makers in CRITIC_OF.items():
         for maker_id in makers:
             assert company.chain(critic_id)[0].model_identity != company.chain(maker_id)[0].model_identity, (critic_id, maker_id)

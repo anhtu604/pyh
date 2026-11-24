@@ -1,5 +1,6 @@
-# R5.3.4: direct verified N/S routes; existing OmniRoute IDs only as fallback.
-# Direct/proxy aliases share model identity and may share account quota.
+# M1 (2026-11-24): doctor-approved model rebalance — Sol for medical_expert & storyboard_director,
+# Claude Sonnet 5.5 (Terra fallback) for art_director & product_critic, Terra for script_critic,
+# Neon for remaining light roles. Existing OmniRoute IDs only as fallback; direct/proxy aliases share identity.
 tiers:
   hard:
   - {cli: codex, model: gpt-6.1-sol}
@@ -48,6 +49,7 @@ roles:
     steps:
     - scout
     tier: bulk
+  # 2026-11-24: Sol primary for medical evidence precision, Terra fallback.
   medical_expert:
     name: Chuyên gia y học
     skills:
@@ -55,6 +57,11 @@ roles:
     steps:
     - research
     tier: medium
+    models:
+    - {cli: codex, model: gpt-6.1-sol}
+    - {cli: omniroute, model: codex/gpt-6.1-sol}
+    - {cli: codex, model: gpt-6.1-terra}
+    - {cli: omniroute, model: codex/gpt-6.1-terra}
   writer:
     name: Biên kịch viral
     skills:
@@ -68,6 +75,7 @@ roles:
     models:
     - {cli: codex, model: gpt-6.1-sol}
     - {cli: omniroute, model: codex/gpt-6.1-sol}
+  # 2026-11-24: Sol primary for storyboard quality; stays disjoint from Terra/Claude critics.
   storyboard_director:
     name: Đạo diễn Phân cảnh & Đồ họa
     skills:
@@ -77,6 +85,9 @@ roles:
     steps:
     - storyboard_design
     tier: medium
+    models:
+    - {cli: codex, model: gpt-6.1-sol}
+    - {cli: omniroute, model: codex/gpt-6.1-sol}
   voice_director:
     name: Đạo diễn Giọng đọc & Phiên âm
     skills:
@@ -84,7 +95,7 @@ roles:
     steps:
     - voice_prep
     tier: bulk
-  # Terra differs from writer Sol and storyboard Neon, including fallback aliases.
+  # Terra differs from writer Sol and storyboard Sol, including fallback aliases.
   script_critic:
     name: Kiểm duyệt kịch bản
     skills:
@@ -96,7 +107,7 @@ roles:
     models:
     - {cli: codex, model: gpt-6.1-terra}
     - {cli: omniroute, model: codex/gpt-6.1-terra}
-  # Sol reviews images independently of storyboard Neon.
+  # 2026-11-24: Claude Sonnet 5.5 primary (Terra fallback) reviews images independently of storyboard Sol.
   art_director:
     name: Đạo diễn hình
     skills:
@@ -105,8 +116,7 @@ roles:
     - visual_review
     tier: medium
     models:
-    - {cli: codex, model: gpt-6.1-sol}
-    - {cli: omniroute, model: codex/gpt-6.1-sol}
+    - {cli: claude, model: claude-sonnet-5-5}
     - {cli: codex, model: gpt-6.1-terra}
     - {cli: omniroute, model: codex/gpt-6.1-terra}
   editor:
@@ -119,7 +129,7 @@ roles:
     - revise_production
     - revise_product
     tier: medium
-  # Sol reviews independently of editor Neon; fallback remains separate.
+  # 2026-11-24: Claude Sonnet 5.5 primary (Terra fallback) reviews independently of editor Neon.
   product_critic:
     name: Kiểm định sản phẩm
     skills:
@@ -129,8 +139,7 @@ roles:
     - product_review
     tier: hard
     models:
-    - {cli: codex, model: gpt-6.1-sol}
-    - {cli: omniroute, model: codex/gpt-6.1-sol}
+    - {cli: claude, model: claude-sonnet-5-5}
     - {cli: codex, model: gpt-6.1-terra}
     - {cli: omniroute, model: codex/gpt-6.1-terra}
   copywriter:
