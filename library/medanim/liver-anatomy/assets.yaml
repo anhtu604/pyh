@@ -1,0 +1,64 @@
+assets:
+- id: niaid-human-anatomy-519
+  file: niaid-human-anatomy-519.png
+  source_page: https://bioart.niaid.nih.gov/bioart/519
+  original_url: https://bioart.niaid.nih.gov/api/bioarts/519/files/657942
+  author: NIAID Visual & Medical Arts (Courtesy of NIAID)
+  license: Public Domain
+  sha256: cff1bdbde1787d39c0f3c0bf6ff8dc79cba545490925cc839d8aaf7ef08d516e
+  role: Cơ thể người nhìn thẳng có phổi, gan dưới vòm cơ hoành bên phải, dạ dày và
+    ruột (Cảnh R02)
+  retrieved_at: null
+  transformations: null
+  license_evidence: null
+- id: servier-digestive-system
+  file: servier-digestive-system.png
+  source_page: https://smart.servier.com/smart_image/complete-digestive-apparatus/
+  original_url: https://smart.servier.com/wp-content/uploads/2016/10/syst_dig_complet.png
+  author: Servier Medical Art (Laboratoires Servier)
+  license: CC BY 4.0
+  license_url: https://creativecommons.org/licenses/by/4.0/
+  sha256: 055f837a28e97c21ebd5a05363a811f18d421920b2abfc946ff4d7c165b6091f
+  role: Hệ tiêu hóa hoàn chỉnh có gan, túi mật, tĩnh mạch cửa từ ruột, động mạch gan
+    và dạ dày-ruột (Cảnh R03)
+  retrieved_at: null
+  transformations: null
+  license_evidence: null
+- id: servier-liver-gallbladder
+  file: servier-liver-gallbladder.png
+  source_page: https://smart.servier.com/smart_image/liver-and-gallbladder/
+  original_url: https://smart.servier.com/wp-content/uploads/2016/10/foie_vesicule.png
+  author: Servier Medical Art (Laboratoires Servier)
+  license: CC BY 4.0
+  license_url: https://creativecommons.org/licenses/by/4.0/
+  sha256: 4769ba659b015920ac960fe06c41d66ef9751fe97ad757e861928126e932bfcf
+  role: Gan cận cảnh có túi mật mặt dưới, nhánh tĩnh mạch cửa (xanh dương) và động
+    mạch gan (đỏ) (Cảnh R02/R03)
+  retrieved_at: null
+  transformations: null
+  license_evidence: null
+- id: servier-liver-lobule
+  file: servier-liver-lobule.png
+  source_page: https://smart.servier.com/smart_image/liver-overview/
+  original_url: https://smart.servier.com/wp-content/uploads/2016/10/foie_coupe.png
+  author: Servier Medical Art (Laboratoires Servier)
+  license: CC BY 4.0
+  license_url: https://creativecommons.org/licenses/by/4.0/
+  sha256: 599bc1f0c34203350b55cc9ac95e5c93665a6f10ddf37651ac7674af682b37a0
+  role: Tiểu thùy gan khối 3D chuyển dần sang sơ đồ lục giác (Cảnh R04)
+  retrieved_at: null
+  transformations: null
+  license_evidence: null
+- id: servier-bile-secretion
+  file: servier-bile-secretion.png
+  source_page: https://smart.servier.com/smart_image/smart-bile-secretion/
+  original_url: https://smart.servier.com/wp-content/uploads/2016/10/secretion_biliaire.png
+  author: Servier Medical Art (Laboratoires Servier)
+  license: CC BY 4.0
+  license_url: https://creativecommons.org/licenses/by/4.0/
+  sha256: 817af3233431b7396307d3c184099dc573aa76dd7b411c208e17b78bec5a8837
+  role: Mặt cắt vi thể dải tế bào gan đa diện có nhân và xoang mạch chứa hồng cầu,
+    tế bào Kupffer (Cảnh R05)
+  retrieved_at: null
+  transformations: null
+  license_evidence: null

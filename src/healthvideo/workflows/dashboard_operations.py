@@ -38,6 +38,7 @@ from healthvideo.workflows import (
     factory,
     researcher,
 )
+from healthvideo.workflows.adopt_r5 import adopt_r5_project
 from healthvideo.workflows.gate_review import reopen_gate
 from healthvideo.workflows.production_retry import AGENT_RETRY_FILE
 from healthvideo.workflows.review import approval_is_stale, latest_approval
@@ -553,6 +554,26 @@ def reopen_project(root: Path, slug: str, *, expected_revision: str, reviewer: s
         return record.model_dump(mode='json')
 
 
+def adopt_r5_dashboard(root: Path, slug: str, *, expected_revision: str,
+                       reason: str, limiter, pin: str = '', recover: bool = False) -> dict:
+    from healthvideo.workflows.dashboard import pin_path
+
+    if not isinstance(reason, str) or not reason.strip():
+        raise ValueError('Nhập lý do chuyển sang chuẩn R5.')
+    with _MUTATION_LOCK:
+        _editable(root, slug, expected_revision)
+        return adopt_r5_project(
+            root,
+            slug,
+            reason=reason.strip(),
+            pin=pin,
+            now=datetime.now().astimezone(),
+            pin_file=pin_path(),
+            limiter=limiter,
+            recover=recover,
+        )
+
+
 def get_route(server, parts: list[str], query: dict) -> dict | bytes | None:
     from healthvideo.workflows import asset_library as library
 
@@ -695,6 +716,18 @@ def post_route(server, parts: list[str], body: dict) -> dict | None:
             return reopen_project(server.root, parts[2], expected_revision=body.get('expected_revision'),
                                   reviewer=body.get('reviewer'), reason=body.get('reason'), changed=body.get('changed'),
                                   limiter=server.limiter, pin=str(body.get('pin', '')))
+        if parts[3] == 'adopt-r5':
+            if body.get('confirmed') is not True:
+                raise ValueError('Bác sĩ cần xác nhận làm lại theo chuẩn R5 trên app.')
+            return adopt_r5_dashboard(
+                server.root,
+                parts[2],
+                expected_revision=body.get('expected_revision'),
+                reason=body.get('reason'),
+                limiter=server.limiter,
+                pin=str(body.get('pin', '')),
+                recover=bool(body.get('recover', False)),
+            )
     return None
 
 

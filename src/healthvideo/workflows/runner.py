@@ -62,6 +62,7 @@ from healthvideo.workflows import (
     review_budget,
     rework,
 )
+from healthvideo.workflows.adopt_r5 import r5_active
 from healthvideo.workflows.factory_standards import style_a_active
 from healthvideo.workflows.gate_review import (
     MEDICAL_APPROVAL_ARTIFACT,
@@ -598,6 +599,31 @@ def _quarantine_review(project_dir: Path, step: str, log_dir: Path) -> None:
         report.rename(archive)
 
 
+def _r5_prompt_block(step: str, slug: str) -> str:
+    if step in {"draft", "revise_medical"}:
+        return (
+            "## Revision này dùng chuẩn R5 (quality_profile: r5_v1)\n"
+            "- Revision này đã ghim chuẩn chất lượng R5 (`workflow/standards.yaml` -> `quality_standard.profile: r5_v1`).\n"
+            "- Bắt buộc viết theo hợp đồng R5: mở đầu 2–4 câu hỏi có ID rõ ràng, chia từng khối sâu bám sát câu hỏi + 1 câu chốt ngắn (<= 8 từ, không đưa Markdown vào TTS), có ít nhất 1 khối cập nhật chuyên môn (nêu rõ nguồn/ngày tìm, hoặc nguồn mới nhất tìm được nếu chưa có cập nhật mới), và đoạn recap trả lời đủ các câu hỏi theo đúng thứ tự.\n"
+            "- Mọi khẳng định y khoa (gồm câu chốt và cập nhật) phải gắn `claim_id` thật trong `evidence/ledger.yaml`; thiếu bằng chứng thì ghi `script/questions.yaml`."
+        )
+    if step == "storyboard_design":
+        return (
+            "## Revision này dùng chuẩn R5 (quality_profile: r5_v1)\n"
+            "- Revision này đã ghim chuẩn chất lượng R5 (`workflow/standards.yaml` -> `quality_standard.profile: r5_v1`).\n"
+            "- `storyboard/storyboard.yaml` BẮT BUỘC khai `quality_profile: r5_v1` và `r5_contract` (`questions` 2–4 câu khớp `hook_line_id`/`answer_line_ids` trong `script/script.yaml`; `blocks` có `line_ids`, `question_ids`, `takeaway_line_id`, ít nhất 1 khối `professional_update: true`).\n"
+            "- Mỗi scene BẮT BUỘC có `shots` dùng component trong registry cố định (`ScaleChain`, `ZoomChain`, `TakeawayCard`, `VnLabSheet`, `ReferenceDistribution`, `CreditCard`, `R5LiverLeakSignature`), anchor cụm thật thuộc lời đọc, `actions` và `text_windows` đạt D1/D2 (cấm tab layout).\n"
+            f"- Asset y khoa/giải phẫu phải lấy từ `assets/r5/catalog.yaml` (dàn từ thư viện repo bằng `healthvideo step stage-r5-assets {slug} --catalog library/medanim/<chủ đề>/assets.yaml --ids <id,...>`, không chép hash tay, không tải mạng) và khai báo đầy đủ trong `assets/asset-manifest.yaml`."
+        )
+    if step == "shorts_plan":
+        return (
+            "## Revision này dùng chuẩn R5 (quality_profile: r5_v1)\n"
+            "- Revision này đã ghim chuẩn chất lượng R5 (`workflow/standards.yaml` -> `quality_standard.profile: r5_v1`).\n"
+            "- Kế hoạch clip dọc 9:16 phải bám `r5_contract` (câu hỏi/khối/câu chốt) và `shots` trong `storyboard/storyboard.yaml`; giữ nguyên tiến triển nhân quả và `safety_caveat`, không ép đổi subject theo quota cũ, không crop mù từ 16:9, giữ phụ đề 9:16 trong vùng an toàn."
+        )
+    return ""
+
+
 def _build_step_prompt(
     root: Path,
     deps: RunDeps,
@@ -729,6 +755,13 @@ def _build_step_prompt(
                 "nếu 6 tiêu chí gốc (`hinh_khop_loi`, `hinh_ro`, `nhip_dung`, `am_thanh_phu_de`, `mo_ket`, `bai_dang`) "
                 "đều đạt >= 7. Không yêu cầu dựng lại video cũ theo mascot Style A hay zoom kính lúp."
             )
+    r5_note = ""
+    if step in {"draft", "revise_medical", "storyboard_design", "shorts_plan"} and (
+        project_dir / "project.yaml"
+    ).is_file():
+        revision_dir = resolve_project_layout(project_dir).artifact_root
+        if r5_active(revision_dir):
+            r5_note = _r5_prompt_block(step, entry.slug)
     standards_block = prompt_block(root, slug=entry.slug)
     stale_visual_note = (
         prepare_stale_review(resolve_project_layout(project_dir).artifact_root)
@@ -747,7 +780,14 @@ def _build_step_prompt(
     )
     extra_blocks = "\n\n".join(
         part
-        for part in (style_note, standards_block.rstrip(), stale_visual_note, shorts_plan_note, guidance_note)
+        for part in (
+            style_note,
+            r5_note,
+            standards_block.rstrip(),
+            stale_visual_note,
+            shorts_plan_note,
+            guidance_note,
+        )
         if part
     )
     if extra_blocks:

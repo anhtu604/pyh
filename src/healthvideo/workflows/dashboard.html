@@ -1155,7 +1155,7 @@ html[data-theme="light"] .ws-iso-stage{background:radial-gradient(ellipse 62% 46
         <h2>Xử lý dự án</h2>
         <label class="ops-form">Dự án<select class="inp" id="ops-project"><option value="">Chọn dự án</option></select></label>
         <pre id="ops-preview" class="md" aria-live="polite">Chọn dự án để xem bước tiếp theo và cache trước khi thử lại.</pre>
-        <div class="controls" style="margin-top:10px"><button type="button" class="btn" id="ops-retry">Cho phép thử lại</button><button type="button" class="btn" id="ops-show-reopen">Mở lại cổng y khoa</button></div>
+        <div class="controls" style="margin-top:10px"><button type="button" class="btn" id="ops-retry">Cho phép thử lại</button><button type="button" class="btn" id="ops-show-reopen">Mở lại cổng y khoa</button><button type="button" class="btn" id="ops-show-adopt-r5">Làm lại theo chuẩn R5</button></div>
         <p class="sub">Dừng xưởng trước khi xử lý. Sau khi cho phép thử lại, dùng nút Bật xưởng để chạy tiếp.</p>
         <form id="ops-reopen" class="ops-form" hidden>
           <label>Tên bác sĩ xác nhận<input class="inp" name="reviewer" required maxlength="120"></label>
@@ -1164,6 +1164,12 @@ html[data-theme="light"] .ws-iso-stage{background:radial-gradient(ellipse 62% 46
           <label>Tệp cần sửa (mỗi dòng một đường dẫn trong revision)<textarea class="inp" name="changed" required>storyboard/storyboard.yaml</textarea></label>
           <label><input type="checkbox" name="confirmed" required> Tôi xác nhận mở lại cổng y khoa và duyệt lại trước sản xuất.</label>
           <button class="btn danger" type="submit">Xác nhận mở lại</button>
+        </form>
+        <form id="ops-adopt-r5" class="ops-form" hidden>
+          <label>PIN bác sĩ<input class="inp" name="pin" type="password" inputmode="numeric" autocomplete="off" required></label>
+          <label>Lý do làm lại theo chuẩn R5<textarea class="inp" name="reason" required maxlength="4000">Hoàn thiện theo chuẩn R5 (r5_v1)</textarea></label>
+          <label><input type="checkbox" name="confirmed" required> Tôi xác nhận tạo revision mới theo chuẩn R5 và duyệt lại từ đầu.</label>
+          <button class="btn danger" type="submit">Xác nhận làm lại theo chuẩn R5</button>
         </form>
       </div>
       <div class="glass card">
@@ -6205,7 +6211,7 @@ $('ops-tabs').querySelectorAll('[data-ops-tab]').forEach(button=>button.onclick=
   try{await opsLoadProjects();if(opsTab==='queue'){await opsQueue();await opsDeleted();await opsPreview()}if(opsTab==='library')await libLoad()}catch(e){toast(e.message,true)}
 });
 $('ops-topic').onsubmit=async e=>{e.preventDefault();try{await post('/api/topics/add',Object.fromEntries(new FormData(e.target)));e.target.reset();await opsQueue();await refresh();toast('Đã thêm chủ đề vào hàng đợi.')}catch(ex){toast(ex.message,true)}};
-$('ops-project').onchange=()=>{ $('ops-reopen').hidden=true;opsPreview().catch(e=>toast(e.message,true))};
+$('ops-project').onchange=()=>{ $('ops-reopen').hidden=true;$('ops-adopt-r5').hidden=true;opsPreview().catch(e=>toast(e.message,true))};
 $('ops-retry').onclick=async()=>{if(!opsCurrent)return;const d=opsCurrent;if(!confirm(`Thử lại bước ${d.next_step||'—'}? Tối đa ${d.cache.max_requests} yêu cầu TTS cho một lượt; cache chưa kiểm hash/giọng/provider.`))return;try{await post(`/api/project/${encodeURIComponent(d.slug)}/retry`,{expected_revision:d.revision});await opsPreview();toast('Đã cho phép thử lại. Bật xưởng khi sẵn sàng.')}catch(e){toast(e.message,true)}};
 async function openReopen(p){
   $('admin-drawer').classList.add('show');
@@ -6215,10 +6221,15 @@ async function openReopen(p){
   f.elements.reason.value=friendlyError(p.blocked);
   f.scrollIntoView({behavior:'smooth',block:'center'}); f.elements.pin.focus();
 }
-$('ops-show-reopen').onclick=()=>{if(opsCurrent)$('ops-reopen').hidden=!$('ops-reopen').hidden};
+$('ops-show-reopen').onclick=()=>{if(opsCurrent){$('ops-adopt-r5').hidden=true;$('ops-reopen').hidden=!$('ops-reopen').hidden}};
+$('ops-show-adopt-r5').onclick=()=>{if(opsCurrent){$('ops-reopen').hidden=true;$('ops-adopt-r5').hidden=!$('ops-adopt-r5').hidden}};
 $('ops-reopen').onsubmit=async e=>{
   e.preventDefault();if(!opsCurrent)return;const d=opsCurrent,f=new FormData(e.target);
   try{await post(`/api/project/${encodeURIComponent(d.slug)}/reopen`,{expected_revision:d.revision,reviewer:f.get('reviewer'),pin:f.get('pin'),reason:f.get('reason'),changed:f.get('changed').split(/\r?\n/).map(s=>s.trim()).filter(Boolean),confirmed:f.get('confirmed')==='on'});e.target.reset();e.target.hidden=true;await opsPreview();toast('Đã mở lại cổng y khoa; cần nộp duyệt lại.');refresh()}catch(ex){toast(ex.message,true)}
+};
+$('ops-adopt-r5').onsubmit=async e=>{
+  e.preventDefault();if(!opsCurrent)return;const d=opsCurrent,f=new FormData(e.target);
+  try{const r=await post(`/api/project/${encodeURIComponent(d.slug)}/adopt-r5`,{expected_revision:d.revision,pin:f.get('pin'),reason:f.get('reason'),confirmed:f.get('confirmed')==='on'});e.target.reset();e.target.hidden=true;await opsPreview();toast(`Đã chuyển sang chuẩn R5 (rev ${r.revision}); dự án về bước viết lời.`);refresh()}catch(ex){toast(ex.message,true)}
 };
 async function libLoad(){
   const q=new URLSearchParams({slug:$('lib-project').value,kind:$('lib-kind').value,query:$('lib-query').value});

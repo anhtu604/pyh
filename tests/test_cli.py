@@ -687,9 +687,10 @@ def test_public_command_surface():
 
     root = get_command(app)
     expected = {
-        (): {"topic", "channel", "telegram", "run", "status", "review", "preview", "produce", "package", "doctor",
+        (): {"topic", "project", "channel", "telegram", "run", "status", "review", "preview", "produce", "package", "doctor",
              "duyet", "xuong", "notify-test", "notify-setup", "app", "evidence"},
         ("topic",): {"discover", "add", "list", "sync-sheet", "discover-ai"},
+        ("project",): {"adopt-r5"},
         ("channel",): {"sync-sheet", "import-csv", "analyze", "create-sheet"},
         ("telegram",): {"status", "start", "stop", "run"},
         ("review",): {"open", "approve", "reject", "reopen", "set-pin"},

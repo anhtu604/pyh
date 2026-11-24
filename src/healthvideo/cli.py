@@ -105,12 +105,14 @@ for _stream in (sys.stdout, sys.stderr):
 app = typer.Typer(no_args_is_help=True)
 review_app = typer.Typer(no_args_is_help=True)
 topic_app = typer.Typer(no_args_is_help=True)
+project_app = typer.Typer(no_args_is_help=True, help="Thao tác chuyển đổi hoặc quản lý project.")
 channel_app = typer.Typer(no_args_is_help=True, help="Chỉ số hiệu quả kênh & báo cáo phân tích.")
 telegram_app = typer.Typer(no_args_is_help=True, help="Bot Telegram điều khiển Trưởng nhóm Điều phối.")
 step_app = typer.Typer(no_args_is_help=True)
 evidence_app = typer.Typer(no_args_is_help=True, help="Tra cứu Elsevier qua API chính thức.")
 app.add_typer(review_app, name="review")
 app.add_typer(topic_app, name="topic")
+app.add_typer(project_app, name="project")
 app.add_typer(channel_app, name="channel")
 app.add_typer(telegram_app, name="telegram")
 app.add_typer(step_app, name="step", hidden=True)
@@ -901,6 +903,63 @@ def revision_create(
         typer.echo(str(error))
         raise typer.Exit(code=1) from error
     typer.echo(f"Created revision: {revision}")
+
+
+@project_app.command("adopt-r5")
+def project_adopt_r5(
+    slug: Annotated[str, typer.Argument(help="Slug dự án cần chuyển sang chuẩn R5")],
+    reason: Annotated[str, typer.Option("--reason", help="Lý do làm lại theo chuẩn R5")],
+    recover: Annotated[
+        bool,
+        typer.Option("--recover", help="Khôi phục idempotent nếu lượt chuyển trước bị gián đoạn"),
+    ] = False,
+    root: Root = Path("."),
+) -> None:
+    """Tạo revision mới ghim chuẩn R5 (r5_v1), đưa về bước viết lời; yêu cầu PIN bác sĩ."""
+    from healthvideo.workflows.adopt_r5 import adopt_r5_project
+
+    pin = _require_approval_pin()
+    try:
+        result = adopt_r5_project(
+            root,
+            slug,
+            reason=reason,
+            pin=pin,
+            now=datetime.now().astimezone(),
+            recover=recover,
+        )
+    except (FileNotFoundError, FileExistsError, PinError, TypeError, ValueError) as error:
+        _echo_error(error)
+        raise typer.Exit(code=1) from error
+    typer.echo(
+        f"Đã chuyển {result['slug']} sang chuẩn {result['quality_profile']} "
+        f"(revision {result['parent_revision']} -> {result['revision']}, state: {result['state']})."
+    )
+
+
+@step_app.command("stage-r5-assets")
+def step_stage_r5_assets(
+    slug: Annotated[str, typer.Argument(help="Slug hoặc đường dẫn thư mục dự án")],
+    catalog: Annotated[
+        Path,
+        typer.Option("--catalog", help="Đường dẫn tới library/medanim/<chủ đề>/assets.yaml trong repo"),
+    ],
+    ids: Annotated[
+        str,
+        typer.Option("--ids", help="Danh sách asset ID cách nhau bằng dấu phẩy"),
+    ],
+    root: Root = Path("."),
+) -> None:
+    """Chép asset có phép từ thư viện repo và ghi assets/r5/catalog.yaml vào revision hiện hành."""
+    from healthvideo.workflows.adopt_r5 import stage_r5_assets
+
+    asset_ids = [item.strip() for item in ids.split(",") if item.strip()]
+    try:
+        result = stage_r5_assets(root, slug, catalog=catalog, asset_ids=asset_ids)
+    except (FileNotFoundError, OSError, TypeError, ValueError) as error:
+        _echo_error(error)
+        raise typer.Exit(code=1) from error
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
 
 
 def _require_tty() -> None:
