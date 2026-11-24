@@ -497,3 +497,15 @@ phases:
     status: done
     owner: codex
     note: 'Đã vào master: 16 vai có hợp đồng input/output/done_when; lời theo mạch cơ chế, câu hỏi-câu chốt-recap, D3, D4 2/3/3; bỏ quota biểu đồ; model Neon/Sol/Terra, critic khác model maker; giọng Anh Tu tốc độ 1,18. pytest 2938 đạt. Còn mở: orchestrator-neon chưa có ID xác thực.'
+
+  - id: R5.3.3
+    title: Resolve shot và đo chất lượng bằng frame
+    status: doing
+    owner: codex
+    note: 'Đo tỷ lệ chữ D1 và nhịp shot D2 theo frame, kiểm trước cổng không cần giọng thật; project cũ đi đường cũ.'
+
+  - id: R5.3.5
+    title: Bộ component R5 (zoom, thanh tầng, câu chốt, phiếu VN, đường cong, credit)
+    status: doing
+    owner: agy
+    note: 'Trích component từ bản thử chương 1 thành bộ dùng chung, bỏ số liệu gan viết cứng.'
