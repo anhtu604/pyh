@@ -476,7 +476,7 @@ phases:
     note: 'Đạt sau 1 vòng sửa (màng là viền ngoài, tế bào trơn); đã ghép vào bản thử. Đoạn S04 của bản thử; ghép vào R5.5 khi xong.'
   - id: R5.3
     title: Thiết kế chuẩn mới (spec) và kế hoạch thực hiện, bác sĩ duyệt hướng
-    status: todo
-    owner: Claude
-    note: 'Sau R5.1 + R5.2.'
+    status: doing
+    owner: codex
+    note: 'Bác sĩ 2026-11-24 duyệt hướng bản thử chương 1 v6; codex viết spec và kế hoạch đưa chuẩn mới vào xưởng (lời sâu theo mạch cơ chế, hình giải phẫu có giấy phép, không phụ đề 16:9, chọn model nhanh, cắt vòng lặp), Claude duyệt.'
 
