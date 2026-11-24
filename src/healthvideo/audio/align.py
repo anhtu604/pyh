@@ -118,7 +118,8 @@ def _asr_lexicon_maps(
     return exact_map, iy_map, max_len
 
 
-def _expand_asr_words(raw_words: Sequence[dict], asr_lexicon: Mapping[str, str]) -> list[dict]:
+def _expand_asr_words(raw_words: Sequence[dict], asr_lexicon: Mapping[str, str], *,
+                      preserve_asr_source: bool = False) -> list[dict]:
     """Expand Whisper ITN tokens matching ``asr_lexicon`` into timed spoken syllables."""
     if not asr_lexicon or not raw_words:
         return [dict(item) for item in raw_words]
@@ -152,7 +153,10 @@ def _expand_asr_words(raw_words: Sequence[dict], asr_lexicon: Mapping[str, str])
         for k, syllable in enumerate(syllables):
             syl_start = start + (end - start) * k / count
             syl_end = end if k == count - 1 else start + (end - start) * (k + 1) / count
-            expanded.append({'word': syllable, 'start': syl_start, 'end': syl_end, 'prob': prob})
+            expanded.append({'word': syllable, 'start': syl_start, 'end': syl_end, 'prob': prob,
+                             **({'asr_source': (raw_words[idx + k]['word'] if count == matched_n else
+                                               ' '.join(w['word'] for w in raw_words[idx:idx + matched_n]))}
+                                if preserve_asr_source else {})})
         idx += matched_n
     return expanded
 
@@ -171,7 +175,8 @@ def _clean_asr(words: Sequence[dict], duration: float) -> list[dict]:
         for i, token in enumerate(tokens):
             if normalize_word(token):
                 cleaned.append({'word': token, 'start': min(duration, start + (end-start)*i/len(tokens)),
-                                    'end': min(duration, start + (end-start)*(i+1)/len(tokens)), 'prob': prob})
+                                    'end': min(duration, start + (end-start)*(i+1)/len(tokens)), 'prob': prob,
+                                    **({'asr_source': item['asr_source']} if 'asr_source' in item else {})})
     return cleaned
 
 
@@ -192,12 +197,16 @@ def map_words(script: str, asr_words: Sequence[dict], *, duration: float) -> lis
             recognized = ' '.join(w['word'] for w in heard[c:d])
             for i in range(a, b):
                 result[i]['heard'] = recognized
+                if any('asr_source' in w for w in heard[c:d]):
+                    result[i]['asr_source'] = ' '.join(dict.fromkeys(w.get('asr_source', w['word']) for w in heard[c:d]))
         elif c < d and result:
             # Retain inserted ASR speech for QA without creating non-script captions.
             i = max(0, a - 1)
             result[i]['extra_heard'] = ' '.join(w['word'] for w in heard[c:d])
             result[i]['extra_start'] = heard[c]['start']
             result[i]['extra_end'] = heard[d-1]['end']
+            if any('asr_source' in w for w in heard[c:d]):
+                result[i]['extra_asr_source'] = ' '.join(dict.fromkeys(w.get('asr_source', w['word']) for w in heard[c:d]))
     i = 0
     while i < len(result):
         if result[i]['matched']:
@@ -227,7 +236,8 @@ def _write_json(path: Path, data) -> None:
 
 def align_lines(line_wavs: Mapping[str, Path], scripts: Mapping[str, str], *, out_dir: Path,
                 cache_dir: Path | None = None, runner=subprocess.run,
-                asr_lexicon: Mapping[str, str] | None = None) -> dict[str, list[dict]]:
+                asr_lexicon: Mapping[str, str] | None = None,
+                preserve_asr_source: bool = False) -> dict[str, list[dict]]:
     """Load one ASR model per batch; raw transcripts cache by WAV/model/version hash.
 
     Missing runtime or inference failure is nonblocking. Per-line JSON contains
@@ -272,7 +282,7 @@ def align_lines(line_wavs: Mapping[str, Path], scripts: Mapping[str, str], *, ou
         for line in line_wavs:
             if not raw[line]:
                 warnings.warn(f'Whisper heard no words for {line}; using estimated timing', stacklevel=2)
-            heard_words = _expand_asr_words(raw[line], asr_lexicon) if asr_lexicon else raw[line]
+            heard_words = _expand_asr_words(raw[line], asr_lexicon, preserve_asr_source=preserve_asr_source) if asr_lexicon else raw[line]
             result[line] = map_words(scripts[line], heard_words, duration=durations[line])
             _write_json(out_dir/f'{line}.json', result[line])
             _write_json(out_dir/f'{line}.meta.json', {'cache_key': keys[line], **alignment_identity()})

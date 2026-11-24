@@ -239,6 +239,7 @@ def ask(
     fingerprint: str | None = None,
     now: datetime | None = None,
     pronunciation_terms: Sequence[Mapping[str, Any]] | None = None,
+    tts_lines: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Create an open question atomically; deduplicate open or answered questions."""
     path = question_path(root, slug)
@@ -282,6 +283,7 @@ def ask(
         'status': 'open',
         'answer': None,
         **({'pronunciation_terms': list(pronunciation_terms)} if pronunciation_terms is not None else {}),
+        **({'tts_lines': list(tts_lines)} if tts_lines is not None else {}),
     }
     write_yaml_atomic(path, payload)
     return payload
@@ -328,6 +330,25 @@ def answer(
         raise ValueError('Câu hỏi này không cho phép nhập chữ tự do.')
 
     answered_at = (now or datetime.now(UTC)).isoformat(timespec='seconds')
+    if data.get('kind') == 'tts_qa':
+        if opt_id not in {'accept', 'change', 'retry'}:
+            raise ValueError('Chọn dùng tiếp, đổi cách đọc hoặc đọc lại.')
+        if opt_id == 'change':
+            from healthvideo.tts import pronunciation as pronunciation_module
+
+            try:
+                choices = json.loads(clean_text)
+            except (ValueError, TypeError):
+                raise ValueError('Nhập cách đọc dạng JSON: {"từ": "cách đọc"}. Cần duyệt lại y khoa.') from None
+            if (len(str(text or '')) > MAX_FREE_TEXT_CHARS or not isinstance(choices, dict) or not choices
+                    or any(not isinstance(k, str) or not k.strip() or len(k) > 200
+                           or not isinstance(v, str) or not v.strip() or len(v) > 200
+                           or any(ord(c) < 32 for c in k + v) for k, v in choices.items())):
+                raise ValueError('Cách đọc không hợp lệ; cần nhập từ và cách đọc đầy đủ.')
+            # The profile is a medical-reviewed artifact. Updating it deliberately
+            # invalidates the medical approval; produce checks it before any TTS.
+            pronunciation_module.save_doctor_pronunciations(
+                pronunciation_module.PRONUNCIATION_PROFILE_PATH, choices, answered_at[:10])
     if data.get('kind') == 'pronunciation':
         from healthvideo.tts.pronunciation import save_doctor_pronunciations
 
@@ -368,4 +389,17 @@ def answer(
     hist_entries.append(answered)
     write_yaml_atomic(history_path(root, slug), {'version': 1, 'entries': hist_entries})
     path.unlink(missing_ok=True)
+    if data.get('kind') == 'tts_qa' and opt_id in {'accept', 'retry'}:
+        from healthvideo.workflows.production_retry import clear_retry
+
+        # The runner records a validation hold after produce raises. The doctor's
+        # explicit listening/retry decision releases only this TTS hold, so the
+        # normal scheduler can resume without a separate technical retry button.
+        marker = 'Whisper TTS QA blocked before render'
+        hold = path.parent / 'production-retry.yaml'
+        if hold.is_file() and marker in str(read_yaml(hold).get('reason', '')):
+            clear_retry(root, slug)
+        blocked = path.parent / 'blocked.txt'
+        if blocked.is_file() and marker in blocked.read_text(encoding='utf-8'):
+            blocked.unlink(missing_ok=True)
     return answered

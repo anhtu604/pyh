@@ -147,7 +147,7 @@ def test_r5_bad_aligned_anchor_stops_before_render(tmp_path, monkeypatch):
     approve_gate(project, GateKind.MEDICAL, reviewer="doctor", now=V2_REVIEWED_AT)
     # Alignment is absent despite valid estimated anchors. Runtime may not estimate.
     monkeypatch.setattr(produce_workflow, "align_lines", lambda *a, **kw: {})
-    with pytest.raises(ValueError, match="missing word alignment"):
+    with pytest.raises(ValueError, match="Whisper TTS QA blocked before render"):
         produce_project(project, SilentTTS(), lambda _: pytest.fail("render before valid anchors"), music=False)
 
 

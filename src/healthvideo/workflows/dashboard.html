@@ -3219,7 +3219,7 @@ function renderStage12DecisionSlot(b){
   `).join('');
   const freeTextHtml = q.allow_free_text ? `
     <div class="s12-free-wrap">
-      <textarea class="inp" id="dq-free-text" rows="2" maxlength="4000" placeholder="Ghi chú thêm hoặc nhập ý kiến riêng cho trạm này…"></textarea>
+      <textarea class="inp" id="dq-free-text" rows="2" maxlength="4000" placeholder="${q.kind === 'tts_qa' ? 'Đổi cách đọc, mỗi dòng: từ/cụm = cách đọc. Cần duyệt lại y khoa.' : 'Ghi chú thêm hoặc nhập ý kiến riêng cho trạm này…'}"></textarea>
       <div class="s12-actions">
         <button type="button" class="btn" id="dq-submit-free">Gửi ý kiến riêng</button>
       </div>
@@ -3233,6 +3233,7 @@ function renderStage12DecisionSlot(b){
       </div>
       <p class="sub s12-lead">${esc(q.question || '')}</p>
       ${listHtml}
+      ${q.kind === 'tts_qa' ? (q.tts_lines || []).map(row => `<div><p>${esc(row.line)} · ${esc(row.text)}</p><audio controls preload="none" src="${esc(row.audio_url)}"></audio></div>`).join('') : ''}
       ${pronunciationTerms.length ? pronunciationTerms.map((term, i) => `
         <fieldset data-pron-term="${i}"><legend>${esc(term.written)}</legend>
         <p>${esc(term.context)}</p>
@@ -3251,6 +3252,19 @@ function renderStage12DecisionSlot(b){
   const allBtns = freeBtn ? [...optBtns, freeBtn] : optBtns;
   const submitAnswer = async (optionId) => {
     let text = freeInput ? String(freeInput.value || '').trim() : '';
+    if(q.kind === 'tts_qa' && (optionId === 'change' || !optionId)){
+      const choices = Object.create(null);
+      for(const row of text.split('\n').filter(v => v.trim())){
+        const at = row.indexOf('=');
+        const term = at > 0 ? row.slice(0, at).trim() : '';
+        const spoken = at > 0 ? row.slice(at + 1).trim() : '';
+        if(!term || !spoken){ toast('Nhập mỗi dòng theo mẫu: từ/cụm = cách đọc.', true); return; }
+        choices[term] = spoken;
+      }
+      if(!Object.keys(choices).length){ toast('Nhập cách đọc trước khi gửi.', true); return; }
+      text = JSON.stringify(choices);
+      optionId = 'change';
+    }
     if(pronunciationTerms.length){
       const choices = Object.create(null);
       for(const [i, term] of pronunciationTerms.entries()){

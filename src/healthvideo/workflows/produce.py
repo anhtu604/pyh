@@ -16,6 +16,7 @@ from healthvideo.assets import (
     referenced_evidence_assets,
     referenced_storyboard_assets,
 )
+from healthvideo.audio import tts_qa
 from healthvideo.audio.align import align_lines, alignment_identity, pronunciation_qa
 from healthvideo.audio.music import (
     DEFAULT_MOOD,
@@ -301,6 +302,7 @@ def tts_cache_key(tts: TTSProvider, request: TTSRequest) -> str:
 
 def _synthesize_cached_line(
     tts: TTSProvider, request: TTSRequest, output: Path, *, cache_dir: Path,
+    force: bool = False,
 ) -> None:
     """Retain paid line requests even when a later render fails."""
     if provider_identity(tts)["provider"] not in {"vibi_minimax"}:
@@ -310,7 +312,7 @@ def _synthesize_cached_line(
     cached = cache_dir / f"{key}.wav"
     receipt = cached.with_suffix(".json")
     try:
-        if read_yaml(receipt).get("sha256") == sha256_file(cached):
+        if not force and read_yaml(receipt).get("sha256") == sha256_file(cached):
             inspect_wav(cached, require_signal=getattr(tts, "require_signal", False))
             shutil.copyfile(cached, output)
             return
@@ -720,6 +722,16 @@ def _produce_v2_inner(
         line_wavs: dict[str, Path] = {}
         line_ms: dict[str, int] = {}
         spoken_scripts: dict[str, str] = {}
+        line_reports: list[dict] = []
+        failed_lines: list[dict] = []
+        is_r5 = storyboard.quality_profile == "r5_v1"
+        from healthvideo.workflows import doctor_questions
+
+        qa_history = doctor_questions.history(telemetry_root, project.slug) if is_r5 else []
+        accepted_hashes = {row['wav_sha256'] for entry in qa_history
+                           if entry.get('kind') == 'tts_qa'
+                           and entry.get('answer', {}).get('option_id') == 'accept'
+                           for row in entry.get('tts_lines', [])}
         usage_provider = getattr(tts, "inner", tts)
         usage_setter = getattr(usage_provider, "set_usage_path", None)
         if callable(usage_setter):
@@ -749,15 +761,73 @@ def _produce_v2_inner(
                 spoken_scripts[line.id] = " ".join(
                     re.sub(r"\[[^\]]*\]", "", sent_text).replace("-", " ").split()
                 )
-                _synthesize_cached_line(
-                    tts, TTSRequest(text=sent_text, language=script.language,
-                                    delivery_beats=line.delivery_beats()),
-                    line_audio, cache_dir=layout.project_dir / "cache/tts",
-                )
+                request = TTSRequest(text=sent_text, language=script.language,
+                                     delivery_beats=line.delivery_beats())
+                if is_r5:
+                    asr_lexicon = tts_qa.equivalents(sent_text, {
+                        e.written: e.spoken.replace('-', ' ') for e in pronunciation.entries})
+                    qa_text = re.sub(r'(?<!\w)[A-Z](?!\w)',
+                                     lambda m, mapping=asr_lexicon: mapping[m.group()], spoken_scripts[line.id])
+                    terms = [e.spoken.replace('-', ' ') for e in pronunciation.entries]
+                    terms += [asr_lexicon[c] for c in re.findall(r'(?<!\w)[A-Z](?!\w)', sent_text)]
+                    key = canonical_json_hash({'tts': tts_cache_key(tts, request), 'line': line.id})
+                    retry_id = next((entry['id'] for entry in reversed(qa_history)
+                                     if entry.get('kind') == 'tts_qa'
+                                     and entry.get('answer', {}).get('option_id') == 'retry'
+                                     and any(row.get('request_key') == key for row in entry.get('tts_lines', []))), '')
+
+                    def synthesize_checked(output, force, request=request):
+                        _synthesize_cached_line(tts, request, output,
+                                                cache_dir=layout.project_dir / 'cache/tts', force=force)
+
+                    with _gpu_mutex(telemetry_root):
+                        report, checked_wav = tts_qa.check_line(
+                            line_id=line.id, text=qa_text, terms=terms,
+                            # Expand letter names, retaining original Latin ITN so
+                            # a synthesized Vietnamese expansion cannot block QA.
+                            asr_lexicon=tts_qa.asr_equivalents(asr_lexicon),
+                            cache_dir=layout.project_dir / 'cache/tts-qa', request_key=key,
+                            synthesize=synthesize_checked, aligner=align_lines,
+                            accepted_hashes=accepted_hashes, retry_id=retry_id)
+                    shutil.copyfile(checked_wav, line_audio)
+                    line_reports.append(report)
+                    if report['blocked']:
+                        # Kept outside staging so the doctor's listening link survives
+                        # cleanup of a blocked production attempt.
+                        relative = f'audio/tts-qa/{report["wav_sha256"]}.wav'
+                        listen = layout.artifact_root / 'renders' / relative
+                        listen.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copyfile(checked_wav, listen)
+                        failed_lines.append({'line': line.id, 'text': qa_text,
+                                             'wav_sha256': report['wav_sha256'], 'request_key': key,
+                                             'retry_id': retry_id,
+                                             'audio_url': f'/media/{project.slug}/{relative}',
+                                             'audio_path': str(listen),
+                                             'flags': [f for f in report['flags'] if f['severity'] == 'block']})
+                else:
+                    _synthesize_cached_line(tts, request, line_audio,
+                                            cache_dir=layout.project_dir / 'cache/tts')
                 line_wavs[line.id] = line_audio
                 line_ms[line.id] = inspect_wav(
                     line_audio, require_signal=getattr(tts, "require_signal", False)
                 ).duration_ms
+            if failed_lines:
+                report = tts_qa.aggregate(line_reports)
+                report['input_hash'] = input_hash
+                _write_json_atomic(layout.artifact_root / 'renders/pronunciation-qa.json', report)
+                doctor_questions.ask(
+                    telemetry_root, project.slug, station='09', kind='tts_qa',
+                    question='Whisper còn nghi ngờ lời đọc sau một lần đọc lại. Xin nghe các dòng bên dưới.',
+                    context=[{'code': row['line'], 'location': row['audio_path'],
+                              'summary': row['text'] + ' | ' + '; '.join(
+                                  f"{f['script_word']} → {f['heard']}" for f in row['flags'])}
+                             for row in failed_lines],
+                    options=[{'id': 'accept', 'label': 'Đọc đúng rồi, dùng tiếp'},
+                             {'id': 'change', 'label': 'Đổi cách đọc: …',
+                              'detail': 'Nhập mỗi dòng: từ = cách đọc. Đổi từ điển sẽ cần duyệt lại y khoa.'},
+                             {'id': 'retry', 'label': 'Đọc lại'}],
+                    fingerprint=canonical_json_hash(failed_lines), tts_lines=failed_lines)
+                raise ValueError('Whisper TTS QA blocked before render; chờ bác sĩ nghe lại.')
             usage_path = layout.artifact_root / "audio/tts-usage.json"
             if provider_name in {"vibi_minimax"} and usage_path.is_file():
                 shutil.copyfile(usage_path, staging_dir / "audio/tts-usage.json")
@@ -781,7 +851,7 @@ def _produce_v2_inner(
             # and expands Whisper ITN tokens only on the QA pass; align_lines reuses
             # unmodified raw Whisper transcripts for the same WAV bytes.
             qa_alignment = alignment
-            if spoken_scripts != raw_scripts:
+            if spoken_scripts != raw_scripts and not is_r5:
                 asr_lexicon = {
                     entry.written: entry.spoken.replace("-", " ")
                     for entry in pronunciation.entries
@@ -800,6 +870,8 @@ def _produce_v2_inner(
                 qa_alignment, terms=[term for entry in pronunciation.entries
                                      for term in (entry.written, entry.spoken.replace("-", " "))],
             )
+            if is_r5:
+                pronunciation_report = tts_qa.aggregate(line_reports)
             pronunciation_report["input_hash"] = input_hash
             _write_json_atomic(staging_dir / "pronunciation-qa.json", pronunciation_report)
         gc.collect()
