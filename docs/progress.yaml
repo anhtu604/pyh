@@ -466,9 +466,9 @@ phases:
     note: 'Xong (docs/reference/2026-11-23-medanim-signature.md): xem 7 kênh (Nucleus, Zack, Osmosis, Kurzgesagt, TED-Ed, Armando, HayHo); chọn rig 2D vector Remotion làm nền, 3D chọn lọc; 26 hoạt ảnh lõi, đợt đầu 6. Bác sĩ 2026-11-23 chọn hoạt ảnh y khoa làm đặc trưng; codex xem mẫu thật, kiểm thư viện medanim, so 2-3 cách sản xuất theo chất lượng/thời gian/chi phí.'
   - id: R5.5
     title: Làm thử 90 giây đầu PYH-003 theo chuẩn mới (nhân vật kể chuyện, mỗi câu một hình)
-    status: doing
+    status: done
     owner: agy
-    note: 'Vòng 4 (agy Neon): dựng chương 1 bản sâu (cache/r5-proto/script-v3-deep.md, khoảng 4,7 phút): gan → tiểu thùy → tế bào → ALT/AST, hình khoa học có giấy phép thay FLUX, giọng Vibi Anh Tu. Bản v4 92 giây: cache/r5-proto/prototype-90s-v4.mp4.'
+    note: 'Chương 1 bản sâu chờ bác sĩ xem: cache/r5-proto/chapter1-deep-v5.mp4 (5 phút 11 giây, giọng Anh Tu, 5.812 ký tự Vibi, hình khoa học có giấy phép, không FLUX ở phần cơ chế). Nhánh r5-5 31c48ea.'
   - id: R5.6
     title: Làm lại hoạt ảnh men gan theo chuẩn một tác nhân - một thay đổi, gần như không chữ
     status: done
