@@ -500,9 +500,9 @@ phases:
 
   - id: R5.3.3
     title: Resolve shot và đo chất lượng bằng frame
-    status: doing
+    status: done
     owner: codex
-    note: 'Đo tỷ lệ chữ D1 và nhịp shot D2 theo frame, kiểm trước cổng không cần giọng thật; project cũ đi đường cũ.'
+    note: 'Đã vào master: đo D1 (hợp khoảng chữ ≤15%, mỗi lần ≤6s) và D2 (median/P90 theo nhóm shot) theo frame, kiểm trước cổng bằng timing ước lượng; project cũ giữ đúng byte/hash. pytest 2973 đạt.'
 
   - id: R5.3.5
     title: Bộ component R5 (zoom, thanh tầng, câu chốt, phiếu VN, đường cong, credit)
