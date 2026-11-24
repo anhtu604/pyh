@@ -26,15 +26,22 @@ from healthvideo.domain.evidence import EvidenceClaim
 from healthvideo.domain.license_ledger import LicenseEntry, LicenseLedger
 from healthvideo.domain.outline import Outline, validate_outline
 from healthvideo.domain.storyboard import Scene, Storyboard
+from healthvideo.render.chapters import chapter_cache_key, chapter_spans
 from healthvideo.render.input import (
+    R5RevisionAsset,
     RenderInput,
     YouTubeCTA,
     audio_timing_qa,
     build_render_input,
 )
-from healthvideo.render.remotion import build_render_argv
+from healthvideo.render.remotion import build_concat_argv, build_render_argv
 from healthvideo.render.timing import concat_scene_audio
-from healthvideo.storage.files import read_yaml, write_yaml_atomic
+from healthvideo.storage.files import (
+    canonical_json_hash,
+    read_yaml,
+    sha256_file,
+    write_yaml_atomic,
+)
 from healthvideo.tts.audio_checks import inspect_wav
 from healthvideo.visuals.brand import render_pyh_logo
 from healthvideo.visuals.mascot import mascot_asset
@@ -53,6 +60,55 @@ from healthvideo.workflows.visual_assets import BRAND_PROFILE_PATH
 
 OUTLINE_ARTIFACT = "script/outline.yaml"
 CLIP_PLAN_ARTIFACT = "script/clip-plan.yaml"
+
+
+def render_r5_long_form(
+    *, render_input_path: Path, render_input: RenderInput, public_dir: Path,
+    audio: Path, output: Path, cache_dir: Path, asset_hashes: Mapping[str, str],
+    renderer_identity: Mapping[str, str], audio_identity: Mapping[str, object],
+    runner: Callable[[list[str]], int],
+) -> tuple[str, ...]:
+    """R5-only chapter cache: bind selected provenance and verify cached MP4 bytes."""
+    if render_input.quality_profile != "r5_v1":
+        raise ValueError("R5 chapter cache requires r5_v1")
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    parts = []
+    for span in chapter_spans(render_input):
+        paths = {path for scene in render_input.scenes if scene.chapter_id == span.chapter_id
+                 for shot in scene.resolved_shots for path in shot.asset_paths}
+        if paths - asset_hashes.keys():
+            raise ValueError(f"R5 chapter {span.chapter_id}: missing shot asset hash")
+        key = canonical_json_hash({
+            "chapter": chapter_cache_key(render_input, span, asset_hashes, renderer_identity),
+            "profile": render_input.quality_profile,
+            "contract": render_input.r5_contract.model_dump(mode="json"),
+            "audio": dict(audio_identity),
+            "assets": {path: asset_hashes[path] for path in sorted(paths)},
+            "provenance": [a.model_dump(mode="json") for a in render_input.r5_assets if a.path in paths],
+        })
+        part = cache_dir / f"{span.chapter_id}-{key}.mp4"
+        receipt = part.with_suffix(".json")
+        try:
+            valid = read_yaml(receipt) == {"key": key, "sha256": sha256_file(part)}
+        except (OSError, ValueError):
+            valid = False
+        if not valid:
+            staged = part.with_name(f".{part.stem}.partial.mp4")
+            try:
+                if runner(build_render_argv(render_input_path, staged, public_dir,
+                        frames=(span.start_frame, span.end_frame - 1), muted=True)) != 0 or not staged.is_file():
+                    raise RuntimeError(f"R5 chapter {span.chapter_id} render failed")
+                staged.replace(part)
+                write_yaml_atomic(receipt, {"key": key, "sha256": sha256_file(part)})
+            finally:
+                staged.unlink(missing_ok=True)
+        parts.append(part)
+    concat_list = cache_dir / "chapters.txt"
+    concat_list.write_text("".join(f"file '{p.resolve().as_posix()}'\n" for p in parts), encoding="utf-8")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    if runner(build_concat_argv(concat_list, audio, output)) != 0 or not output.is_file():
+        raise RuntimeError("R5 chapter concat failed")
+    return tuple(p.name for p in parts)
 _LEGACY_FALLBACK_FIELDS = frozenset({
     "mascot_max_width_percent",
     "subtitle_position",
@@ -210,11 +266,12 @@ def clip_render_input(
     audio_file: str,
     *,
     brand: BrandProfile | None = None,
+    r5_assets: tuple[R5RevisionAsset, ...] = (),
 ) -> RenderInput:
     """Re-time the clip's approved scenes from frame 0 as a 9:16 render (re-laid out, not cropped)."""
     board = vertical_clip_storyboard(storyboard, scenes)
     brand = brand or load_brand_profile(BRAND_PROFILE_PATH)
-    result = build_render_input(board, audio_file)
+    result = build_render_input(board, audio_file, r5_assets=r5_assets)
     return RenderInput.model_validate(
         {
             **result.model_dump(),
@@ -238,6 +295,7 @@ def render_clips(
     revision: str = "001",
     sfx_events: list[dict] | None = None,
     min_frames: int = CLIP_MIN_FRAMES,
+    r5_assets: tuple[R5RevisionAsset, ...] = (),
 ) -> dict[str, str]:
     """Reuse measured line audio for each clip; return run-relative mp4 paths."""
     # ponytail: clips re-render with every long-form render; cache per clip if it gets slow.
@@ -252,7 +310,9 @@ def render_clips(
             )
         selected_lines = {scene.script_line_id for scene in scenes if scene.script_line_id}
         audio = f"audio/clips/{clip_id}.wav"
-        render_input = clip_render_input(storyboard, scenes, audio, brand=brand)
+        selected_paths = {path for scene in scenes for shot in scene.shots for path in shot.asset_paths}
+        render_input = clip_render_input(storyboard, scenes, audio, brand=brand,
+            r5_assets=tuple(a for a in r5_assets if a.path in selected_paths))
         # The reviewed clip content is followed by an intentional silent CTA.
         cta = Scene(
             id=f"{clip_id}-CTA", start_frame=frames - 90, duration_frames=90,

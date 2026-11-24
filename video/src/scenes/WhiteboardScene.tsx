@@ -8,12 +8,13 @@ import {slowDriftTransform} from '../components/slowDrift';
 import {useLayout} from '../layout';
 import {SceneEnvelopeWrapper, type SceneTransitionProps} from '../motion/sceneEnvelope';
 import {SplitClinicalWorksheetStage} from '../medanim/SplitClinicalWorksheetStage';
-import type {Scene} from '../types';
-import {AuthoredWorksheet, panelRows} from '../components/AuthoredPanels';
+import type {RenderInput, Scene} from '../types';
+import {assertNoR5TabLayout, AuthoredWorksheet, panelRows} from '../components/AuthoredPanels';
 
 type WhiteboardSceneProps = {
   scene: Scene;
   transition?: SceneTransitionProps;
+  qualityProfile?: RenderInput['quality_profile'];
 };
 
 export const WHITEBOARD_REVEAL_MIN_FRAMES = 9; // 0.3s @ 30fps
@@ -48,9 +49,10 @@ export const whiteboardFontSize = (text: string, width: number, height: number, 
   return 1;
 };
 
-export const WhiteboardScene: React.FC<WhiteboardSceneProps> = ({scene, transition}) => {
+export const WhiteboardScene: React.FC<WhiteboardSceneProps> = ({scene, transition, qualityProfile}) => {
   const frame = useCurrentFrame();
   const layout = useLayout();
+  assertNoR5TabLayout(scene, qualityProfile);
   const dashOffset = interpolate(frame, [0, 30], [1, 0], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
@@ -67,7 +69,7 @@ export const WhiteboardScene: React.FC<WhiteboardSceneProps> = ({scene, transiti
   const drift = slowDriftTransform(frame, scene.duration_frames);
   const captionVariant = scene.words?.length ? 'shorts' : undefined;
 
-  if (panelRows(scene, 3).length) {
+  if (qualityProfile !== 'r5_v1' && panelRows(scene, 3, qualityProfile).length) {
     if (hasIllustration) {
       return <SplitClinicalWorksheetStage scene={scene} transition={transition} />;
     }

@@ -118,6 +118,72 @@ def test_submit_draft_at_draft_ready_replaces_storyboard(tmp_path: Path) -> None
     assert read_yaml(project / "revisions/001/storyboard/storyboard.yaml")["scenes"][1]["anatomy"]["motion"] == board["scenes"][1]["anatomy"]["motion"]
 
 
+def test_cli_submit_medical_creates_r5_snapshot_before_gate(tmp_path: Path) -> None:
+    from healthvideo.domain.gate_review import GateKind
+    from healthvideo.storage.files import sha256_file
+    from healthvideo.workflows.gate_review import (
+        R5_CATALOG,
+        R5_LICENSE_LEDGER,
+        R5_USED_ASSETS,
+        approve_gate,
+        hash_reviewed_artifacts,
+        medical_reviewed_paths,
+    )
+    from tests.workflows.test_produce import V2_REVIEWED_AT, _r5_project
+
+    project = _r5_project(tmp_path, state=WorkflowState.DRAFT_READY)
+    revision = project / "revisions/001"
+    asset = revision / "assets/cell.svg"
+    asset.write_bytes(b"<svg xmlns='http://www.w3.org/2000/svg'/>")
+    digest = sha256_file(asset)
+    record = {
+        "id": "cell",
+        "file": "assets/cell.svg",
+        "source_page": "https://smart.servier.com/smart_image/cell/",
+        "original_url": "https://smart.servier.com/cell.svg",
+        "author": "Fixture author",
+        "license": "CC BY 4.0",
+        "license_url": "https://creativecommons.org/licenses/by/4.0/",
+        "sha256": digest,
+    }
+    write_yaml_atomic(revision / R5_CATALOG, {"assets": [record]})
+    manifest_data = read_yaml(revision / "assets/asset-manifest.yaml")
+    manifest_data["assets"].append({
+        "path": "assets/cell.svg",
+        "kind": "medical_diagram",
+        "semantic": True,
+        "creator": record["author"],
+        "revision": "001",
+        "source": record["source_page"],
+        "license": record["license"],
+        "sha256": digest,
+    })
+    write_yaml_atomic(revision / "assets/asset-manifest.yaml", manifest_data)
+    board_data = read_yaml(revision / "storyboard/storyboard.yaml")
+    board_data["scenes"][0]["shots"][0]["asset_paths"] = ["assets/cell.svg"]
+    write_yaml_atomic(revision / "storyboard/storyboard.yaml", board_data)
+    write_critic_review_fixture(project)
+
+    assert not (revision / R5_USED_ASSETS).exists()
+    assert not (revision / R5_LICENSE_LEDGER).exists()
+
+    result = CliRunner().invoke(app, ["step", "submit-medical", str(project)])
+    assert result.exit_code == 0, result.stdout
+    assert _state(project) is WorkflowState.AWAITING_MEDICAL_REVIEW
+    assert (revision / R5_USED_ASSETS).is_file()
+    assert (revision / R5_LICENSE_LEDGER).is_file()
+
+    hashes = hash_reviewed_artifacts(medical_reviewed_paths(revision))
+    assert f"r5-byte:{R5_USED_ASSETS}" in hashes
+    assert f"r5-byte:{R5_LICENSE_LEDGER}" in hashes
+    assert f"r5-byte:{R5_CATALOG}" in hashes
+    assert "r5-byte:assets/cell.svg" in hashes
+
+    approval = approve_gate(project, GateKind.MEDICAL, reviewer="doctor", now=V2_REVIEWED_AT)
+    assert approval.artifact_hashes[f"r5-byte:{R5_USED_ASSETS}"] == hashes[f"r5-byte:{R5_USED_ASSETS}"]
+    assert approval.artifact_hashes[f"r5-byte:{R5_LICENSE_LEDGER}"] == hashes[f"r5-byte:{R5_LICENSE_LEDGER}"]
+
+
 @pytest.mark.parametrize("medical", [False, True])
 def test_unsupported_anatomy_subject_refused_before_submission(tmp_path: Path, medical: bool) -> None:
     from healthvideo.workflows.draft import submit_draft, submit_medical_review

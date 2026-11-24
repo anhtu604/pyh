@@ -360,4 +360,126 @@ describe('HealthVideo visual asset layer', () => {
     expect(html).toContain('data-scientific-artwork="hepatocyte_sinusoid_unit"');
     expect(html).not.toContain('data-motion="marker-underline-title"');
   });
+
+  it('routes quality_profile=r5_v1 through R5ShotScene without legacy FLUX/caption leakage, and fails closed when missing resolved_shots', () => {
+    const r5Contract = {
+      questions: [
+        {id: 'Q1', text: 'Men gan tăng là gì?', hook_line_id: 'L01', answer_line_ids: ['L02']},
+        {id: 'Q2', text: 'Khi nào cần đi khám?', hook_line_id: 'L01', answer_line_ids: ['L03']},
+      ],
+      blocks: [
+        {
+          id: 'B1',
+          line_ids: ['L01', 'L02', 'L03'],
+          question_ids: ['Q1', 'Q2'],
+          takeaway_line_id: 'L02',
+          professional_update: true,
+        },
+      ],
+    };
+    const words = [
+      {text: 'Men', start_frame: 0, end_frame: 20},
+      {text: 'gan', start_frame: 20, end_frame: 40},
+    ];
+    const r5Scene = {
+      schema_version: '1.0',
+      id: 'S01',
+      start_frame: 0,
+      duration_frames: 120,
+      narration: 'Men gan tăng.',
+      words,
+      visual: 'whiteboard' as const,
+      visual_assets: [
+        {path: 'assets/legacy-flux.png', role: 'whiteboard' as const},
+        {path: 'assets/brand/mascot/explain.png', role: 'mascot' as const, pose: 'explain' as const},
+      ],
+      resolved_shots: [
+        {
+          id: 'SH01',
+          kind: 'recap' as const,
+          tier: 'organ',
+          component: 'TakeawayCard' as const,
+          asset_paths: ['assets/brand/mascot/explain.png'],
+          question_ids: ['Q1'],
+          long_shot_reason: null,
+          start_frame: 0,
+          end_frame: 120,
+          actions: [],
+          text_windows: [
+            {
+              kind: 'takeaway' as const,
+              text: 'Men gan phản ánh tổn thương tế bào',
+              claim_ids: ['C01'],
+              exception_reason: null,
+              start_frame: 0,
+              end_frame: 120,
+            },
+          ],
+        },
+      ],
+    };
+
+    const longProps = parseRenderInput({
+      title: 'R5 16:9',
+      audio_file: 'audio/silence.wav',
+      quality_profile: 'r5_v1',
+      r5_contract: r5Contract,
+      r5_assets: [{id: 'mascot', path: 'assets/brand/mascot/explain.png', title: 'Fixture mascot',
+        author: 'Fixture author', repository: 'servier', license: 'CC BY 4.0',
+        license_url: 'https://creativecommons.org/licenses/by/4.0/',
+        source_page: 'https://smart.servier.com/smart_image/cell/', sha256: 'a'.repeat(64)}],
+      format_profile: 'youtube_long',
+      width: 1920,
+      height: 1080,
+      scenes: [r5Scene],
+    });
+    const longHtml = renderToStaticMarkup(<HealthVideo {...longProps} />);
+    expect(longHtml).toContain('data-r5-scene="S01"');
+    expect(longHtml).toContain('data-r5-component="TakeawayCard"');
+    expect(longHtml).toContain('data-layout="16:9"');
+    expect(longHtml).not.toContain('assets/legacy-flux.png');
+    expect(longHtml).not.toContain('aria-label="Phụ đề đang đọc"');
+    expect(longHtml).not.toContain('data-mechanism-caption-band');
+    expect(longProps.scenes[0].words).toEqual(words);
+
+    const shortProps = parseRenderInput({
+      title: 'R5 9:16',
+      audio_file: 'audio/silence.wav',
+      quality_profile: 'r5_v1',
+      r5_contract: r5Contract,
+      r5_assets: [{id: 'mascot', path: 'assets/brand/mascot/explain.png', title: 'Fixture mascot',
+        author: 'Fixture author', repository: 'servier', license: 'CC BY 4.0',
+        license_url: 'https://creativecommons.org/licenses/by/4.0/',
+        source_page: 'https://smart.servier.com/smart_image/cell/', sha256: 'a'.repeat(64)}],
+      format_profile: 'vertical_clip',
+      width: 1080,
+      height: 1920,
+      scenes: [r5Scene],
+    });
+    const shortHtml = renderToStaticMarkup(<HealthVideo {...shortProps} />);
+    expect(shortHtml).toContain('data-r5-scene="S01"');
+    expect(shortHtml).toContain('data-layout="9:16"');
+    expect(shortHtml).toContain('aria-label="Phụ đề đang đọc"');
+    expect(shortHtml).not.toContain('assets/legacy-flux.png');
+    expect(longHtml).not.toBe(shortHtml);
+
+    // Missing resolved_shots under quality_profile=r5_v1 must fail closed, never fall back to legacy.
+    const missingResolved = parseRenderInput({
+      title: 'R5 missing resolved',
+      audio_file: 'audio/silence.wav',
+      quality_profile: 'r5_v1',
+      r5_contract: r5Contract,
+      r5_assets: [{id: 'mascot', path: 'assets/brand/mascot/explain.png', title: 'Fixture mascot',
+        author: 'Fixture author', repository: 'servier', license: 'CC BY 4.0',
+        license_url: 'https://creativecommons.org/licenses/by/4.0/',
+        source_page: 'https://smart.servier.com/smart_image/cell/', sha256: 'a'.repeat(64)}],
+      format_profile: 'youtube_long',
+      width: 1920,
+      height: 1080,
+      scenes: [{...r5Scene, resolved_shots: undefined}],
+    });
+    expect(() => renderToStaticMarkup(<HealthVideo {...missingResolved} />)).toThrow(
+      /S01.*resolved_shots/i,
+    );
+  });
 });

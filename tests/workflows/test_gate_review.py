@@ -12,7 +12,7 @@ from healthvideo.domain.state_graph import (
     TransitionError,
     transition_v2,
 )
-from healthvideo.storage.files import read_yaml, write_yaml_atomic
+from healthvideo.storage.files import read_yaml, sha256_file, write_yaml_atomic
 from healthvideo.workflows.gate_review import (
     MEDICAL_APPROVAL_ARTIFACT,
     approve_gate,
@@ -720,3 +720,177 @@ def test_video_qa_accepts_known_success_status(tmp_path, status):
     (tmp_path / 'reviews/video-qa.json').write_text(json.dumps({'status': status}), encoding='utf-8')
     assert _check_video_qa(tmp_path, accept_pronunciation=False,
                            pronunciation_pin=None, pin_file=None) is None
+def test_r5_snapshot_binds_source_bytes_and_license(tmp_path):
+    from healthvideo.domain.storyboard import Storyboard
+    from healthvideo.workflows.gate_review import (
+        load_r5_revision_assets,
+        snapshot_r5_assets,
+    )
+    from tests.render.test_quality import board, shot
+
+    revision = tmp_path / "revisions/001"
+    (revision / "assets").mkdir(parents=True)
+    (revision / "storyboard").mkdir()
+    (revision / "evidence").mkdir()
+    asset = revision / "assets/cell.svg"
+    asset.write_bytes(b"<svg/>")
+    record = {"id": "cell", "file": "assets/cell.svg", "source_page": "https://smart.servier.com/smart_image/cell/",
+              "original_url": "https://smart.servier.com/cell.svg", "author": "Fixture author",
+              "license": "CC BY 4.0", "license_url": "https://creativecommons.org/licenses/by/4.0/",
+              "sha256": sha256_file(asset)}
+    write_yaml_atomic(revision / "assets/r5/catalog.yaml", {"assets": [record]})
+    write_yaml_atomic(revision / "assets/asset-manifest.yaml", {"schema_version": "2.0", "assets": [{
+        "path": "assets/cell.svg", "kind": "medical_diagram", "semantic": True,
+        "creator": record["author"], "revision": "001",
+        "source": record["source_page"], "license": record["license"], "sha256": record["sha256"],
+    }]})
+    original = board([{**shot(0, 90), "kind": "mechanism", "asset_paths": ["assets/cell.svg"]}], frames=90)
+    write_yaml_atomic(revision / "storyboard/storyboard.yaml", original.model_dump(mode="json"))
+    source = revision / "evidence/source.txt"
+    source.write_bytes(b"fixture source")
+    snapshot_r5_assets(revision, original)
+    paths = medical_reviewed_paths(revision)
+    before = hash_reviewed_artifacts(paths)
+    assert load_r5_revision_assets(revision, original)[0].author == "Fixture author"
+    source.write_bytes(b"changed source")
+    assert before != hash_reviewed_artifacts(medical_reviewed_paths(revision))
+    source.unlink()
+    assert before != hash_reviewed_artifacts(medical_reviewed_paths(revision))
+    (revision / "assets/r5/license-ledger.yaml").unlink()
+    assert before != hash_reviewed_artifacts(medical_reviewed_paths(revision))
+    with pytest.raises((ValueError, FileNotFoundError)):
+        load_r5_revision_assets(revision, original)
+    # Removing the opt-in cannot reuse an approval that included R5 artifacts.
+    write_yaml_atomic(revision / "storyboard/storyboard.yaml", Storyboard(title="Legacy").model_dump(mode="json"))
+    assert before != hash_reviewed_artifacts(medical_reviewed_paths(revision))
+
+
+def test_r5_video_gate_rejects_stale_cache_and_enforces_pin(tmp_path, monkeypatch):
+    import json
+
+    from healthvideo.approver_pin import set_pin
+    from healthvideo.tts.silent import SilentTTS
+    from healthvideo.workflows.produce import produce_project
+    from tests.helpers import submit_video_fixture
+    from tests.workflows.test_produce import (
+        V2_REVIEWED_AT,
+        _r5_alignment,
+        _r5_project,
+        _write_synthetic_output,
+    )
+
+    project = _r5_project(tmp_path)
+    revision = project / "revisions/001"
+    approve_gate(project, GateKind.MEDICAL, reviewer="doctor", now=V2_REVIEWED_AT)
+    _r5_alignment(monkeypatch)
+    produce_project(project, SilentTTS(), lambda argv: (_write_synthetic_output(argv), 0)[1], music=False)
+    submit_video_fixture(project)
+    # Tampering quality-report or stale medical source must never pass the video gate.
+    (revision / "reviews/quality-report.json").write_text("{}", encoding="utf-8")
+    with pytest.raises(ValueError, match="stale|quality"):
+        approve_gate(project, GateKind.VIDEO, reviewer="doctor", now=V2_REVIEWED_AT)
+    (revision / "reviews/quality-report.json").write_bytes((revision / "renders/quality-report.json").read_bytes())
+    # Pronunciation override still enforces doctor PIN (no bypass for R5).
+    pin_file = tmp_path / "pin.json"
+    set_pin("123456", path=pin_file)
+    qa = json.loads((revision / "reviews/video-qa.json").read_text(encoding="utf-8"))
+    qa["status"] = "failed"
+    qa["pronunciation"] = {
+        "passed": False,
+        "blocking_count": 1,
+        "report_sha256": sha256_file(revision / "renders/pronunciation-qa.json"),
+    }
+    (revision / "reviews/video-qa.json").write_text(json.dumps(qa), encoding="utf-8")
+    with pytest.raises(ValueError, match="PIN"):
+        approve_gate(
+            project, GateKind.VIDEO, reviewer="doctor", now=V2_REVIEWED_AT,
+            accept_pronunciation=True, pronunciation_pin=None, pin_file=pin_file,
+        )
+
+
+def test_r5_medical_gate_is_read_only_and_rejects_missing_snapshot(tmp_path):
+    from healthvideo.domain.storyboard import Storyboard
+    from healthvideo.workflows.gate_review import (
+        R5_CATALOG,
+        R5_LICENSE_LEDGER,
+        R5_USED_ASSETS,
+        snapshot_r5_assets,
+    )
+    from tests.workflows.test_produce import V2_REVIEWED_AT, _r5_project
+
+    project = _r5_project(tmp_path)
+    revision = project / "revisions/001"
+    library_dir = tmp_path / "library"
+    (library_dir / "assets").mkdir(parents=True)
+    lib_asset = library_dir / "assets/cell.svg"
+    lib_asset.write_bytes(b"<svg xmlns='http://www.w3.org/2000/svg'/>")
+    digest = sha256_file(lib_asset)
+    record = {
+        "id": "cell",
+        "file": "assets/cell.svg",
+        "source_page": "https://smart.servier.com/smart_image/cell/",
+        "original_url": "https://smart.servier.com/cell.svg",
+        "author": "Fixture author",
+        "license": "CC BY 4.0",
+        "license_url": "https://creativecommons.org/licenses/by/4.0/",
+        "sha256": digest,
+    }
+    write_yaml_atomic(revision / R5_CATALOG, {"assets": [record]})
+    manifest_data = read_yaml(revision / "assets/asset-manifest.yaml")
+    manifest_data["assets"].append({
+        "path": "assets/cell.svg",
+        "kind": "medical_diagram",
+        "semantic": True,
+        "creator": record["author"],
+        "revision": "001",
+        "source": record["source_page"],
+        "license": record["license"],
+        "sha256": digest,
+    })
+    write_yaml_atomic(revision / "assets/asset-manifest.yaml", manifest_data)
+    board_data = read_yaml(revision / "storyboard/storyboard.yaml")
+    board_data["scenes"][0]["shots"][0]["asset_paths"] = ["assets/cell.svg"]
+    write_yaml_atomic(revision / "storyboard/storyboard.yaml", board_data)
+    board = Storyboard.model_validate(board_data)
+
+    def _tree(root: Path) -> dict[str, bytes]:
+        return {
+            p.relative_to(root).as_posix(): p.read_bytes()
+            for p in sorted(root.rglob("*"))
+            if p.is_file()
+        }
+
+    # Without snapshot, medical gate must refuse and write ZERO files.
+    before_missing = _tree(revision)
+    with pytest.raises((FileNotFoundError, ValueError)):
+        approve_gate(project, GateKind.MEDICAL, reviewer="doctor", now=V2_REVIEWED_AT)
+    assert _tree(revision) == before_missing
+    assert not (revision / R5_USED_ASSETS).exists()
+    assert not (revision / R5_LICENSE_LEDGER).exists()
+
+    # Snapshotting from library source copies and verifies asset into revision.
+    snapshot_r5_assets(revision, board, source_root=library_dir)
+    assert (revision / "assets/cell.svg").read_bytes() == lib_asset.read_bytes()
+    assert (revision / R5_USED_ASSETS).is_file()
+    assert (revision / R5_LICENSE_LEDGER).is_file()
+
+    # Once snapshot exists, approve_gate(MEDICAL) must not write or alter any
+    # revision files other than the approval record (and standards pin).
+    before_approve = _tree(revision)
+    approve_gate(project, GateKind.MEDICAL, reviewer="doctor", now=V2_REVIEWED_AT)
+    after_approve = _tree(revision)
+    created_or_changed = {
+        k for k, v in after_approve.items() if before_approve.get(k) != v
+    }
+    assert created_or_changed <= {
+        MEDICAL_APPROVAL_ARTIFACT,
+        "workflow/standards.yaml",
+        "reviews/.results.preproduction.lock",
+    }
+    if "reviews/.results.preproduction.lock" in created_or_changed:
+        assert after_approve["reviews/.results.preproduction.lock"] == b""
+    assert set(before_approve) <= set(after_approve)
+
+    # Snapshot must refuse to overwrite after medical approval exists.
+    with pytest.raises(ValueError, match="reopening"):
+        snapshot_r5_assets(revision, board, source_root=library_dir)

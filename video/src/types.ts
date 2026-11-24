@@ -10,6 +10,16 @@ const safeRelativePath = z.string().regex(/^(?!\.?\/?$)(?![A-Za-z]:)(?!\/)(?!.*\
 export const R5_COMPONENT_IDS = ['ScaleChain', 'ZoomChain', 'TakeawayCard', 'VnLabSheet',
   'ReferenceDistribution', 'CreditCard', 'R5LiverLeakSignature'] as const;
 const r5Nonblank = z.string().regex(/\S/);
+export const R5RevisionAssetSchema = z.object({
+  id: r5Nonblank, path: safeRelativePath, title: r5Nonblank, author: r5Nonblank,
+  repository: r5Nonblank, license: z.enum(['Public Domain', 'CC0', 'CC BY 3.0', 'CC BY 4.0']),
+  license_url: z.string().regex(/^https:\/\/\S+$/).nullable(),
+  source_page: z.string().regex(/^https:\/\/\S+$/), sha256: z.string().regex(/^[0-9a-f]{64}$/),
+}).strict().superRefine((asset, ctx) => {
+  if (asset.license.startsWith('CC BY') && !asset.license_url) {
+    ctx.addIssue({code: 'custom', message: 'R5 attribution license requires license_url'});
+  }
+});
 const r5Frame = z.number().int().nonnegative();
 const r5Kind = z.enum(['story', 'mechanism', 'recap', 'credit']);
 const r5TextKind = z.enum(['question', 'takeaway', 'worksheet', 'source_card', 'table',
@@ -423,6 +433,7 @@ const BaseRenderInputSchema = z.object({
   audio_file: z.string(),
   quality_profile: z.literal('r5_v1').nullable().optional(),
   r5_contract: R5ContractSchema.nullable().optional(),
+  r5_assets: z.array(R5RevisionAssetSchema).optional(),
   youtube_cta: z.object({
     text: z.string().regex(/\S/),
     mascot_path: safeRelativePath,
@@ -437,9 +448,13 @@ const BaseRenderInputSchema = z.object({
   height: z.union([z.literal(1920), z.literal(1080)]).default(1920),
   fps: z.literal(30).default(30),
 }).superRefine((input, context) => {
-  if ((!input.quality_profile && (input.r5_contract || input.scenes.some(s => s.shots?.length || s.resolved_shots?.length)))
+  if ((!input.quality_profile && (input.r5_contract || input.r5_assets?.length || input.scenes.some(s => s.shots?.length || s.resolved_shots?.length)))
     || (input.quality_profile === 'r5_v1' && !input.r5_contract)) {
     context.addIssue({code: 'custom', message: 'R5 data requires quality_profile=r5_v1 and r5_contract'});
+  }
+  if (new Set(input.r5_assets?.map(a => a.path)).size !== (input.r5_assets?.length ?? 0)
+    || new Set(input.r5_assets?.map(a => a.id)).size !== (input.r5_assets?.length ?? 0)) {
+    context.addIssue({code: 'custom', message: 'R5 asset metadata requires unique id/path'});
   }
   if (input.youtube_cta) {
     const frames = Math.max(0, ...input.scenes.map((s) => s.start_frame + s.duration_frames)) + 90;

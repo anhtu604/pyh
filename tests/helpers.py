@@ -19,16 +19,28 @@ FIXTURE_REVIEWER = "BS Nguyễn Văn An"
 
 def write_critic_review_fixture(project: Path, *, product: bool = False) -> None:
     """Record an explicitly synthetic passing critic report for a gate fixture."""
-    from healthvideo.workflows import product_review, script_review
+    from healthvideo.workflows import product_review, review_budget, script_review
 
     critic = product_review if product else script_review
+    stage = "product" if product else "script"
     revision = project / "revisions" / read_yaml(project / "project.yaml")["active_revision"]
-    write_yaml_atomic(revision / critic.REPORT, {
+    report_path = revision / critic.REPORT
+    write_yaml_atomic(report_path, {
         "scores": dict.fromkeys(critic.CRITERIA, 8),
         "summary": "Synthetic passing critic fixture.", "issues": [],
         "checked": ["Synthetic fixture artifacts"], "decisions": [],
     })
     digest = critic.render_hash(project) if product else critic.script_hash(project)
+    if review_budget.enabled(revision):
+        used = review_budget.review_budget_status(revision, stage)["used"]
+        event_id = f"fixture:{stage}:{used + 1}"
+        review_budget.consume_review_budget(revision, stage, event_id)
+        review_budget.finish_attempt(
+            revision, stage, event_id,
+            outcome="completed", detail="synthetic fixture", report=report_path,
+        )
+        critic.record_review(project, digest, event_id=event_id)
+        return
     critic.record_review(project, digest)
 
 

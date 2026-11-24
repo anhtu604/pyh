@@ -497,6 +497,80 @@
       "title": "R5Question",
       "type": "object"
     },
+    "R5RevisionAsset": {
+      "additionalProperties": false,
+      "description": "Verified, revision-local provenance, shared with the R5 renderer.",
+      "properties": {
+        "author": {
+          "pattern": "\\S",
+          "title": "Author",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "\\S",
+          "title": "Id",
+          "type": "string"
+        },
+        "license": {
+          "enum": [
+            "Public Domain",
+            "CC0",
+            "CC BY 3.0",
+            "CC BY 4.0"
+          ],
+          "title": "License",
+          "type": "string"
+        },
+        "license_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "License Url"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "repository": {
+          "pattern": "\\S",
+          "title": "Repository",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "source_page": {
+          "pattern": "^https://\\S+$",
+          "title": "Source Page",
+          "type": "string"
+        },
+        "title": {
+          "pattern": "\\S",
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "path",
+        "title",
+        "author",
+        "repository",
+        "license",
+        "license_url",
+        "source_page",
+        "sha256"
+      ],
+      "title": "R5RevisionAsset",
+      "type": "object"
+    },
     "R5Shot": {
       "additionalProperties": false,
       "properties": {
@@ -1829,6 +1903,14 @@
       ],
       "default": null,
       "title": "Quality Profile"
+    },
+    "r5_assets": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/R5RevisionAsset"
+      },
+      "title": "R5 Assets",
+      "type": "array"
     },
     "r5_contract": {
       "anyOf": [

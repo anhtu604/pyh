@@ -107,6 +107,8 @@ def vertical_clip_storyboard(storyboard: Storyboard, scenes: Sequence[Scene]) ->
         start += scene.duration_frames
     return Storyboard(
         title=storyboard.title,
+        quality_profile=storyboard.quality_profile,
+        r5_contract=storyboard.r5_contract,
         scenes=tuple(retimed),
         visual_budget_profile=storyboard.visual_budget_profile,
         format_profile="vertical_clip",

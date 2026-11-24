@@ -32,6 +32,19 @@ def _claim(claim_id: str, caveats: list[str]) -> EvidenceClaim:
 CLAIMS = {"C01": _claim("C01", ["C02"]), "C02": _claim("C02", [])}
 
 
+def test_r5_vertical_clip_preserves_opt_in_and_contract():
+    from healthvideo.domain.clip_plan import vertical_clip_storyboard
+    from tests.render.test_quality import board, shot
+
+    original = board([shot(0, 1800)], frames=1800)
+    before = original.model_dump_json()
+    result = vertical_clip_storyboard(original, original.scenes)
+    assert result.quality_profile == "r5_v1"
+    assert result.r5_contract == original.r5_contract
+    assert result.scenes[0].shots == original.scenes[0].shots
+    assert original.model_dump_json() == before
+
+
 def _clip(clip_id: str, first: str, last: str, **extra: str) -> dict:
     return {"id": clip_id, "title": f"Clip {clip_id}", "first_scene_id": first,
             "last_scene_id": last, **extra}

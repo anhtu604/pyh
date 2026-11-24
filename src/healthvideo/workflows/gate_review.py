@@ -6,6 +6,7 @@ import json
 import os
 from datetime import datetime
 from pathlib import Path, PurePosixPath, PureWindowsPath
+from urllib.parse import urlsplit
 
 from healthvideo.approver_pin import verify_pin
 from healthvideo.assets import referenced_storyboard_assets
@@ -27,10 +28,15 @@ from healthvideo.domain.invalidation import (
     InvalidationLevel,
     evaluate_invalidation,
 )
-from healthvideo.domain.license_ledger import LicenseLedger, validate_license_ledger
+from healthvideo.domain.license_ledger import (
+    LicenseEntry,
+    LicenseLedger,
+    validate_license_ledger,
+)
 from healthvideo.domain.outline import Outline
 from healthvideo.domain.posts import PostSet, validate_posts
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
+from healthvideo.domain.quality_standards import QualityReport, validate_r5_contract
 from healthvideo.domain.script import Script
 from healthvideo.domain.state_graph import (
     _POST_MEDICAL_GATE_STATES,
@@ -39,6 +45,13 @@ from healthvideo.domain.state_graph import (
 )
 from healthvideo.domain.storyboard import Storyboard
 from healthvideo.domain.visual_budget import validate_visual_budget
+from healthvideo.render.input import R5RevisionAsset
+from healthvideo.render.quality import (
+    R5RuntimeStoryboard,
+    measure_r5_quality,
+    resolve_r5_shots,
+    validate_r5_quality,
+)
 from healthvideo.storage.files import (
     canonical_json_hash,
     read_agent_yaml,
@@ -48,6 +61,12 @@ from healthvideo.storage.files import (
 )
 from healthvideo.storage.immutable import write_yaml_once
 from healthvideo.tts import pronunciation as pronunciation_module
+from healthvideo.visuals.medanim_assets import (
+    MAX_ASSET_BYTES,
+    assert_safe_path,
+    copy_used_assets,
+    load_asset_catalog,
+)
 from healthvideo.workflows.citations import resolve_citations
 from healthvideo.workflows.long_form import (
     CLIP_PLAN_ARTIFACT,
@@ -60,6 +79,153 @@ from healthvideo.workflows.visual_assets import recover_chart_asset_binding
 MEDICAL_APPROVAL_ARTIFACT = "reviews/medical-approval.yaml"
 VIDEO_APPROVAL_ARTIFACT = "reviews/video-approval.yaml"
 POSTS_ARTIFACT = "posts/posts.yaml"
+R5_CATALOG = "assets/r5/catalog.yaml"
+R5_USED_ASSETS = "assets/r5/used-assets.yaml"
+R5_LICENSE_LEDGER = "assets/r5/license-ledger.yaml"
+R5_QUALITY_REPORT = "reviews/quality-report.json"
+
+
+def _r5_asset_paths(board: Storyboard) -> set[str]:
+    return {path for scene in board.scenes for shot in scene.shots for path in shot.asset_paths}
+
+
+def snapshot_r5_assets(
+    revision_root: Path,
+    board: Storyboard,
+    *,
+    source_root: Path | None = None,
+) -> None:
+    """Pin only selected catalog records/bytes before medical submission.
+
+    When ``source_root`` points to an external library directory distinct from
+    ``revision_root``, selected assets are copied and verified via
+    ``copy_used_assets(records, ids, source_root, revision_root)``. When assets
+    are already staged in ``revision_root`` (``source_root`` is ``None`` or the
+    same directory), files are verified in place without self-overwriting.
+    Refuses to overwrite once medical approval exists.
+    """
+    used_paths = _r5_asset_paths(board)
+    if board.quality_profile != "r5_v1" or not used_paths:
+        return
+    if (revision_root / MEDICAL_APPROVAL_ARTIFACT).exists():
+        raise ValueError("R5 snapshot requires reopening the medical gate")
+    records = load_asset_catalog(revision_root / R5_CATALOG)
+    by_path = {record.file: record for record in records}
+    missing = used_paths - by_path.keys()
+    if missing:
+        raise ValueError(f"R5 catalog missing used asset: {min(missing)}")
+    selected_ids = [by_path[path].id for path in sorted(used_paths)]
+    rev_resolved = assert_safe_path(revision_root).resolve()
+    if source_root is not None and assert_safe_path(source_root).resolve() != rev_resolved:
+        used = copy_used_assets(records, selected_ids, source_root, revision_root)
+    else:
+        used = tuple(by_path[path] for path in sorted(used_paths))
+        for record in used:
+            asset_path = assert_safe_path(revision_root / record.file)
+            if not asset_path.resolve().is_relative_to(rev_resolved) or not asset_path.is_file():
+                raise ValueError(f"R5 asset missing or escapes revision: {record.file}")
+            if asset_path.stat().st_size > MAX_ASSET_BYTES or sha256_file(asset_path) != record.sha256:
+                raise ValueError(f"R5 asset size/SHA-256 mismatch: {record.file}")
+    # Preserve the complete provenance, including evidence, acquisition date and changes.
+    write_yaml_atomic(revision_root / R5_USED_ASSETS,
+                      {"assets": [record.model_dump(mode="json") for record in used]})
+    ledger = LicenseLedger(entries=tuple(LicenseEntry(
+        path=r.file, source=r.source_page, creator=r.author, license=r.license,
+        rights_basis=r.license_evidence or r.license_url or r.source_page,
+        revision=revision_root.name, sha256=r.sha256,
+    ) for r in used))
+    write_yaml_atomic(revision_root / R5_LICENSE_LEDGER, ledger.model_dump(mode="json"))
+    load_r5_revision_assets(revision_root, board)
+
+
+def load_r5_revision_assets(revision_root: Path, board: Storyboard) -> tuple[R5RevisionAsset, ...]:
+    """Read and verify the pinned snapshot only; refuse missing provenance/rights."""
+    paths = _r5_asset_paths(board)
+    if board.quality_profile != "r5_v1" or not paths:
+        return ()
+    records = load_asset_catalog(revision_root / R5_USED_ASSETS)
+    if {r.file for r in records} != paths:
+        raise ValueError("R5 used-asset snapshot differs from the approved shots")
+    manifest = load_asset_manifest(revision_root / "assets/asset-manifest.yaml")
+    index = {asset.path: asset for asset in manifest.assets}
+    ledger = LicenseLedger.model_validate(read_yaml(revision_root / R5_LICENSE_LEDGER))
+    rights = {entry.path: entry for entry in ledger.entries}
+    mechanism_paths = {p for scene in board.scenes for shot in scene.shots
+                       if shot.kind == "mechanism" for p in shot.asset_paths}
+    result = []
+    for record in records:
+        path = assert_safe_path(revision_root / record.file)
+        if not path.resolve().is_relative_to(revision_root.resolve()) or sha256_file(path) != record.sha256:
+            raise ValueError(f"R5 asset changed: {record.file}")
+        asset, right = index.get(record.file), rights.get(record.file)
+        if asset is None or asset.sha256 != record.sha256 or asset.license != record.license:
+            raise ValueError(f"R5 asset manifest differs from catalog: {record.file}")
+        if record.file in mechanism_paths and not asset.semantic:
+            raise ValueError(f"R5 mechanism asset must be semantic: {record.file}")
+        if (right is None or right.sha256 != record.sha256 or right.license != record.license
+                or right.creator != record.author or right.source != record.source_page
+                or right.revision != revision_root.name):
+            raise ValueError(f"R5 asset license ledger mismatch: {record.file}")
+        result.append(R5RevisionAsset(
+            id=record.id, path=record.file, title=record.attribution or Path(record.file).stem,
+            author=record.author, repository=urlsplit(record.source_page).hostname,
+            license=record.license, license_url=record.license_url,
+            source_page=record.source_page, sha256=record.sha256,
+        ))
+    return tuple(result)
+
+
+def r5_reviewed_paths(revision_root: Path) -> dict[str, Path]:
+    """Byte-bind R5 source/provenance files and every shot asset, including missing ones."""
+    board_path = revision_root / "storyboard/storyboard.yaml"
+    if not board_path.is_file():
+        return {}
+    raw = read_yaml(board_path)
+    if raw.get("quality_profile") != "r5_v1":
+        return {}
+    paths = {}
+    for scene in raw.get("scenes", []):
+        for shot in scene.get("shots", []):
+            for relative in shot.get("asset_paths", []):
+                target = assert_safe_path(revision_root / relative)
+                if not target.resolve().is_relative_to(revision_root.resolve()):
+                    raise ValueError("R5 asset escapes revision")
+                paths[f"r5-byte:{relative}"] = target
+    if paths:
+        for relative in (R5_CATALOG, R5_USED_ASSETS, R5_LICENSE_LEDGER):
+            paths[f"r5-byte:{relative}"] = assert_safe_path(revision_root / relative)
+    for source in sorted((revision_root / "evidence").rglob("*")):
+        if source.is_file():
+            paths[f"r5-byte:{source.relative_to(revision_root).as_posix()}"] = assert_safe_path(source)
+    return paths
+
+
+def validate_r5_render_report(revision_root: Path, run_dir: Path | None = None) -> None:
+    """Recompute the same aligned validator and bind it to the actual rendered input."""
+    run_dir = run_dir or revision_root / "renders"
+    approved = Storyboard.model_validate(read_yaml(revision_root / "storyboard/storyboard.yaml"))
+    if approved.quality_profile != "r5_v1":
+        return
+    data = json.loads((run_dir / "render-input.json").read_text(encoding="utf-8"))
+    manifest = json.loads((run_dir / "render-manifest.json").read_text(encoding="utf-8"))
+    report_path = run_dir / "quality-report.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    board = Storyboard.model_validate(data)
+    resolved = resolve_r5_shots(board)
+    measured = measure_r5_quality(resolved)
+    validate_r5_quality(measured, estimated=False)
+    if (board.quality_profile != "r5_v1" or board.r5_contract != approved.r5_contract
+            or canonical_json_hash(report.get("quality")) != canonical_json_hash(measured.model_dump(mode="json"))
+            or report.get("input_hash") != manifest.get("input_hash")
+            or report.get("renderer_identity") != manifest.get("renderer_identity")
+            or report.get("render_input_sha256") != canonical_json_hash(data)
+            or manifest.get("render_input_sha256") != canonical_json_hash(data)
+            or manifest.get("quality_report_sha256") != sha256_file(report_path)
+            or any(a.resolved_shots != b.resolved_shots for a, b in zip(board.scenes, resolved.scenes, strict=True))):
+        raise ValueError("R5 quality report differs from current render input/renderer")
+    QualityReport.model_validate(report["quality"])
+    if data.get("r5_assets", []) != [a.model_dump(mode="json") for a in load_r5_revision_assets(revision_root, approved)]:
+        raise ValueError("R5 rendered asset metadata differs from revision snapshot")
 
 
 class _MissingPostsError(FileNotFoundError, ValueError):
@@ -185,6 +351,7 @@ def medical_reviewed_paths(revision_root: Path) -> dict[str, Path]:
                 or asset.storyboard_role == "brand"
             ):
                 paths[f"asset:{asset.path}"] = revision_root / asset.path
+    paths.update(r5_reviewed_paths(revision_root))
     return paths
 
 
@@ -195,6 +362,11 @@ def video_reviewed_paths(revision_root: Path) -> dict[str, Path]:
         "renders/render-manifest.json": renders / "render-manifest.json",
         "renders/video.mp4": renders / "video.mp4",
     }
+    board_path = revision_root / "storyboard/storyboard.yaml"
+    if board_path.is_file() and read_yaml(board_path).get("quality_profile") == "r5_v1":
+        paths.update(r5_reviewed_paths(revision_root))
+        for relative in ("renders/render-input.json", "renders/quality-report.json", R5_QUALITY_REPORT):
+            paths[relative] = revision_root / relative
     if (revision_root / 'workflow/standards.yaml').is_file():
         paths['workflow/standards.yaml'] = revision_root / 'workflow/standards.yaml'
     from healthvideo.workflows.review_frames import imported_reviewed_paths
@@ -265,7 +437,8 @@ def hash_reviewed_artifacts(paths: dict[str, Path]) -> dict[str, str]:
     reason and must not crash the audit trail.
     """
     return {
-        name: _hash_artifact(path) for name, path in paths.items() if path.is_file()
+        name: (sha256_file(path) if name.startswith("r5-byte:") else _hash_artifact(path))
+        for name, path in paths.items() if path.is_file()
     }
 
 
@@ -324,8 +497,14 @@ def approve_gate(
         storyboard = Storyboard.model_validate(
             read_yaml(revision_root / "storyboard/storyboard.yaml")
         )
+        if storyboard.quality_profile == "r5_v1":
+            load_r5_revision_assets(revision_root, storyboard)
         validate_visual_budget(storyboard, manifest)
         script = Script.model_validate(read_yaml(revision_root / "script/script.yaml"))
+        if storyboard.quality_profile == "r5_v1":
+            validate_r5_contract(storyboard, script)
+            estimated = R5RuntimeStoryboard(**storyboard.model_dump(mode="python"), estimated=True)
+            validate_r5_quality(measure_r5_quality(resolve_r5_shots(estimated)), estimated=True)
         validate_hook_outro(script, storyboard, require_brand=True, allow_line_references=True)
         if storyboard.format_profile == "youtube_long":
             # The medical approval record does not exist yet while this gate is being approved.
@@ -387,6 +566,13 @@ def approve_gate(
         )
 
     if kind is GateKind.VIDEO:
+        if read_yaml(revision_root / "storyboard/storyboard.yaml").get("quality_profile") == "r5_v1":
+            approval = GateApprovalRecord.model_validate(read_yaml(revision_root / MEDICAL_APPROVAL_ARTIFACT))
+            if hash_reviewed_artifacts(medical_reviewed_paths(revision_root)) != approval.artifact_hashes:
+                raise ValueError("R5 video gate requires current medical approval")
+            validate_r5_render_report(revision_root)
+            if sha256_file(revision_root / R5_QUALITY_REPORT) != sha256_file(revision_root / "renders/quality-report.json"):
+                raise ValueError("R5 quality report is stale")
         pronunciation_acceptance = _check_video_qa(
             revision_root, accept_pronunciation=accept_pronunciation,
             pronunciation_pin=pronunciation_pin, pin_file=pin_file,

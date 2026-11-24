@@ -29,7 +29,10 @@ def test_render_input_carries_authored_r5_data_without_legacy_caption_rhythm():
     board = Storyboard(title="R5", quality_profile="r5_v1", r5_contract=contract_payload(),
                        scenes=[Scene(id="S1", start_frame=0, duration_frames=600,
                                      narration="Synthetic.", visual="whiteboard",
-                                     on_screen_text="Synthetic.", shots=[shot_payload()])])
+                                     on_screen_text="Synthetic.", shots=[{**shot_payload(), "asset_paths": []}])])
+    from healthvideo.render.quality import resolve_r5_shots
+
+    board = resolve_r5_shots(board)
     result = build_render_input(board, "audio/narration.wav")
     assert result.quality_profile == "r5_v1"
     assert result.r5_contract == board.r5_contract
@@ -377,3 +380,31 @@ def test_cta_logo_default_and_path_validation() -> None:
     for path in ("../logo.svg", "/logo.svg", "C:/logo.svg", "a\\logo.svg"):
         with pytest.raises(ValueError):
             YouTubeCTA(text="YouTube", logo_path=path)
+
+
+def test_r5_render_requires_real_metadata_and_resolved_shots():
+    from healthvideo.render.quality import resolve_r5_shots
+    from tests.render.test_quality import board, shot
+
+    original = board([shot(0, 90)], frames=90)
+    original = original.model_copy(update={"scenes": (original.scenes[0].model_copy(update={
+        "shots": (original.scenes[0].shots[0].model_copy(update={"asset_paths": ("assets/cell.svg",)}),)
+    }),)})
+    with pytest.raises(ValueError, match="resolved"):
+        build_render_input(original, "audio/a.wav")
+    resolved = resolve_r5_shots(original)
+    with pytest.raises(ValueError, match="SH1.*assets/cell.svg"):
+        build_render_input(resolved, "audio/a.wav")
+    metadata = {"id": "cell", "path": "assets/cell.svg", "title": "Cell",
+                "author": "Synthetic author", "repository": "servier", "license": "CC BY 4.0",
+                "license_url": "https://creativecommons.org/licenses/by/4.0/",
+                "source_page": "https://smart.servier.com/smart_image/cell/", "sha256": "a" * 64}
+    result = build_render_input(resolved, "audio/a.wav", r5_assets=[metadata])
+    assert result.model_dump(mode="json")["r5_assets"] == [metadata]
+    with pytest.raises(ValueError):
+        build_render_input(resolved, "audio/a.wav", r5_assets=[{**metadata, "license": ""}])
+
+
+def test_legacy_render_omits_r5_assets():
+    result = build_render_input(Storyboard(title="Muối", scenes=[valid_highlight_scene()]), "audio/a.wav")
+    assert "r5_assets" not in result.model_dump(mode="json")

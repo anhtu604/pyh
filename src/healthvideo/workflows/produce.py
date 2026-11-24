@@ -46,6 +46,7 @@ from healthvideo.domain.gate_review import GateApprovalRecord, GateKind
 from healthvideo.domain.hook_outro import validate_hook_outro
 from healthvideo.domain.license_ledger import LicenseEntry, LicenseLedger
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
+from healthvideo.domain.quality_standards import validate_r5_contract
 from healthvideo.domain.script import Script
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
 from healthvideo.domain.storyboard import (
@@ -58,8 +59,17 @@ from healthvideo.domain.visual_budget import validate_visual_budget
 from healthvideo.render import remotion as remotion_module
 from healthvideo.render.beats import resolve_scene_beats
 from healthvideo.render.chapters import render_long_form
-from healthvideo.render.input import audio_timing_qa, build_render_input
+from healthvideo.render.input import (
+    R5RevisionAsset,
+    audio_timing_qa,
+    build_render_input,
+)
 from healthvideo.render.openmontage import require_preview_renderer, selected_renderer
+from healthvideo.render.quality import (
+    measure_r5_quality,
+    resolve_r5_shots,
+    validate_r5_quality,
+)
 from healthvideo.render.remotion import (
     active_bundle,
     build_render_argv,
@@ -110,14 +120,18 @@ from healthvideo.visuals.flux import (
 from healthvideo.workflows.factory_standards import pinned_style_spec, style_a_active
 from healthvideo.workflows.gate_review import (
     MEDICAL_APPROVAL_ARTIFACT,
+    R5_QUALITY_REPORT,
     hash_reviewed_artifacts,
+    load_r5_revision_assets,
     medical_reviewed_paths,
+    validate_r5_render_report,
 )
 from healthvideo.workflows.long_form import (
     CLIP_PLAN_ARTIFACT,
     _resolve_effective_clip_plan,
     load_clip_scenes,
     render_clips,
+    render_r5_long_form,
 )
 from healthvideo.workflows.shorts_plan import revision_tx_lock
 from healthvideo.workflows.visual_assets import (
@@ -239,6 +253,7 @@ def _build_v2_input_hash(
     style_spec: dict[str, Any] | None,
     clip_payload: dict[str, Any] | None,
     clip_brand: Any,
+    r5_assets: tuple[R5RevisionAsset, ...] = (),
 ) -> str:
     return canonical_json_hash(
         {
@@ -259,6 +274,11 @@ def _build_v2_input_hash(
             "sfx": sfx_identity_data,
             "visual_review": visual_identity_data,
             **({"style_spec": style_spec} if style_spec is not None else {}),
+            **(
+                {"r5_assets": [asset.model_dump(mode="json") for asset in r5_assets]}
+                if approved_storyboard.quality_profile == "r5_v1"
+                else {}
+            ),
             **(
                 {
                     "clip_plan": clip_payload,
@@ -486,6 +506,10 @@ def _produce_v2_inner(
     asset_manifest = load_asset_manifest(layout.artifact_root / "assets/asset-manifest.yaml")
     visual_budget_report = validate_visual_budget(storyboard, asset_manifest)
     visual_budget_qa = visual_budget_report.model_dump(mode="json")
+    r5_assets: tuple[R5RevisionAsset, ...] = ()
+    if storyboard.quality_profile == "r5_v1":
+        validate_r5_contract(storyboard, script)
+        r5_assets = load_r5_revision_assets(layout.artifact_root, storyboard)
     validate_hook_outro(
         script, storyboard, require_brand=script.format_profile == "hook_outro_v1",
         allow_line_references=True,
@@ -547,6 +571,8 @@ def _produce_v2_inner(
     asset_hashes.update(
         {relative: sha256_file(path) for relative, path in visual_paths.items()}
     )
+    if r5_assets:
+        asset_hashes.update({asset.path: asset.sha256 for asset in r5_assets})
     clip_brand = (
         load_brand_profile(BRAND_PROFILE_PATH)
         if storyboard.format_profile == "youtube_long" else None
@@ -576,6 +602,7 @@ def _produce_v2_inner(
         style_spec=style_spec,
         clip_payload=effective_clip_payload,
         clip_brand=clip_brand,
+        r5_assets=r5_assets,
     )
     approved_storyboard = storyboard
     final_scene = storyboard.scenes[-1]
@@ -604,12 +631,17 @@ def _produce_v2_inner(
             storyboard = storyboard.model_copy(update={"scenes": tuple(
                 resolve_scene_beats(scene, clamp_outside=True) for scene in storyboard.scenes
             )})
+            if storyboard.quality_profile == "r5_v1":
+                storyboard = resolve_r5_shots(storyboard)
+                validate_r5_quality(measure_r5_quality(storyboard), estimated=False)
             storyboard = apply_visual_fallbacks(layout.artifact_root, storyboard)
             expected_input = build_render_input(
-                storyboard, audio_file="audio/narration.wav"
+                storyboard, audio_file="audio/narration.wav", r5_assets=r5_assets,
             ).model_dump(mode="json")
             cached_input = json.loads((renders_dir / RENDER_INPUT_NAME).read_text(encoding="utf-8"))
             cache_valid = canonical_json_hash(expected_input) == canonical_json_hash(cached_input)
+            if cache_valid and storyboard.quality_profile == "r5_v1":
+                validate_r5_render_report(layout.artifact_root, renders_dir)
         except (OSError, ValueError, KeyError, TypeError):
             cache_valid = False
     if cache_valid and (require_timing or visual_budget_qa is not None):
@@ -643,6 +675,7 @@ def _produce_v2_inner(
             )
         if not dry_run:
             _promote_pronunciation_qa(layout.artifact_root, input_hash)
+            _promote_r5_quality_report(layout.artifact_root)
             render_optional_thumbnail(layout.artifact_root, runner=runner)
         return output
     if dry_run:
@@ -673,7 +706,9 @@ def _produce_v2_inner(
         )
     )
     try:
-        _copy_v2_assets(layout.artifact_root, staging_dir, storyboard, asset_hashes)
+        _copy_v2_assets(
+            layout.artifact_root, staging_dir, storyboard, asset_hashes, r5_assets=r5_assets,
+        )
         staged_audio = staging_dir / "audio" / "narration.wav"
         line_wavs: dict[str, Path] = {}
         line_ms: dict[str, int] = {}
@@ -766,6 +801,11 @@ def _produce_v2_inner(
         storyboard = storyboard.model_copy(update={"scenes": tuple(
             resolve_scene_beats(scene, clamp_outside=True) for scene in storyboard.scenes
         )})
+        r5_quality_report = None
+        if storyboard.quality_profile == "r5_v1":
+            storyboard = resolve_r5_shots(storyboard)
+            r5_quality_report = measure_r5_quality(storyboard)
+            validate_r5_quality(r5_quality_report, estimated=False)
         timing_record["audio_alignment"] = concat_scene_audio(storyboard, line_wavs, staged_audio)
         # Keyword-timed SFX read the alignment just written to staging, not the previous run's.
         sfx_events = resolve_sfx(storyboard, staging_dir)
@@ -841,7 +881,7 @@ def _produce_v2_inner(
         visual_budget_qa = visual_budget_report.model_dump(mode="json")
         storyboard = apply_visual_fallbacks(layout.artifact_root, storyboard)
         render_input = build_render_input(
-            storyboard, audio_file="audio/narration.wav"
+            storyboard, audio_file="audio/narration.wav", r5_assets=r5_assets,
         )
         final_frame = storyboard.scenes[-1].start_frame + storyboard.scenes[-1].duration_frames
         audio_report = inspect_wav(staged_audio)
@@ -873,9 +913,23 @@ def _produce_v2_inner(
                     style_spec=style_spec,
                     clip_payload=effective_clip_payload,
                     clip_brand=clip_brand,
+                    r5_assets=r5_assets,
                 )
                 pronunciation_report["input_hash"] = input_hash
                 _write_json_atomic(staging_dir / "pronunciation-qa.json", pronunciation_report)
+        r5_report_sha256: str | None = None
+        if r5_quality_report is not None:
+            staged_r5_report = staging_dir / "quality-report.json"
+            _write_json_atomic(
+                staged_r5_report,
+                {
+                    "quality": r5_quality_report.model_dump(mode="json"),
+                    "input_hash": input_hash,
+                    "renderer_identity": renderer_identity_data,
+                    "render_input_sha256": canonical_json_hash(render_input_data),
+                },
+            )
+            r5_report_sha256 = sha256_file(staged_r5_report)
         gc.collect()
         media_probe: dict[str, Any] | None = None
         clip_probes: dict[str, dict[str, Any]] = {}
@@ -926,18 +980,40 @@ def _produce_v2_inner(
                                 brand=clip_brand,
                                 revision=project.active_revision,
                                 sfx_events=sfx_events,
+                                r5_assets=r5_assets,
                             )
-                            chapter_parts = render_long_form(
-                                render_input_path=staged_render_input,
-                                render_input=render_input,
-                                public_dir=staging_dir,
-                                audio=staged_audio,
-                                output=staged_output,
-                                cache_dir=layout.project_dir / CHAPTER_CACHE_DIRECTORY,
-                                asset_hashes=asset_hashes,
-                                renderer_identity=renderer_identity_data,
-                                runner=render_runner,
-                            )
+                            if render_input.quality_profile == "r5_v1":
+                                chapter_parts = render_r5_long_form(
+                                    render_input_path=staged_render_input,
+                                    render_input=render_input,
+                                    public_dir=staging_dir,
+                                    audio=staged_audio,
+                                    output=staged_output,
+                                    cache_dir=layout.project_dir / CHAPTER_CACHE_DIRECTORY,
+                                    asset_hashes=asset_hashes,
+                                    renderer_identity=renderer_identity_data,
+                                    audio_identity={
+                                        "provider": provider_identity_data,
+                                        "pronunciation_sha256": pronunciation_sha256,
+                                        "line_audio_sha256": {
+                                            path.relative_to(staging_dir).as_posix(): sha256_file(path)
+                                            for path in line_wavs.values()
+                                        },
+                                    },
+                                    runner=render_runner,
+                                )
+                            else:
+                                chapter_parts = render_long_form(
+                                    render_input_path=staged_render_input,
+                                    render_input=render_input,
+                                    public_dir=staging_dir,
+                                    audio=staged_audio,
+                                    output=staged_output,
+                                    cache_dir=layout.project_dir / CHAPTER_CACHE_DIRECTORY,
+                                    asset_hashes=asset_hashes,
+                                    renderer_identity=renderer_identity_data,
+                                    runner=render_runner,
+                                )
                         else:
                             argv = build_render_argv(staged_render_input, staged_output, staging_dir)
                             exit_code = render_runner(argv)
@@ -975,6 +1051,7 @@ def _produce_v2_inner(
                 "provider": provider_name,
                 "asset_sha256": dict(asset_hashes),
                 "render_input_sha256": canonical_json_hash(render_input_data),
+                **({"quality_report_sha256": r5_report_sha256} if r5_report_sha256 is not None else {}),
                 "scene_timing_sha256": sha256_file(staging_dir / "scene-timing.json"),
                 "alignment_sha256": {
                     path.relative_to(staging_dir).as_posix(): sha256_file(path)
@@ -1049,6 +1126,8 @@ def _produce_v2_inner(
                 final_frame=final_frame,
                 expected_visual_budget=visual_budget_qa,
             )
+            if r5_quality_report is not None:
+                validate_r5_render_report(layout.artifact_root, staging_dir)
         _promote_run(staging_dir, renders_dir)
         _ensure_contact_sheet(layout.artifact_root)
         render_optional_thumbnail(layout.artifact_root, runner=runner)
@@ -1257,6 +1336,7 @@ def _promote_v2_video_qa_if_needed(
 ) -> None:
     _promote_pronunciation_qa(revision_root, input_hash)
     _promote_motion_report(revision_root)
+    _promote_r5_quality_report(revision_root)
     if _v2_video_qa_is_valid(
         revision_root, input_hash, require_timing=require_timing,
         final_frame=final_frame,
@@ -1516,6 +1596,8 @@ def _copy_v2_assets(
     staging_dir: Path,
     storyboard: Storyboard,
     expected_hashes: Mapping[str, str],
+    *,
+    r5_assets: tuple[R5RevisionAsset, ...] = (),
 ) -> None:
     paths = referenced_evidence_assets(revision_root, storyboard)
     paths.update(
@@ -1525,6 +1607,8 @@ def _copy_v2_assets(
             load_asset_manifest(revision_root / "assets/asset-manifest.yaml"),
         )
     )
+    for asset in r5_assets:
+        paths[asset.path] = revision_root.joinpath(*Path(asset.path).parts)
     for relative, source in paths.items():
         destination = staging_dir.joinpath(*Path(relative).parts)
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -1601,3 +1685,16 @@ def _promote_pronunciation_qa(revision_root: Path, input_hash: str) -> None:
         if pronunciation_data.get("input_hash") != input_hash:
             raise ValueError("Pronunciation QA does not match active render")
         _write_json_atomic(revision_root / "reviews/pronunciation-qa.json", pronunciation_data)
+
+
+def _promote_r5_quality_report(revision_root: Path) -> None:
+    source = revision_root / "renders/quality-report.json"
+    if source.is_file():
+        target = revision_root / R5_QUALITY_REPORT
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_suffix(f"{target.suffix}.tmp")
+        try:
+            shutil.copyfile(source, temporary)
+            os.replace(temporary, target)
+        finally:
+            temporary.unlink(missing_ok=True)

@@ -20,6 +20,7 @@ import {ProcessScene} from './scenes/ProcessScene';
 import {ComparisonScene} from './scenes/ComparisonScene';
 import {TimelapseScene} from './scenes/TimelapseScene';
 import {MechanismCameraContext, mechanismSequenceFramings} from './scenes/MechanismScene';
+import {R5ShotScene} from './scenes/R5ShotScene';
 import {panelRows} from './components/AuthoredPanels';
 import type {RenderInput, Scene, SceneMotion, SceneTiming, VisualStyle} from './types';
 
@@ -41,8 +42,9 @@ export const activeSceneIndex = (scenes: SceneTiming[], frame: number): number =
   );
 
 export const HealthVideo: React.FC<RenderInput> = (rawInput) => {
-  const {audio_file, format_profile, scenes, youtube_cta, visualStyle} = parseRenderInput(rawInput);
-  const cameraFramings = mechanismSequenceFramings(scenes);
+  const {audio_file, format_profile, scenes, youtube_cta, visualStyle, quality_profile, r5_contract, r5_assets} = parseRenderInput(rawInput);
+  const isR5 = quality_profile === 'r5_v1';
+  const cameraFramings = isR5 ? [] : mechanismSequenceFramings(scenes);
   const forceLightCanvas = format_profile === 'youtube_long';
 
   return (
@@ -50,8 +52,18 @@ export const HealthVideo: React.FC<RenderInput> = (rawInput) => {
     <AbsoluteFill style={{backgroundColor: forceLightCanvas ? brand.off_white : CAPTION_BACKGROUND_COLOR, color: CAPTION_TEXT_COLOR}}>
       <Audio src={staticFile(audio_file)} />
       {scenes.map((scene, index) => {
-        const motion = effectiveSceneMotion(scene, visualStyle);
         const transition = sceneTransitionPlan(scenes, index);
+        if (isR5) {
+          if (!scene.resolved_shots?.length) {
+            throw new Error(`R5 scene ${scene.id} requires resolved_shots; legacy fallback is forbidden`);
+          }
+          return (
+            <Sequence key={scene.id} from={scene.start_frame} durationInFrames={scene.duration_frames}>
+              <R5ShotScene scene={scene} r5Contract={r5_contract} assets={r5_assets} transition={transition} />
+            </Sequence>
+          );
+        }
+        const motion = effectiveSceneMotion(scene, visualStyle);
         return (
         <Sequence key={scene.id} from={scene.start_frame} durationInFrames={scene.duration_frames}>
           {scene.visual_assets.filter((asset) => asset.role === 'whiteboard').map((asset) => (

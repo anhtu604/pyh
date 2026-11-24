@@ -5,10 +5,10 @@ import {ANATOMY_COMPONENTS, ANATOMY_CONTENT_BOXES, ANATOMY_VIEW_BOXES, ANATOMY_C
 import {Captions, CAPTION_BACKGROUND_COLOR, shouldRenderCaptions} from '../components/Captions';
 import {MascotGuide} from '../components/MascotGuide';
 import {useLayout, type Box} from '../layout';
-import {isMechanismVisual, type Scene, type VisualStyle} from '../types';
+import {isMechanismVisual, type RenderInput, type Scene, type VisualStyle} from '../types';
 import {activeSceneBeat, beatCamera} from './mechanismBeats';
 import {DiagramAnnotations} from '../anatomy/annotations';
-import {AuthoredStep, AuthoredWorksheet, panelRows} from '../components/AuthoredPanels';
+import {assertNoR5TabLayout, AuthoredStep, AuthoredWorksheet, panelRows} from '../components/AuthoredPanels';
 import {useVisualStyle} from '../scalezoom/context';
 import {ScaleZoomStage} from '../scalezoom/ScaleZoomStage';
 import {IsoInfographicStage} from '../isoinfo/IsoInfographicStage';
@@ -103,13 +103,15 @@ export const MechanismScene: React.FC<{
   visualStyle?: VisualStyle;
   transition?: SceneTransitionProps;
   forceLightCanvas?: boolean;
-}> = ({scene, kind, visualStyle, transition, forceLightCanvas}) => {
+  qualityProfile?: RenderInput['quality_profile'];
+}> = ({scene, kind, visualStyle, transition, forceLightCanvas, qualityProfile}) => {
   const frame = useCurrentFrame();
   const framingIndex = useContext(MechanismCameraContext);
   const contextStyle = useVisualStyle();
   const effectiveStyle = visualStyle ?? contextStyle;
   const frameLayout = useLayout();
-  const hasSteps = panelRows(scene, 2).length > 0;
+  assertNoR5TabLayout(scene, qualityProfile);
+  const hasSteps = panelRows(scene, 2, qualityProfile).length > 0;
   // Reserve a separate band for authored ideas; camera and callouts still share the same safe canvas.
   const original = frameLayout.mechanism;
   const shift = (box: Box) => hasSteps ? {...box, top: box.top + 150, height: box.height - 150} : box;
@@ -122,7 +124,7 @@ export const MechanismScene: React.FC<{
   const envelopeStyle = transition && transition.durationFrames >= 45
     ? {opacity: env.opacity, transform: env.transform}
     : {};
-  if (effectiveStyle === 'scale_zoom' && (kind === 'anatomy' || kind === 'process') && !panelRows(scene, 3).length) {
+  if (effectiveStyle === 'scale_zoom' && (kind === 'anatomy' || kind === 'process') && !panelRows(scene, 3, qualityProfile).length) {
     const stage = (
       <ScaleZoomStage
         scene={scene}
@@ -133,7 +135,7 @@ export const MechanismScene: React.FC<{
     );
     return transition ? <SceneEnvelopeWrapper transition={transition}>{stage}</SceneEnvelopeWrapper> : stage;
   }
-  if (effectiveStyle === 'iso_infographic' && (kind === 'anatomy' || kind === 'process') && !panelRows(scene, 3).length) {
+  if (effectiveStyle === 'iso_infographic' && (kind === 'anatomy' || kind === 'process') && !panelRows(scene, 3, qualityProfile).length) {
     const stage = <IsoInfographicStage scene={scene} kind={kind} cueProgress={cueProgress} />;
     return transition ? <SceneEnvelopeWrapper transition={transition}>{stage}</SceneEnvelopeWrapper> : stage;
   }
@@ -159,8 +161,8 @@ export const MechanismScene: React.FC<{
   const activeBeat = activeSceneBeat(scene, frame);
   const relative = (box: typeof layout.subject) => ({...box, left: box.left - viewport.left, top: box.top - viewport.top});
   const caption = frameLayout.captions;
-  // A process can be a clinical history worksheet rather than moving biological tissue.
-  if (panelRows(scene, 3).length) {
+  // A process can be a clinical history worksheet rather than moving biological tissue (legacy only).
+  if (qualityProfile !== 'r5_v1' && panelRows(scene, 3, qualityProfile).length) {
     if (effectiveStyle === 'scale_zoom' || forceLightCanvas) {
       return <SplitClinicalWorksheetStage scene={scene} transition={transition} />;
     }

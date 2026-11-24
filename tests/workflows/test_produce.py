@@ -30,6 +30,198 @@ from tests.helpers import align_fixture_script, create_v2_project_fixture
 V2_REVIEWED_AT = datetime(2026, 9, 12, 8, 0, tzinfo=UTC)
 
 
+def _r5_project(tmp_path, *, state: WorkflowState = WorkflowState.AWAITING_MEDICAL_REVIEW):
+    project = create_v2_project_fixture(tmp_path, state=state)
+    revision = project / "revisions/001"
+    data = read_yaml(revision / "storyboard/storyboard.yaml")
+    script = read_yaml(revision / "script/script.yaml")
+    ids = [line["id"] for line in script["lines"]]
+    data["quality_profile"] = "r5_v1"
+    data["r5_contract"] = {
+        "questions": [{"id": f"Q{i}", "text": script["lines"][0]["text"].split()[0],
+                       "hook_line_id": ids[0], "answer_line_ids": [ids[-1]]} for i in (1, 2)],
+        "blocks": [{"id": "B1", "line_ids": ids, "question_ids": ["Q1", "Q2"],
+                    "takeaway_line_id": ids[-1], "professional_update": True}],
+    }
+    for index, scene in enumerate(data["scenes"]):
+        scene["shots"] = [{"id": f"SH{index}", "kind": "recap", "tier": None,
+            "component": "ScaleChain", "asset_paths": [], "question_ids": ["Q1"],
+            "start": {"kind": "scene_start"}, "end": {"kind": "scene_end"},
+            "actions": [], "text_windows": []}]
+    write_yaml_atomic(revision / "storyboard/storyboard.yaml", data)
+    return project
+
+
+def _r5_alignment(monkeypatch):
+    def align(wavs, scripts, *, out_dir, **kwargs):
+        from healthvideo.tts.audio_checks import inspect_wav
+        result = {}
+        out_dir.mkdir(parents=True, exist_ok=True)
+        for line, text in scripts.items():
+            duration = inspect_wav(wavs[line]).duration_ms / 1000
+            tokens = text.split()
+            result[line] = [{"word": token, "start": i * duration / len(tokens),
+                             "end": (i + 1) * duration / len(tokens), "matched": True}
+                            for i, token in enumerate(tokens)]
+            (out_dir / f"{line}.json").write_text(json.dumps(result[line]), encoding="utf-8")
+        return result
+    monkeypatch.setattr(produce_workflow, "align_lines", align)
+
+
+@pytest.mark.parametrize("factor", [0.9, 1.1])
+def test_r5_production_measures_after_alignment_and_binds_cache(tmp_path, monkeypatch, factor):
+    from healthvideo.workflows.gate_review import validate_r5_render_report
+    project = _r5_project(tmp_path)
+    revision = project / "revisions/001"
+    before = (revision / "storyboard/storyboard.yaml").read_bytes()
+    approve_gate(project, GateKind.MEDICAL, reviewer="doctor", now=V2_REVIEWED_AT)
+    _r5_alignment(monkeypatch)
+
+    class VariedTTS(SilentTTS):
+        def synthesize(self, request, output):
+            result = super().synthesize(request, output)
+            with wave.open(str(output), "rb") as stream:
+                params, frames = stream.getparams(), stream.readframes(stream.getnframes())
+            count = round(params.nframes * factor)
+            with wave.open(str(output), "wb") as stream:
+                stream.setparams(params)
+                stream.writeframes((frames + bytes(count * params.sampwidth * params.nchannels))[:count * params.sampwidth * params.nchannels])
+            return result
+
+    calls = []
+    def runner(argv):
+        calls.append(argv)
+        _write_synthetic_output(argv)
+        return 0
+
+    produce_project(project, VariedTTS(), runner, music=False)
+    report = json.loads((revision / "renders/quality-report.json").read_text(encoding="utf-8"))
+    assert report["quality"]["estimated"] is False
+    assert report["quality"]["manual_review"] == "pending"
+    assert report["render_input_sha256"]
+    validate_r5_render_report(revision)
+    assert (revision / "reviews/quality-report.json").read_bytes() == (revision / "renders/quality-report.json").read_bytes()
+    assert (revision / "storyboard/storyboard.yaml").read_bytes() == before
+    first_count = len(calls)
+    produce_project(project, VariedTTS(), runner, music=False)
+    assert len(calls) == first_count
+    (revision / "renders/quality-report.json").write_text("{}", encoding="utf-8")
+    produce_project(project, VariedTTS(), runner, music=False)
+    assert len(calls) > first_count
+    validate_r5_render_report(revision)
+
+
+def test_r5_bad_aligned_anchor_stops_before_render(tmp_path, monkeypatch):
+    from tests.helpers import submit_medical_review_fixture
+
+    project = _r5_project(tmp_path, state=WorkflowState.DRAFT_READY)
+    revision = project / "revisions/001"
+    board_path = revision / "storyboard/storyboard.yaml"
+    script_path = revision / "script/script.yaml"
+    board = read_yaml(board_path)
+    script = read_yaml(script_path)
+    first = board["scenes"][0]
+    unique_word = "AnchorUniqueToken"
+    first["narration"] = f"{unique_word} {first['narration']}"
+    for line in script["lines"]:
+        if line["id"] == first["script_line_id"]:
+            line["text"] = f"{unique_word} {line['text']}"
+    first["shots"][0]["start"] = {"kind": "phrase", "line_id": first["script_line_id"],
+                                    "phrase": unique_word}
+    write_yaml_atomic(script_path, script)
+    write_yaml_atomic(board_path, board)
+    submit_medical_review_fixture(project)
+    approve_gate(project, GateKind.MEDICAL, reviewer="doctor", now=V2_REVIEWED_AT)
+    # Alignment is absent despite valid estimated anchors. Runtime may not estimate.
+    monkeypatch.setattr(produce_workflow, "align_lines", lambda *a, **kw: {})
+    with pytest.raises(ValueError, match="missing word alignment"):
+        produce_project(project, SilentTTS(), lambda _: pytest.fail("render before valid anchors"), music=False)
+
+
+def test_r5_overlapping_text_windows_report_union_and_speed_changes_tts_cache(tmp_path, monkeypatch):
+    from healthvideo.tts.base import TTSRequest
+    from healthvideo.workflows.produce import _synthesize_cached_line
+    from tests.helpers import submit_medical_review_fixture
+
+    project = _r5_project(tmp_path, state=WorkflowState.DRAFT_READY)
+    revision = project / "revisions/001"
+    board_path = revision / "storyboard/storyboard.yaml"
+    script_path = revision / "script/script.yaml"
+    board = read_yaml(board_path)
+    script = read_yaml(script_path)
+    first = board["scenes"][0]
+    line_id = first["script_line_id"]
+    first["narration"] = "AlphaOne BetaTwo GammaThree DeltaFour EpsilonFive ZetaSix EtaSeven ThetaEight"
+    for line in script["lines"]:
+        if line["id"] == line_id:
+            line["text"] = first["narration"]
+    for question in board["r5_contract"]["questions"]:
+        question["text"] = "AlphaOne"
+    first["shots"][0]["text_windows"] = [
+        {"kind": "takeaway", "text": "Chốt một",
+         "start": {"kind": "phrase", "line_id": line_id, "phrase": "AlphaOne"},
+         "end": {"kind": "phrase", "line_id": line_id, "phrase": "GammaThree"}},
+        {"kind": "question", "text": "Câu hỏi",
+         "start": {"kind": "phrase", "line_id": line_id, "phrase": "BetaTwo"},
+         "end": {"kind": "phrase", "line_id": line_id, "phrase": "DeltaFour"}},
+    ]
+    write_yaml_atomic(script_path, script)
+    write_yaml_atomic(board_path, board)
+    submit_medical_review_fixture(project)
+    approve_gate(project, GateKind.MEDICAL, reviewer="doctor", now=V2_REVIEWED_AT)
+    _r5_alignment(monkeypatch)
+    produce_project(project, SilentTTS(), lambda argv: (_write_synthetic_output(argv), 0)[1], music=False)
+    report = json.loads((revision / "renders/quality-report.json").read_text(encoding="utf-8"))
+    sources = report["quality"]["source_intervals"]
+    union = report["quality"]["text_union_intervals"]
+    assert len(sources) == 2
+    assert len(union) == 1
+    assert report["quality"]["numerator_frames"] == union[0]["end_frame"] - union[0]["start_frame"]
+    assert report["quality"]["numerator_frames"] < sum(s["end_frame"] - s["start_frame"] for s in sources)
+
+    # Changing TTS speed must not reuse a WAV cached for another speed.
+    class FakeVibiTTS(SilentTTS):
+        provider_name = "vibi_minimax"
+
+        def __init__(self, speed: float) -> None:
+            super().__init__()
+            self._speed = speed
+            self.calls = 0
+
+        def cache_identity(self) -> dict[str, str]:
+            return {"provider": "vibi_minimax", "model_id": "speech-2.8-hd",
+                    "voice_id": "anh-tu", "runtime_id": f"speed-{str(self._speed).replace('.', '_')}"}
+
+        def synthesize(self, request, output):
+            self.calls += 1
+            return super().synthesize(request, output)
+
+    cache_dir = tmp_path / "tts-cache"
+    slow, fast = FakeVibiTTS(1.0), FakeVibiTTS(1.18)
+    req = TTSRequest(text="Xin chào", language="vi")
+    _synthesize_cached_line(slow, req, tmp_path / "a.wav", cache_dir=cache_dir)
+    _synthesize_cached_line(slow, req, tmp_path / "b.wav", cache_dir=cache_dir)
+    _synthesize_cached_line(fast, req, tmp_path / "c.wav", cache_dir=cache_dir)
+    assert slow.calls == 1
+    assert fast.calls == 1
+
+
+def test_legacy_produce_omits_r5_keys_and_quality_report(tmp_path):
+    project = create_v2_project_fixture(tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW)
+    revision = project / "revisions/001"
+    approve_gate(project, GateKind.MEDICAL, reviewer="doctor", now=V2_REVIEWED_AT)
+    produce_project(project, SilentTTS(), lambda argv: (_write_synthetic_output(argv), 0)[1], music=False)
+    manifest = json.loads((revision / "renders/render-manifest.json").read_text(encoding="utf-8"))
+    render_input = json.loads((revision / "renders/render-input.json").read_text(encoding="utf-8"))
+    assert "quality_report_sha256" not in manifest
+    assert not (revision / "renders/quality-report.json").exists()
+    assert not (revision / "reviews/quality-report.json").exists()
+    assert "quality_profile" not in render_input
+    assert "r5_contract" not in render_input
+    assert "r5_assets" not in render_input
+
+
+
 def test_m64_production_records_measured_audio_and_rejects_stale_qa(tmp_path: Path) -> None:
     project = create_v2_project_fixture(tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW)
     revision = project / "revisions/001"

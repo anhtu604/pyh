@@ -2,10 +2,28 @@ import React from 'react';
 import {brand} from '../anatomy/palette';
 import {FONT_FAMILY} from '../fonts';
 import {useLayout, type Box} from '../layout';
-import type {Scene} from '../types';
+import type {RenderInput, Scene} from '../types';
+
+export type QualityProfile = RenderInput['quality_profile'];
+
+/** Fail closed in R5: tab-delimited text must never be inferred as a table or worksheet. */
+export const assertNoR5TabLayout = (scene: Scene, qualityProfile?: QualityProfile): void => {
+  if (qualityProfile !== 'r5_v1') return;
+  const hasTabEntrance = scene.entrances?.some((row) => row.text.includes('\t')) ?? false;
+  const hasTabText = scene.on_screen_text?.includes('\t') ?? false;
+  if (hasTabEntrance || hasTabText) {
+    throw new Error(
+      `R5 scene ${scene.id} forbids implicit tab layout; declare an explicit VnLabSheet shot instead`,
+    );
+  }
+};
 
 /** Tabs are authored column stops in entrance text. Plain entrances retain their legacy layout. */
-export const panelRows = (scene: Scene, columns: number) => {
+export const panelRows = (scene: Scene, columns: number, qualityProfile?: QualityProfile) => {
+  if (qualityProfile === 'r5_v1') {
+    assertNoR5TabLayout(scene, qualityProfile);
+    return [];
+  }
   const rows = scene.entrances ?? [];
   if (!rows.length || !rows.every(row => row.text.split('\t').length === columns)) return [];
   // Mechanism beats are resolved against the real narration by the existing timing pipeline.
@@ -15,7 +33,11 @@ export const panelRows = (scene: Scene, columns: number) => {
 export const activePanelIndex = (rows: NonNullable<Scene['entrances']>, frame: number) =>
   rows.reduce((active, row, index) => row.start_frame <= frame ? index : active, -1);
 
-export const AuthoredStep: React.FC<{scene: Scene; frame: number; box?: Box}> = ({scene, frame, box}) => {
+export const AuthoredStep: React.FC<{scene: Scene; frame: number; box?: Box; qualityProfile?: QualityProfile}> = ({scene, frame, box, qualityProfile}) => {
+  if (qualityProfile === 'r5_v1') {
+    assertNoR5TabLayout(scene, qualityProfile);
+    throw new Error(`R5 scene ${scene.id} forbids AuthoredStep implicit tab layout`);
+  }
   const rows = panelRows(scene, 2);
   const index = activePanelIndex(rows, frame);
   if (index < 0) return null;
@@ -29,7 +51,12 @@ export const AuthoredStep: React.FC<{scene: Scene; frame: number; box?: Box}> = 
 };
 
 /** A date rail / document worksheet, with one focus per authored entrance, no implied causal arrows. */
-export const AuthoredWorksheet: React.FC<{scene: Scene; frame: number}> = ({scene, frame}) => {
+export const AuthoredWorksheet: React.FC<{scene: Scene; frame: number; qualityProfile?: QualityProfile}> = ({scene, frame, qualityProfile}) => {
+  if (qualityProfile === 'r5_v1') {
+    throw new Error(
+      `R5 scene ${scene.id} forbids implicit AuthoredWorksheet; declare a VnLabSheet shot instead`,
+    );
+  }
   const layout = useLayout();
   const box = layout.sourceCard;
   const rows = panelRows(scene, 3);

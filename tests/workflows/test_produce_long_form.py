@@ -12,6 +12,48 @@ from tests.helpers import create_long_form_project_fixture
 REVIEWED_AT = datetime(2026, 9, 29, 9, 0, tzinfo=UTC)
 
 
+def test_r5_chapter_cache_reuses_unchanged_chapter_and_checks_bytes(tmp_path):
+    from healthvideo.render.input import build_render_input
+    from healthvideo.render.quality import resolve_r5_shots
+    from healthvideo.workflows.long_form import render_r5_long_form
+    from tests.render.test_quality import board, shot
+
+    original = board([shot(0, 9000)], frames=9000)
+    first = original.scenes[0].model_copy(update={"chapter_id": "CH01"})
+    second = first.model_copy(update={"id": "S2", "start_frame": 9000, "chapter_id": "CH02",
+        "shots": (first.shots[0].model_copy(update={"id": "SH2"}),)})
+    original = original.model_copy(update={"scenes": (first, second), "format_profile": "youtube_long"})
+    resolved = resolve_r5_shots(original)
+    calls = []
+
+    def runner(argv):
+        calls.append(argv)
+        output = Path(argv[argv.index("--output") + 1] if "--output" in argv else argv[-1])
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(b"fixture video")
+        return 0
+
+    def run(value, identity=None):
+        return render_r5_long_form(render_input_path=tmp_path / "input.json", render_input=value,
+            public_dir=tmp_path, audio=tmp_path / "audio.wav", output=tmp_path / "out.mp4",
+            cache_dir=tmp_path / "cache", asset_hashes={}, renderer_identity={"source": "fixture"},
+            audio_identity=identity or {"voice_id": "fixture", "speed": "1.18", "lexicon": "fixture"}, runner=runner)
+
+    value = build_render_input(resolved, "audio/a.wav")
+    initial = run(value)
+    changed = value.model_copy(update={"scenes": (value.scenes[0].model_copy(update={"narration": "changed fixture"}), value.scenes[1])})
+    subsequent = run(changed)
+    assert initial[0] != subsequent[0]
+    assert initial[1] == subsequent[1]
+    assert sum(any(arg.startswith("--frames") for arg in call) for call in calls) == 3
+    # A present but corrupted cached MP4 is never accepted as a cache hit.
+    (tmp_path / "cache" / subsequent[1]).write_bytes(b"corrupted")
+    run(changed)
+    assert sum(any(arg.startswith("--frames") for arg in call) for call in calls) == 4
+    sped = run(changed, {"voice_id": "fixture", "speed": "1.2", "lexicon": "fixture"})
+    assert all(a != b for a, b in zip(sped, subsequent))
+
+
 def _long_form_project(tmp_path: Path) -> Path:
     project_dir = create_long_form_project_fixture(tmp_path)
     approve_gate(project_dir, GateKind.MEDICAL, reviewer="BS Nguyễn Văn An", now=REVIEWED_AT)

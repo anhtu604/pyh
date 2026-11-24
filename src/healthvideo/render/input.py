@@ -16,6 +16,30 @@ MAX_TRAILING_VISUAL_MS = 1500
 MAX_SCENE_DRIFT_MS = 120
 
 
+class R5RevisionAsset(BaseModel):
+    """Verified, revision-local provenance, shared with the R5 renderer."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    id: str = Field(pattern=r"\S")
+    path: str
+    title: str = Field(pattern=r"\S")
+    author: str = Field(pattern=r"\S")
+    repository: str = Field(pattern=r"\S")
+    license: Literal["Public Domain", "CC0", "CC BY 3.0", "CC BY 4.0"]
+    license_url: str | None
+    source_page: str = Field(pattern=r"^https://\S+$")
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def safe_provenance(self) -> "R5RevisionAsset":
+        _validate_relative_posix_path(self.path, "R5 asset")
+        if self.license_url is not None and not self.license_url.startswith("https://"):
+            raise ValueError("R5 asset license_url requires HTTPS")
+        if self.license.startswith("CC BY") and not self.license_url:
+            raise ValueError("R5 attribution license requires license_url")
+        return self
+
+
 class YouTubeCTA(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -47,6 +71,7 @@ class RenderInput(BaseModel):
     title: str
     quality_profile: QualityProfile | None = Field(default=None, exclude_if=lambda v: v is None)
     r5_contract: R5Contract | None = Field(default=None, exclude_if=lambda v: v is None)
+    r5_assets: tuple[R5RevisionAsset, ...] = Field(default=(), exclude_if=lambda v: not v)
     visual_style: VisualStyle | None = Field(default=None, exclude_if=lambda v: v is None)
     youtube_cta: YouTubeCTA | None = None
     audio_file: str
@@ -60,11 +85,22 @@ class RenderInput(BaseModel):
     @model_validator(mode="after")
     def validate_r5_activation(self) -> "RenderInput":
         if self.quality_profile is None and (
-            self.r5_contract is not None or any(s.shots or s.resolved_shots for s in self.scenes)
+            self.r5_contract is not None or self.r5_assets or any(s.shots or s.resolved_shots for s in self.scenes)
         ):
             raise ValueError("R5 data requires quality_profile=r5_v1")
         if self.quality_profile == "r5_v1" and self.r5_contract is None:
             raise ValueError("quality_profile=r5_v1 requires r5_contract")
+        if self.quality_profile == "r5_v1":
+            by_path = {asset.path: asset for asset in self.r5_assets}
+            if len(by_path) != len(self.r5_assets) or len({a.id for a in self.r5_assets}) != len(self.r5_assets):
+                raise ValueError("R5 asset metadata requires unique id/path")
+            for scene in self.scenes:
+                if not scene.resolved_shots:
+                    raise ValueError(f"Scene {scene.id}: R5 requires resolved shots")
+                for shot in scene.resolved_shots:
+                    for path in shot.asset_paths:
+                        if path not in by_path:
+                            raise ValueError(f"Scene {scene.id} shot {shot.id} asset {path}: missing metadata")
         return self
 
     @model_validator(mode="after")
@@ -102,6 +138,8 @@ class RenderInput(BaseModel):
 def build_render_input(
     storyboard: Storyboard,
     audio_file: str,
+    *,
+    r5_assets: tuple[R5RevisionAsset, ...] | list[dict[str, Any]] = (),
 ) -> RenderInput:
     _validate_relative_posix_path(audio_file, "audio")
 
@@ -135,6 +173,7 @@ def build_render_input(
         title=storyboard.title,
         quality_profile=storyboard.quality_profile,
         r5_contract=storyboard.r5_contract,
+        r5_assets=r5_assets,
         visual_style=storyboard.visual_style,
         audio_file=audio_file,
         scenes=(storyboard.scenes if storyboard.quality_profile == "r5_v1"

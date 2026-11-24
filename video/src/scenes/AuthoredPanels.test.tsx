@@ -8,7 +8,9 @@ import {WhiteboardScene} from './WhiteboardScene';
 import {AnatomyScene} from './AnatomyScene';
 import {SourceCardScene} from './SourceCardScene';
 import {ProcessScene} from './ProcessScene';
-import {panelRows} from '../components/AuthoredPanels';
+import {MechanismScene} from './MechanismScene';
+import {R5ShotScene} from './R5ShotScene';
+import {AuthoredWorksheet, panelRows} from '../components/AuthoredPanels';
 
 const clock = vi.hoisted(() => ({frame: 0}));
 vi.mock('remotion', async original => ({
@@ -100,5 +102,85 @@ describe.each(['youtube_long', 'vertical_clip'] as const)('authored panels in %s
     expect(html).toContain('Source fixture');
     expect(html).toContain('fixture-id');
     expect(scene.source_card?.interpretation).toBe('Diễn giải giữ nguyên trong dữ liệu.');
+  });
+});
+
+describe('R5 policy: reject implicit tab layout and require explicit VnLabSheet', () => {
+  const tabbedScene: Scene = {
+    ...base,
+    id: 'R5-TAB',
+    visual: 'process_animation',
+    anatomy: {subject: 'hepatocyte_sinusoid_unit', state: 'normal', severity: 0, motion: 'Đối chiếu.'},
+    entrances: [
+      {text: 'ALT\t240 U/L\tGiới hạn trên 40 U/L', start_frame: 0},
+      {text: 'AST\t180 U/L\tGiới hạn trên 40 U/L', start_frame: 120},
+    ],
+  };
+
+  it('rejects tab-delimited entrances in panelRows, AuthoredWorksheet, WhiteboardScene, and MechanismScene under r5_v1', () => {
+    expect(() => panelRows(tabbedScene, 3, 'r5_v1')).toThrow(/R5-TAB.*tab layout/i);
+    expect(() =>
+      renderToStaticMarkup(
+        <LayoutContext.Provider value={LAYOUTS.youtube_long}>
+          <AuthoredWorksheet scene={tabbedScene} frame={0} qualityProfile="r5_v1" />
+        </LayoutContext.Provider>,
+      ),
+    ).toThrow(/R5-TAB.*AuthoredWorksheet/i);
+    expect(() =>
+      renderToStaticMarkup(
+        <LayoutContext.Provider value={LAYOUTS.youtube_long}>
+          <WhiteboardScene scene={{...tabbedScene, visual: 'whiteboard'}} qualityProfile="r5_v1" />
+        </LayoutContext.Provider>,
+      ),
+    ).toThrow(/R5-TAB.*tab layout/i);
+    expect(() =>
+      renderToStaticMarkup(
+        <LayoutContext.Provider value={LAYOUTS.youtube_long}>
+          <MechanismScene scene={tabbedScene} kind="process" qualityProfile="r5_v1" />
+        </LayoutContext.Provider>,
+      ),
+    ).toThrow(/R5-TAB.*tab layout/i);
+  });
+
+  it('renders a lab sheet in R5 only when the shot explicitly declares VnLabSheet', () => {
+    const labScene: Scene = {
+      ...base,
+      id: 'R5-LAB',
+      on_screen_text: 'Phiếu xét nghiệm minh họa',
+      resolved_shots: [
+        {
+          id: 'SH-LAB',
+          kind: 'story',
+          tier: null,
+          component: 'VnLabSheet',
+          asset_paths: [],
+          question_ids: ['Q1'],
+          long_shot_reason: null,
+          start_frame: 0,
+          end_frame: 180,
+          actions: [],
+          text_windows: [
+            {
+              kind: 'lab_sheet',
+              text: 'ALT | 240 | U/L | < 40 | H',
+              claim_ids: ['C01'],
+              exception_reason: null,
+              start_frame: 0,
+              end_frame: 180,
+            },
+          ],
+        },
+      ],
+    };
+    const html = renderToStaticMarkup(
+      <LayoutContext.Provider value={LAYOUTS.youtube_long}>
+        <R5ShotScene scene={labScene} frame={20} />
+      </LayoutContext.Provider>,
+    );
+    expect(html).toContain('data-r5-component="VnLabSheet"');
+    expect(html).toContain('240');
+    expect(html).toContain('U/L');
+    expect(html).toContain('data-lab-flag="H"');
+    expect(html).not.toContain('data-worksheet="true"');
   });
 });

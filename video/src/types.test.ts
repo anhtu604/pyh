@@ -327,7 +327,18 @@ print(json.dumps([m.model_validate(p).model_dump(mode='json') for m,p in zip(mod
     const legacy = RenderInputSchema.parse({title: 'Legacy', audio_file: 'audio/narration.wav'});
     expect(legacy).not.toHaveProperty('quality_profile');
     expect(legacy).not.toHaveProperty('r5_contract');
+    expect(legacy).not.toHaveProperty('r5_assets');
     expect(legacy.visual_budget_profile).toBe('explain_first_v1');
     expect(RenderInputSchema.safeParse({title: 'Bad', audio_file: 'a.wav', r5_contract: contract}).success).toBe(false);
+  });
+
+  it('preserves real R5 provenance and rejects missing license or unknown fields', () => {
+    const asset = {id: 'cell', path: 'assets/cell.svg', title: 'Cell', author: 'Fixture author',
+      repository: 'servier', license: 'CC BY 4.0', license_url: 'https://creativecommons.org/licenses/by/4.0/',
+      source_page: 'https://smart.servier.com/smart_image/cell/', sha256: 'a'.repeat(64)};
+    const input = {title: 'R5', audio_file: 'a.wav', quality_profile: 'r5_v1', r5_contract: contract, r5_assets: [asset]};
+    expect(RenderInputSchema.parse(input)).toHaveProperty('r5_assets', [asset]);
+    expect(RenderInputSchema.safeParse({...input, r5_assets: [{...asset, license: ''}]}).success).toBe(false);
+    expect(RenderInputSchema.safeParse({...input, r5_assets: [{...asset, extra: true}]}).success).toBe(false);
   });
 });
