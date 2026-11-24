@@ -506,6 +506,6 @@ phases:
 
   - id: R5.3.5
     title: Bộ component R5 (zoom, thanh tầng, câu chốt, phiếu VN, đường cong, credit)
-    status: doing
+    status: done
     owner: agy
-    note: 'Trích component từ bản thử chương 1 thành bộ dùng chung, bỏ số liệu gan viết cứng.'
+    note: 'Đã vào master: 6 component trong video/src/components/r5 (ScaleChain, ZoomChain, TakeawayCard, VnLabSheet, ReferenceDistribution, CreditCard), không import proto, không số liệu viết cứng; Vitest 15 đạt, tsc sạch. Chưa render thật: nối vào video ở R5.3.7.'
