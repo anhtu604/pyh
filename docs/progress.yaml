@@ -535,6 +535,6 @@ phases:
 
   - id: R5.3.10
     title: Chốt chuẩn R5, kiểm tích hợp offline và bàn giao
-    status: doing
+    status: done
     owner: agy
-    note: 'Kiểm toàn luồng R5 offline (lời → cổng → dựng giả → chấm → đóng gói), thêm mục chuẩn R5 bác sĩ đã chốt vào factory-standards (chỉ thêm).'
+    note: 'Đã vào master: kiểm toàn luồng R5 offline đạt (pytest 3022, Vitest 500); ghi chuẩn pyh_r5_quality_v1 D1–D4 vào factory-standards (chỉ thêm). Chưa nghiệm thu video thật.'
