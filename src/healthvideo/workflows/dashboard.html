@@ -2110,7 +2110,7 @@ function renderChannelSection(ch){
   channelAnalysisReady = Boolean(ch.analysis_ready);
   channelAnalysisReason = ch.analysis_reason || 'Chưa đủ số liệu để phân tích.';
   syncChannelAnalysis();
-  loadChannelConnections();
+  if(currentHomeTab() === 'channel') loadChannelConnections();
   renderChannelPublish();
   statusEl.innerHTML = `<span><b>Kết quả kênh:</b> ${connected ? 'đã kết nối tài khoản' : 'chưa kết nối tài khoản'}${ch.data_available ? ' · có dữ liệu đã nhập / đồng bộ' : ' · chưa có số liệu'}</span> <span class="tag">YouTube / TikTok / Facebook</span>`;
   const sourceNames = {csv:'CSV đã nhập',manual:'Nhập tay',google_sheet:'Google Sheet',youtube_api:'YouTube API',tiktok_api:'TikTok API'};
@@ -2694,51 +2694,91 @@ function render(d){
   document.title=(d.waiting?`(${d.waiting}) `:'')+'Xưởng video · Protect Your Health';
   syncStartGate();
 }
-async function refresh(){
-  try{
-    const [rStatus, rOv, rAct, rComp] = await Promise.all([
-      fetch('/api/status',{cache:'no-store'}),
-      fetch('/api/overview',{cache:'no-store'}),
-      fetch('/api/activity?limit=10',{cache:'no-store'}),
-      fetch('/api/company',{cache:'no-store'}),
-    ]);
-    if(!rStatus.ok || !rComp.ok){
-      throw new Error('HTTP ' + (!rStatus.ok ? rStatus.status : rComp.status));
-    }
-    const d = await rStatus.json();
-    const compData = await rComp.json();
-    const ov = rOv.ok ? await rOv.json().catch(()=>null) : null;
-    const actData = rAct.ok ? await rAct.json().catch(()=>null) : null;
-    wsOffline = false;
-    $('offline').classList.remove('show');
-    companyData = compData;
-    state = d;
-    if(ov) renderOverview(ov);
-    if(actData) renderActivityFeed(actData);
-    render(d);
-    renderWorkshop();
-    if(!busy) document.querySelectorAll('main button, header button').forEach(b=>{if(!b.closest('#channel')) b.disabled=false;});
-    syncStartGate();
-    syncChannelAnalysis();
-    renderChannelPublish();
-    await loadProgress();
-    loadMedanimLibrary(false).catch(()=>{});
-  }catch(e){
-    if(updatingApp) return;
-    wsOffline = true;
-    $('offline').classList.add('show');
-    if(!state){
-      const decBox = $('decisions');
-      if(decBox) decBox.innerHTML = '<div class="todo-calm">Chưa kết nối được với máy chủ xưởng để kiểm tra việc cần duyệt.</div>';
-      const projBox = $('projects');
-      if(projBox){
-        projBox.innerHTML = '<div class="glass load-err"><b>Không tải được danh sách dự án</b><p>Máy chủ app chưa phản hồi. Hãy kiểm tra lại app Xưởng video rồi bấm Thử tải lại.</p><button type="button" class="btn primary" id="btn-retry-load">Thử tải lại</button></div>';
-        const btn = projBox.querySelector('#btn-retry-load');
-        if(btn) btn.onclick = () => refresh();
+let refreshInFlight = null, medanimInitialLoaded = false, progressInitialLoaded = false;
+async function refresh(opts = {}){
+  const fromPoll = Boolean(opts && opts.fromPoll);
+  if(refreshInFlight){
+    if(fromPoll) return refreshInFlight;
+    try{ await refreshInFlight; }catch(e){}
+    return refresh(opts);
+  }
+  const run = (async () => {
+    try{
+      let d, compData, ov = null, actData = null;
+      const rPoll = await fetch('/api/poll',{cache:'no-store'});
+      let pollPayload = null;
+      if(rPoll.ok){
+        const parsed = await rPoll.json().catch(()=>null);
+        if(parsed && parsed.status && parsed.company){
+          pollPayload = parsed;
+        }
       }
-      if($('tiles') && !$('tiles').textContent.trim()) $('tiles').innerHTML = '<span class="sum-i error has"><i></i><span>Mất kết nối máy chủ</span></span>';
+      if(pollPayload){
+        d = pollPayload.status;
+        compData = pollPayload.company;
+        ov = pollPayload.overview || null;
+        actData = pollPayload.activity || null;
+      }else if(rPoll.status === 404 || rPoll.ok){
+        const [rStatus, rOv, rAct, rComp] = await Promise.all([
+          fetch('/api/status',{cache:'no-store'}),
+          fetch('/api/overview',{cache:'no-store'}),
+          fetch('/api/activity?limit=10',{cache:'no-store'}),
+          fetch('/api/company',{cache:'no-store'}),
+        ]);
+        if(!rStatus.ok || !rComp.ok){
+          throw new Error('HTTP ' + (!rStatus.ok ? rStatus.status : rComp.status));
+        }
+        d = await rStatus.json();
+        compData = await rComp.json();
+        ov = rOv.ok ? await rOv.json().catch(()=>null) : null;
+        actData = rAct.ok ? await rAct.json().catch(()=>null) : null;
+      }else{
+        throw new Error('HTTP ' + rPoll.status);
+      }
+      wsOffline = false;
+      $('offline').classList.remove('show');
+      companyData = compData;
+      state = d;
+      if(ov) renderOverview(ov);
+      if(actData) renderActivityFeed(actData);
+      render(d);
+      renderWorkshop();
+      if(!busy) document.querySelectorAll('main button, header button').forEach(b=>{if(!b.closest('#channel')) b.disabled=false;});
+      syncStartGate();
+      syncChannelAnalysis();
+      renderChannelPublish();
+      const tab = currentHomeTab();
+      if(tab === 'progress' || !progressInitialLoaded){
+        progressInitialLoaded = true;
+        await loadProgress();
+      }
+      if(tab === 'medanim' || !medanimInitialLoaded){
+        medanimInitialLoaded = true;
+        loadMedanimLibrary(false).catch(()=>{});
+      }
+    }catch(e){
+      if(updatingApp) return;
+      wsOffline = true;
+      $('offline').classList.add('show');
+      if(!state){
+        const decBox = $('decisions');
+        if(decBox) decBox.innerHTML = '<div class="todo-calm">Chưa kết nối được với máy chủ xưởng để kiểm tra việc cần duyệt.</div>';
+        const projBox = $('projects');
+        if(projBox){
+          projBox.innerHTML = '<div class="glass load-err"><b>Không tải được danh sách dự án</b><p>Máy chủ app chưa phản hồi. Hãy kiểm tra lại app Xưởng video rồi bấm Thử tải lại.</p><button type="button" class="btn primary" id="btn-retry-load">Thử tải lại</button></div>';
+          const btn = projBox.querySelector('#btn-retry-load');
+          if(btn) btn.onclick = () => refresh();
+        }
+        if($('tiles') && !$('tiles').textContent.trim()) $('tiles').innerHTML = '<span class="sum-i error has"><i></i><span>Mất kết nối máy chủ</span></span>';
+      }
+      renderWorkshop();
     }
-    renderWorkshop();
+  })();
+  refreshInFlight = run;
+  try{
+    return await run;
+  }finally{
+    if(refreshInFlight === run) refreshInFlight = null;
   }
 }
 
@@ -4546,7 +4586,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 /* ---------- Chat Panel (Task 5 Backend Integration) ---------- */
-let chatPollTimer = null;
+let chatPollTimer = null, chatHasPending = false;
 async function loadChat(){
   clearTimeout(chatPollTimer);
   const q = chatCtx.slug ? `?slug=${encodeURIComponent(chatCtx.slug)}` : '';
@@ -4635,8 +4675,9 @@ function renderChatMessages(msgs){
       }catch(e){toast(e.message, true); btn.disabled = false;}
     };
   });
-  if(hasPending){
-    chatPollTimer = setTimeout(loadChat, 3000);
+  chatHasPending = hasPending;
+  if(hasPending && document.visibilityState !== 'hidden'){
+    chatPollTimer = setTimeout(loadChat, 5000);
   }
 }
 async function sendChatMessage(text){
@@ -6362,6 +6403,7 @@ function showHomeView(){
   document.querySelectorAll('[data-home-view]').forEach(el => { el.hidden = el.dataset.homeView !== active; });
   if(active === 'progress') loadProgress();
   if(active === 'medanim') loadMedanimLibrary(true);
+  if(active === 'channel') loadChannelConnections();
   if(active === 'research-panel' && typeof loadResearchInbox === 'function') loadResearchInbox();
 }
 document.querySelectorAll('[data-home-tab]').forEach(link => {
@@ -6560,7 +6602,34 @@ document.querySelectorAll('[data-medanim-filter]').forEach(btn => {
 if($('btn-medanim-refresh')) $('btn-medanim-refresh').onclick = () => loadMedanimLibrary(true);
 window.addEventListener('hashchange', showHomeView);
 showHomeView();
-refresh(); loadChat(); loadVersion(); setInterval(()=>{ if(!isOpen('pv')) refresh(); }, 3000); setInterval(()=>{ if(!updatingApp) loadVersion(); }, 20000);
+const POLL_INTERVAL_MS = 5000;
+let pollTimer = null;
+function stopPoll(){
+  clearTimeout(pollTimer);
+  pollTimer = null;
+}
+function schedulePoll(){
+  stopPoll();
+  if(document.visibilityState === 'hidden') return;
+  pollTimer = setTimeout(async () => {
+    pollTimer = null;
+    if(document.visibilityState === 'hidden') return;
+    if(!isOpen('pv')) await refresh({fromPoll: true});
+    schedulePoll();
+  }, POLL_INTERVAL_MS);
+}
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState === 'hidden'){
+    stopPoll();
+    clearTimeout(chatPollTimer);
+    chatPollTimer = null;
+  } else {
+    if(!isOpen('pv')) refresh({fromPoll: true}).finally(schedulePoll);
+    else schedulePoll();
+    if(chatHasPending) loadChat();
+  }
+});
+refresh().finally(schedulePoll); loadChat(); loadVersion(); setInterval(()=>{ if(!updatingApp && document.visibilityState !== 'hidden') loadVersion(); }, 20000);
 </script>
 <script>
 /* Package C: app operations inside Quản trị menu */

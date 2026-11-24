@@ -2599,3 +2599,68 @@ def test_media_head_and_open_range_chunking_and_lite_bundle(tmp_path):
             assert 'frame_inspector' in vid_data
         finally:
             server.shutdown()
+
+
+def test_server_cache_invalidates_on_file_change_ttl_and_poll(tmp_path, monkeypatch):
+    """Cached endpoints reuse results within TTL, recompute on mtime/size change or TTL expiry, and /api/poll merges them."""
+    now_t = [100.0]
+    calls = {'state': 0, 'overview': 0, 'medanim': 0, 'inbox': 0}
+
+    orig_snapshot = dashboard.snapshot
+    orig_overview = dashboard.overview
+    orig_medanim = dashboard.medanim_catalog_payload
+    orig_inbox = dashboard.dashboard_operations.research_inbox_payload
+
+    def counted_snapshot(root, *, agents=None):
+        calls['state'] += 1
+        return orig_snapshot(root, agents=agents)
+
+    def counted_overview(root):
+        calls['overview'] += 1
+        return orig_overview(root)
+
+    def counted_medanim(root):
+        calls['medanim'] += 1
+        return orig_medanim(root)
+
+    def counted_inbox(root):
+        calls['inbox'] += 1
+        return orig_inbox(root)
+
+    monkeypatch.setattr(dashboard, 'snapshot', counted_snapshot)
+    monkeypatch.setattr(dashboard, 'overview', counted_overview)
+    monkeypatch.setattr(dashboard, 'medanim_catalog_payload', counted_medanim)
+    monkeypatch.setattr(dashboard.dashboard_operations, 'research_inbox_payload', counted_inbox)
+
+    with dashboard.DashboardServer(tmp_path, 0, token='tok-cache') as server:
+        server._cache = dashboard._ResponseCache(clock=lambda: now_t[0])
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            # First requests compute once; immediate repeats hit cache.
+            for ep in ('/api/state', '/api/overview', '/api/medanim', '/api/research/inbox'):
+                assert request(server, 'GET', ep)[0] == 200
+                assert request(server, 'GET', ep)[0] == 200
+            assert calls == {'state': 1, 'overview': 1, 'medanim': 1, 'inbox': 1}
+
+            # /api/poll reuses cached state & overview without recomputing.
+            status_poll, body_poll = request(server, 'GET', '/api/poll')
+            assert status_poll == 200
+            poll_data = json.loads(body_poll)
+            assert set(poll_data) == {'status', 'overview', 'activity', 'company'}
+            assert calls['state'] == 1 and calls['overview'] == 1
+
+            # File change invalidates immediately even within TTL.
+            inbox_dir = tmp_path / 'topics' / 'inbox'
+            inbox_dir.mkdir(parents=True, exist_ok=True)
+            (inbox_dir / 'new-topic.dossier.yaml').write_text('slug: new-topic\n', encoding='utf-8')
+            assert request(server, 'GET', '/api/research/inbox')[0] == 200
+            assert calls['inbox'] == 2
+
+            # TTL expiry forces recomputation even when files are untouched.
+            now_t[0] += dashboard._CACHE_TTL_MEDIA + 0.5
+            assert request(server, 'GET', '/api/state')[0] == 200
+            assert request(server, 'GET', '/api/medanim')[0] == 200
+            assert calls['state'] == 2 and calls['medanim'] == 2
+        finally:
+            server.shutdown()

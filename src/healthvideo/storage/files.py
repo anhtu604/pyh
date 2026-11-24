@@ -99,6 +99,14 @@ class DirectoryPromotionError(OSError):
         self.backup_dir = backup_dir
 
 
+_YAML_SAFE_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+
+
+def safe_load_yaml(raw: str) -> Any:
+    """Parse YAML safely using libyaml's CSafeLoader when available."""
+    return yaml.load(raw, Loader=_YAML_SAFE_LOADER)
+
+
 def read_yaml(path: Path) -> dict[str, Any]:
     raw = ""
     for index, delay in enumerate((0.0, 0.005, 0.015, 0.03)):
@@ -111,7 +119,7 @@ def read_yaml(path: Path) -> dict[str, Any]:
         except PermissionError:
             if sys.platform != "win32" or index == 3:
                 raise
-    data = yaml.safe_load(raw)
+    data = safe_load_yaml(raw)
     if not isinstance(data, Mapping):
         raise TypeError(f"YAML root must be a mapping: {path}")
     return dict(data)

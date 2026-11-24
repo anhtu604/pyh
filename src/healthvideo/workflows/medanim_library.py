@@ -51,29 +51,30 @@ def _assert_inside(base: Path, target: Path) -> Path:
     return resolved_target
 
 
-def load_medanim_entry(path: Path) -> MedAnimEntry:
+def load_medanim_entry(path: Path, *, raw: dict[str, Any] | None = None) -> MedAnimEntry:
     """Resolve catalog IDs, while keeping inline legacy entries readable."""
     assert_safe_path(path)
-    raw = read_yaml(path)
-    assets = raw.get("assets")
+    data = read_yaml(path) if raw is None else raw
+    assets = data.get("assets")
     if isinstance(assets, list) and any(isinstance(item, str) for item in assets):
         if not all(isinstance(item, str) for item in assets) or len(set(assets)) != len(assets):
             raise ValueError("Asset references must be unique IDs, without inline metadata")
         catalog = {asset.id: asset for asset in load_asset_catalog(path.parent / "assets.yaml")}
         if any(asset_id not in catalog for asset_id in assets):
             raise ValueError("Unknown catalog asset ID")
-        raw = {**raw, "assets": [catalog[asset_id] for asset_id in assets]}
-    return MedAnimEntry.model_validate(raw)
+        data = {**data, "assets": [catalog[asset_id] for asset_id in assets]}
+    return MedAnimEntry.model_validate(data)
 
 
-def _content_sha256(path: Path) -> str:
+def _content_sha256(path: Path, *, raw: dict[str, Any] | None = None) -> str:
     """Legacy hashes stay byte-identical; references bind catalog provenance too."""
     assert_safe_path(path)
-    try:
-        raw = read_yaml(path)
-    except (ValueError, TypeError, yaml.YAMLError):
-        # A doctor can still reject malformed legacy YAML and retain its hash.
-        return sha256_file(path)
+    if raw is None:
+        try:
+            raw = read_yaml(path)
+        except (ValueError, TypeError, yaml.YAMLError):
+            # A doctor can still reject malformed legacy YAML and retain its hash.
+            return sha256_file(path)
     assets = raw.get("assets")
     if isinstance(assets, list) and any(isinstance(item, str) for item in assets):
         catalog_path = assert_safe_path(path.parent / "assets.yaml")
@@ -265,12 +266,17 @@ def inspect_medanim_entry(root: Path, entry_dir: Path) -> dict[str, Any]:
     entry: MedAnimEntry | None = None
 
     try:
-        content_sha256 = _content_sha256(animation_path)
         raw_yaml = read_yaml(animation_path)
-        entry = load_medanim_entry(animation_path)
+        content_sha256 = _content_sha256(animation_path, raw=raw_yaml)
+        entry = load_medanim_entry(animation_path, raw=raw_yaml)
         if entry.id != anim_id:
             raise ValueError(f"animation.yaml id {entry.id!r} không khớp tên thư mục {anim_id!r}")
     except (OSError, ValueError, TypeError, yaml.YAMLError) as exc:
+        if not content_sha256:
+            try:
+                content_sha256 = sha256_file(animation_path)
+            except OSError:
+                content_sha256 = ""
         errors.append(f"animation.yaml không hợp lệ: {exc}")
 
     approval_record: MedAnimApprovalRecord | None = None

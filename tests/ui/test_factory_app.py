@@ -1840,6 +1840,66 @@ def test_zero_hang_error_ui_active_repair_escalation_and_stopped_reminder():
     ''')
 
 
+def test_dashboard_polling_merges_requests_pauses_when_hidden_and_prevents_overlap():
+    _run_workshop_js(r'''
+    const assert = (cond, msg) => { if (!cond) throw new Error(msg); };
+    const { pyh, doc, setFetchHandler } = ctx;
+    const seen = [];
+    let releaseSlowPoll = null;
+    const pollPayload = {
+      status: { factory: { running: false, pid: null }, waiting: 0, projects: [], stages: ['1','2','3','4','5','6','7'], log: [], agents: [], now: '2026-11-24T20:00:00Z', standards: 0 },
+      overview: { tiles: {}, projects: [], decisions: [], resting: [] },
+      activity: { items: [] },
+      company: { roles: [], production_running: [], production: { work_state: 'idle' } },
+    };
+
+    setFetchHandler((url) => {
+      seen.push(url);
+      if (url.startsWith('/api/poll')) {
+        if (releaseSlowPoll === 'armed') {
+          return new Promise((resolve) => {
+            releaseSlowPoll = () => resolve({ ok: true, status: 200, async json() { return pollPayload; } });
+          });
+        }
+        return { ok: true, status: 200, async json() { return pollPayload; } };
+      }
+      if (url.startsWith('/api/medanim')) return { ok: true, status: 200, async json() { return { items: [], total: 0 }; } };
+      if (url.startsWith('/api/progress')) return { ok: true, status: 200, async json() { return { phases: [], doing: [], total: 0, done: 0 }; } };
+      return { ok: true, status: 200, async json() { return {}; } };
+    });
+
+    // Wait for boot refresh to finish first, then verify periodic poll uses /api/poll only.
+    await pyh.refresh();
+    seen.length = 0;
+    await pyh.refresh({ fromPoll: true });
+    assert(seen.filter(u => u.startsWith('/api/poll')).length === 1, 'poll calls merged /api/poll once: ' + JSON.stringify(seen));
+    assert(!seen.some(u => u.startsWith('/api/status') || u.startsWith('/api/overview') || u.startsWith('/api/company')), 'poll avoids separate status/overview/company fetches: ' + JSON.stringify(seen));
+    assert(!seen.some(u => u.startsWith('/api/medanim') || u.startsWith('/api/progress')), 'poll on home tab does not re-fetch medanim/progress: ' + JSON.stringify(seen));
+
+    // 2. Overlapping periodic poll while in-flight is skipped.
+    seen.length = 0;
+    releaseSlowPoll = 'armed';
+    const p1 = pyh.refresh({ fromPoll: true });
+    const p2 = pyh.refresh({ fromPoll: true });
+    assert(seen.filter(u => u.startsWith('/api/poll')).length === 1, 'in-flight guard blocks overlapping poll');
+    releaseSlowPoll();
+    await Promise.all([p1, p2]);
+
+    // 3. Visibilitychange to hidden stops poll; returning to visible polls immediately.
+    seen.length = 0;
+    doc.visibilityState = 'hidden';
+    doc.hidden = true;
+    doc.dispatch('visibilitychange');
+    assert(seen.length === 0, 'hiding tab does not poll');
+
+    doc.visibilityState = 'visible';
+    doc.hidden = false;
+    doc.dispatch('visibilitychange');
+    await new Promise(r => setImmediate(r));
+    assert(seen.some(u => u.startsWith('/api/poll')), 'returning to visible tab polls immediately');
+    ''')
+
+
 def test_version_header_and_stage12_no_duplicate_prefix():
     html = DASHBOARD_HTML.read_text(encoding='utf-8')
     assert 'id="app-version"' in html

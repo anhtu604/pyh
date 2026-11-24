@@ -2843,10 +2843,16 @@ class _Handler(BaseHTTPRequestHandler):
                     self._json(extra)
                 return
             if path in {'/', '/index.html'}:
-                html = HTML_PATH.read_text(encoding='utf-8').replace('__TOKEN__', self.server.token)
-                self._send(HTTPStatus.OK, html.encode('utf-8'), 'text/html; charset=utf-8')
+                self._send(HTTPStatus.OK, self.server.html_bytes(), 'text/html; charset=utf-8')
             elif path == '/api/ping':
                 self._json({'app': APP_ID})
+            elif path == '/api/poll':
+                self._json({
+                    'status': self.server.cached_state(),
+                    'overview': self.server.cached_overview(),
+                    'activity': self.server.cached_activity(limit=10, slug=None),
+                    'company': self.server.cached_company(),
+                })
             elif path == '/api/version':
                 self._json(
                     app_update.version_payload(
@@ -2855,11 +2861,11 @@ class _Handler(BaseHTTPRequestHandler):
                     )
                 )
             elif path in {'/api/status', '/api/state'}:
-                self._json(snapshot(self.server.root, agents=self.server.agents))
+                self._json(self.server.cached_state())
             elif path == '/api/overview':
-                self._json(overview(self.server.root))
+                self._json(self.server.cached_overview())
             elif path == '/api/company':
-                self._json(company_roster(self.server.root))
+                self._json(self.server.cached_company())
             elif path == '/api/progress':
                 self._json(progress(self.server.root))
             elif path == '/api/activity':
@@ -2868,13 +2874,13 @@ class _Handler(BaseHTTPRequestHandler):
                 except ValueError:
                     limit = 10
                 slug_filter = query.get('slug', [None])[0] or None
-                self._json(activity(self.server.root, limit=limit, slug=slug_filter))
+                self._json(self.server.cached_activity(limit=limit, slug=slug_filter))
             elif path == '/api/feedback':
                 self._json({'entries': feedback_inbox.view(self.server.root)})
             elif path == '/api/standards':
                 self._json({'entries': standards.load(self.server.root)[::-1]})
             elif path == '/api/medanim':
-                self._json(medanim_catalog_payload(self.server.root))
+                self._json(self.server.cached_medanim())
             elif len(parts) >= 5 and parts[:2] == ['api', 'medanim'] and parts[3] == 'preview':
                 self._file(medanim_library.resolve_medanim_preview(self.server.root, parts[2], '/'.join(parts[4:])))
             elif len(parts) == 4 and parts[0] == 'api' and parts[1] in {'project', 'projects'} and parts[3] == 'card':
@@ -2995,10 +3001,249 @@ class _Handler(BaseHTTPRequestHandler):
         except (OSError, TypeError, ValueError, RuntimeError) as error:
             self._json({'error': str(error)}, HTTPStatus.BAD_REQUEST)
         else:
+            self.server.invalidate_cache()
             payload = {'ok': True, 'message': message}
             if isinstance(message, dict):
                 payload = {**message, **payload}
             self._json(payload)
+
+
+_CACHE_TTL_FAST = 3.0
+_CACHE_TTL_MEDIA = 5.0
+
+
+def _stat_sig(path: Path) -> tuple[int, int] | None:
+    try:
+        st = path.stat()
+        return (st.st_mtime_ns, st.st_size)
+    except OSError:
+        return None
+
+
+def _dir_sig(directory: Path, *, suffix: str = '', recursive: bool = False) -> tuple:
+    if not directory.is_dir():
+        return ()
+    items: list[tuple[str, int, int]] = []
+
+    def _walk(base: Path, prefix: str) -> None:
+        try:
+            with os.scandir(base) as entries:
+                ordered = sorted(entries, key=lambda entry: entry.name)
+        except OSError:
+            return
+        for entry in ordered:
+            rel = f'{prefix}{entry.name}'
+            try:
+                st = entry.stat(follow_symlinks=False)
+            except OSError:
+                continue
+            if entry.is_dir(follow_symlinks=False):
+                items.append((rel + '/', st.st_mtime_ns, 0))
+                if recursive:
+                    _walk(Path(entry.path), rel + '/')
+            elif not suffix or entry.name.endswith(suffix):
+                items.append((rel, st.st_mtime_ns, st.st_size))
+
+    _walk(directory, '')
+    return tuple(items)
+
+
+def _projects_sig(root: Path, *, deep_revisions: bool = False) -> tuple:
+    projects_dir = root / 'projects'
+    if not projects_dir.is_dir():
+        return ()
+    items: list[tuple] = [_stat_sig(projects_dir)]
+    try:
+        with os.scandir(projects_dir) as entries:
+            ordered = sorted(entries, key=lambda entry: entry.name)
+    except OSError:
+        return tuple(items)
+    for entry in ordered:
+        if not entry.is_dir(follow_symlinks=False):
+            continue
+        pdir = Path(entry.path)
+        row: list[object] = [
+            entry.name,
+            _stat_sig(pdir / 'project.yaml'),
+            _stat_sig(pdir / 'blocked-reason.md'),
+        ]
+        if deep_revisions:
+            revs_dir = pdir / 'revisions'
+            if revs_dir.is_dir():
+                row.append(_stat_sig(revs_dir))
+                try:
+                    rev_names = sorted(
+                        r.name for r in os.scandir(revs_dir) if r.is_dir(follow_symlinks=False)
+                    )
+                except OSError:
+                    rev_names = []
+                for rname in rev_names[-2:]:
+                    rdir = revs_dir / rname
+                    row.append((
+                        rname,
+                        _stat_sig(rdir / 'evidence/ledger.yaml'),
+                        _stat_sig(rdir / 'script/script.yaml'),
+                        _stat_sig(rdir / 'storyboard/storyboard.yaml'),
+                        _stat_sig(rdir / 'posts/posts.yaml'),
+                        _stat_sig(rdir / 'renders/video.mp4'),
+                        _stat_sig(rdir / 'reviews/medical-approval.yaml'),
+                        _stat_sig(rdir / 'reviews/video-approval.yaml'),
+                        _stat_sig(rdir / 'reviews/script-review.yaml'),
+                        _stat_sig(rdir / 'reviews/product-review.yaml'),
+                    ))
+        items.append(tuple(row))
+    return tuple(items)
+
+
+def _logs_sig(root: Path) -> tuple:
+    logs_dir = root / 'topics' / 'logs'
+    if not logs_dir.is_dir():
+        return ()
+    items: list[tuple] = [
+        _stat_sig(logs_dir),
+        _stat_sig(logs_dir / 'xuong.log'),
+        _stat_sig(logs_dir / 'activity.jsonl'),
+        _stat_sig(logs_dir / 'quota.yaml'),
+    ]
+    try:
+        with os.scandir(logs_dir) as entries:
+            ordered = sorted(entries, key=lambda entry: entry.name)
+    except OSError:
+        return tuple(items)
+    for entry in ordered:
+        if not entry.is_dir(follow_symlinks=False):
+            continue
+        sdir = Path(entry.path)
+        items.append((
+            entry.name,
+            _stat_sig(sdir),
+            _stat_sig(sdir / 'blocked.txt'),
+            _stat_sig(sdir / 'paused.yaml'),
+            _stat_sig(sdir / 'leader-repair.yaml'),
+            _stat_sig(sdir / 'review-draft.yaml'),
+            _stat_sig(sdir / 'waiting-model.txt'),
+            _stat_sig(sdir / 'waiting-model-step.yaml'),
+            _stat_sig(sdir / 'agent-retry.yaml'),
+            _stat_sig(sdir / 'production-retry.yaml'),
+            _stat_sig(sdir / 'doctor-questions.yaml'),
+            _stat_sig(sdir / RUNNING_MARKER),
+            _stat_sig(sdir / PRODUCTION_RUNNING_MARKER),
+        ))
+    return tuple(items)
+
+
+def _state_fingerprint(root: Path, agents: Callable[[], list[str]] | None = None) -> tuple:
+    return (
+        factory.running_pid(root),
+        tuple(agents()) if agents is not None else None,
+        _stat_sig(root / 'topics/.xuong.lock'),
+        _stat_sig(root / 'topics/.telegram-bot.lock'),
+        _stat_sig(root / 'cache/telegram/bot-state.yaml'),
+        _stat_sig(root / 'profiles/doctor-feedback.yaml'),
+        _stat_sig(root / 'profiles/company.yaml'),
+        _stat_sig(pin_path()),
+        _stat_sig(_operator_config()),
+        _projects_sig(root, deep_revisions=False),
+        _logs_sig(root),
+    )
+
+
+def _overview_fingerprint(root: Path) -> tuple:
+    return (
+        factory.running_pid(root),
+        _stat_sig(root / 'topics/.xuong.lock'),
+        _stat_sig(root / 'topics/queue.yaml'),
+        _stat_sig(root / 'topics/channel-metrics.yaml'),
+        _stat_sig(root / 'topics/channel-insights.yaml'),
+        _stat_sig(root / 'profiles/company.yaml'),
+        _dir_sig(root / 'topics/inbox', suffix='.dossier.yaml'),
+        _projects_sig(root, deep_revisions=True),
+        _logs_sig(root),
+    )
+
+
+def _company_fingerprint(root: Path) -> tuple:
+    return (
+        factory.running_pid(root),
+        _stat_sig(root / 'topics/.xuong.lock'),
+        _stat_sig(root / 'topics/queue.yaml'),
+        _stat_sig(root / 'profiles/company.yaml'),
+        _projects_sig(root, deep_revisions=True),
+        _logs_sig(root),
+    )
+
+
+def _activity_fingerprint(root: Path) -> tuple:
+    return (
+        factory.running_pid(root),
+        _stat_sig(root / 'topics/logs/activity.jsonl'),
+        _stat_sig(root / 'profiles/company.yaml'),
+    )
+
+
+def _medanim_fingerprint(root: Path) -> tuple:
+    return (
+        _dir_sig(root / 'library/medanim', recursive=True),
+        _dir_sig(root / 'video/public/medanim', recursive=True),
+        _stat_sig(pin_path()),
+        _stat_sig(_operator_config()),
+    )
+
+
+def _research_inbox_fingerprint(root: Path) -> tuple:
+    return (
+        _stat_sig(root / 'topics/queue.yaml'),
+        _dir_sig(root / 'topics/inbox', suffix='.dossier.yaml'),
+        _projects_sig(root, deep_revisions=False),
+    )
+
+
+class _ResponseCache:
+    """Thread-safe response cache invalidated by source-file (mtime_ns, size) or short TTL."""
+
+    def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
+        self._clock = clock
+        self._lock = threading.Lock()
+        self._key_locks: dict[str, threading.Lock] = {}
+        self._entries: dict[str, tuple[float, object, object]] = {}
+
+    def _lock_for(self, key: str) -> threading.Lock:
+        with self._lock:
+            lock = self._key_locks.get(key)
+            if lock is None:
+                lock = threading.Lock()
+                self._key_locks[key] = lock
+            return lock
+
+    def get_or_compute(
+        self,
+        key: str,
+        fingerprint_fn: Callable[[], object],
+        ttl_s: float,
+        compute_fn: Callable[[], object],
+    ) -> object:
+        fp = fingerprint_fn()
+        now = self._clock()
+        with self._lock:
+            hit = self._entries.get(key)
+            if hit is not None and hit[1] == fp and (now - hit[0]) < ttl_s:
+                return hit[2]
+        with self._lock_for(key):
+            fp = fingerprint_fn()
+            now = self._clock()
+            with self._lock:
+                hit = self._entries.get(key)
+                if hit is not None and hit[1] == fp and (now - hit[0]) < ttl_s:
+                    return hit[2]
+            value = compute_fn()
+            computed_at = self._clock()
+            with self._lock:
+                self._entries[key] = (computed_at, fp, value)
+            return value
+
+    def invalidate(self) -> None:
+        with self._lock:
+            self._entries.clear()
 
 
 def _load_or_create_token(root: Path) -> str:
@@ -3046,8 +3291,70 @@ class DashboardServer(ThreadingHTTPServer):
         self._studio_proc: object | None = None
         self._studio_log_handle: object | None = None
         self._studio_lock = threading.Lock()
+        self._cache = _ResponseCache()
+        self._html_cache: tuple[tuple[int, int] | None, bytes] | None = None
         super().__init__(('127.0.0.1', port), _Handler)
         self.actions = actions or default_actions(self)
+
+    def invalidate_cache(self) -> None:
+        self._cache.invalidate()
+
+    def html_bytes(self) -> bytes:
+        sig = _stat_sig(HTML_PATH)
+        cached = self._html_cache
+        if cached is not None and cached[0] == sig:
+            return cached[1]
+        raw = HTML_PATH.read_text(encoding='utf-8').replace('__TOKEN__', self.token).encode('utf-8')
+        self._html_cache = (sig, raw)
+        return raw
+
+    def cached_state(self) -> dict:
+        return self._cache.get_or_compute(
+            'state',
+            lambda: _state_fingerprint(self.root, self.agents),
+            _CACHE_TTL_FAST,
+            lambda: snapshot(self.root, agents=self.agents),
+        )
+
+    def cached_overview(self) -> dict:
+        return self._cache.get_or_compute(
+            'overview',
+            lambda: _overview_fingerprint(self.root),
+            _CACHE_TTL_FAST,
+            lambda: overview(self.root),
+        )
+
+    def cached_company(self) -> dict:
+        return self._cache.get_or_compute(
+            'company',
+            lambda: _company_fingerprint(self.root),
+            _CACHE_TTL_FAST,
+            lambda: company_roster(self.root),
+        )
+
+    def cached_activity(self, *, limit: int = 10, slug: str | None = None) -> dict:
+        return self._cache.get_or_compute(
+            f'activity:{limit}:{slug or ""}',
+            lambda: _activity_fingerprint(self.root),
+            _CACHE_TTL_FAST,
+            lambda: activity(self.root, limit=limit, slug=slug),
+        )
+
+    def cached_medanim(self) -> dict:
+        return self._cache.get_or_compute(
+            'medanim',
+            lambda: _medanim_fingerprint(self.root),
+            _CACHE_TTL_MEDIA,
+            lambda: medanim_catalog_payload(self.root),
+        )
+
+    def cached_research_inbox(self) -> dict:
+        return self._cache.get_or_compute(
+            'research_inbox',
+            lambda: _research_inbox_fingerprint(self.root),
+            _CACHE_TTL_MEDIA,
+            lambda: dashboard_operations.research_inbox_payload(self.root),
+        )
 
     @property
     def url(self) -> str:

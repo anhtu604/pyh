@@ -219,7 +219,7 @@ def test_read_yaml_closes_file_handle_before_safe_load(
     opened_streams = []
     closed_during_parse: list[bool] = []
     real_open = Path.open
-    real_safe_load = files.yaml.safe_load
+    real_safe_load = files.safe_load_yaml
 
     def tracking_open(self: Path, *args, **kwargs):
         stream = real_open(self, *args, **kwargs)
@@ -234,7 +234,7 @@ def test_read_yaml_closes_file_handle_before_safe_load(
         return real_safe_load(payload)
 
     monkeypatch.setattr(Path, "open", tracking_open)
-    monkeypatch.setattr(files.yaml, "safe_load", tracking_safe_load)
+    monkeypatch.setattr(files, "safe_load_yaml", tracking_safe_load)
 
     assert files.read_yaml(path) == {"key": "value"}
     assert closed_during_parse == [True]
@@ -287,3 +287,27 @@ def test_rmtree_long_path_removes_deep_directory_tree(tmp_path: Path) -> None:
     files.rmtree_long_path(root_dir)
     assert not root_dir.exists()
     assert not os.path.exists(deep_str)
+
+
+def test_read_yaml_uses_csafeloader_and_matches_safeloader(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import yaml
+
+    sample = (
+        "title: 'Thay men gan tăng có nên uống thuốc bổ gan?'\n"
+        "date: 2026-11-24\n"
+        "nested:\n"
+        "  count: 3\n"
+        "  flags: [true, false, null]\n"
+    )
+    path = tmp_path / "sample.yaml"
+    path.write_text(sample, encoding="utf-8")
+
+    expected = yaml.load(sample, Loader=yaml.SafeLoader)
+    if getattr(yaml, "__with_libyaml__", False):
+        assert files._YAML_SAFE_LOADER is yaml.CSafeLoader
+    assert files.read_yaml(path) == expected
+
+    monkeypatch.setattr(files, "_YAML_SAFE_LOADER", yaml.SafeLoader)
+    assert files.read_yaml(path) == expected

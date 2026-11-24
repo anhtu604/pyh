@@ -574,6 +574,20 @@ def adopt_r5_dashboard(root: Path, slug: str, *, expected_revision: str,
         )
 
 
+def research_inbox_payload(root: Path) -> dict:
+    """Return inbox items and summary in one pass over topics/inbox."""
+    items = researcher.load_inbox(root)
+    return {
+        'summary': {
+            'total': len(items),
+            'tier_a': sum(1 for it in items if it.get('tier') == 'A' and it.get('status') == 'inbox'),
+            'tier_b': sum(1 for it in items if it.get('tier') == 'B' and it.get('status') == 'inbox'),
+            'tier_c': sum(1 for it in items if it.get('tier') == 'C' and it.get('status') == 'inbox'),
+        },
+        'items': items,
+    }
+
+
 def get_route(server, parts: list[str], query: dict) -> dict | bytes | None:
     from healthvideo.workflows import asset_library as library
 
@@ -596,10 +610,9 @@ def get_route(server, parts: list[str], query: dict) -> dict | bytes | None:
     if parts == ['api', 'topics']:
         return {'entries': [e.model_dump(mode='json') for e in load_queue(server.root)]}
     if parts == ['api', 'research', 'inbox']:
-        return {
-            'summary': researcher.inbox_summary(server.root),
-            'items': researcher.load_inbox(server.root),
-        }
+        if hasattr(server, 'cached_research_inbox'):
+            return server.cached_research_inbox()
+        return research_inbox_payload(server.root)
     if parts == ['api', 'channel']:
         return channel_analytics.channel_overview_payload(server.root)
     if parts == ['api', 'projects', 'deleted']:
