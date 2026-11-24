@@ -488,9 +488,9 @@ phases:
 
   - id: R5.3.2
     title: Catalog hình có giấy phép và tải có kiểm soát
-    status: doing
+    status: done
     owner: codex
-    note: 'Tách nguồn gốc và giấy phép từng hình vào assets.yaml, chặn hình thiếu giấy phép hoặc tải từ nguồn ngoài danh sách cho phép.'
+    note: 'Đã vào master 5aaf961: assets.yaml ghi nguồn và giấy phép 10 hình gan; chỉ nhận PD, CC0, CC BY 4.0 từ Servier, NIAID, DBCLS, Reactome; file hình giữ nguyên byte (gitattributes). pytest 2907 đạt.'
 
   - id: R5.3.4
     title: Hợp đồng 16 vai, model, lời và điểm chạm TOFU
