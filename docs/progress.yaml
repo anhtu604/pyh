@@ -518,15 +518,15 @@ phases:
 
   - id: R5.3.7
     title: Renderer R5, bỏ tab thành bảng, khóa chính sách phụ đề
-    status: doing
+    status: done
     owner: agy
-    note: 'Nối bộ component R5 và rig men gan vào video; 16:9 không phụ đề, 9:16 có phụ đề; project cũ giữ renderer cũ.'
+    note: '﻿Đã vào master cùng R5.3.8: renderer R5 theo registry 7 component, fail closed; không tự biến tab thành bảng; 16:9 không phụ đề, 9:16 có; project cũ giữ renderer cũ. Vitest 500 đạt.'
 
   - id: R5.3.8
     title: Tích hợp sản xuất, cache, nguồn và cổng
-    status: doing
+    status: done
     owner: codex
-    note: 'Gắn đo chất lượng sau căn giọng, ghi giấy phép hình vào revision, khóa cache theo giọng/tốc độ/shot; không mở cổng hay bỏ PIN.'
+    note: 'Đã vào master: sổ vòng chấm bền (lời 2, hình 3, sản phẩm 3) trừ một lần ngay trước khi gọi critic, restart không reset, hết vòng dừng trình bác sĩ (chỉ r5_v1); critic hết model độc lập thì dừng, không quay về model maker (mọi project). pytest 3002 đạt. Codex làm phần đầu, agy hoàn tất.'
   - id: R5.3.9
     title: Giới hạn vòng chấm và chẩn đoán bền qua restart
     status: done
