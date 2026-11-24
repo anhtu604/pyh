@@ -520,6 +520,33 @@ def _with_server(tmp_path, fn):
         srv.server_close()
 
 
+def test_auto_publish_settings_require_dashboard_token_and_reads_are_offline(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from healthvideo.workflows import channel_publishing as pub
+
+    fake = SimpleNamespace(connection_status=lambda root: {'youtube': {'account_id': 'channel', 'display_name': 'Doctor channel'}},
+        authorized_account=lambda *a, **k: {'account_id': 'channel', 'access_token': 'do-not-expose'})
+    monkeypatch.setattr(pub, '_connections', lambda: fake)
+    monkeypatch.setattr(pub, '_request', lambda *a, **k: pytest.fail('Network on overview'))
+    def check(srv):
+        status, raw = request(srv, 'GET', '/api/channel/auto-publish')
+        assert status == 200 and json.loads(raw)['settings']['youtube_enabled'] is False
+        for token, expected in [(None, 403), ('wrong', 403), ('tok', 200)]:
+            conn = HTTPConnection('127.0.0.1', srv.server_address[1], timeout=5)
+            headers = {'Content-Type': 'application/json'}
+            if token:
+                headers['X-Dashboard-Token'] = token
+            conn.request('POST', '/api/channel/auto-publish', json.dumps({'youtube_enabled': True, 'youtube_privacy': 'public'}), headers)
+            response = conn.getresponse()
+            body = response.read().decode()
+            assert response.status == expected
+            assert 'do-not-expose' not in body
+            conn.close()
+        assert json.loads(request(srv, 'GET', '/api/overview')[1])['auto_publish']['settings']['account']['id'] == 'channel'
+    _with_server(tmp_path, check)
+
+
 def test_overview_shape(tmp_path):
     from datetime import datetime, timedelta
 

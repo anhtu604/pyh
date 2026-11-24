@@ -433,6 +433,13 @@ def run_factory(root: Path, deps: RunDeps, *, interval: float = 120, once: bool 
                         elif project.state == WorkflowState.VIDEO_APPROVED:
                             try:
                                 package_project(path)
+                                try:
+                                    from healthvideo.workflows.auto_publish import (
+                                        on_packaged,
+                                    )
+                                    on_packaged(root, path.name)
+                                except Exception:  # noqa: BLE001 - publication must not fail packaging
+                                    logger.warning('Tự động đăng chưa chạy được; kiểm tra tab Kênh.')
                                 clear_retry(root, path.name)
                                 (logs / path.name / 'blocked.txt').unlink(missing_ok=True)
                                 event = 'đã đóng gói'

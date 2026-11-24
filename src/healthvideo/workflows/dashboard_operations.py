@@ -591,6 +591,9 @@ def research_inbox_payload(root: Path) -> dict:
 def get_route(server, parts: list[str], query: dict) -> dict | bytes | None:
     from healthvideo.workflows import asset_library as library
 
+    if parts == ['api', 'channel', 'auto-publish']:
+        from healthvideo.workflows import auto_publish
+        return auto_publish.overview(server.root)
     if parts == ['api', 'channel', 'browser-status']:
         from healthvideo.workflows import tiktok_browser
         return tiktok_browser.browser_status(server.root)
@@ -635,6 +638,7 @@ def post_route(server, parts: list[str], body: dict) -> dict | None:
     if len(parts) == 3 and parts[:2] == ['api', 'channel'] and parts[2] in {
         'configure', 'connect', 'disconnect', 'sync-api', 'publish-preview', 'publish', 'publish-status',
         'browser-install', 'browser-login', 'browser-disconnect',
+        'auto-publish', 'auto-publish-retry',
     }:
         return _channel_post(server, parts[2], body)
     if parts in (['api', 'chat'], ['api', 'chat', 'confirm']):
@@ -788,6 +792,13 @@ def _channel_post(server, action: str, body: dict) -> dict:
     from healthvideo.workflows import channel_connections as connections
     from healthvideo.workflows import channel_publishing as publishing
 
+    if action in ('auto-publish', 'auto-publish-retry'):
+        from healthvideo.workflows import auto_publish
+        if action == 'auto-publish':
+            return auto_publish.save_settings(server.root, body)
+        if set(body) != {'id'}:
+            raise ValueError('Việc đăng không hợp lệ.')
+        return auto_publish.retry_youtube(server.root, body['id'])
     platform = body.get('platform')
     if action in ('browser-install', 'browser-login', 'browser-disconnect'):
         from healthvideo.workflows import tiktok_browser

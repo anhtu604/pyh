@@ -46,7 +46,7 @@ def _run_workshop_js(test_body: str, *, pre_storage: dict[str, str] | None = Non
         ' WS_AVATARS, wsIsoSvg, wsPersonSvg, wsPropSvg, wsGateEmptySvg,'
         ' pvFormatTc, pvParseJumpInput, stopPvVideoRuntime,'
         ' updateChatContext, closeProduct, postJson,'
-        ' renderVersion, renderStage12DecisionSlot,'
+        ' renderVersion, renderStage12DecisionSlot, renderAutoPublish,'
         ' getVideoState: () => ({ pv, pvTab, chatCtx, pvVideoState }),'
         ' setVideoState: (patch) => {'
         '   if ("pv" in patch) pv = patch.pv;'
@@ -783,6 +783,48 @@ def test_workshop_js_work_state_and_render_machine_contracts():
 
     const editorBtn = doc.querySelector('[data-station-id="editor"]');
     assert(editorBtn.classList.contains('has-error') && editorBtn.textContent.includes('Dừng do lỗi'), 'error label & class');
+    ''')
+
+
+def test_auto_publish_ui_requires_music_and_does_not_mark_pending_complete():
+    _run_workshop_js(r'''
+    const assert=(v,m)=>{if(!v)throw Error(m);};
+    const {pyh,doc}=ctx;
+    const p={platform:'tiktok',slug:'clip-project',clip_id:'CL01',revision:'001',sha256:'abc',caption:'Approved caption',account:{id:'acct',name:'Doctor channel'}};
+    const item={id:'event',slug:p.slug,youtube:{status:'error'},tiktok:[p]};
+    const data={settings:{youtube_enabled:false,youtube_privacy:'public'},items:[item]};
+    const calls=[];
+    ctx.setFetchHandler((url,opts)=>{
+      if(url.startsWith('/api/channel/')){
+        calls.push({url,body:JSON.parse(opts.body),token:opts.headers['X-Dashboard-Token']});
+        return {ok:true,status:200,async json(){return url.endsWith('publish-preview') ? {...p,connection_method:'browser_session',privacy_options:['private','public']} : {status:'pending_verification',receipt_id:'receipt'};}};
+      }
+      if(url.startsWith('/api/overview'))return {ok:true,status:200,async json(){return {tiles:{},projects:[],decisions:[],auto_publish:data};}};
+      return {ok:true,status:200,async json(){return {};}};
+    });
+    pyh.renderAutoPublish(data);
+    assert(!doc.getElementById('auto-yt-enabled').checked,'default off');
+    assert(doc.getElementById('auto-yt-privacy').value==='public','public default');
+    assert(calls.length===0,'render may not call provider preview or publish');
+    const work=doc.getElementById('auto-publish-work');
+    assert(work.textContent.includes('Đăng TikTok'),'doctor task');
+    const task=work.querySelector('[data-auto-preview]');
+    task.open=true;
+    await task.ontoggle();
+    let slot=work.querySelector('.auto-tt-preview');
+    const send=slot.querySelector('.auto-send'), music=slot.querySelector('.auto-music'), nc=slot.querySelector('.auto-noncommercial'), privacy=slot.querySelector('.auto-privacy');
+    assert(send.disabled,'consent initially unchecked');
+    privacy.value='public';nc.checked=true;privacy.onchange();
+    await send.onclick();
+    assert(calls.length===1,'no publish without music');
+    music.checked=true;music.onchange();
+    assert(!send.disabled,'ready with consent');
+    await send.onclick();
+    const posts=calls.filter(c=>c.url==='/api/channel/publish');
+    assert(posts.length===1 && posts[0].body.music_usage_confirmed===true,'one explicit post');
+    assert(posts[0].token,'dashboard token required');
+    assert(slot.textContent.includes('chờ xác minh'),'pending is not complete');
+    assert(!music.checked && !nc.checked,'consent consumed');
     ''')
 
 

@@ -393,7 +393,7 @@ def publish_approved(root, slug, *, platform, clip_id=None, privacy=None, title_
                 if isinstance(exc, tiktok_browser.SessionExpired):
                     tiktok_browser.invalidate_session(root, preview['account']['id'])
             # Never expose provider bodies, bearer URLs, tokens or arbitrary exception text.
-            receipt['error'] = str(exc) if isinstance(exc, RuntimeError) else 'Publication interrupted; reconcile before retrying'
+            receipt['error'] = 'Lượt đăng bị gián đoạn; kiểm tra trạng thái trước khi thử lại.'
         return _save(path, receipt)
 
 

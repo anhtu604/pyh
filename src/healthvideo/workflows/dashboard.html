@@ -1006,6 +1006,7 @@ html[data-theme="light"] .ws-iso-stage{background:radial-gradient(ellipse 62% 46
   <!-- 2. Việc của bác sĩ -->
   <h2 class="section-title" id="sec-todo" data-home-view="home">Việc của bác sĩ <span class="count" id="todo-count" hidden>0</span></h2>
   <section class="glass todo-list" id="decisions" data-home-view="home" aria-live="polite"><div class="todo-calm">Đang kiểm tra việc cần bác sĩ…</div></section>
+  <section id="auto-publish-work" data-home-view="home" aria-label="Việc đăng kênh" aria-live="polite"></section>
 
   <!-- 3. Project cards -->
   <h2 class="section-title" id="sec-projects" data-home-view="home">Dự án video</h2>
@@ -1137,6 +1138,14 @@ html[data-theme="light"] .ws-iso-stage{background:radial-gradient(ellipse 62% 46
       </div>
     </div>
     <div id="channel-connections" class="ch-kpis"></div>
+    <form id="auto-publish-settings" class="ops-form">
+      <h3>Tự động đăng</h3>
+      <label><input type="checkbox" role="switch" id="auto-yt-enabled"> Tự động đăng YouTube sau khi duyệt video</label>
+      <label>Quyền hiển thị YouTube<select id="auto-yt-privacy"><option value="public">Công khai ngay</option><option value="unlisted">Không công khai</option><option value="private">Riêng tư</option></select></label>
+      <p>Chỉ áp dụng cho lượt duyệt video mới sau khi bật, vào đúng kênh được lưu bên dưới. TikTok luôn chờ bác sĩ xác nhận nhạc và bấm đăng từng clip.</p>
+      <p id="auto-yt-account" role="status">Tự động đăng đang tắt.</p>
+      <button type="submit" class="btn" id="auto-yt-save">Lưu tự động đăng</button>
+    </form>
     <div id="channel-publish"></div>
     <div id="channel-forms">
       <form class="ops-form" id="form-ch-csv" hidden>
@@ -1866,6 +1875,7 @@ function renderOverview(ov){
   }
 
   renderResearchSummary(ov.inbox || null);
+  renderAutoPublish(ov.auto_publish || {settings:{youtube_enabled:false,youtube_privacy:'public'},items:[]});
   renderChannelSection(ov.channel || {connected: false});
 }
 
@@ -1947,6 +1957,72 @@ async function loadResearchInbox(){
   }
 }
 
+let autoSettingsSignature = '', autoWorkSignature = '', autoSettingsBusy = false;
+const autoBusy = new Set();
+function publicationLabel(r){
+  return ({posted:'Đã đăng và được nền tảng xác nhận',pending:'Đang chờ nền tảng xử lý',pending_verification:'Đã gửi, chờ xác minh trên TikTok; không gửi lại',needs_reconciliation:'Chưa rõ kết quả; kiểm tra trạng thái trước khi đăng lại',error:'Chưa đăng được. Kiểm tra kết nối và gói duyệt.',failed:'Nền tảng báo đăng thất bại'})[r?.status] || 'Chờ bác sĩ xác nhận đăng';
+}
+function renderAutoPublish(data){
+  const settings = data.settings || {}, sig = JSON.stringify(settings);
+  if(sig !== autoSettingsSignature && !autoSettingsBusy){
+    autoSettingsSignature = sig;
+    $('auto-yt-enabled').checked = settings.youtube_enabled === true;
+    $('auto-yt-privacy').value = settings.youtube_privacy || 'public';
+    $('auto-yt-account').textContent = settings.youtube_enabled ? 'Kênh tự động: '+(settings.account?.name || settings.account?.id || '') : 'Tự động đăng đang tắt.';
+  }
+  $('auto-publish-settings').onsubmit = async e => {
+    e.preventDefault(); if(autoSettingsBusy)return;
+    autoSettingsBusy = true; $('auto-yt-save').disabled = true;
+    try{
+      const s = await postJson('/api/channel/auto-publish',{youtube_enabled:$('auto-yt-enabled').checked,youtube_privacy:$('auto-yt-privacy').value});
+      autoSettingsSignature = ''; autoSettingsBusy = false;
+      renderAutoPublish({...data,settings:s}); toast('Đã lưu tự động đăng.'); await refresh();
+    }catch(ex){toast(ex.message,true);}
+    finally{autoSettingsBusy = false;$('auto-yt-save').disabled = false;}
+  };
+  const items = data.items || [], workSig = JSON.stringify(items);
+  if(workSig === autoWorkSignature || autoBusy.size)return;
+  autoWorkSignature = workSig;
+  const el = $('auto-publish-work');
+  el.innerHTML = items.map(item => `<article class="glass channel-box"><h3>YouTube · ${esc(item.youtube_preview?.title || item.slug)}</h3><p>${esc(publicationLabel(item.youtube))}</p>${item.youtube?.thumbnail_status === 'failed' ? '<p>Video đã đăng; ảnh thu nhỏ chưa tải được. Kiểm tra trạng thái để thử lại riêng ảnh.</p>' : ''}${['error','needs_reconciliation','failed'].includes(item.youtube?.status) ? `<button class="btn" type="button" data-auto-retry="${esc(item.id)}">Thử đăng lại</button>` : ''}${item.youtube?.receipt_id ? `<button class="btn ghost" type="button" data-auto-status="${esc(item.youtube.receipt_id)}">Kiểm tra trạng thái đăng</button>` : ''}${item.tiktok_error ? `<p>${esc(item.tiktok_error)}</p>` : ''}${(item.tiktok || []).map((p,i) => `<details id="auto-tt-${esc(item.id)}-${i}" ${!p.receipt ? `data-auto-preview="${esc(item.id)}" data-clip-index="${i}"` : ''}><summary>Đăng TikTok · ${esc(p.clip_id)}</summary><p>Kênh đích: <b>${esc(p.account.name || p.account.id)}</b></p><p style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(p.caption)}</p><p>${esc(publicationLabel(p.receipt))}</p>${p.receipt ? `<button type="button" class="btn ghost" data-auto-status="${esc(p.receipt.receipt_id)}">Kiểm tra trạng thái đăng</button>` : `<div class="auto-tt-preview ops-form" role="status">Mở thẻ để xem quyền hiển thị mới nhất và xác nhận đăng.</div>`}</details>`).join('')}</article>`).join('');
+  el.querySelectorAll('[data-auto-retry]').forEach(b => b.onclick = async () => {
+    if(autoBusy.has(b.dataset.autoRetry))return;
+    autoBusy.add(b.dataset.autoRetry);b.disabled = true;
+    try{await postJson('/api/channel/auto-publish-retry',{id:b.dataset.autoRetry});}
+    catch(e){toast(e.message,true);}
+    finally{autoBusy.delete(b.dataset.autoRetry);autoWorkSignature='';await refresh();}
+  });
+  el.querySelectorAll('[data-auto-status]').forEach(b => b.onclick = async () => {
+    b.disabled=true;
+    try{const r=await postJson('/api/channel/publish-status',{receipt_id:b.dataset.autoStatus});toast(publicationLabel(r));await refresh();}
+    catch(e){toast(e.message,true);}finally{b.disabled=false;}
+  });
+  el.querySelectorAll('[data-auto-preview]').forEach(b => b.ontoggle = async () => {
+    if(!b.open || b.dataset.loading)return;
+    b.dataset.loading='true';
+    const item=items.find(x=>x.id===b.dataset.autoPreview), p=item.tiktok[Number(b.dataset.clipIndex)];
+    const slot=b.querySelector('.auto-tt-preview');slot.textContent='Đang lấy quyền hiển thị mới nhất…';
+    try{
+      const fresh=await postJson('/api/channel/publish-preview',{platform:'tiktok',slug:p.slug,clip_id:p.clip_id,title_index:0});
+      if(!b.open)return;
+      if(fresh.account.id!==p.account.id || fresh.revision!==p.revision || fresh.sha256!==p.sha256)throw Error('Gói hoặc kênh đã đổi; hãy kiểm tra lại trong tab Kênh.');
+      slot.innerHTML=`<p>Kênh nhận: <b>${esc(fresh.account.name || fresh.account.id)}</b></p><p style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(fresh.caption)}</p><label>Quyền hiển thị<select class="auto-privacy"><option value="">Chọn quyền hiển thị…</option>${(fresh.privacy_options || []).map(v=>`<option value="${esc(v)}">${esc(({public:'Công khai',private:'Riêng tư',SELF_ONLY:'Chỉ mình tôi'})[v] || v)}</option>`).join('')}</select></label><label><input type="checkbox" class="auto-music"> Tôi đồng ý <a href="https://www.tiktok.com/legal/page/global/music-usage-confirmation/en" target="_blank" rel="noopener noreferrer">sử dụng nhạc TikTok</a> cho lượt đăng này.</label><label><input type="checkbox" class="auto-noncommercial"> Tôi xác nhận nội dung phi thương mại.</label><p>Nút Đăng TikTok xác nhận gửi đúng clip và caption trên vào kênh này.${fresh.connection_method==='browser_session' ? ' Gửi xong vẫn cần xác minh video trên TikTok.' : ''}</p><button type="button" class="btn primary auto-send" disabled>Đăng TikTok</button>`;
+      const send=slot.querySelector('.auto-send'), privacy=slot.querySelector('.auto-privacy'), music=slot.querySelector('.auto-music'), nc=slot.querySelector('.auto-noncommercial');
+      const ready=()=>privacy.value && music.checked && nc.checked && !autoBusy.has(item.id);
+      send.disabled=!ready();
+      for(const input of [privacy,music,nc])input.onchange=()=>send.disabled=!ready();
+      send.onclick=async()=>{
+        if(!ready())return;autoBusy.add(item.id);send.disabled=true;
+        try{
+          const r=await postJson('/api/channel/publish',{platform:'tiktok',slug:p.slug,clip_id:p.clip_id,title_index:0,privacy:privacy.value,expected_account_id:fresh.account.id,expected_revision:fresh.revision,expected_sha256:fresh.sha256,confirmed:true,music_usage_confirmed:music.checked,noncommercial_confirmed:nc.checked});
+          slot.textContent=publicationLabel(r);toast(publicationLabel(r));
+        }catch(e){slot.textContent='Chưa rõ kết quả. Kiểm tra trạng thái đăng trong tab Kênh trước khi thử lại.';toast(e.message,true);}
+        finally{music.checked=false;nc.checked=false;autoBusy.delete(item.id);autoWorkSignature='';await refresh();}
+      };
+    }catch(e){slot.textContent=e.message;}
+    finally{delete b.dataset.loading;}
+  });
+}
 let channelAnalysisReady = false, channelAnalysisReason = '', channelConnectionsLoading = false;
 let channelPreview = null, channelReceipt = null, channelPublishBusy = false;
 let channelBrowserBusy = false, channelBrowserMethod = false;

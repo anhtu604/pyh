@@ -1627,6 +1627,8 @@ def overview(
             'updated_at': mtime_dt.isoformat(timespec='seconds'),
         })
 
+    from healthvideo.workflows import auto_publish
+    publication_work = auto_publish.overview(root)
     avg_days = round(sum(lead_days) / len(lead_days), 1) if lead_days else 0.0
     return {
         'tiles': {
@@ -1638,6 +1640,7 @@ def overview(
             'models_resting': len(resting),
         },
         'decisions': decisions,
+        'auto_publish': publication_work,
         'projects': project_cards,
         'resting': resting,
         'channel': channel_analytics.channel_overview_payload(root),
@@ -3155,6 +3158,9 @@ def _overview_fingerprint(root: Path) -> tuple:
         _stat_sig(root / 'topics/queue.yaml'),
         _stat_sig(root / 'topics/channel-metrics.yaml'),
         _stat_sig(root / 'topics/channel-insights.yaml'),
+        _stat_sig(root / 'topics/auto-publish.json'),
+        _dir_sig(root / 'topics/auto-publications', suffix='.json'),
+        _dir_sig(root / 'topics/channel-publications', suffix='.json'),
         _stat_sig(root / 'profiles/company.yaml'),
         _dir_sig(root / 'topics/inbox', suffix='.dossier.yaml'),
         _projects_sig(root, deep_revisions=True),

@@ -63,3 +63,27 @@ def test_stop_background_handles_race_when_process_already_exited(
     monkeypatch.setattr(factory.os, "kill", lambda pid, sig: (_ for _ in ()).throw(PermissionError("denied")))
     with pytest.raises(PermissionError, match="denied"):
         factory.stop_background(tmp_path)
+
+
+@pytest.mark.parametrize('hook_fails', [False, True])
+def test_packaging_hook_runs_only_on_transition_and_failure_is_isolated(tmp_path, monkeypatch, hook_fails):
+    from healthvideo.storage.files import read_yaml
+    from healthvideo.workflows import auto_publish
+    from healthvideo.workflows.runner import RunReport
+    from tests.workflows.test_package import _v2_video_approved_project
+
+    project = _v2_video_approved_project(tmp_path / 'projects')
+    monkeypatch.setattr(factory, 'run_queue', lambda *a, **k: RunReport())
+    calls = []
+    def hook(root, slug):
+        assert read_yaml(project / 'project.yaml')['state'] == 'packaged'
+        calls.append((root, slug))
+        if hook_fails:
+            raise RuntimeError('secret-do-not-log')
+    monkeypatch.setattr(auto_publish, 'on_packaged', hook)
+    factory.run_factory(tmp_path, object(), once=True, notify=lambda *a: None, echo=lambda *a: None)
+    factory.run_factory(tmp_path, object(), once=True, notify=lambda *a: None, echo=lambda *a: None)
+    assert calls == [(tmp_path, project.name)]
+    assert read_yaml(project / 'project.yaml')['state'] == 'packaged'
+    assert not (tmp_path / 'topics/logs' / project.name / 'blocked.txt').exists()
+    assert 'secret-do-not-log' not in (tmp_path / 'topics/logs/xuong.log').read_text(encoding='utf-8')

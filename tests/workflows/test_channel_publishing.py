@@ -80,6 +80,17 @@ def test_uncertain_intent_prevents_retry(approved, monkeypatch):
     assert len(calls) == 1
 
 
+def test_runtime_failure_never_persists_provider_secrets(approved, monkeypatch):
+    root, slug, _ = approved
+    def fail(*args, **kwargs):
+        raise RuntimeError('Bearer secret-token https://provider/secret-session')
+    monkeypatch.setattr(pub, '_request', fail)
+    receipt = _publish(root, slug, platform='youtube', confirmed=True,
+        expected_account_id='acct', privacy='public')
+    assert receipt['status'] == 'needs_reconciliation'
+    assert 'secret-token' not in json.dumps(receipt)
+
+
 def test_youtube_success_and_explicit_privacy(approved, monkeypatch):
     root, slug, _ = approved
     with pytest.raises(ValueError, match='visibility'):
