@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import PurePosixPath
 from typing import Any, Literal
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 _ANIM_ID_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -73,7 +80,7 @@ def validate_safe_relative_path(value: str, *, allowed_extensions: frozenset[str
     """Validate a safe POSIX relative file path with no traversal, drive, or absolute prefix."""
     if not isinstance(value, str) or not value.strip() or value != value.strip():
         raise ValueError(f"Path must be a nonblank trimmed POSIX relative path: {value!r}")
-    if "\\" in value or value.startswith("/"):
+    if "\\" in value or value.startswith("/") or any(ord(c) < 32 or c in '<>"|?*' for c in value):
         raise ValueError(f"Path must be relative POSIX without backslashes: {value!r}")
     posix = PurePosixPath(value)
     parts = posix.parts
@@ -81,6 +88,10 @@ def validate_safe_relative_path(value: str, *, allowed_extensions: frozenset[str
         raise ValueError(f"Path escapes library root: {value!r}")
     if posix.as_posix() != value:
         raise ValueError(f"Path must use canonical POSIX relative spelling: {value!r}")
+    reserved = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
+    if any(":" in part or part.endswith((".", " ")) or
+           part.split(".")[0].upper() in reserved for part in parts):
+        raise ValueError(f"Unsafe Windows path: {value!r}")
     if allowed_extensions is not None and posix.suffix.lower() not in allowed_extensions:
         raise ValueError(
             f"Unsupported file extension {posix.suffix!r} for {value!r}; expected {sorted(allowed_extensions)}"
@@ -257,6 +268,18 @@ class MedAnimAsset(BaseModel):
     role: str | None = None
     license_url: str | None = None
     attribution: str | None = None
+    id: str | None = Field(default=None, pattern=_ANIM_ID_RE.pattern)
+    retrieved_at: date | None = None
+    transformations: tuple[str, ...] | None = None
+    license_evidence: str | None = None
+
+    @model_serializer(mode="wrap")
+    def _preserve_legacy_keys(self, handler):
+        data = handler(self)
+        for key in ("id", "retrieved_at", "transformations", "license_evidence"):
+            if getattr(self, key) is None and key not in self.model_fields_set:
+                data.pop(key, None)
+        return data
 
     @field_validator("file")
     @classmethod

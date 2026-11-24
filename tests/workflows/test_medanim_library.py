@@ -277,3 +277,85 @@ def test_resolve_preview_blocks_traversal_and_non_raster(tmp_path):
         resolve_medanim_preview(tmp_path, "alveolar-gas-exchange", "../assets/alveolus.svg")
     with pytest.raises(LookupError):
         resolve_medanim_preview(tmp_path, "alveolar-gas-exchange", "alveolus.svg")
+
+
+def _extract_catalog(entry_dir):
+    raw = read_yaml(entry_dir / 'animation.yaml')
+    asset = {**raw['assets'][0], 'id': 'alveolus', 'retrieved_at': None}
+    write_yaml_atomic(entry_dir / 'assets.yaml', {'assets': [asset]})
+    raw['assets'] = ['alveolus']
+    write_yaml_atomic(entry_dir / 'animation.yaml', raw)
+    return asset
+
+
+def test_catalog_reference_loads_and_catalog_edit_stales_approval(tmp_path):
+    entry_dir, pin_file = _create_medanim_fixture(tmp_path)
+    asset = _extract_catalog(entry_dir)
+    item = list_medanim_library(tmp_path)[0]
+    assert item['status'] == 'pending', item['errors']
+    assert item['assets'][0]['id'] == 'alveolus'
+    approve_medanim_entry(tmp_path, entry_dir.name, reviewer='Doctor', pin='918273', pin_file=pin_file, now=NOW)
+    assert approved_medanim_catalog(tmp_path)
+    asset['author'] = 'Changed provenance'
+    write_yaml_atomic(entry_dir / 'assets.yaml', {'assets': [asset]})
+    assert list_medanim_library(tmp_path)[0]['status'] == 'needs_reapproval'
+    assert not approved_medanim_catalog(tmp_path)
+
+
+@pytest.mark.parametrize('problem', ['unknown', 'missing_provenance', 'duplicate', 'missing_catalog'])
+def test_catalog_reference_cannot_select_invalid_asset(tmp_path, problem):
+    entry_dir, _ = _create_medanim_fixture(tmp_path)
+    asset = _extract_catalog(entry_dir)
+    if problem == 'unknown':
+        raw = read_yaml(entry_dir / 'animation.yaml')
+        raw['assets'] = ['missing']
+        write_yaml_atomic(entry_dir / 'animation.yaml', raw)
+    elif problem == 'missing_provenance':
+        del asset['author']
+        write_yaml_atomic(entry_dir / 'assets.yaml', {'assets': [asset]})
+    elif problem == 'duplicate':
+        write_yaml_atomic(entry_dir / 'assets.yaml', {'assets': [asset, asset]})
+    else:
+        (entry_dir / 'assets.yaml').unlink()
+    assert list_medanim_library(tmp_path)[0]['status'] == 'invalid'
+    assert not approved_medanim_catalog(tmp_path)
+
+
+def test_legacy_inline_approval_hash_and_serialization_unchanged(tmp_path):
+    entry_dir, pin_file = _create_medanim_fixture(tmp_path)
+    raw = read_yaml(entry_dir / 'animation.yaml')
+    entry = MedAnimEntry.model_validate(raw)
+    assert 'id' not in entry.model_dump()['assets'][0]
+    assert 'retrieved_at' not in entry.model_dump()['assets'][0]
+    approval = approve_medanim_entry(tmp_path, entry_dir.name, reviewer='Doctor', pin='918273', pin_file=pin_file, now=NOW)
+    assert approval.content_sha256 == sha256_file(entry_dir / 'animation.yaml')
+
+
+def test_extracted_liver_catalog_preserves_original_provenance():
+    from healthvideo.workflows.medanim_library import load_medanim_entry
+
+    root = Path(__file__).resolve().parents[2]
+    path = root / 'library/medanim/liver-enzyme-leak/animation.yaml'
+    raw = read_yaml(path)
+    assert all(isinstance(asset_id, str) for asset_id in raw['assets'])
+    entry = load_medanim_entry(path)
+    assert len(entry.assets) == 10
+    assert all(a.id and a.retrieved_at is None for a in entry.assets)
+    assert entry.assets[0].sha256 == '4eb567dbe9159feae60c151d688f441378ce24447bcc04128ef1f6f52774bf24'
+
+
+def test_catalog_rejection_uses_same_content_and_asset_hashes(tmp_path):
+    entry_dir, pin_file = _create_medanim_fixture(tmp_path)
+    _extract_catalog(entry_dir)
+    before = list_medanim_library(tmp_path)[0]
+    rejected = reject_medanim_entry(tmp_path, entry_dir.name, reviewer='Doctor', reason='Review', pin='918273', pin_file=pin_file, now=NOW)
+    assert rejected.content_sha256 == before['content_sha256']
+    assert rejected.asset_sha256 == before['asset_sha256']
+    assert list_medanim_library(tmp_path)[0]['status'] == 'rejected'
+
+
+def test_reject_malformed_legacy_yaml_retains_doctor_audit(tmp_path):
+    entry_dir, pin_file = _create_medanim_fixture(tmp_path)
+    (entry_dir / 'animation.yaml').write_text('assets: [invalid', encoding='utf-8')
+    rejected = reject_medanim_entry(tmp_path, entry_dir.name, reviewer='Doctor', reason='Invalid YAML', pin='918273', pin_file=pin_file, now=NOW)
+    assert rejected.content_sha256 == sha256_file(entry_dir / 'animation.yaml')

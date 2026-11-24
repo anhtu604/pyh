@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 from datetime import datetime
@@ -19,6 +20,7 @@ from healthvideo.domain.medanim_library import (
 )
 from healthvideo.storage.files import read_yaml, sha256_file
 from healthvideo.storage.immutable import write_yaml_once
+from healthvideo.visuals.medanim_assets import assert_safe_path, load_asset_catalog
 
 _ANIM_ID_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _PREVIEW_EXTENSIONS: frozenset[str] = frozenset({".png", ".jpg", ".jpeg", ".webp"})
@@ -38,6 +40,8 @@ def _validate_anim_id(anim_id: str) -> str:
 
 
 def _assert_inside(base: Path, target: Path) -> Path:
+    assert_safe_path(base)
+    assert_safe_path(target)
     if target.is_symlink():
         raise ValueError(f"Từ chối liên kết ngoài phạm vi thư viện: {target.name}")
     resolved_base = base.resolve()
@@ -45,6 +49,40 @@ def _assert_inside(base: Path, target: Path) -> Path:
     if not resolved_target.is_relative_to(resolved_base):
         raise ValueError(f"Đường dẫn thoát khỏi thư mục thư viện: {target}")
     return resolved_target
+
+
+def load_medanim_entry(path: Path) -> MedAnimEntry:
+    """Resolve catalog IDs, while keeping inline legacy entries readable."""
+    assert_safe_path(path)
+    raw = read_yaml(path)
+    assets = raw.get("assets")
+    if isinstance(assets, list) and any(isinstance(item, str) for item in assets):
+        if not all(isinstance(item, str) for item in assets) or len(set(assets)) != len(assets):
+            raise ValueError("Asset references must be unique IDs, without inline metadata")
+        catalog = {asset.id: asset for asset in load_asset_catalog(path.parent / "assets.yaml")}
+        if any(asset_id not in catalog for asset_id in assets):
+            raise ValueError("Unknown catalog asset ID")
+        raw = {**raw, "assets": [catalog[asset_id] for asset_id in assets]}
+    return MedAnimEntry.model_validate(raw)
+
+
+def _content_sha256(path: Path) -> str:
+    """Legacy hashes stay byte-identical; references bind catalog provenance too."""
+    assert_safe_path(path)
+    try:
+        raw = read_yaml(path)
+    except (ValueError, TypeError, yaml.YAMLError):
+        # A doctor can still reject malformed legacy YAML and retain its hash.
+        return sha256_file(path)
+    assets = raw.get("assets")
+    if isinstance(assets, list) and any(isinstance(item, str) for item in assets):
+        catalog_path = assert_safe_path(path.parent / "assets.yaml")
+        if not catalog_path.is_file():
+            return sha256_file(path)
+        return hashlib.sha256(
+            b"medanim-catalog-v1\0" + path.read_bytes() + b"\0" + catalog_path.read_bytes()
+        ).hexdigest()
+    return sha256_file(path)
 
 
 def _entry_dir(root: Path, anim_id: str) -> Path:
@@ -138,6 +176,11 @@ def _best_effort_disk_hashes(root: Path, entry_dir: Path, anim_id: str, raw: dic
     assets = raw.get("assets")
     if not isinstance(assets, list):
         return result
+    if any(isinstance(item, str) for item in assets):
+        try:
+            assets = [asset.model_dump() for asset in load_medanim_entry(entry_dir / "animation.yaml").assets]
+        except (OSError, ValueError, TypeError, yaml.YAMLError):
+            return result
     lib_assets_base = entry_dir / "assets"
     pub_assets_base = root / _PUBLIC_MEDANIM_SUBDIR / anim_id
     for item in assets:
@@ -216,14 +259,15 @@ def inspect_medanim_entry(root: Path, entry_dir: Path) -> dict[str, Any]:
     if not animation_path.is_file():
         raise LookupError(f"Thiếu animation.yaml trong {entry_dir}")
 
-    content_sha256 = sha256_file(animation_path)
+    content_sha256 = ""
     errors: list[str] = []
     raw_yaml: dict[str, Any] = {}
     entry: MedAnimEntry | None = None
 
     try:
+        content_sha256 = _content_sha256(animation_path)
         raw_yaml = read_yaml(animation_path)
-        entry = MedAnimEntry.model_validate(raw_yaml)
+        entry = load_medanim_entry(animation_path)
         if entry.id != anim_id:
             raise ValueError(f"animation.yaml id {entry.id!r} không khớp tên thư mục {anim_id!r}")
     except (OSError, ValueError, TypeError, yaml.YAMLError) as exc:
@@ -420,7 +464,7 @@ def approve_medanim_entry(
     if animation_path.is_symlink() or not animation_path.is_file():
         raise LookupError(f"Thiếu animation.yaml cho {anim_id!r}")
 
-    entry = MedAnimEntry.model_validate(read_yaml(animation_path))
+    entry = load_medanim_entry(animation_path)
     if entry.id != anim_id:
         raise ValueError(f"animation.yaml id {entry.id!r} không khớp {anim_id!r}")
     if not entry.medical_audit.passed:
@@ -435,7 +479,7 @@ def approve_medanim_entry(
         if target.is_symlink() or not _assert_inside(entry_dir, target).is_file():
             raise FileNotFoundError(f"Thiếu ảnh preview đã khai báo: {preview}")
 
-    content_sha256 = sha256_file(animation_path)
+    content_sha256 = _content_sha256(animation_path)
     asset_sha256 = {asset.file: actual_hashes[asset.file] for asset in entry.assets}
     approval_path = entry_dir / "doctor-approval.yaml"
 
@@ -499,7 +543,7 @@ def reject_medanim_entry(
     if animation_path.is_symlink() or not animation_path.is_file():
         raise LookupError(f"Thiếu animation.yaml cho {anim_id!r}")
 
-    content_sha256 = sha256_file(animation_path)
+    content_sha256 = _content_sha256(animation_path)
     try:
         raw_yaml = read_yaml(animation_path)
     except (OSError, ValueError, TypeError, yaml.YAMLError):

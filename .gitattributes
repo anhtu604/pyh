@@ -1,0 +1,2 @@
+# Licensed asset bytes are hash-pinned in assets.yaml: never convert line endings.
+library/medanim/** -text
