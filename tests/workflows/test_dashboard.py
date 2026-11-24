@@ -89,6 +89,40 @@ def test_post_requires_token(server):
     assert calls == []
 
 
+def test_voice_preview_requires_token_and_current_revision(server, monkeypatch):
+    from healthvideo.workflows import voice_preview
+
+    srv, project, _ = server
+    calls = []
+    monkeypatch.setattr(voice_preview, 'voice_preview',
+                        lambda project, lines: calls.append(lines) or {
+                            'provider': 'voicestudio', 'duration_ms': 1234, 'lines': [],
+                        })
+    route = f'/api/project/{project.name}/voice-preview'
+    assert request(srv, 'POST', route)[0] == 403
+    assert not calls
+
+    def submit(payload):
+        port = srv.server_address[1]
+        conn = HTTPConnection('127.0.0.1', port, timeout=5)
+        conn.request('POST', route, body=json.dumps(payload), headers={
+            'Host': f'127.0.0.1:{port}', 'X-Dashboard-Token': 'tok',
+            'Content-Type': 'application/json',
+        })
+        response = conn.getresponse()
+        result = response.status, json.loads(response.read())
+        conn.close()
+        return result
+
+    assert submit({'revision': '000', 'line_ids': ['N1']})[0] == 400
+    assert not calls
+    status, result = submit({'revision': '001', 'line_ids': ['N1']})
+    assert status == 200 and result['duration_ms'] == 1234
+    assert calls == [['N1']]
+    status, html = request(srv, 'GET', '/')
+    assert status == 200 and 'Nghe thử giọng (máy)' in html
+
+
 def test_foreign_host_rejected(server):
     srv, _, calls = server
     port = srv.server_address[1]

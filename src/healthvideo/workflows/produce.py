@@ -305,20 +305,36 @@ def _synthesize_cached_line(
     force: bool = False,
 ) -> None:
     """Retain paid line requests even when a later render fails."""
-    if provider_identity(tts)["provider"] not in {"vibi_minimax"}:
+    identity = provider_identity(tts)
+    if identity["provider"] not in {"vibi_minimax", "voicestudio"}:
         tts.synthesize(request, output)
         return
     key = tts_cache_key(tts, request)
     cached = cache_dir / f"{key}.wav"
     receipt = cached.with_suffix(".json")
+    if not force and receipt.is_file():
+        try:
+            metadata = read_yaml(receipt)
+        except (OSError, ValueError):
+            metadata = None
+        if (identity['provider'] == 'vibi_minimax' and isinstance(metadata, dict)
+                and metadata.get('provider') != identity):
+            raise ValueError('Bản đăng cần WAV Vibi; cache có backend khác Vibi.')
     try:
-        if not force and read_yaml(receipt).get("sha256") == sha256_file(cached):
+        metadata = read_yaml(receipt)
+        if (not force and metadata.get('provider') == identity
+                and metadata.get('request') == request.model_dump(mode='json')
+                and metadata.get("sha256") == sha256_file(cached)):
             inspect_wav(cached, require_signal=getattr(tts, "require_signal", False))
             shutil.copyfile(cached, output)
             return
     except (OSError, ValueError, TypeError, AttributeError):
         pass
-    tts.synthesize(request, output)
+    result = tts.synthesize(request, output)
+    if result.provider != identity['provider']:
+        output.unlink(missing_ok=True)
+        raise ValueError('Bản đăng cần WAV Vibi; kết quả TTS có backend khác Vibi.'
+                         if identity['provider'] == 'vibi_minimax' else 'Backend TTS không khớp.')
     try:
         inspect_wav(output, require_signal=getattr(tts, "require_signal", False))
     except ValueError as error:
@@ -419,6 +435,8 @@ def produce_project(
     With ``hold_for_product_review`` the final render waits for the product critic
     instead of entering the doctor's video gate; ``submit_video`` submits it later.
     """
+    if provider_identity(tts)['provider'] == 'voicestudio':
+        raise ValueError('Bản đăng cần giọng Vibi; Voice Studio chỉ dùng nghe thử bản nháp.')
     layout = resolve_project_layout(project_dir)
     return _produce_v2(layout, tts, runner, dry_run=dry_run, music=music,
                        hold=hold_for_product_review)

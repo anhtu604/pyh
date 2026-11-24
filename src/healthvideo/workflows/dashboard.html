@@ -3438,10 +3438,11 @@ function tabScript(b,dm,opts={}){
     </details></div>`;
   }
   if(!b.lines.length) return h+'<div class="glass empty">Chưa có kịch bản ở revision này.</div>';
+  if(!opts.readOnly) h+=`<div class="sec-card"><button type="button" class="btn" data-voice-preview="">Nghe thử giọng (máy)</button><p class="sub">Bản nháp để nghe lời và đo thời lượng. Bản đăng dùng giọng Vibi.</p><div id="voice-preview-result" aria-live="polite"></div></div>`;
   return h+b.lines.map(l=>{const id=l.id||'?';
     const deliv=l.delivery?`<span class="tag">${esc(typeof l.delivery==='string'?l.delivery:JSON.stringify(l.delivery))}</span>`:'';
     return `<div class="row ${dm[id]?'has-c':''}"><div class="rid">${esc(id)}</div>
-      <div><div class="rtext">${esc(l.text)}</div><div class="rmeta">${l.purpose&&l.purpose!=='content'?`<span class="tag">${esc(l.purpose)}</span>`:''}${deliv}${l.claim_id?`<span class="tag claim" data-goto="${esc(l.claim_id)}" title="Xem bằng chứng">${esc(l.claim_id)}${l.source_marker?' · '+esc(l.source_marker):''}</span>`:''}</div></div>
+      <div><div class="rtext">${esc(l.text)}</div><div class="rmeta">${opts.readOnly?'':`<button type="button" class="btn" data-voice-preview="${esc(id)}">Nghe thử dòng (máy)</button>`}${l.purpose&&l.purpose!=='content'?`<span class="tag">${esc(l.purpose)}</span>`:''}${deliv}${l.claim_id?`<span class="tag claim" data-goto="${esc(l.claim_id)}" title="Xem bằng chứng">${esc(l.claim_id)}${l.source_marker?' · '+esc(l.source_marker):''}</span>`:''}</div></div>
       ${opts.readOnly?'':cbtn(id,dm)+cmtRow(id,dm)}</div>`}).join('');
 }
 function srcLine(r){
@@ -4671,6 +4672,20 @@ function renderPv(){
   const hideGeneral=['overview','posts','log'].includes(pvTab);
   body.innerHTML=(hideGeneral?'':generalRow(dm))+tabFn(b,dm);
   wireComments(body);
+  body.querySelectorAll('[data-voice-preview]').forEach(btn=>btn.onclick=async()=>{
+    const result=body.querySelector('#voice-preview-result');
+    const buttons=body.querySelectorAll('[data-voice-preview]');
+    buttons.forEach(el=>el.disabled=true);
+    result.textContent='Đang đọc thử trên máy…';
+    try{
+      const data=await postJson(`/api/project/${encodeURIComponent(b.slug)}/voice-preview`,{
+        revision:b.revision, line_ids:btn.dataset.voicePreview?[btn.dataset.voicePreview]:null
+      });
+      result.innerHTML=`<p>Thời lượng đọc thực: ${(data.duration_ms/1000).toFixed(1)} giây</p>`+
+        data.lines.map(l=>`<div>${esc(l.id)} · ${(l.duration_ms/1000).toFixed(1)} giây <audio controls preload="none" src="${esc(l.url)}"></audio></div>`).join('');
+    }catch(e){result.textContent=e.message;}
+    finally{buttons.forEach(el=>el.disabled=false);}
+  });
   body.querySelectorAll('[data-goto]').forEach(t=>t.onclick=()=>gotoClaim(t.dataset.goto));
   body.querySelectorAll('[data-stage-tab]').forEach(el=>{
     el.onclick=()=>{pvTab=el.dataset.stageTab; updateChatContext({view:pvTab}); renderPv(); $('pv-scroll').scrollTop=0};

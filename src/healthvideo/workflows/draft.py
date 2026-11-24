@@ -41,12 +41,19 @@ def validate_estimated_layout(
     assets: AssetManifest | None = None, *, clip_plan: ClipPlan | None = None,
     claims: dict[str, EvidenceClaim] | None = None,
 ) -> Storyboard:
-    """Read-only pre-gate timing check; collect actionable errors in one pass."""
+    """Pre-gate timing check; source artifacts stay immutable, draft audio may be cached."""
     from healthvideo.render.beats import resolve_scene_beats, visual_rhythm_qa
     from healthvideo.render.timing import estimate_line_ms, retime_storyboard
     from healthvideo.render.word_timing import entrance_timing_qa
 
-    timed, _ = retime_storyboard(storyboard, estimate_line_ms(script, project_dir))
+    measured = None
+    if storyboard.quality_profile == 'r5_v1':
+        from healthvideo.workflows.voice_preview import draft_line_ms
+
+        measured = draft_line_ms(project_dir, script)
+    timed, _ = retime_storyboard(
+        storyboard, measured if measured is not None else estimate_line_ms(script, project_dir),
+    )
     errors: list[str] = []
     if storyboard.quality_profile == 'r5_v1':
         from healthvideo.domain.quality_standards import validate_r5_contract

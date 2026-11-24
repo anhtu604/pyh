@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from healthvideo.storage.files import read_yaml
 from healthvideo.tts.audio_checks import inspect_wav
 from healthvideo.tts.base import TTSRequest, TTSResult
+from healthvideo.tts.voicestudio import VoiceStudioSettings
 
 FFMPEG_TIMEOUT_SECONDS = 120
 
@@ -43,6 +44,7 @@ class VoiceProfile(BaseModel, frozen=True):
     model_id: str | None = None
     voice_id: str = Field(min_length=1, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
     settings: MiniMaxSettings = Field(default_factory=MiniMaxSettings)
+    voicestudio: VoiceStudioSettings | None = None
     allowed_tags: tuple[str, ...] = (
         "sarcastic", "curious", "excited", "chuckles", "sighs", "whispers", "pause",
     )

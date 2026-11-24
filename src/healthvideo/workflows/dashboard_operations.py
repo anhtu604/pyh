@@ -635,6 +635,14 @@ def get_route(server, parts: list[str], query: dict) -> dict | bytes | None:
 
 
 def post_route(server, parts: list[str], body: dict) -> dict | None:
+    if len(parts) == 4 and parts[:2] == ['api', 'project'] and parts[3] == 'voice-preview':
+        from healthvideo.workflows.voice_preview import voice_preview
+
+        layout = project_layout(server.root, parts[2])
+        check_revision_paths(layout.project_dir, layout.artifact_root)
+        if body.get('revision') != layout.manifest.active_revision:
+            raise ValueError('Revision đã thay đổi; tải lại trang lời trước khi nghe thử.')
+        return voice_preview(layout.project_dir, body.get('line_ids'))
     if len(parts) == 3 and parts[:2] == ['api', 'channel'] and parts[2] in {
         'configure', 'connect', 'disconnect', 'sync-api', 'publish-preview', 'publish', 'publish-status',
         'browser-install', 'browser-login', 'browser-disconnect',

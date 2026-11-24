@@ -15,3 +15,18 @@ allowed_tags:
   - sighs
   - whispers
   - pause
+
+# Bản nháp/nghe thử; không dùng cho bản đăng.
+voicestudio:
+  url: http://127.0.0.1:3900
+  role: draft
+  language: vi
+  ref_audio: cache/voice-ref/anh-tu-ref.wav
+  ref_text: >-
+    Trên đường đi, máu len qua xoang mạch, những khe có thành rất mỏng và có lỗ, nên tiếp xúc gần như trực tiếp với các dải tế bào gan. Trong xoang có tế bào Kupffer, đại thực bào thường trú của gan. Tế bào gan cũng chia việc: vùng sát khoảng cửa lo chủ yếu chuyển hóa năng lượng bằng oxy; vùng quanh tĩnh mạch trung tâm là nơi chính biến đổi thuốc. Viên thuốc hay gói thảo dược bạn uống được xử lý chính ở đây.
+  speed: 1.15
+  effect_preset: warm
+  num_step: 32
+  guidance_scale: 2.5
+  pronounce: false
+  seed: 42
