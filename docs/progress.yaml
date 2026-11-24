@@ -520,7 +520,7 @@ phases:
     title: Renderer R5, bỏ tab thành bảng, khóa chính sách phụ đề
     status: done
     owner: agy
-    note: '﻿Đã vào master cùng R5.3.8: renderer R5 theo registry 7 component, fail closed; không tự biến tab thành bảng; 16:9 không phụ đề, 9:16 có; project cũ giữ renderer cũ. Vitest 500 đạt.'
+    note: 'Đã vào master cùng R5.3.8: renderer R5 theo registry 7 component, fail closed; không tự biến tab thành bảng; 16:9 không phụ đề, 9:16 có; project cũ giữ renderer cũ. Vitest 500 đạt.'
 
   - id: R5.3.8
     title: Tích hợp sản xuất, cache, nguồn và cổng
