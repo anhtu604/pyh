@@ -529,6 +529,6 @@ phases:
     note: 'Gắn đo chất lượng sau căn giọng, ghi giấy phép hình vào revision, khóa cache theo giọng/tốc độ/shot; không mở cổng hay bỏ PIN.'
   - id: R5.3.9
     title: Giới hạn vòng chấm và chẩn đoán bền qua restart
-    status: doing
+    status: done
     owner: codex
-    note: 'Lời 2, hình 3, sản phẩm 3 vòng; restart không reset; hết vòng thì dừng trình bác sĩ.'
+    note: 'Đã vào master: sổ vòng chấm bền (lời 2, hình 3, sản phẩm 3) trừ một lần ngay trước khi gọi critic, restart không reset, hết vòng dừng trình bác sĩ (chỉ r5_v1); critic hết model độc lập thì dừng, không quay về model maker (mọi project). pytest 3002 đạt. Codex làm phần đầu, agy hoàn tất.'
