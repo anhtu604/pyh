@@ -47,6 +47,7 @@ def _run_workshop_js(test_body: str, *, pre_storage: dict[str, str] | None = Non
         ' pvFormatTc, pvParseJumpInput, stopPvVideoRuntime,'
         ' updateChatContext, closeProduct, postJson,'
         ' renderVersion, renderStage12DecisionSlot, renderAutoPublish,'
+        ' renderProjects, renderPvProgress, resolveProjectProgress, renderProjectProgressHtml,'
         ' getVideoState: () => ({ pv, pvTab, chatCtx, pvVideoState }),'
         ' setVideoState: (patch) => {'
         '   if ("pv" in patch) pv = patch.pv;'
@@ -1988,4 +1989,75 @@ def test_version_header_and_stage12_no_duplicate_prefix():
     const mini = doc.getElementById('pv-card-slot').textContent;
     assert(mini.includes('Trạm 12 kẹt cùng issue'), 'contains stage 12 question');
     assert(!mini.includes('Trạm 12: Trạm 12'), 'does not duplicate Trạm 12 prefix');
+    ''')
+
+
+def test_project_progress_bar_renders_in_cards_and_project_view():
+    html = DASHBOARD_HTML.read_text(encoding='utf-8')
+    assert 'id="pv-progress-slot"' in html
+    assert '.pprog-track' in html
+
+    _run_workshop_js(r'''
+    const { pyh, doc } = ctx;
+    const assert = (c, m) => { if (!c) throw new Error(m); };
+
+    const projects = [
+      {
+        slug: 'run-vid', code: 'PYH-001', title: 'Đang render', state: 'production_in_progress',
+        state_label: 'Đang sản xuất video', stage: 4, gate: null, blocked: '', paused: false,
+        revision: '001', updated_at: '2026-11-24T21:15:00+07:00',
+        progress: {
+          percent: 70, stage_index: 4, stage_name: 'Sản xuất', status: 'running',
+          label: 'Sản xuất', detail: 'Đang render 50%', sub_percent: 50,
+          sub_label: 'Đang render 50%', updated_hhmm: '21:15',
+        },
+      },
+      {
+        slug: 'gate-vid', code: 'PYH-002', title: 'Chờ duyệt y khoa', state: 'awaiting_medical_review',
+        state_label: 'Chờ bác sĩ duyệt y khoa', stage: 3, gate: 'medical', blocked: '', paused: false,
+        revision: '001', updated_at: '2026-11-24T21:10:00+07:00',
+        progress: {
+          percent: 40, stage_index: 3, stage_name: 'Duyệt y khoa', status: 'gate',
+          label: 'Chờ bác sĩ duyệt', detail: 'Cổng y khoa', sub_percent: null,
+          sub_label: '', updated_hhmm: '21:10',
+        },
+      },
+      {
+        slug: 'err-vid', code: 'PYH-003', title: 'Lỗi dựng', state: 'production_in_progress',
+        state_label: 'Bị chặn · sản xuất', stage: 4, gate: null, blocked: 'Chrome timeout 25s', paused: false,
+        revision: '001', updated_at: '2026-11-24T21:05:00+07:00',
+        progress: {
+          percent: 45, stage_index: 4, stage_name: 'Sản xuất', status: 'error',
+          label: 'Sản xuất', detail: 'Chrome timeout 25s', sub_percent: null,
+          sub_label: '', updated_hhmm: '21:05',
+        },
+      },
+      {
+        slug: 'done-vid', code: 'PYH-004', title: 'Đã đóng gói', state: 'packaged',
+        state_label: 'Đã đóng gói', stage: 6, gate: null, blocked: '', paused: false,
+        revision: '001', updated_at: '2026-11-24T20:50:00+07:00',
+        progress: {
+          percent: 100, stage_index: 6, stage_name: 'Đóng gói', status: 'done',
+          label: 'Đã đóng gói', detail: '', sub_percent: null,
+          sub_label: '', updated_hhmm: '20:50',
+        },
+      },
+    ];
+
+    pyh.setState({ overviewData: { projects } });
+    pyh.renderProjects({
+      stages: ['Chủ đề','Nghiên cứu','Kịch bản','Duyệt y khoa','Sản xuất','Duyệt video','Đóng gói'],
+      projects,
+    });
+    const htmlOut = doc.getElementById('projects').innerHTML;
+    assert(htmlOut.includes('70%') && htmlOut.includes('Đang render 50%') && htmlOut.includes('cập nhật 21:15'), 'running card shows percent, sub-progress and updated hh:mm');
+    assert(htmlOut.includes('is-gate') && htmlOut.includes('Chờ bác sĩ duyệt') && htmlOut.includes('40%'), 'gate card shows doctor gate label and gate class');
+    assert(htmlOut.includes('is-error') && htmlOut.includes('Chrome timeout 25s'), 'error card shows error class and short reason');
+    assert(htmlOut.includes('is-done') && htmlOut.includes('100%'), 'packaged card shows done class and 100%');
+
+    // Project detail view progress bar slot
+    pyh.renderPvProgress(projects[0]);
+    const slot = doc.getElementById('pv-progress-slot');
+    assert(slot.hidden === false, 'project view progress slot is visible');
+    assert(slot.innerHTML.includes('70%') && slot.innerHTML.includes('Đang render 50%'), 'project view renders progress bar');
     ''')

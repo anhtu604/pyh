@@ -55,6 +55,7 @@ from healthvideo.workflows import (
     medanim_library,
     product_review,
     production_retry,
+    project_progress,
     repair_service,
     researcher,
     standards,
@@ -1460,6 +1461,7 @@ def overview(
     }
     verified_jobs = _active_running_jobs(root)
     role_names = _role_names()
+    render_logs = project_progress.scan_render_logs(root)
     decisions: list[dict] = []
     project_cards: list[dict] = []
     done_states = {WorkflowState.VIDEO_APPROVED, WorkflowState.PACKAGED, WorkflowState.PUBLISHED_MANUAL}
@@ -1579,6 +1581,7 @@ def overview(
             'has_posts': (rev_dir / 'posts/posts.yaml').is_file(),
         }
         label = STATE_LABELS.get(project.state, project.state.value)
+        gate = factory.gate_for_project(path, project)
         state_label = (
             'Chờ ý kiến bác sĩ'
             if open_q is not None and current_card is None
@@ -1588,6 +1591,19 @@ def overview(
             if note
             else label
         )
+        progress_info = project_progress.compute_project_progress(
+            root,
+            path,
+            project,
+            gate=gate,
+            blocked_note=note,
+            paused=is_paused and current_card is None,
+            doctor_question=open_q,
+            producing=path.name in prod_by_slug,
+            total_lines=counts['lines'],
+            updated_dt=mtime_dt,
+            render_logs=render_logs,
+        )
         project_cards.append({
             'slug': path.name,
             'code': codes[path.name],
@@ -1596,7 +1612,7 @@ def overview(
             'stage': stage_index(project),
             'state': project.state.value,
             'state_label': state_label,
-            'gate': factory.gate_for_project(path, project),
+            'gate': gate,
             'revision': project.active_revision,
             'blocked': note,
             'doctor_question': open_q,
@@ -1607,6 +1623,7 @@ def overview(
             'retry_after': _project_retry_after(root, path, project.state, current_now),
             'counts': counts,
             'preview_url': _project_preview_url(path, project),
+            'progress': progress_info,
             'status_line': _project_status_line(
                 root, path, project,
                 running_by_slug.get(path.name),
@@ -1616,7 +1633,7 @@ def overview(
             ),
             'handler': project_handler(
                 root, path.name,
-                gate=factory.gate_for_project(path, project),
+                gate=gate,
                 paused=is_paused and current_card is None,
                 blocked_note=note,
                 running_jobs=verified_jobs,
@@ -1714,6 +1731,7 @@ def snapshot(root: Path, *, agents: Callable[[], list[str]] | None = None) -> di
     items = []
     verified_jobs = _active_running_jobs(root)
     role_names = _role_names()
+    render_logs = project_progress.scan_render_logs(root)
     for path, project in factory.projects(root):
         blocked = logs / path.name / 'blocked.txt'
         reason = path / 'blocked-reason.md'
@@ -1722,6 +1740,7 @@ def snapshot(root: Path, *, agents: Callable[[], list[str]] | None = None) -> di
             source = reason if reason.exists() else blocked
             note = source.read_text(encoding='utf-8', errors='replace').strip() if source.exists() else ''
         manifest = path / 'project.yaml'
+        mtime_dt = _safe_mtime(manifest, now_dt)
         gate = factory.gate_for_project(path, project)
         open_q = doctor_questions.open_question(root, path.name)
         is_paused = (logs / path.name / 'paused.yaml').is_file()
@@ -1735,6 +1754,17 @@ def snapshot(root: Path, *, agents: Callable[[], list[str]] | None = None) -> di
             if note
             else label
         )
+        progress_info = project_progress.compute_project_progress(
+            root,
+            path,
+            project,
+            gate=gate,
+            blocked_note=note,
+            paused=is_paused and not gate,
+            doctor_question=open_q,
+            updated_dt=mtime_dt,
+            render_logs=render_logs,
+        )
         items.append({
             'slug': path.name,
             'code': codes[path.name],
@@ -1746,13 +1776,14 @@ def snapshot(root: Path, *, agents: Callable[[], list[str]] | None = None) -> di
             'blocked': note,
             'doctor_question': open_q,
             'paused': is_paused,
+            'progress': progress_info,
             'handler': project_handler(
                 root, path.name, gate=gate, paused=is_paused and not gate, blocked_note=note,
                 running_jobs=verified_jobs, roles=role_names, doctor_question=open_q,
             ),
             'revision': project.active_revision,
             'comments': len(load_draft(root, path.name)),
-            'updated_at': _safe_mtime(manifest, now_dt).isoformat(timespec='seconds'),
+            'updated_at': mtime_dt.isoformat(timespec='seconds'),
         })
     from healthvideo.workflows import telegram_bot
 
@@ -2421,6 +2452,16 @@ def review_bundle(
         claims_count = _fast_list_len(rev / 'evidence/ledger.yaml', 'claims')
         lines_count = _fast_list_len(rev / 'script/script.yaml', 'lines')
         scenes_count = _fast_list_len(rev / 'storyboard/storyboard.yaml', 'scenes')
+        progress_info = project_progress.compute_project_progress(
+            root,
+            project_dir,
+            project,
+            gate=gate,
+            blocked_note=blocked,
+            paused=is_paused and not gate,
+            doctor_question=open_q,
+            total_lines=lines_count,
+        )
         return {
             'lite': True,
             'slug': project_dir.name, 'title': factory.project_title(project_dir, project),
@@ -2429,6 +2470,7 @@ def review_bundle(
             'gate': gate, 'revision': project.active_revision,
             'paused': is_paused, 'paused_info': paused_info, 'blocked': blocked,
             'doctor_question': open_q,
+            'progress': progress_info,
             'stage_index': stage_index(project), 'stages': list(STAGES), 'revisions': revisions,
             'topic_card': _safe_yaml(rev / 'topic/card.yaml'),
             'dossier': _safe_yaml(rev / 'topic/dossier.yaml'),
@@ -2502,6 +2544,16 @@ def review_bundle(
     prod_rev = product_review.review_view(rev)
     pron_qa = _summarize_pronunciation_qa(rev / 'reviews/pronunciation-qa.json')
     frame_insp = _frame_inspector_payload(rev, project_dir.name, tl_rows, prod_rev, pron_qa)
+    progress_info = project_progress.compute_project_progress(
+        root,
+        project_dir,
+        project,
+        gate=gate,
+        blocked_note=blocked,
+        paused=is_paused and not gate,
+        doctor_question=open_q,
+        total_lines=len(lines),
+    )
     return {
         'slug': project_dir.name, 'title': factory.project_title(project_dir, project),
         'code': project_codes(root)[project_dir.name],
@@ -2509,6 +2561,7 @@ def review_bundle(
         'gate': gate, 'revision': project.active_revision,
         'paused': is_paused, 'paused_info': paused_info, 'blocked': blocked,
         'doctor_question': open_q,
+        'progress': progress_info,
         'stage_index': stage_index(project), 'stages': list(STAGES), 'revisions': revisions,
         'topic_card': _safe_yaml(rev / 'topic/card.yaml'),
         'dossier': _safe_yaml(rev / 'topic/dossier.yaml'),
@@ -3117,6 +3170,9 @@ def _logs_sig(root: Path) -> tuple:
         if not entry.is_dir(follow_symlinks=False):
             continue
         sdir = Path(entry.path)
+        if entry.name == 'render':
+            items.append((entry.name, _dir_sig(sdir, suffix='.log')))
+            continue
         items.append((
             entry.name,
             _stat_sig(sdir),

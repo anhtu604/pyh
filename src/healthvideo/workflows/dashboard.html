@@ -186,7 +186,7 @@ button{font:inherit;cursor:pointer;border:0;color:inherit}
 .load-err{display:grid;gap:10px;justify-items:start;padding:18px;color:var(--text);text-align:left}
 .load-err p{color:var(--muted);font-size:var(--fs-sm)}
 .plist{display:grid;gap:10px}
-.prow{display:grid;grid-template-columns:minmax(0,1fr) 200px auto;grid-template-areas:"head prog act" "main prog act";gap:6px 20px;align-items:center;padding:14px 16px 14px 18px;cursor:pointer;position:relative;transition:border-color .2s}
+.prow{display:grid;grid-template-columns:minmax(0,1fr) 236px auto;grid-template-areas:"head prog act" "main prog act";gap:6px 20px;align-items:center;padding:14px 16px 14px 18px;cursor:pointer;position:relative;transition:border-color .2s}
 .prow:hover{border-color:var(--line-strong)}
 .prow.gate,.prow.st-doctor{border-color:color-mix(in srgb,var(--brand-yellow) 55%,transparent)}
 .prow.blocked{border-color:color-mix(in srgb,var(--st-error) 50%,transparent)}
@@ -200,9 +200,33 @@ button{font:inherit;cursor:pointer;border:0;color:inherit}
 .prow .chip{max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .prow-who{display:block;font-size:var(--fs-xs);line-height:1.4;font-weight:600;color:var(--muted);margin-top:4px;min-width:0;overflow-wrap:anywhere}
 .prow-who.none{color:var(--faint);font-weight:500}
-.prow-prog{grid-area:prog;display:grid;gap:6px;min-width:0}
+.prow-prog{grid-area:prog;display:grid;gap:5px;min-width:0}
 .prow-step{font-size:var(--fs-xs);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .prow-step b{color:var(--text);font-weight:700}
+.pprog{display:grid;gap:5px;min-width:0}
+.pprog-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;min-width:0}
+.pprog-stage{font-size:var(--fs-xs);font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pprog-pct{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--text);flex-shrink:0}
+.pprog-track{height:8px;border-radius:999px;background:color-mix(in srgb,var(--text) 12%,transparent);overflow:hidden}
+.pprog-fill{display:block;height:100%;border-radius:999px;background:var(--st-run);transition:width .35s var(--ease)}
+.pprog-meta{display:flex;align-items:baseline;justify-content:space-between;gap:8px;font-size:11.5px;line-height:1.35;color:var(--muted);min-width:0}
+.pprog-detail{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pprog-time{font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums;color:var(--faint);white-space:nowrap;flex-shrink:0}
+.pprog.is-gate .pprog-stage,.pprog.is-gate .pprog-pct{color:var(--st-doctor)}
+.pprog.is-gate .pprog-fill{background:var(--st-doctor)}
+.pprog.is-error .pprog-stage,.pprog.is-error .pprog-pct,.pprog.is-error .pprog-detail{color:var(--st-error)}
+.pprog.is-error .pprog-fill{background:var(--st-error)}
+.pprog.is-paused .pprog-stage,.pprog.is-paused .pprog-pct{color:var(--st-paused)}
+.pprog.is-paused .pprog-fill{background:var(--st-paused)}
+.pprog.is-done .pprog-stage,.pprog.is-done .pprog-pct{color:var(--st-done)}
+.pprog.is-done .pprog-fill{background:var(--st-done)}
+.pv-prog-bar{padding:10px 22px;background:var(--panel-2);border-bottom:1px solid var(--line)}
+.pv-prog-bar[hidden]{display:none}
+.pv-prog-bar .pprog{max-width:960px;margin:0 auto}
+.pv-prog-bar .pprog-track{height:9px}
+.pv-prog-bar .pprog-stage{font-size:var(--fs-sm)}
+.pv-prog-bar .pprog-pct{font-size:14px}
+@media (max-width:640px){.pv-prog-bar{padding:10px 14px}}
 .prow-act{grid-area:act;display:flex;gap:6px;align-items:center;justify-content:flex-end}
 .prow-title:focus-visible,.pmenu summary:focus-visible{outline:3px solid var(--focus);outline-offset:2px;border-radius:6px}
 .msteps{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
@@ -217,7 +241,7 @@ button{font:inherit;cursor:pointer;border:0;color:inherit}
 .pmenu-pop .btn{justify-content:flex-start;width:100%}
 @media (max-width:860px){
   .prow{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"head act" "main main" "prog prog";row-gap:8px}
-  .prow-prog{grid-template-columns:minmax(90px,150px) minmax(0,1fr);align-items:center;gap:10px}
+  .prow-prog{display:grid;gap:5px}
 }
 @media (max-width:520px){
   .prow{grid-template-columns:minmax(0,1fr);grid-template-areas:"head" "main" "prog" "act";padding:14px}
@@ -1330,6 +1354,7 @@ html[data-theme="light"] .ws-iso-stage{background:radial-gradient(ellipse 62% 46
     <button class="btn" id="pv-packet" type="button">Mở gói duyệt đầy đủ</button>
     <button class="btn danger" id="pv-delete" type="button">Xoá dự án</button>
   </div>
+  <div class="pv-prog-bar" id="pv-progress-slot" hidden></div>
   <nav class="tabs" id="pv-tabs" role="tablist"></nav>
   <div class="vbody" id="pv-scroll">
     <div class="vinner">
@@ -2425,6 +2450,91 @@ function handlerView(p, ovp){
 }
 
 const REOPENABLE=['medically_approved','production_in_progress','needs_production_revision'];
+const FALLBACK_STATE_PCT={
+  idea:0, topic_selected:5, topic_rejected:0, research_in_progress:5,
+  evidence_ready:20, draft_ready:30, needs_medical_revision:30,
+  awaiting_medical_review:40, medically_approved:45, production_in_progress:45,
+  needs_production_revision:45, awaiting_video_review:85, video_approved:95,
+  packaged:100, published_manual:100,
+};
+function formatHhmmFromIso(iso){
+  if(!iso) return '';
+  const dt = new Date(iso);
+  if(Number.isNaN(dt.getTime())) return '';
+  return `${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`;
+}
+function resolveProjectProgress(p, ovp, stages){
+  const raw = (ovp && ovp.progress) || (p && p.progress) || null;
+  if(raw && typeof raw === 'object' && typeof raw.percent === 'number'){
+    return raw;
+  }
+  const src = p || ovp || {};
+  const st = String(src.state || '');
+  const done = st === 'packaged' || st === 'published_manual';
+  const stageIdx = Math.min(Math.max(src.stage ?? src.stage_index ?? 0, 0), 6);
+  const stageName = (stages && stages[stageIdx]) || 'Chủ đề';
+  const pct = done ? 100 : (FALLBACK_STATE_PCT[st] ?? Math.round((stageIdx / 6) * 100));
+  const isGate = Boolean(src.gate);
+  const isQuestion = Boolean(src.doctor_question) && !isGate;
+  const isError = Boolean(src.blocked) && !isGate && !done;
+  const isPaused = Boolean(ovp?.paused ?? src.paused) && !isGate && !done && !isError;
+  const status = done ? 'done' : (isGate || isQuestion ? 'gate' : (isError ? 'error' : (isPaused ? 'paused' : 'running')));
+  const label = done ? (st === 'packaged' ? 'Đã đóng gói' : 'Đã đăng')
+    : (isGate ? 'Chờ bác sĩ duyệt' : (isQuestion ? 'Chờ ý kiến bác sĩ' : stageName));
+  const detail = isError ? friendlyError(src.blocked)
+    : (isGate ? (src.gate === 'medical' ? 'Cổng y khoa' : (src.gate === 'video' ? 'Cổng video' : ''))
+    : (isPaused ? 'Tạm dừng' : ''));
+  return {
+    percent: Math.max(0, Math.min(100, Math.round(pct))),
+    stage_index: stageIdx,
+    stage_name: stageName,
+    status,
+    label,
+    detail,
+    sub_percent: null,
+    sub_label: '',
+    updated_hhmm: formatHhmmFromIso(ovp?.updated_at || src.updated_at || ''),
+    updated_at: ovp?.updated_at || src.updated_at || '',
+  };
+}
+function renderProjectProgressHtml(prog, opts = {}){
+  const pct = Math.max(0, Math.min(100, Math.round(Number(prog?.percent ?? 0))));
+  const status = String(prog?.status || 'running');
+  const statusCls = ['running','gate','error','paused','done'].includes(status) ? `is-${status}` : 'is-running';
+  const label = String(prog?.label || prog?.stage_name || 'Đang xử lý');
+  const detail = String(prog?.detail || '').trim();
+  const hhmm = String(prog?.updated_hhmm || formatHhmmFromIso(prog?.updated_at || '')).trim();
+  const timeText = hhmm ? `cập nhật ${hhmm}` : '';
+  const ariaLabel = `${label} · ${pct}%${detail ? ` · ${detail}` : ''}`;
+  const showMeta = Boolean(detail || timeText);
+  return `<div class="pprog ${statusCls}" data-progress-status="${esc(status)}" data-progress-percent="${pct}">
+    <div class="pprog-head">
+      <span class="pprog-stage" title="${esc(label)}">${esc(label)}</span>
+      <span class="pprog-pct">${pct}%</span>
+    </div>
+    <div class="pprog-track" role="progressbar" aria-label="${esc(ariaLabel)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}">
+      <i class="pprog-fill" style="width:${pct}%"></i>
+    </div>
+    ${showMeta ? `<div class="pprog-meta">
+      <span class="pprog-detail" title="${esc(detail)}">${esc(detail)}</span>
+      ${timeText ? `<span class="pprog-time">${esc(timeText)}</span>` : ''}
+    </div>` : ''}
+  </div>`;
+}
+function renderPvProgress(b){
+  const slot = $('pv-progress-slot');
+  if(!slot) return;
+  if(!b){
+    slot.innerHTML = '';
+    slot.hidden = true;
+    return;
+  }
+  const ovp = (overviewData?.projects || []).find(x => x.slug === b.slug) || null;
+  const stp = (state?.projects || []).find(x => x.slug === b.slug) || null;
+  const prog = resolveProjectProgress(b, ovp || stp, b.stages || state?.stages || []);
+  slot.innerHTML = renderProjectProgressHtml(prog);
+  slot.hidden = false;
+}
 function renderProjects(d){
   const box=$('projects');
   const expanded = new Set([...box.querySelectorAll('.pmenu[open]')].map(el => el.dataset.projectMore));
@@ -2468,15 +2578,7 @@ function renderProjects(d){
     more.push(`<button type="button" class="btn ghost" data-chat-project="${esc(p.slug)}" data-revision="${esc(p.revision)}">💬 Nhắn điều phối</button>`);
     more.push(`<button type="button" class="btn ghost" data-act="/api/project/${q}/folder">Mở thư mục</button>`);
     more.push(`<button type="button" class="btn danger" data-delete-project="${esc(p.slug)}">Xoá dự án</button>`);
-    const stage = Math.min(Math.max(p.stage ?? 0, 0), 6);
-    const stageName = stages[stage] || '';
-    const bars = [0,1,2,3,4,5,6].map(k => {
-      let c='step';
-      if(k<stage || done) c+=' done';
-      else if(k===stage){ c+=' cur'; if(isPaused) c+=' paused'; else if(p.gate || p.doctor_question) c+=' wait'; if(cls==='bad') c+=' bad'; }
-      return `<div class="${c}"><div class="bar"></div></div>`;
-    }).join('');
-    const stepsTip = done ? 'Đã hoàn tất 7/7 bước' : `Bước ${stage+1}/7: ${stageName}`;
+    const prog = resolveProjectProgress(p, ovp, stages);
     const chipText = cls==='question' ? 'Chờ ý kiến bác sĩ'
       : (cls==='gate' ? (p.gate==='medical' ? 'Chờ bác sĩ · Duyệt y khoa' : (p.gate==='video' ? 'Chờ bác sĩ · Duyệt video' : 'Chờ bác sĩ'))
       : (cls==='bad' ? 'Lỗi cần xử lý'
@@ -2487,7 +2589,6 @@ function renderProjects(d){
     const whoText = ap.active ? ap.statusText : hv.who;
     const reasonHtml = reasonText ? `<div class="prow-reason ${ap.active || hv.kind==='paused' || hv.kind==='doctor'?'':'bad'}" title="${esc(reasonText)}">${esc(reasonText)}</div>` : '';
     const whoHtml = whoText && whoText !== '—' ? `<div class="prow-who ${!ap.active && hv.none?'none':''}" title="${esc(whoText)}">${esc(whoText)}</div>` : '';
-    const stepHtml = done ? '<b>Hoàn tất 7/7 bước</b>' : `Bước ${stage+1}/7 · <b>${esc(stageName)}</b>`;
     return `<article class="glass prow ${p.gate?'gate':''} ${p.doctor_question?'st-doctor':''} ${cls==='bad'?'blocked':''}" data-row-slug="${esc(p.slug)}">
         <div class="prow-head">
           <span class="prow-code">${esc(p.code || '')}</span>
@@ -2499,8 +2600,7 @@ function renderProjects(d){
           ${whoHtml}
         </div>
         <div class="prow-prog">
-          <div class="prow-step">${stepHtml}</div>
-          <div class="msteps" role="img" aria-label="${esc(stepsTip)}" title="${esc(stepsTip)}">${bars}</div>
+          ${renderProjectProgressHtml(prog)}
         </div>
         <div class="prow-act">
           ${primary}
@@ -2818,6 +2918,14 @@ async function refresh(opts = {}){
       if(ov) renderOverview(ov);
       if(actData) renderActivityFeed(actData);
       render(d);
+      if(pv && pv.slug){
+        const liveProj = (ov?.projects || []).find(x => x.slug === pv.slug)
+          || (d?.projects || []).find(x => x.slug === pv.slug);
+        if(liveProj && liveProj.progress){
+          pv.progress = liveProj.progress;
+          renderPvProgress(pv);
+        }
+      }
       renderWorkshop();
       if(!busy) document.querySelectorAll('main button, header button').forEach(b=>{if(!b.closest('#channel')) b.disabled=false;});
       syncStartGate();
@@ -2922,6 +3030,7 @@ async function openProduct(slug, tab){
     const projHint = (overviewData?.projects || state?.projects || []).find(p => p.slug === slug);
     $('pv-title').textContent = projHint ? [projHint.code, projHint.title].filter(Boolean).join(' · ') : slug;
     $('pv-meta').textContent = `${slug} · đang tải…`;
+    renderPvProgress(projHint || null);
     $('pv-tabs').innerHTML = '';
     $('pv-card-slot').innerHTML = '';
     $('pv-body').innerHTML = pvSkeletonHtml('Đang mở dự án…');
@@ -2941,6 +3050,7 @@ async function openProduct(slug, tab){
     const chip = $('pv-chip');
     chip.textContent = b.state_label;
     chip.className = 'chip ' + chipClass(b);
+    renderPvProgress(b);
     updateChatContext({slug: b.slug, revision: b.revision, view: pvTab, scene: null, time_s: null});
     renderDecisionCardSlot(b);
     renderPv();
@@ -2952,6 +3062,7 @@ function closeProduct(){
   if(typeof stopPvVideoRuntime==='function') stopPvVideoRuntime();
   pauseMedia();
   $('pv').classList.remove('show', 'is-video-mode');
+  renderPvProgress(null);
   document.body.style.overflow='';
   pv=null;
   if(!userChatCollapsed) toggleChatPanel(true, {remember: false});

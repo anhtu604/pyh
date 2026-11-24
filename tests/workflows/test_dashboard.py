@@ -2691,3 +2691,55 @@ def test_server_cache_invalidates_on_file_change_ttl_and_poll(tmp_path, monkeypa
             assert calls['state'] == 2 and calls['medanim'] == 2
         finally:
             server.shutdown()
+
+
+def test_project_progress_in_poll_state_overview_and_bundle_with_render_log(tmp_path, monkeypatch):
+    from healthvideo.storage.files import write_yaml_atomic
+
+    project = create_v2_project_fixture(tmp_path / 'projects')
+    manifest_data = read_yaml(project / 'project.yaml')
+    manifest_data['state'] = 'production_in_progress'
+    manifest_data['side_state'] = None
+    write_yaml_atomic(project / 'project.yaml', manifest_data)
+    video_mp4 = project / 'revisions/001/renders/video.mp4'
+    if video_mp4.exists():
+        video_mp4.unlink()
+    monkeypatch.setattr(factory, 'running_pid', lambda _: None)
+    monkeypatch.setattr(dashboard, 'pin_path', lambda: tmp_path / 'config' / 'approver-pin.json')
+
+    with dashboard.DashboardServer(tmp_path, 0, token='tok-prog') as srv:
+        thread = threading.Thread(target=srv.serve_forever, daemon=True)
+        thread.start()
+        try:
+            st, body = request(srv, 'GET', '/api/poll')
+            assert st == 200
+            poll = json.loads(body)
+            st_proj = poll['status']['projects'][0]['progress']
+            ov_proj = poll['overview']['projects'][0]['progress']
+            assert st_proj['percent'] == 45
+            assert ov_proj['percent'] == 45
+            assert ov_proj['status'] == 'running'
+            assert ov_proj['stage_name'] == 'Sản xuất'
+            assert ov_proj['updated_hhmm']
+
+            # Writing a Remotion render log invalidates cache and updates progress via /api/poll.
+            render_dir = tmp_path / 'topics' / 'logs' / 'render'
+            render_dir.mkdir(parents=True, exist_ok=True)
+            log_file = render_dir / '20261124T213000000000.log'
+            log_file.write_text(
+                f'pnpm render --output projects/{project.name}/revisions/001/out.mp4\n\nRendered 600/1000\n',
+                encoding='utf-8',
+            )
+            st2, body2 = request(srv, 'GET', '/api/poll')
+            assert st2 == 200
+            poll2 = json.loads(body2)
+            # 45 + 10 (TTS) + 60% of 30 (render) = 73
+            assert poll2['overview']['projects'][0]['progress']['percent'] == 73
+            assert poll2['overview']['projects'][0]['progress']['sub_percent'] == 60
+
+            st_b, body_b = request(srv, 'GET', f'/api/project/{project.name}/bundle?lite=1')
+            assert st_b == 200
+            bundle = json.loads(body_b)
+            assert bundle['progress']['percent'] == 73
+        finally:
+            srv.shutdown()
