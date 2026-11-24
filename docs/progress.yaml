@@ -526,7 +526,7 @@ phases:
     title: Tích hợp sản xuất, cache, nguồn và cổng
     status: done
     owner: codex
-    note: 'Đã vào master: sổ vòng chấm bền (lời 2, hình 3, sản phẩm 3) trừ một lần ngay trước khi gọi critic, restart không reset, hết vòng dừng trình bác sĩ (chỉ r5_v1); critic hết model độc lập thì dừng, không quay về model maker (mọi project). pytest 3002 đạt. Codex làm phần đầu, agy hoàn tất.'
+    note: 'Đã vào master b4c233a: R5 đo lại chất lượng sau căn giọng, báo cáo gắn với đúng bản dựng; danh sách hình và sổ giấy phép ghi lúc nộp cổng y khoa, cổng chỉ kiểm; credit dùng giấy phép thật; cache theo giọng/tốc độ/shot; clip dọc giữ chuẩn R5. pytest 3015, Vitest 500 đạt. Codex làm phần đầu, agy hoàn tất.'
   - id: R5.3.9
     title: Giới hạn vòng chấm và chẩn đoán bền qua restart
     status: done
