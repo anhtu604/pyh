@@ -515,3 +515,15 @@ phases:
     status: done
     owner: agy
     note: 'Đã vào master: rig men gan vào máu chạy theo mốc action (3 bước tường minh, không dò từ khóa), dùng hình có giấy phép, có bản 9:16; Vitest 9 đạt, tsc sạch. Nối vào video ở R5.3.7.'
+
+  - id: R5.3.7
+    title: Renderer R5, bỏ tab thành bảng, khóa chính sách phụ đề
+    status: doing
+    owner: agy
+    note: 'Nối bộ component R5 và rig men gan vào video; 16:9 không phụ đề, 9:16 có phụ đề; project cũ giữ renderer cũ.'
+
+  - id: R5.3.9
+    title: Giới hạn vòng chấm và chẩn đoán bền qua restart
+    status: doing
+    owner: codex
+    note: 'Lời 2, hình 3, sản phẩm 3 vòng; restart không reset; hết vòng thì dừng trình bác sĩ.'
