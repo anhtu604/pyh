@@ -466,9 +466,9 @@ phases:
     note: 'Xong (docs/reference/2026-11-23-medanim-signature.md): xem 7 kênh (Nucleus, Zack, Osmosis, Kurzgesagt, TED-Ed, Armando, HayHo); chọn rig 2D vector Remotion làm nền, 3D chọn lọc; 26 hoạt ảnh lõi, đợt đầu 6. Bác sĩ 2026-11-23 chọn hoạt ảnh y khoa làm đặc trưng; codex xem mẫu thật, kiểm thư viện medanim, so 2-3 cách sản xuất theo chất lượng/thời gian/chi phí.'
   - id: R5.5
     title: Làm thử 90 giây đầu PYH-003 theo chuẩn mới (nhân vật kể chuyện, mỗi câu một hình)
-    status: doing
+    status: done
     owner: agy
-    note: 'Vòng 5 (agy Neon): bác sĩ cho tải hình giải phẫu Servier (CC BY 4.0) và NIAID (phạm vi công cộng) để thay thân người tự vẽ; đổi nửa sau từ thẻ chữ sang cảnh chuyển động. Bản trước: cache/r5-proto/chapter1-deep-v5.mp4.'
+    note: 'Chương 1 v6 chờ bác sĩ xem: cache/r5-proto/chapter1-deep-v6.mp4 (5 phút 11 giây). Hình giải phẫu NIAID/Servier có giấy phép, nửa sau chuyển thành cảnh chuyển động, mascot ở các câu chốt. Nhánh r5-5, chưa vào master.'
   - id: R5.6
     title: Làm lại hoạt ảnh men gan theo chuẩn một tác nhân - một thay đổi, gần như không chữ
     status: done
