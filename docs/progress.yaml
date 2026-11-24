@@ -532,3 +532,9 @@ phases:
     status: done
     owner: codex
     note: 'Đã vào master: sổ vòng chấm bền (lời 2, hình 3, sản phẩm 3) trừ một lần ngay trước khi gọi critic, restart không reset, hết vòng dừng trình bác sĩ (chỉ r5_v1); critic hết model độc lập thì dừng, không quay về model maker (mọi project). pytest 3002 đạt. Codex làm phần đầu, agy hoàn tất.'
+
+  - id: R5.3.10
+    title: Chốt chuẩn R5, kiểm tích hợp offline và bàn giao
+    status: doing
+    owner: agy
+    note: 'Kiểm toàn luồng R5 offline (lời → cổng → dựng giả → chấm → đóng gói), thêm mục chuẩn R5 bác sĩ đã chốt vào factory-standards (chỉ thêm).'
