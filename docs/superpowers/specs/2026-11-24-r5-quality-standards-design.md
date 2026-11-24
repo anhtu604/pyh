@@ -1,6 +1,6 @@
 # R5.3 — Chuẩn chất lượng PYH: giải thích sâu, hình diễn hành
 
-Ngày 2026-11-24 · Trạng thái: dự thảo để bác sĩ chốt các ngưỡng đề xuất ở §10.
+Ngày 2026-11-24 · Trạng thái: bác sĩ đã chốt D1, D2, D4, D5 theo phương án đề xuất ngày 2026-11-24; D3 dùng phương án đề xuất (không bịa cập nhật) cho tới khi bác sĩ đổi. Xem §10.
 Phạm vi phiên này: chỉ viết spec và kế hoạch; không thay code/cấu hình, không commit, không gọi Vibi/FLUX, không bật xưởng.
 
 ## 1. Căn cứ, hiệu lực và giới hạn bằng chứng
@@ -174,5 +174,7 @@ Giảm thời gian theo thứ tự: dùng cache WAV theo voice/speed/text/lexico
 | D3. Cập nhật khi thiếu nguồn mới phù hợp | **Chỉ rõ nguồn mới nhất tìm được/ngày tìm, nói chưa có cập nhật đủ chắc**; hoặc hoãn chủ đề tới khi bổ sung được nguồn | Không bịa “nghiên cứu mới”, không gọi hướng dẫn cũ là phát hiện mới |
 | D4. Hết budget review | **Dừng và trình brief cho bác sĩ chọn hướng, không tự reset**; hoặc bác sĩ cho một đợt bổ sung hữu hạn có phạm vi/đếm riêng | Cả hai không cho lỗi y khoa vượt cổng, không coi hỏi ý kiến là xin PIN |
 | D5. Pilot nghiệm thu sau triển khai | **Một chủ đề thật 10–15 phút, ưu tiên chuỗi gan tái dùng**; hoặc một chủ đề mới 15–25 phút | Chỉ làm sau khi bác sĩ cho phép bật lại xưởng, đủ hai cổng; không tự đăng |
+
+**Đã chốt 2026-11-24:** D1 ≤15%, mỗi thẻ ≤6s; D2 ngưỡng cứng thử nghiệm; D4 dừng và trình bác sĩ; D5 chủ đề gan 10–15 phút (chỉ chạy khi bác sĩ cho bật lại xưởng). D3 theo phương án đề xuất.
 
 Kế hoạch đi kèm: `docs/superpowers/plans/2026-11-24-r5-quality-standards.md`. Chốt spec không đồng nghĩa cho phép chạy pilot; năm lựa chọn này không mở lại các quyết định đã chốt ở §2.
