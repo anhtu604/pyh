@@ -80,3 +80,27 @@ entries:
     spoken: xáp-xcrai
     needs_doctor_review: true
     note: Đề xuất, cần bác sĩ xác nhận.
+  - written: HBsAg
+    spoken: hát bê ét a gê
+    needs_doctor_review: false
+    note: Bác sĩ chọn 2026-11-25.
+  - written: MASLD
+    spoken: em a ét eo đê
+    needs_doctor_review: false
+    note: Bác sĩ chọn 2026-11-25.
+  - written: anti-HCV
+    spoken: an-ti hát xê vê
+    needs_doctor_review: false
+    note: Bác sĩ chọn 2026-11-25.
+  - written: HCV RNA
+    spoken: hát xê vê a-rê-en-ây
+    needs_doctor_review: false
+    note: Bác sĩ chọn 2026-11-25.
+  - written: HCV
+    spoken: hát xê vê
+    needs_doctor_review: false
+    note: Theo cách đọc anti-HCV bác sĩ chọn 2026-11-25.
+  - written: DILIN
+    spoken: đi-lin
+    needs_doctor_review: false
+    note: Bác sĩ chọn 2026-11-25.
