@@ -300,6 +300,596 @@
       "title": "MascotPose",
       "type": "string"
     },
+    "R5Action": {
+      "additionalProperties": false,
+      "properties": {
+        "actor": {
+          "pattern": "\\S",
+          "title": "Actor",
+          "type": "string"
+        },
+        "change": {
+          "pattern": "\\S",
+          "title": "Change",
+          "type": "string"
+        },
+        "compartment": {
+          "pattern": "\\S",
+          "title": "Compartment",
+          "type": "string"
+        },
+        "end": {
+          "$ref": "#/$defs/R5Anchor"
+        },
+        "outcome": {
+          "pattern": "\\S",
+          "title": "Outcome",
+          "type": "string"
+        },
+        "start": {
+          "$ref": "#/$defs/R5Anchor"
+        }
+      },
+      "required": [
+        "actor",
+        "compartment",
+        "change",
+        "outcome",
+        "start",
+        "end"
+      ],
+      "title": "R5Action",
+      "type": "object"
+    },
+    "R5Anchor": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "scene_start",
+            "scene_end",
+            "phrase"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "line_id": {
+          "anyOf": [
+            {
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Line Id"
+        },
+        "phrase": {
+          "anyOf": [
+            {
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Phrase"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "R5Anchor",
+      "type": "object"
+    },
+    "R5Block": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "\\S",
+          "title": "Id",
+          "type": "string"
+        },
+        "line_ids": {
+          "items": {
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Line Ids",
+          "type": "array"
+        },
+        "professional_update": {
+          "title": "Professional Update",
+          "type": "boolean"
+        },
+        "question_ids": {
+          "items": {
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Question Ids",
+          "type": "array"
+        },
+        "takeaway_line_id": {
+          "pattern": "\\S",
+          "title": "Takeaway Line Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "line_ids",
+        "question_ids",
+        "takeaway_line_id",
+        "professional_update"
+      ],
+      "title": "R5Block",
+      "type": "object"
+    },
+    "R5Contract": {
+      "additionalProperties": false,
+      "properties": {
+        "blocks": {
+          "items": {
+            "$ref": "#/$defs/R5Block"
+          },
+          "minItems": 1,
+          "title": "Blocks",
+          "type": "array"
+        },
+        "questions": {
+          "items": {
+            "$ref": "#/$defs/R5Question"
+          },
+          "maxItems": 4,
+          "minItems": 2,
+          "title": "Questions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "questions",
+        "blocks"
+      ],
+      "title": "R5Contract",
+      "type": "object"
+    },
+    "R5Question": {
+      "additionalProperties": false,
+      "properties": {
+        "answer_line_ids": {
+          "items": {
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Answer Line Ids",
+          "type": "array"
+        },
+        "hook_line_id": {
+          "pattern": "\\S",
+          "title": "Hook Line Id",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "\\S",
+          "title": "Id",
+          "type": "string"
+        },
+        "text": {
+          "pattern": "\\S",
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "text",
+        "hook_line_id",
+        "answer_line_ids"
+      ],
+      "title": "R5Question",
+      "type": "object"
+    },
+    "R5Shot": {
+      "additionalProperties": false,
+      "properties": {
+        "actions": {
+          "items": {
+            "$ref": "#/$defs/R5Action"
+          },
+          "title": "Actions",
+          "type": "array"
+        },
+        "asset_paths": {
+          "items": {
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "title": "Asset Paths",
+          "type": "array"
+        },
+        "component": {
+          "enum": [
+            "ScaleChain",
+            "ZoomChain",
+            "TakeawayCard",
+            "VnLabSheet",
+            "ReferenceDistribution",
+            "CreditCard",
+            "R5LiverLeakSignature"
+          ],
+          "title": "Component",
+          "type": "string"
+        },
+        "end": {
+          "$ref": "#/$defs/R5Anchor"
+        },
+        "id": {
+          "pattern": "\\S",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "story",
+            "mechanism",
+            "recap",
+            "credit"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "long_shot_reason": {
+          "anyOf": [
+            {
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Long Shot Reason"
+        },
+        "question_ids": {
+          "items": {
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "title": "Question Ids",
+          "type": "array"
+        },
+        "start": {
+          "$ref": "#/$defs/R5Anchor"
+        },
+        "text_windows": {
+          "items": {
+            "$ref": "#/$defs/R5TextWindow"
+          },
+          "title": "Text Windows",
+          "type": "array"
+        },
+        "tier": {
+          "anyOf": [
+            {
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Tier"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "tier",
+        "component",
+        "asset_paths",
+        "question_ids",
+        "start",
+        "end",
+        "actions",
+        "text_windows"
+      ],
+      "title": "R5Shot",
+      "type": "object"
+    },
+    "R5TextWindow": {
+      "additionalProperties": false,
+      "properties": {
+        "claim_ids": {
+          "default": [],
+          "items": {
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "title": "Claim Ids",
+          "type": "array"
+        },
+        "end": {
+          "$ref": "#/$defs/R5Anchor"
+        },
+        "exception_reason": {
+          "anyOf": [
+            {
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Exception Reason"
+        },
+        "kind": {
+          "enum": [
+            "question",
+            "takeaway",
+            "worksheet",
+            "source_card",
+            "table",
+            "lab_sheet",
+            "text_tree",
+            "credit",
+            "label",
+            "scale_bar"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "start": {
+          "$ref": "#/$defs/R5Anchor"
+        },
+        "text": {
+          "pattern": "\\S",
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "text",
+        "start",
+        "end"
+      ],
+      "title": "R5TextWindow",
+      "type": "object"
+    },
+    "ResolvedR5Action": {
+      "additionalProperties": false,
+      "properties": {
+        "actor": {
+          "pattern": "\\S",
+          "title": "Actor",
+          "type": "string"
+        },
+        "change": {
+          "pattern": "\\S",
+          "title": "Change",
+          "type": "string"
+        },
+        "compartment": {
+          "pattern": "\\S",
+          "title": "Compartment",
+          "type": "string"
+        },
+        "end_frame": {
+          "minimum": 0,
+          "title": "End Frame",
+          "type": "integer"
+        },
+        "outcome": {
+          "pattern": "\\S",
+          "title": "Outcome",
+          "type": "string"
+        },
+        "start_frame": {
+          "minimum": 0,
+          "title": "Start Frame",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "start_frame",
+        "end_frame",
+        "actor",
+        "compartment",
+        "change",
+        "outcome"
+      ],
+      "title": "ResolvedR5Action",
+      "type": "object"
+    },
+    "ResolvedR5Shot": {
+      "additionalProperties": false,
+      "properties": {
+        "actions": {
+          "items": {
+            "$ref": "#/$defs/ResolvedR5Action"
+          },
+          "title": "Actions",
+          "type": "array"
+        },
+        "asset_paths": {
+          "items": {
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "title": "Asset Paths",
+          "type": "array"
+        },
+        "component": {
+          "enum": [
+            "ScaleChain",
+            "ZoomChain",
+            "TakeawayCard",
+            "VnLabSheet",
+            "ReferenceDistribution",
+            "CreditCard",
+            "R5LiverLeakSignature"
+          ],
+          "title": "Component",
+          "type": "string"
+        },
+        "end_frame": {
+          "minimum": 0,
+          "title": "End Frame",
+          "type": "integer"
+        },
+        "id": {
+          "pattern": "\\S",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "story",
+            "mechanism",
+            "recap",
+            "credit"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "long_shot_reason": {
+          "anyOf": [
+            {
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Long Shot Reason"
+        },
+        "question_ids": {
+          "items": {
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "title": "Question Ids",
+          "type": "array"
+        },
+        "start_frame": {
+          "minimum": 0,
+          "title": "Start Frame",
+          "type": "integer"
+        },
+        "text_windows": {
+          "items": {
+            "$ref": "#/$defs/ResolvedR5TextWindow"
+          },
+          "title": "Text Windows",
+          "type": "array"
+        },
+        "tier": {
+          "anyOf": [
+            {
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Tier"
+        }
+      },
+      "required": [
+        "start_frame",
+        "end_frame",
+        "id",
+        "kind",
+        "tier",
+        "component",
+        "asset_paths",
+        "question_ids",
+        "actions",
+        "text_windows"
+      ],
+      "title": "ResolvedR5Shot",
+      "type": "object"
+    },
+    "ResolvedR5TextWindow": {
+      "additionalProperties": false,
+      "properties": {
+        "claim_ids": {
+          "default": [],
+          "items": {
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "title": "Claim Ids",
+          "type": "array"
+        },
+        "end_frame": {
+          "minimum": 0,
+          "title": "End Frame",
+          "type": "integer"
+        },
+        "exception_reason": {
+          "anyOf": [
+            {
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Exception Reason"
+        },
+        "kind": {
+          "enum": [
+            "question",
+            "takeaway",
+            "worksheet",
+            "source_card",
+            "table",
+            "lab_sheet",
+            "text_tree",
+            "credit",
+            "label",
+            "scale_bar"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "start_frame": {
+          "minimum": 0,
+          "title": "Start Frame",
+          "type": "integer"
+        },
+        "text": {
+          "pattern": "\\S",
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "start_frame",
+        "end_frame",
+        "kind",
+        "text"
+      ],
+      "title": "ResolvedR5TextWindow",
+      "type": "object"
+    },
     "Scene": {
       "allOf": [
         {
@@ -617,6 +1207,14 @@
           "default": null,
           "title": "On Screen Text"
         },
+        "resolved_shots": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ResolvedR5Shot"
+          },
+          "title": "Resolved Shots",
+          "type": "array"
+        },
         "schema_version": {
           "default": "1.0",
           "title": "Schema Version",
@@ -641,6 +1239,14 @@
           },
           "maxItems": 2,
           "title": "Sfx",
+          "type": "array"
+        },
+        "shots": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/R5Shot"
+          },
+          "title": "Shots",
           "type": "array"
         },
         "source_card": {
@@ -1210,6 +1816,30 @@
       ],
       "title": "Height",
       "type": "integer"
+    },
+    "quality_profile": {
+      "anyOf": [
+        {
+          "const": "r5_v1",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Quality Profile"
+    },
+    "r5_contract": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/R5Contract"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "scenes": {
       "items": {

@@ -5,6 +5,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from healthvideo.domain.format_profile import FORMAT_SPECS, FormatProfile
+from healthvideo.domain.quality_standards import QualityProfile, R5Contract
 from healthvideo.domain.storyboard import Scene, Storyboard, VisualStyle
 from healthvideo.domain.visual_budget import VisualBudgetProfile
 
@@ -44,6 +45,8 @@ class RenderInput(BaseModel):
 
     schema_version: str = "1.0"
     title: str
+    quality_profile: QualityProfile | None = Field(default=None, exclude_if=lambda v: v is None)
+    r5_contract: R5Contract | None = Field(default=None, exclude_if=lambda v: v is None)
     visual_style: VisualStyle | None = Field(default=None, exclude_if=lambda v: v is None)
     youtube_cta: YouTubeCTA | None = None
     audio_file: str
@@ -55,13 +58,24 @@ class RenderInput(BaseModel):
     fps: Literal[30] = FRAMES_PER_SECOND
 
     @model_validator(mode="after")
+    def validate_r5_activation(self) -> "RenderInput":
+        if self.quality_profile is None and (
+            self.r5_contract is not None or any(s.shots or s.resolved_shots for s in self.scenes)
+        ):
+            raise ValueError("R5 data requires quality_profile=r5_v1")
+        if self.quality_profile == "r5_v1" and self.r5_contract is None:
+            raise ValueError("quality_profile=r5_v1 requires r5_contract")
+        return self
+
+    @model_validator(mode="after")
     def validate_m6_5_chart_refs(self) -> "RenderInput":
         from healthvideo.render.beats import visual_rhythm_qa
         from healthvideo.render.word_timing import entrance_timing_qa
 
         for scene in self.scenes:
             entrance_timing_qa(scene)
-            visual_rhythm_qa(scene)
+            if self.quality_profile is None:
+                visual_rhythm_qa(scene)
         spec = FORMAT_SPECS[self.format_profile]
         if (self.width, self.height) != (spec.width, spec.height):
             raise ValueError(
@@ -119,9 +133,12 @@ def build_render_input(
 
     return RenderInput(
         title=storyboard.title,
+        quality_profile=storyboard.quality_profile,
+        r5_contract=storyboard.r5_contract,
         visual_style=storyboard.visual_style,
         audio_file=audio_file,
-        scenes=tuple(resolve_scene_beats(scene) for scene in storyboard.scenes),
+        scenes=(storyboard.scenes if storyboard.quality_profile == "r5_v1"
+                else tuple(resolve_scene_beats(scene) for scene in storyboard.scenes)),
         visual_budget_profile=storyboard.visual_budget_profile,
         format_profile=storyboard.format_profile,
         width=spec.width,

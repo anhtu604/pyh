@@ -6,6 +6,101 @@ const unitCoordinate = z.number().min(0).max(1);
 
 const safeRelativePath = z.string().regex(/^(?!\.?\/?$)(?![A-Za-z]:)(?!\/)(?!.*\\)(?!.*(?:^|\/)\.\.(?:\/|$))\S+$/);
 
+// Wire contracts shared with domain/quality_standards.py. All R5 objects fail closed.
+export const R5_COMPONENT_IDS = ['ScaleChain', 'ZoomChain', 'TakeawayCard', 'VnLabSheet',
+  'ReferenceDistribution', 'CreditCard', 'R5LiverLeakSignature'] as const;
+const r5Nonblank = z.string().regex(/\S/);
+const r5Frame = z.number().int().nonnegative();
+const r5Kind = z.enum(['story', 'mechanism', 'recap', 'credit']);
+const r5TextKind = z.enum(['question', 'takeaway', 'worksheet', 'source_card', 'table',
+  'lab_sheet', 'text_tree', 'credit', 'label', 'scale_bar']);
+const r5Text = r5Nonblank.refine(s => !s.includes('\t'), 'R5 text forbids tab layout');
+const r5Paths = z.array(safeRelativePath.refine(s => !s.includes(':'), 'relative POSIX path'))
+  .refine(paths => new Set(paths).size === paths.length, 'duplicate asset path');
+
+export const R5QuestionSchema = z.object({
+  id: r5Nonblank, text: r5Nonblank, hook_line_id: r5Nonblank,
+  answer_line_ids: z.array(r5Nonblank).min(1),
+}).strict();
+export const R5BlockSchema = z.object({
+  id: r5Nonblank, line_ids: z.array(r5Nonblank).min(1), question_ids: z.array(r5Nonblank).min(1),
+  takeaway_line_id: r5Nonblank, professional_update: z.boolean(),
+}).strict().refine(b => b.line_ids.includes(b.takeaway_line_id), 'takeaway must belong to block');
+export const R5ContractSchema = z.object({
+  questions: z.array(R5QuestionSchema).min(2).max(4), blocks: z.array(R5BlockSchema).min(1),
+}).strict().superRefine((c, ctx) => {
+  const ids = new Set(c.questions.map(q => q.id));
+  const served = new Set(c.blocks.flatMap(b => b.question_ids));
+  if (ids.size !== c.questions.length || new Set(c.blocks.map(b => b.id)).size !== c.blocks.length) {
+    ctx.addIssue({code: 'custom', message: 'duplicate question or block ID'});
+  }
+  if (served.size !== ids.size || [...served].some(id => !ids.has(id))) {
+    ctx.addIssue({code: 'custom', message: 'blocks must serve exactly declared question IDs'});
+  }
+  if (!c.blocks.some(b => b.professional_update)) {
+    ctx.addIssue({code: 'custom', message: 'professional_update block required'});
+  }
+});
+export const R5AnchorSchema = z.object({
+  kind: z.enum(['scene_start', 'scene_end', 'phrase']),
+  line_id: r5Nonblank.nullable().default(null), phrase: r5Nonblank.nullable().default(null),
+}).strict().refine(a => a.kind === 'phrase'
+  ? a.line_id !== null && a.phrase !== null : a.line_id === null && a.phrase === null,
+  'phrase anchors require line_id and phrase; scene boundaries forbid them');
+const actionFields = {actor: r5Nonblank, compartment: r5Nonblank, change: r5Nonblank, outcome: r5Nonblank};
+const textFields = {kind: r5TextKind, text: r5Text, claim_ids: z.array(r5Nonblank).default([]),
+  exception_reason: r5Nonblank.nullable().default(null)};
+export const R5ActionSchema = z.object({...actionFields, start: R5AnchorSchema, end: R5AnchorSchema}).strict();
+export const R5TextWindowSchema = z.object({...textFields, start: R5AnchorSchema, end: R5AnchorSchema}).strict();
+const shotFields = {id: r5Nonblank, kind: r5Kind, tier: r5Nonblank.nullable(),
+  component: z.enum(R5_COMPONENT_IDS), asset_paths: r5Paths, question_ids: z.array(r5Nonblank),
+  long_shot_reason: r5Nonblank.nullable().default(null)};
+export const R5ShotSchema = z.object({...shotFields, start: R5AnchorSchema, end: R5AnchorSchema,
+  actions: z.array(R5ActionSchema), text_windows: z.array(R5TextWindowSchema)}).strict();
+const frameFields = {start_frame: r5Frame, end_frame: r5Frame};
+const positiveInterval = (i: {start_frame: number; end_frame: number}) => i.end_frame > i.start_frame;
+export const R5FrameIntervalSchema = z.object(frameFields).strict().refine(positiveInterval, 'end must follow start');
+export const ResolvedR5ActionSchema = z.object({...frameFields, ...actionFields}).strict()
+  .refine(positiveInterval, 'end must follow start');
+export const ResolvedR5TextWindowSchema = z.object({...frameFields, ...textFields}).strict()
+  .refine(positiveInterval, 'end must follow start');
+export const ResolvedR5ShotSchema = z.object({...shotFields, ...frameFields,
+  actions: z.array(ResolvedR5ActionSchema), text_windows: z.array(ResolvedR5TextWindowSchema)}).strict()
+  .refine(positiveInterval, 'end must follow start')
+  .refine(s => [...s.actions, ...s.text_windows].every(i =>
+    i.start_frame >= s.start_frame && i.end_frame <= s.end_frame), 'interval must be contained in shot');
+export const ShotStatisticsSchema = z.object({count: r5Frame,
+  median_seconds: z.number().finite().nonnegative().nullable(),
+  p90_seconds: z.number().finite().nonnegative().nullable(),
+}).strict().refine(s => (s.count === 0) === (s.median_seconds === null)
+  && (s.count === 0) === (s.p90_seconds === null), 'empty groups require N/A');
+export const QualitySourceIntervalSchema = z.object({...frameFields,
+  scene_id: r5Nonblank, shot_id: r5Nonblank, kind: r5TextKind}).strict()
+  .refine(positiveInterval, 'end must follow start');
+export const QualityShotIntervalSchema = z.object({...frameFields,
+  scene_id: r5Nonblank, shot_id: r5Nonblank, kind: r5Kind}).strict()
+  .refine(positiveInterval, 'end must follow start');
+export const QualityReportSchema = z.object({
+  standard: z.literal('pyh_r5_quality_v1').default('pyh_r5_quality_v1'),
+  quality_profile: z.literal('r5_v1').default('r5_v1'), estimated: z.boolean(), fps: z.literal(30).default(30),
+  denominator_frames: z.number().int().positive(), numerator_frames: r5Frame,
+  shot_intervals: z.array(QualityShotIntervalSchema),
+  source_intervals: z.array(QualitySourceIntervalSchema), text_union_intervals: z.array(R5FrameIntervalSchema),
+  story: ShotStatisticsSchema, mechanism: ShotStatisticsSchema,
+  manual_review: z.enum(['pending', 'passed', 'failed']).default('pending'), issues: z.array(z.string()).default([]),
+}).strict().superRefine((r, ctx) => {
+  if (r.numerator_frames > r.denominator_frames
+    || [...r.shot_intervals, ...r.source_intervals, ...r.text_union_intervals].some(i => i.end_frame > r.denominator_frames)
+    || r.text_union_intervals.some((i, n, a) => n > 0 && i.start_frame <= a[n - 1].end_frame)
+    || r.text_union_intervals.reduce((n, i) => n + i.end_frame - i.start_frame, 0) !== r.numerator_frames) {
+    ctx.addIssue({code: 'custom', message: 'invalid report bounds or text union'});
+  }
+});
+export type R5Contract = z.output<typeof R5ContractSchema>;
+export type R5Shot = z.output<typeof R5ShotSchema>;
+export type ResolvedR5Shot = z.output<typeof ResolvedR5ShotSchema>;
+export type QualityReport = z.output<typeof QualityReportSchema>;
+
 export const VisualAssetRefSchema = z
   .object({
     path: safeRelativePath,
@@ -196,6 +291,8 @@ const BaseSceneSchema = z
     start_frame: z.number().int().min(0),
     duration_frames: z.number().int().positive(),
     narration: z.string(),
+    shots: z.array(R5ShotSchema).optional(),
+    resolved_shots: z.array(ResolvedR5ShotSchema).optional(),
     words: z.array(z.object({text: z.string(), start_frame: z.number().int().min(0),
       end_frame: z.number().int().min(0)}).refine(word => word.end_frame >= word.start_frame,
       'word end must follow start')).optional(),
@@ -324,6 +421,8 @@ const BaseRenderInputSchema = z.object({
   schema_version: z.string().default('1.0'),
   title: z.string(),
   audio_file: z.string(),
+  quality_profile: z.literal('r5_v1').nullable().optional(),
+  r5_contract: R5ContractSchema.nullable().optional(),
   youtube_cta: z.object({
     text: z.string().regex(/\S/),
     mascot_path: safeRelativePath,
@@ -338,6 +437,10 @@ const BaseRenderInputSchema = z.object({
   height: z.union([z.literal(1920), z.literal(1080)]).default(1920),
   fps: z.literal(30).default(30),
 }).superRefine((input, context) => {
+  if ((!input.quality_profile && (input.r5_contract || input.scenes.some(s => s.shots?.length || s.resolved_shots?.length)))
+    || (input.quality_profile === 'r5_v1' && !input.r5_contract)) {
+    context.addIssue({code: 'custom', message: 'R5 data requires quality_profile=r5_v1 and r5_contract'});
+  }
   if (input.youtube_cta) {
     const frames = Math.max(0, ...input.scenes.map((s) => s.start_frame + s.duration_frames)) + 90;
     if (input.format_profile !== 'vertical_clip' || frames < 1800 || frames > 5400) {

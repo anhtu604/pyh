@@ -5,6 +5,7 @@ import hashlib
 import json
 from pathlib import Path
 
+from healthvideo.domain.quality_standards import QualityProfile, r5_standard_snapshot
 from healthvideo.storage.files import read_yaml, sha256_file, write_yaml_atomic
 
 STANDARDS_FILE = Path('profiles/factory-standards.yaml')
@@ -90,7 +91,11 @@ def standards_hash(root: Path) -> str:
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 
 
-def pin_standards(root: Path, project_dir: Path) -> Path:
+def pin_standards(
+    root: Path, project_dir: Path, *, quality_profile: QualityProfile | None = None,
+) -> Path:
+    if quality_profile not in (None, "r5_v1"):
+        raise ValueError("Unknown quality_profile")
     manifest = read_yaml(project_dir / 'project.yaml')
     revision = manifest['active_revision']
     if not isinstance(revision, str) or not revision.isdigit():
@@ -106,5 +111,7 @@ def pin_standards(root: Path, project_dir: Path) -> Path:
     style_spec = style_spec_pin(root)
     if style_spec is not None:
         payload['style_spec'] = style_spec
+    if quality_profile == "r5_v1":
+        payload["quality_standard"] = r5_standard_snapshot()
     write_yaml_atomic(target, payload)
     return target

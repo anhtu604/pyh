@@ -6,6 +6,21 @@ from healthvideo.domain.storyboard import Scene, Storyboard
 from healthvideo.workflows.citations import resolve_citations
 
 
+def test_r5_keeps_same_subject_across_deep_sequence_without_legacy_quota():
+    from tests.domain.test_quality_standards import contract_payload
+
+    scenes = [Scene(id=f"S{i}", start_frame=i * 90, duration_frames=90,
+                    narration="Synthetic.", visual="process_animation",
+                    anatomy={"subject": "liver_organ", "state": "normal", "motion": "flow"})
+              for i in range(5)]
+    with pytest.raises(ValidationError, match="consecutive"):
+        Storyboard(title="Legacy", scenes=scenes)
+    board = Storyboard(title="R5", scenes=scenes, quality_profile="r5_v1",
+                       r5_contract=contract_payload())
+    assert len(board.scenes) == 5
+    assert board.visual_budget_profile == "explain_first_v1"
+
+
 def test_storyboard_defaults_to_explain_first_visual_budget() -> None:
     board = Storyboard.model_validate({"title": "Legacy", "scenes": []})
 

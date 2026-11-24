@@ -122,6 +122,8 @@ def classify_scene_visual(visual: str) -> VisualCategory:
 
 
 def _effective_bounds(storyboard: Storyboard) -> dict[VisualCategory, PercentRange]:
+    if storyboard.quality_profile == "r5_v1":
+        return {}
     if storyboard.visual_budget_profile == "explain_first_v1":
         return dict(EXPLAIN_FIRST_VISUAL_BOUNDS)
     override = storyboard.visual_budget_override
@@ -174,7 +176,7 @@ def calculate_visual_budget(storyboard: Storyboard, assets: AssetManifest | None
         ("Mascot share exceeds 35% of storyboard frames.",)
         if 100 * mascot_frames > 35 * mascot_total else ()
     )
-    if storyboard.format_profile == "youtube_long":
+    if storyboard.format_profile == "youtube_long" and storyboard.quality_profile is None:
         flux_paths = {asset.path for asset in assets.assets
                       if asset.kind is AssetKind.ILLUSTRATION
                       and asset.source == "generated:flux2-klein-4b"} if assets else set()

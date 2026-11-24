@@ -7,6 +7,12 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from healthvideo.domain.brand import MascotPose
 from healthvideo.domain.explainer import Nonblank
 from healthvideo.domain.format_profile import FormatProfile
+from healthvideo.domain.quality_standards import (
+    QualityProfile,
+    R5Contract,
+    R5Shot,
+    ResolvedR5Shot,
+)
 from healthvideo.domain.visual_budget import VisualBudgetOverride, VisualBudgetProfile
 from healthvideo.visuals.anatomy_library import load_library
 
@@ -342,6 +348,8 @@ class Scene(BaseModel):
     start_frame: int = Field(json_schema_extra={"minimum": 0})
     duration_frames: int = Field(json_schema_extra={"exclusiveMinimum": 0})
     narration: str
+    shots: tuple[R5Shot, ...] = Field(default=(), exclude_if=lambda v: not v)
+    resolved_shots: tuple[ResolvedR5Shot, ...] = Field(default=(), exclude_if=lambda v: not v)
     visual_takeaway: str | None = Field(
         default=None, min_length=1, max_length=160, exclude_if=lambda v: v is None,
     )
@@ -514,6 +522,8 @@ class Storyboard(BaseModel):
 
     schema_version: str = "1.0"
     title: str
+    quality_profile: QualityProfile | None = Field(default=None, exclude_if=lambda v: v is None)
+    r5_contract: R5Contract | None = Field(default=None, exclude_if=lambda v: v is None)
     visual_style: VisualStyle | None = Field(default=None, exclude_if=lambda v: v is None)
     sfx_defaults: bool = Field(default=True, exclude_if=lambda v: v is True)
     scenes: tuple[Scene, ...] = Field(default_factory=tuple)
@@ -548,6 +558,8 @@ class Storyboard(BaseModel):
 
     @model_validator(mode="after")
     def validate_mechanism_variety(self) -> "Storyboard":
+        if self.quality_profile == "r5_v1":
+            return self
         previous = None
         run = 0
         for scene in self.scenes:
@@ -579,6 +591,16 @@ class Storyboard(BaseModel):
                     f"Scene {scene.id}: chapter {scene.chapter_id} must be contiguous"
                 )
             seen.append(scene.chapter_id)
+        return self
+
+    @model_validator(mode="after")
+    def validate_r5_activation(self) -> "Storyboard":
+        if self.quality_profile is None and (
+            self.r5_contract is not None or any(s.shots or s.resolved_shots for s in self.scenes)
+        ):
+            raise ValueError("R5 data requires quality_profile=r5_v1")
+        if self.quality_profile == "r5_v1" and self.r5_contract is None:
+            raise ValueError("quality_profile=r5_v1 requires r5_contract")
         return self
 
     @model_validator(mode="after")

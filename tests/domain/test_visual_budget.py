@@ -14,6 +14,20 @@ from healthvideo.domain.visual_budget import (
 )
 
 
+def test_r5_does_not_require_chart_or_legacy_percentages():
+    from tests.domain.test_quality_standards import contract_payload
+
+    legacy = storyboard((("whiteboard", 90),))
+    with pytest.raises(ValueError, match="visual budget failed"):
+        validate_visual_budget(legacy)
+    board = Storyboard(**{**legacy.model_dump(), "quality_profile": "r5_v1",
+                          "r5_contract": contract_payload()})
+    report = validate_visual_budget(board)
+    assert report.effective_bounds == {}
+    assert report.category_frames[VisualCategory.WHITEBOARD_SVG] == 90
+    # This is only the legacy budget adapter, not a quality measurement.
+
+
 def storyboard(
     durations: Sequence[tuple[str, int]],
     *,

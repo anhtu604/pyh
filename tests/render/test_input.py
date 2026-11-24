@@ -10,6 +10,33 @@ from healthvideo.domain.storyboard import (
 from healthvideo.render.input import audio_timing_qa, build_render_input
 
 
+def test_legacy_render_fixture_bytes_and_hash():
+    import hashlib
+    from pathlib import Path
+
+    from healthvideo.storage.files import read_yaml
+
+    fixture = Path(__file__).parents[1] / "fixtures/golden-project-v2/revisions/001/storyboard/storyboard.yaml"
+    board = Storyboard.model_validate(read_yaml(fixture))
+    payload = build_render_input(board, "audio/narration.wav").model_dump_json().encode()
+    assert len(payload) == 22386
+    assert hashlib.sha256(payload).hexdigest() == "02b5c84cef8ffbf1a017f6a214568b76980a29af11cc2647ff3907fee1e1c0ea"
+
+
+def test_render_input_carries_authored_r5_data_without_legacy_caption_rhythm():
+    from tests.domain.test_quality_standards import contract_payload, shot_payload
+
+    board = Storyboard(title="R5", quality_profile="r5_v1", r5_contract=contract_payload(),
+                       scenes=[Scene(id="S1", start_frame=0, duration_frames=600,
+                                     narration="Synthetic.", visual="whiteboard",
+                                     on_screen_text="Synthetic.", shots=[shot_payload()])])
+    result = build_render_input(board, "audio/narration.wav")
+    assert result.quality_profile == "r5_v1"
+    assert result.r5_contract == board.r5_contract
+    assert result.scenes[0].shots == board.scenes[0].shots
+    assert result.scenes[0].words == ()
+
+
 @pytest.mark.parametrize("frames", [600, 5401])
 def test_static_content_duration_rejected_over_six_seconds(frames: int) -> None:
     board = Storyboard(title="variable", scenes=(Scene(

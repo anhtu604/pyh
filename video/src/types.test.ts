@@ -1,5 +1,6 @@
-import {describe, expect, it} from 'vitest';
-import {EvidenceHighlightSchema, RenderInputSchema, SceneSchema} from './types';
+import {describe, expect, it, vi} from 'vitest';
+import {EvidenceHighlightSchema, RenderInputSchema, SceneSchema,
+  R5ContractSchema, R5ShotSchema, ResolvedR5ShotSchema, QualityReportSchema} from './types';
 
 const validHighlight = {
   image: 'assets/evidence-card.svg',
@@ -224,4 +225,109 @@ it('rejects removed AI clip scene and asset kinds', () => {
   expect(SceneSchema.safeParse({...scene, visual: 'whiteboard', visual_assets: [
     {path: 'assets/removed.mp4', role: 'ai_clip'},
   ]}).success).toBe(false);
+});
+
+const contract = {
+  questions: [
+    {id: 'Q1', text: 'First?', hook_line_id: 'L1', answer_line_ids: ['L3']},
+    {id: 'Q2', text: 'Second?', hook_line_id: 'L1', answer_line_ids: ['L3']},
+  ],
+  blocks: [{id: 'B1', line_ids: ['L2'], question_ids: ['Q1', 'Q2'],
+    takeaway_line_id: 'L2', professional_update: true}],
+};
+const shot = {
+  id: 'SH1', kind: 'mechanism', tier: 'cell', component: 'ZoomChain',
+  asset_paths: ['assets/cell.svg'], question_ids: ['Q1'],
+  start: {kind: 'scene_start', line_id: null, phrase: null},
+  end: {kind: 'scene_end', line_id: null, phrase: null},
+  actions: [], text_windows: [], long_shot_reason: null,
+};
+
+describe('R5 contracts', () => {
+  it('round trips the Python wire payload including explicit nulls', () => {
+    expect(R5ContractSchema.parse(contract)).toEqual(contract);
+    expect(R5ShotSchema.parse(shot)).toEqual(shot);
+    const {start: _start, end: _end, ...fields} = shot;
+    const resolved = {...fields, start_frame: 0, end_frame: 300};
+    expect(ResolvedR5ShotSchema.parse(resolved)).toEqual(resolved);
+    const empty = {count: 0, median_seconds: null, p90_seconds: null};
+    const report = {standard: 'pyh_r5_quality_v1', quality_profile: 'r5_v1', estimated: true,
+      fps: 30, denominator_frames: 300, numerator_frames: 0, source_intervals: [],
+      shot_intervals: [], text_union_intervals: [], story: empty, mechanism: empty, manual_review: 'pending', issues: []};
+    expect(QualityReportSchema.parse(report)).toEqual(report);
+  });
+
+  it('round trips actual Python serialization through Zod and back to Python', async () => {
+    // Node test helpers are imported through Vitest; the browser project has no @types/node.
+    const {execFileSync} = await vi.importActual<{execFileSync: (file: string, args: string[],
+      options: {cwd: string; env: Record<string, string | undefined>; encoding: 'utf8'; input?: string}) => string}>('node:child_process');
+    const {fileURLToPath} = await vi.importActual<{fileURLToPath: (url: URL) => string}>('node:url');
+    const process = await vi.importActual<{env: Record<string, string | undefined>; platform: string}>('node:process');
+    const python = process.env.PYH_TEST_PYTHON ?? (process.platform === 'win32'
+      ? 'E:/Protect Your Health/.venv/Scripts/python.exe' : 'python3');
+    const cwd = fileURLToPath(new URL('../../', import.meta.url));
+    const env = {...process.env, PYTHONPATH: fileURLToPath(new URL('../../src', import.meta.url))};
+    const build = `
+import json
+from tests.domain.test_quality_standards import contract_payload, shot_payload
+from healthvideo.domain.quality_standards import R5Contract, R5Shot, ResolvedR5Shot, QualityReport
+s = shot_payload()
+action = dict(actor='entity', compartment='cell', change='move', outcome='arrival')
+s['actions'] = [dict(**action, start=s['start'], end=s['end'])]
+s['text_windows'] = [dict(kind='label', text='Entity', start=s['start'], end=s['end'])]
+resolved = {k:v for k,v in s.items() if k not in ('start','end','actions','text_windows')}
+resolved['actions'] = [dict(**action, start_frame=0, end_frame=300)]
+resolved['text_windows'] = [dict(kind='label', text='Entity', start_frame=0, end_frame=30)]
+empty = dict(count=0, median_seconds=None, p90_seconds=None)
+models = [R5Contract(**contract_payload()), R5Shot(**s),
+          ResolvedR5Shot(**resolved, start_frame=0, end_frame=300),
+          QualityReport(estimated=True, denominator_frames=300, numerator_frames=0,
+              shot_intervals=[], source_intervals=[], text_union_intervals=[], story=empty, mechanism=empty)]
+print(json.dumps([m.model_dump(mode='json') for m in models]))
+`;
+    const payload = JSON.parse(execFileSync(python, ['-c', build], {cwd, env, encoding: 'utf8'}));
+    const schemas = [R5ContractSchema, R5ShotSchema, ResolvedR5ShotSchema, QualityReportSchema];
+    const parsed = schemas.map((schema, i) => schema.parse(payload[i]));
+    expect(parsed).toEqual(payload);
+    const check = `
+import json, sys
+from healthvideo.domain.quality_standards import R5Contract, R5Shot, ResolvedR5Shot, QualityReport
+models = [R5Contract, R5Shot, ResolvedR5Shot, QualityReport]
+print(json.dumps([m.model_validate(p).model_dump(mode='json') for m,p in zip(models,json.load(sys.stdin))]))
+`;
+    expect(JSON.parse(execFileSync(python, ['-c', check], {
+      cwd, env, encoding: 'utf8', input: JSON.stringify(parsed),
+    }))).toEqual(payload);
+  });
+
+  it.each([
+    {...contract, questions: contract.questions.slice(0, 1)},
+    {...contract, questions: Array(5).fill(contract.questions[0])},
+    {...contract, blocks: [{...contract.blocks[0], professional_update: false}]},
+    {...contract, blocks: [{...contract.blocks[0], professional_update: 'true'}]},
+    {...contract, blocks: [{...contract.blocks[0], question_ids: ['unknown']}]},
+    {...contract, blocks: [{...contract.blocks[0], takeaway_line_id: 'missing'}]},
+    {...contract, extra: true},
+  ])('rejects incomplete and unknown contract fields', payload => {
+    expect(R5ContractSchema.safeParse(payload).success).toBe(false);
+  });
+
+  it.each([
+    {...shot, component: '../../evil.tsx'},
+    {...shot, start: undefined},
+    {...shot, extra: true},
+    {...shot, asset_paths: ['../escape.svg']},
+    {...shot, start: {kind: 'phrase', line_id: 'L1'}},
+    {...shot, text_windows: [{kind: 'table', text: 'a\tb', start: shot.start, end: shot.end}]},
+  ])('rejects unsafe or incomplete shots', payload => {
+    expect(R5ShotSchema.safeParse(payload).success).toBe(false);
+  });
+
+  it('leaves absent legacy profile absent and keeps the old default', () => {
+    const legacy = RenderInputSchema.parse({title: 'Legacy', audio_file: 'audio/narration.wav'});
+    expect(legacy).not.toHaveProperty('quality_profile');
+    expect(legacy).not.toHaveProperty('r5_contract');
+    expect(legacy.visual_budget_profile).toBe('explain_first_v1');
+    expect(RenderInputSchema.safeParse({title: 'Bad', audio_file: 'a.wav', r5_contract: contract}).success).toBe(false);
+  });
 });
