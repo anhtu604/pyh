@@ -1,5 +1,5 @@
 version: 1
-updated: '2026-11-23'
+updated: '2026-11-24'
 phases:
 - id: R1
   title: Hoàn thiện xưởng trước khi làm video mới
@@ -482,6 +482,18 @@ phases:
 
   - id: R5.3.1
     title: Hợp đồng dữ liệu chuẩn R5, giữ tương thích project cũ
+    status: done
+    owner: codex
+    note: 'Đã vào master 58baf09: chuẩn pyh_r5_quality_v1 bật tùy chọn bằng quality_profile r5_v1; project cũ giữ nguyên byte và hash. pytest 2838 đạt.'
+
+  - id: R5.3.2
+    title: Catalog hình có giấy phép và tải có kiểm soát
     status: doing
     owner: codex
-    note: 'Thêm quality_profile r5_v1, hợp đồng câu hỏi-khối-câu chốt và shot (Python + TypeScript); project cũ giữ nguyên hash.'
+    note: 'Tách nguồn gốc và giấy phép từng hình vào assets.yaml, chặn hình thiếu giấy phép hoặc tải từ nguồn ngoài danh sách cho phép.'
+
+  - id: R5.3.4
+    title: Hợp đồng 16 vai, model, lời và điểm chạm TOFU
+    status: doing
+    owner: codex
+    note: 'Đưa chuẩn R5 vào skill và prompt của 16 vai: mạch cơ chế, câu hỏi-câu chốt, bỏ hạn ngạch biểu đồ, giọng Anh Tu tốc độ 1,18.'
