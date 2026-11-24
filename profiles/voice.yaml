@@ -2,7 +2,7 @@
 # Đổi model sang speech-2.8-turbo nếu muốn rẻ/nhanh hơn.
 provider: vibi_minimax
 model_id: speech-2.8-hd
-voice_id: fd0856c1-f9db-45c8-a7de-c8f3f3f1d380
+voice_id: c081d39a-4922-4c88-9615-78bb240337cd
 settings:
   speed: 1.0
   pitch: 0
