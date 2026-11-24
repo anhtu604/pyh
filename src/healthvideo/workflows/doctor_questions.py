@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
@@ -237,6 +238,7 @@ def ask(
     allow_free_text: bool = True,
     fingerprint: str | None = None,
     now: datetime | None = None,
+    pronunciation_terms: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Create an open question atomically; deduplicate open or answered questions."""
     path = question_path(root, slug)
@@ -279,6 +281,7 @@ def ask(
         'created_at': (now or datetime.now(UTC)).isoformat(timespec='seconds'),
         'status': 'open',
         'answer': None,
+        **({'pronunciation_terms': list(pronunciation_terms)} if pronunciation_terms is not None else {}),
     }
     write_yaml_atomic(path, payload)
     return payload
@@ -325,6 +328,30 @@ def answer(
         raise ValueError('Câu hỏi này không cho phép nhập chữ tự do.')
 
     answered_at = (now or datetime.now(UTC)).isoformat(timespec='seconds')
+    if data.get('kind') == 'pronunciation':
+        from healthvideo.tts.pronunciation import save_doctor_pronunciations
+
+        terms = data.get('pronunciation_terms') or []
+        if opt_id and not clean_text:
+            index = {'spelling': 0, 'joined': 1}.get(opt_id)
+            if index is None:
+                raise ValueError('Phương án cách đọc không hợp lệ.')
+            choices = {term['written']: term['options'][index] for term in terms}
+        else:
+            try:
+                choices = json.loads(clean_text)
+            except (ValueError, TypeError):
+                raise ValueError('Câu trả lời cách đọc không đúng định dạng; vui lòng chọn hoặc nhập từng từ.') from None
+        if (
+            len(str(text or '')) > MAX_FREE_TEXT_CHARS
+            or not isinstance(choices, dict)
+            or set(choices) != {term['written'] for term in terms}
+            or not choices
+            or any(not isinstance(value, str) or not value.strip() or len(value) > 200
+                   or any(ord(ch) < 32 for ch in value) for value in choices.values())
+        ):
+            raise ValueError('Cần nhập đầy đủ cách đọc hợp lệ cho từng từ (tối đa 200 ký tự mỗi từ).')
+        save_doctor_pronunciations(root / 'profiles/pronunciation.vi.yaml', choices, answered_at[:10])
     answered: dict[str, Any] = {
         **data,
         'status': 'answered',

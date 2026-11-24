@@ -3194,6 +3194,7 @@ function renderStage12DecisionSlot(b){
   }
   const contextItems = Array.isArray(q.context) ? q.context : [];
   const options = Array.isArray(q.options) ? q.options : [];
+  const pronunciationTerms = q.kind === 'pronunciation' ? (q.pronunciation_terms || []) : [];
   const listHtml = contextItems.length
     ? `<ul class="s12-issues">${contextItems.map((it, idx) => {
         const code = String(it.code || it.id || ('M' + String(idx + 1).padStart(2, '0'))).trim();
@@ -3232,8 +3233,16 @@ function renderStage12DecisionSlot(b){
       </div>
       <p class="sub s12-lead">${esc(q.question || '')}</p>
       ${listHtml}
-      <div class="s12-actions">${optionsHtml}</div>
-      ${freeTextHtml}
+      ${pronunciationTerms.length ? pronunciationTerms.map((term, i) => `
+        <fieldset data-pron-term="${i}"><legend>${esc(term.written)}</legend>
+        <p>${esc(term.context)}</p>
+        <select class="inp" aria-label="Cách đọc ${esc(term.written)}">
+          <option value="">Chọn cách đọc…</option>
+          ${term.options.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('')}
+        </select>
+        <input class="inp" maxlength="200" aria-label="Tự nhập cách đọc ${esc(term.written)}" placeholder="Hoặc tự nhập cách đọc">
+        </fieldset>`).join('') + '<button class="btn primary" id="dq-submit-free">Gửi cách đọc</button>' :
+        `<div class="s12-actions">${optionsHtml}</div>${freeTextHtml}`}
     </section>
   `;
   const optBtns = [...slot.querySelectorAll('[data-dq-option]')];
@@ -3241,7 +3250,16 @@ function renderStage12DecisionSlot(b){
   const freeBtn = slot.querySelector('#dq-submit-free');
   const allBtns = freeBtn ? [...optBtns, freeBtn] : optBtns;
   const submitAnswer = async (optionId) => {
-    const text = freeInput ? String(freeInput.value || '').trim() : '';
+    let text = freeInput ? String(freeInput.value || '').trim() : '';
+    if(pronunciationTerms.length){
+      const choices = Object.create(null);
+      for(const [i, term] of pronunciationTerms.entries()){
+        const row = slot.querySelector(`[data-pron-term="${i}"]`);
+        choices[term.written] = row.querySelector('input').value.trim() || row.querySelector('select').value;
+      }
+      if(Object.values(choices).some(v => !v)){ toast('Chọn hoặc nhập cách đọc cho từng từ.', true); return; }
+      text = JSON.stringify(choices);
+    }
     if(!optionId && !text){
       toast('Nhập ý kiến trước khi gửi.', true);
       return;

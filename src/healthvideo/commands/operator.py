@@ -25,7 +25,7 @@ from healthvideo.workflows.operator import get_next_action, render_status
 from healthvideo.workflows.shorts_plan import save_shorts_plan
 from healthvideo.workflows.storyboard_design import submit_storyboard_design
 from healthvideo.workflows.topic import select_topic
-from healthvideo.workflows.voice_prep import save_voice_prep
+from healthvideo.workflows.voice_prep import check_before_medical, save_voice_prep
 
 app = typer.Typer(no_args_is_help=True)
 
@@ -122,6 +122,9 @@ def submit_medical(
                     board = Storyboard.model_validate(read_yaml(board_path))
                     if board.quality_profile == "r5_v1":
                         snapshot_r5_assets(revision_root, board)
+        if not check_before_medical(project_dir):
+            typer.echo('Chờ bác sĩ chọn cách đọc trong app trước khi nộp cổng y khoa.')
+            return
         changed = submit_medical_review(project_dir)
     except (OSError, TypeError, ValueError) as error:
         typer.echo(str(error))

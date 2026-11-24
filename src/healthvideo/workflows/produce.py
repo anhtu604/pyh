@@ -522,6 +522,13 @@ def _produce_v2_inner(
         from healthvideo.workflows.voice_prep import load_voice_prep_lexicon
 
         pronunciation = load_voice_prep_lexicon(layout.artifact_root, pronunciation)
+    if not dry_run and storyboard.quality_profile == "r5_v1":
+        from healthvideo.workflows.voice_prep import narration_pronunciation_candidates
+
+        unknown = narration_pronunciation_candidates(script, pronunciation)['terms']
+        if unknown:
+            raise ValueError('Ch\u01b0a c\u00f3 c\u00e1ch \u0111\u1ecdc \u0111\u01b0\u1ee3c b\u00e1c s\u0129 duy\u1ec7t: ' + ', '.join(unknown)
+                             + '. H\u00e3y x\u00e1c nh\u1eadn c\u00e1ch \u0111\u1ecdc tr\u01b0\u1edbc khi n\u1ed9p l\u1ea1i c\u1ed5ng y khoa.')
     pronunciation_sha256 = pronunciation_hash(pronunciation)
     provider_name = _provider_name(tts)
     provider_identity_data = provider_identity(tts)

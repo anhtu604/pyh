@@ -118,7 +118,7 @@ def test_submit_draft_at_draft_ready_replaces_storyboard(tmp_path: Path) -> None
     assert read_yaml(project / "revisions/001/storyboard/storyboard.yaml")["scenes"][1]["anatomy"]["motion"] == board["scenes"][1]["anatomy"]["motion"]
 
 
-def test_cli_submit_medical_creates_r5_snapshot_before_gate(tmp_path: Path) -> None:
+def test_cli_submit_medical_creates_r5_snapshot_before_gate(tmp_path: Path, monkeypatch) -> None:
     from healthvideo.domain.gate_review import GateKind
     from healthvideo.storage.files import sha256_file
     from healthvideo.workflows.gate_review import (
@@ -131,7 +131,7 @@ def test_cli_submit_medical_creates_r5_snapshot_before_gate(tmp_path: Path) -> N
     )
     from tests.workflows.test_produce import V2_REVIEWED_AT, _r5_project
 
-    project = _r5_project(tmp_path, state=WorkflowState.DRAFT_READY)
+    project = _r5_project(tmp_path, state=WorkflowState.DRAFT_READY, monkeypatch=monkeypatch)
     revision = project / "revisions/001"
     asset = revision / "assets/cell.svg"
     asset.write_bytes(b"<svg xmlns='http://www.w3.org/2000/svg'/>")

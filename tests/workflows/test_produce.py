@@ -30,7 +30,20 @@ from tests.helpers import align_fixture_script, create_v2_project_fixture
 V2_REVIEWED_AT = datetime(2026, 9, 12, 8, 0, tzinfo=UTC)
 
 
-def _r5_project(tmp_path, *, state: WorkflowState = WorkflowState.AWAITING_MEDICAL_REVIEW):
+def _r5_project(tmp_path, *, state: WorkflowState = WorkflowState.AWAITING_MEDICAL_REVIEW,
+                monkeypatch=None):
+    if monkeypatch is not None:
+        # Synthetic narration deliberately contains these English anchor words.
+        # Give R5 a reviewed temporary lexicon; never change the runtime profile.
+        profile = tmp_path / 'r5-pronunciation.yaml'
+        data = read_yaml(pronunciation_module.PRONUNCIATION_PROFILE_PATH)
+        terms = ('evidence Illustrative IllustrativeVisualization mechanism Synthetic video visualizations '
+                 'AnchorUniqueToken AlphaOne BetaTwo GammaThree DeltaFour EpsilonFive ZetaSix EtaSeven ThetaEight')
+        known = {e['written'].casefold() for e in data['entries']}
+        data['entries'].extend({'written': t, 'spoken': t, 'needs_doctor_review': False}
+                               for t in terms.split() if t.casefold() not in known)
+        write_yaml_atomic(profile, data)
+        monkeypatch.setattr(pronunciation_module, 'PRONUNCIATION_PROFILE_PATH', profile)
     project = create_v2_project_fixture(tmp_path, state=state)
     revision = project / "revisions/001"
     data = read_yaml(revision / "storyboard/storyboard.yaml")
@@ -71,7 +84,7 @@ def _r5_alignment(monkeypatch):
 @pytest.mark.parametrize("factor", [0.9, 1.1])
 def test_r5_production_measures_after_alignment_and_binds_cache(tmp_path, monkeypatch, factor):
     from healthvideo.workflows.gate_review import validate_r5_render_report
-    project = _r5_project(tmp_path)
+    project = _r5_project(tmp_path, monkeypatch=monkeypatch)
     revision = project / "revisions/001"
     before = (revision / "storyboard/storyboard.yaml").read_bytes()
     approve_gate(project, GateKind.MEDICAL, reviewer="doctor", now=V2_REVIEWED_AT)
@@ -114,7 +127,7 @@ def test_r5_production_measures_after_alignment_and_binds_cache(tmp_path, monkey
 def test_r5_bad_aligned_anchor_stops_before_render(tmp_path, monkeypatch):
     from tests.helpers import submit_medical_review_fixture
 
-    project = _r5_project(tmp_path, state=WorkflowState.DRAFT_READY)
+    project = _r5_project(tmp_path, state=WorkflowState.DRAFT_READY, monkeypatch=monkeypatch)
     revision = project / "revisions/001"
     board_path = revision / "storyboard/storyboard.yaml"
     script_path = revision / "script/script.yaml"
@@ -143,7 +156,7 @@ def test_r5_overlapping_text_windows_report_union_and_speed_changes_tts_cache(tm
     from healthvideo.workflows.produce import _synthesize_cached_line
     from tests.helpers import submit_medical_review_fixture
 
-    project = _r5_project(tmp_path, state=WorkflowState.DRAFT_READY)
+    project = _r5_project(tmp_path, state=WorkflowState.DRAFT_READY, monkeypatch=monkeypatch)
     revision = project / "revisions/001"
     board_path = revision / "storyboard/storyboard.yaml"
     script_path = revision / "script/script.yaml"

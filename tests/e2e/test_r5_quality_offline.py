@@ -958,6 +958,8 @@ def test_factory_standards_yaml_records_pyh_r5_quality_v1_and_keeps_legacy_histo
 def test_r5_full_offline_pipeline_and_two_layout_shapes(tmp_path: Path, monkeypatch) -> None:
     """End-to-end offline R5 flow: draft -> pre-gate QA -> snapshot -> gates -> mocked produce -> package."""
     project = _synthetic_r5_project(tmp_path)
+    from tests.helpers import reviewed_r5_lexicon_fixture
+    reviewed_r5_lexicon_fixture(project, monkeypatch)
     revision = project / "revisions" / "001"
 
     # 1. Draft submission runs pre-gate estimated R5 QA (contract + D1 + D2 + clip plan).
@@ -1065,6 +1067,8 @@ def test_r5_blocks_missing_pin_stale_hash_missing_license_and_exhausted_budget(
 ) -> None:
     """Missing PIN, missing license, stale hashes, and exhausted D4 budgets all fail closed."""
     project = _synthetic_r5_project(tmp_path)
+    from tests.helpers import reviewed_r5_lexicon_fixture
+    reviewed_r5_lexicon_fixture(project, monkeypatch)
     revision = project / "revisions" / "001"
     submit_draft(
         project,

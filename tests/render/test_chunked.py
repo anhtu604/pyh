@@ -249,6 +249,8 @@ def test_produce_chunk_retries_gpu_failure_through_cpu_fallback(tmp_path, monkey
     from tests.workflows.test_produce import _r5_alignment
 
     project = _synthetic_r5_project(tmp_path)
+    from tests.helpers import reviewed_r5_lexicon_fixture
+    reviewed_r5_lexicon_fixture(project, monkeypatch)
     revision = project / "revisions/001"
     submit_draft(project, revision / "script/script.yaml", revision / "storyboard/storyboard.yaml",
                  revision / "assets/asset-manifest.yaml")

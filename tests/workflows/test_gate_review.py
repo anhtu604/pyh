@@ -779,7 +779,7 @@ def test_r5_video_gate_rejects_stale_cache_and_enforces_pin(tmp_path, monkeypatc
         _write_synthetic_output,
     )
 
-    project = _r5_project(tmp_path)
+    project = _r5_project(tmp_path, monkeypatch=monkeypatch)
     revision = project / "revisions/001"
     approve_gate(project, GateKind.MEDICAL, reviewer="doctor", now=V2_REVIEWED_AT)
     _r5_alignment(monkeypatch)

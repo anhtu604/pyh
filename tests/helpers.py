@@ -6,12 +6,36 @@ from typing import Any
 from healthvideo.domain.explainer import Explainer
 from healthvideo.domain.gate_review import GateKind
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
+from healthvideo.domain.script import Script
 from healthvideo.domain.state_graph import TransitionContext, transition_v2
 from healthvideo.storage.explainer import write_explainer
 from healthvideo.storage.files import read_yaml, sha256_file, write_yaml_atomic
 from healthvideo.tts.base import TTSRequest
 from healthvideo.tts.silent import SilentTTS
 from healthvideo.workflows.gate_review import approve_gate
+
+
+def reviewed_r5_lexicon_fixture(project, monkeypatch):
+    """Supply reviewed readings for synthetic R5 narration, in a test-only file."""
+    from healthvideo.tts import pronunciation as pronunciation_module
+    from healthvideo.tts.pronunciation import load_pronunciation_lexicon
+    from healthvideo.workflows.voice_prep import narration_pronunciation_candidates
+
+    revision = project / 'revisions/001'
+    profile = project / 'fixture-pronunciation.yaml'
+    data = read_yaml(pronunciation_module.PRONUNCIATION_PROFILE_PATH)
+    script = Script.model_validate(read_yaml(revision / 'script/script.yaml'))
+    terms = narration_pronunciation_candidates(script, load_pronunciation_lexicon(
+        pronunciation_module.PRONUNCIATION_PROFILE_PATH))['terms']
+    known = {e['written'].casefold(): e for e in data['entries']}
+    for term in terms:
+        if term.casefold() in known:
+            known[term.casefold()]['needs_doctor_review'] = False
+        else:
+            data['entries'].append({'written': term, 'spoken': term, 'needs_doctor_review': False})
+    write_yaml_atomic(profile, data)
+    monkeypatch.setattr(pronunciation_module, 'PRONUNCIATION_PROFILE_PATH', profile)
+
 
 FIXTURE_PRODUCTION_HASH = "synthetic-production-run"
 FIXTURE_REVIEWER = "BS Nguyễn Văn An"

@@ -54,6 +54,7 @@ _UNIT_OR_NUMERIC_RE = re.compile(
     r"|(?<!\w)\d+(?:[.,]\d+)?\s*/\s*\d+(?:[.,]\d+)?"
     r"|(?<!\w)\d+(?:[.,]\d+)?\s*(?:%|°[CF]?)(?!\w)"
     r"|(?<!\w)[A-Za-zµμ]+(?:/[A-Za-zµμ]+)+(?!\w)"
+    r"|(?<!\w)(?:µg|μg|mg|kg|g|mL|ml|mmol|mol|mmHg|cm|mm|kcal|IU)(?!\w)"
 )
 _HYPHEN_TECH_RE = re.compile(
     r"(?<!\w)[A-Za-z0-9α-ωΑ-Ωµμ]+(?:-[A-Za-z0-9α-ωΑ-Ωβµμ]+)+(?!\w)"
@@ -153,6 +154,8 @@ def _looks_like_candidate_word(token: str) -> bool:
     # Strict Vietnamese orthography check prevents multi-vowel non-VI words from slipping past.
     if not _VI_PLAIN_SYLLABLE_RE.match(lowered):
         return True
+    if lowered.startswith(('ch', 'gh', 'ngh')):
+        return False
     # Disallow invalid `qu`/`gi`/`c`/`g`/`ng` internal clusters caught by `[a-z]*` above.
     rhyme_part = lowered
     for onset in ("ngh", "qu", "gi", "ng", "c", "g"):
@@ -367,6 +370,8 @@ def save_voice_prep(
             candidates=candidates,
             sheet=sheet,
         )
+        if pronunciation_gate_active(revision):
+            require_doctor_pronunciations(_resolve_workspace_root(project_dir, root), project.slug, script, lexicon)
         return target
 
 
@@ -583,13 +588,22 @@ def voice_prep_ready(project_dir: Path) -> bool:
         sheet = VoicePrepSheet.model_validate(read_yaml(target))
     except (OSError, TypeError, ValueError):
         return False
-    return sheet.script_hash == script_hash
+    ready = sheet.script_hash == script_hash
+    if ready and project.state.value == 'draft_ready':
+        # Factory submissions call the workflow directly, so cover cached sheets
+        # at the existing voice-prep readiness boundary as well as the CLI.
+        check_before_medical(project_dir)
+    return ready
 
 
 def load_voice_prep_lexicon(
     revision: Path, base_lexicon: PronunciationLexicon
 ) -> PronunciationLexicon:
     """Merge project ``script/voice-prep.yaml`` entries atop the shared base lexicon."""
+    if pronunciation_gate_active(revision):
+        # R5 can speak only shared doctor choices. A local agent sheet is a
+        # proposal, not approval; retain the legacy merge below unchanged.
+        return base_lexicon
     target = revision / VOICE_PREP_ARTIFACT
     if not target.is_file():
         return base_lexicon
@@ -611,3 +625,78 @@ def load_voice_prep_lexicon(
         version=f"{base_lexicon.version}+voiceprep",
         entries=tuple(merged),
     )
+
+
+def require_doctor_pronunciations(
+    root: Path, slug: str, script: Script, base_lexicon: PronunciationLexicon,
+) -> bool:
+    """Open one waiting marker for all unconfirmed terms; never approve agent proposals."""
+    from healthvideo.workflows import doctor_questions
+
+    candidates = narration_pronunciation_candidates(script, base_lexicon)
+    if not candidates['terms']:
+        return doctor_questions.open_question(root, slug) is None
+    if doctor_questions.open_question(root, slug) is not None:
+        return False
+    letters = dict(zip(
+        'abcdefghijklmnopqrstuvwxyz0123456789',
+        ('a', 'bê', 'xê', 'đê', 'e', 'ép', 'giê', 'hát', 'i', 'giây', 'ca', 'e lờ',
+         'em', 'en', 'o', 'pê', 'quy', 'e rờ', 'ét', 'tê', 'u', 'vê', 'vê kép',
+         'ích', 'i dài', 'dét', 'không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu',
+         'bảy', 'tám', 'chín'), strict=True,
+    ))
+    pending = {e.written.casefold(): e.spoken for e in base_lexicon.entries if e.needs_doctor_review}
+    terms = []
+    for term in candidates['terms']:
+        row = next(row for row in candidates['lines'] if term in row['terms'])
+        text = row['text']
+        at = text.casefold().find(term.casefold())
+        excerpt = text[max(0, at - 60):at + len(term) + 60]
+        spelling = ' '.join(letters.get(ch.lower(), ch) for ch in term if ch != '-')
+        joined = pending.get(term.casefold(), term.lower().replace('-', ' '))
+        terms.append({'written': term, 'context': excerpt, 'options': [spelling, joined]})
+    doctor_questions.ask(
+        root, slug, station='09', kind='pronunciation',
+        question='Bác sĩ chọn cách đọc từng từ dưới đây trước khi xưởng đọc giọng.',
+        context=[{'code': t['written'], 'summary': t['context']} for t in terms],
+        options=[{'id': 'spelling', 'label': 'Đánh vần tất cả'}, {'id': 'joined', 'label': 'Đọc liền tất cả'}],
+        allow_free_text=True, pronunciation_terms=terms,
+    )
+    return False
+
+
+def check_before_medical(project_dir: Path) -> bool:
+    """Ask before submission so the unchanged medical gate hashes the doctor's choices."""
+    project = _project(project_dir)
+    revision = project_dir / 'revisions' / project.active_revision
+    if not pronunciation_gate_active(revision):
+        return True
+    script, _ = _load_script(revision)
+    lexicon = load_pronunciation_lexicon(pronunciation_module.PRONUNCIATION_PROFILE_PATH)
+    return require_doctor_pronunciations(_resolve_workspace_root(project_dir), project.slug, script, lexicon)
+
+
+def pronunciation_gate_active(revision: Path) -> bool:
+    path = revision / 'storyboard/storyboard.yaml'
+    return path.is_file() and read_yaml(path).get('quality_profile') == 'r5_v1'
+
+
+def narration_pronunciation_candidates(script: Script, lexicon: PronunciationLexicon) -> dict[str, Any]:
+    """Scan only line.tts_text after confirmed replacements; never storyboard/metadata.
+
+    Confirmed spoken forms are masked too: syllable separators in an approved
+    reading are not new foreign terms requiring a second approval.
+    """
+    confirmed = lexicon.model_copy(update={'entries': tuple(e for e in lexicon.entries if not e.needs_doctor_review)})
+    spoken_entries = list(confirmed.entries)
+    known = {e.written.casefold() for e in spoken_entries}
+    for entry in confirmed.entries:
+        if entry.spoken.casefold() not in known:
+            spoken_entries.append(PronunciationEntry(written=entry.spoken, spoken=entry.spoken))
+            known.add(entry.spoken.casefold())
+    masked = confirmed.model_copy(update={'entries': tuple(spoken_entries)})
+    lines = [line.model_copy(update={
+        'text': pronunciation_module.apply_pronunciation(line.tts_text(expressive=False), confirmed),
+        'delivery': None,
+    }) for line in script.lines]
+    return extract_pronunciation_candidates(script.model_copy(update={'lines': lines}), masked)
