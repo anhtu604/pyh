@@ -494,6 +494,6 @@ phases:
 
   - id: R5.3.4
     title: Hợp đồng 16 vai, model, lời và điểm chạm TOFU
-    status: doing
+    status: done
     owner: codex
-    note: 'Đưa chuẩn R5 vào skill và prompt của 16 vai: mạch cơ chế, câu hỏi-câu chốt, bỏ hạn ngạch biểu đồ, giọng Anh Tu tốc độ 1,18.'
+    note: 'Đã vào master: 16 vai có hợp đồng input/output/done_when; lời theo mạch cơ chế, câu hỏi-câu chốt-recap, D3, D4 2/3/3; bỏ quota biểu đồ; model Neon/Sol/Terra, critic khác model maker; giọng Anh Tu tốc độ 1,18. pytest 2938 đạt. Còn mở: orchestrator-neon chưa có ID xác thực.'
