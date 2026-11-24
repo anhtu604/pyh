@@ -681,6 +681,10 @@ def pronunciation_gate_active(revision: Path) -> bool:
     return path.is_file() and read_yaml(path).get('quality_profile') == 'r5_v1'
 
 
+# Bác sĩ 2026-11-25: không hỏi phần trăm đơn ("25%") và "video" — đọc thường đã đúng.
+_GATE_SKIP_RE = re.compile(r"(?<![\w<>≤≥–/-])\d+(?:[.,]\d+)?\s*%(?!\w)|(?<!\w)video(?!\w)", re.IGNORECASE)
+
+
 def narration_pronunciation_candidates(script: Script, lexicon: PronunciationLexicon) -> dict[str, Any]:
     """Scan only line.tts_text after confirmed replacements; never storyboard/metadata.
 
@@ -696,7 +700,8 @@ def narration_pronunciation_candidates(script: Script, lexicon: PronunciationLex
             known.add(entry.spoken.casefold())
     masked = confirmed.model_copy(update={'entries': tuple(spoken_entries)})
     lines = [line.model_copy(update={
-        'text': pronunciation_module.apply_pronunciation(line.tts_text(expressive=False), confirmed),
+        'text': _GATE_SKIP_RE.sub(' ', pronunciation_module.apply_pronunciation(
+            line.tts_text(expressive=False), confirmed)),
         'delivery': None,
     }) for line in script.lines]
     return extract_pronunciation_candidates(script.model_copy(update={'lines': lines}), masked)
