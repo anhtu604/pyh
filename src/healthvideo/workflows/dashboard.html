@@ -63,6 +63,23 @@ header{display:flex;align-items:center;gap:14px;justify-content:space-between;fl
 .mark svg{width:24px;height:24px}
 h1{font-size:21px;font-weight:800;letter-spacing:-.02em}
 .sub{color:var(--muted);font-size:14px;margin-top:2px;line-height:1.45}
+.brand-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.ver-sep{color:var(--faint)}
+.app-ver{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--faint)}
+.ver-badge{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:700;
+  background:color-mix(in srgb,var(--brand-yellow) 18%,transparent);color:var(--st-doctor);
+  border:1px solid color-mix(in srgb,var(--brand-yellow) 55%,transparent);transition:background .18s}
+.ver-badge:hover{background:color-mix(in srgb,var(--brand-yellow) 28%,transparent)}
+.ver-badge[hidden]{display:none}
+.ver-dot{width:7px;height:7px;border-radius:50%;background:var(--brand-yellow);flex-shrink:0}
+.update-overlay{position:fixed;inset:0;z-index:60;display:none;place-items:center;padding:20px;
+  background:rgba(4,12,22,.78);backdrop-filter:blur(6px)}
+.update-overlay.show{display:grid}
+.update-card{max-width:440px;width:100%;padding:24px 26px;text-align:center;display:grid;gap:12px;justify-items:center;
+  background:var(--panel-solid);border:1px solid var(--line-strong);border-radius:var(--radius);box-shadow:var(--shadow-pop)}
+.update-card h3{font-size:18px;font-weight:800}
+.update-card p{font-size:14px;color:var(--muted);line-height:1.55}
+.update-spin{width:34px;height:34px;border-radius:50%;border:3px solid var(--line-strong);border-top-color:var(--teal);animation:rot .85s linear infinite}
 .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 
 .pill{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:7px 14px;border-radius:999px;font-size:13.5px;font-weight:600;
@@ -941,7 +958,14 @@ html[data-theme="light"] .ws-iso-stage{background:radial-gradient(ellipse 62% 46
       </div>
       <div>
         <h1>Xưởng video</h1>
-        <div class="sub">Protect Your Health</div>
+        <div class="sub brand-meta">
+          <span>Protect Your Health</span>
+          <span class="ver-sep" aria-hidden="true">·</span>
+          <span class="app-ver" id="app-version" title="Phiên bản code đang chạy">…</span>
+          <button class="ver-badge" id="btn-version-update" type="button" hidden title="Có code mới — bấm để cập nhật">
+            <span class="ver-dot" aria-hidden="true"></span>Có code mới
+          </button>
+        </div>
       </div>
     </div>
     <div class="controls">
@@ -1172,6 +1196,7 @@ html[data-theme="light"] .ws-iso-stage{background:radial-gradient(ellipse 62% 46
       <div class="controls">
         <button class="btn" id="btn-standards" type="button" title="Mọi góp ý của bác sĩ, agent áp dụng cho mọi chủ đề">
           Chuẩn đã ghi nhớ <span id="std-count" class="tag">0</span></button>
+        <button class="btn" id="btn-update-app" type="button" title="Khởi động lại app để nạp code mới nhất trong thư mục dự án">Cập nhật code mới</button>
         <button class="btn ghost" id="btn-quit" type="button" title="Tắt app (xưởng nền vẫn chạy)">Tắt app</button>
         <button class="btn ghost" id="btn-admin-close" type="button" aria-label="Đóng menu Quản trị">×</button>
       </div>
@@ -1417,10 +1442,20 @@ html[data-theme="light"] .ws-iso-stage{background:radial-gradient(ellipse 62% 46
   </div>
 </div>
 
+<!-- App Update Overlay -->
+<div class="update-overlay" id="update-overlay" role="alertdialog" aria-modal="true" aria-labelledby="update-overlay-title" hidden>
+  <div class="update-card">
+    <div class="update-spin" aria-hidden="true"></div>
+    <h3 id="update-overlay-title">Đang cập nhật…</h3>
+    <p id="update-overlay-msg">App đang khởi động lại với code mới. Trang sẽ tự động kết nối lại và tải lại sau vài giây.</p>
+  </div>
+</div>
+
 <script>
 let TOKEN = '__TOKEN__';
 const $ = (id) => document.getElementById(id);
 let state = null, overviewData = null, activityData = null, companyData = null, busy = false, logFull = false;
+let versionInfo = null, updatingApp = false;
 let wsSelectedId = null, wsStationMap = new Map();
 let wsOffline = false, wsPageHidden = Boolean(document.hidden), wsInView = true, wsHasActiveExecution = false, wsMotionEnabled = true;
 let chatCtx = {slug: null, revision: null, view: 'overview', scene: null, time_s: null};
@@ -1675,8 +1710,9 @@ function renderOverview(ov){
           sub:d.question || 'Dự án đang chờ ý kiến bác sĩ', btn:'Trả lời câu hỏi'};
       }
       if(d.kind === 'script_guidance' || d.kind === 'product_guidance'){
-        return {slug:d.slug, code:d.code, title:d.title, guidance:true, productGuidance:d.kind === 'product_guidance', guidanceRole:d.role || '', guidanceView:d.view || '', stuck:d.stuck || '', rounds:d.rounds || 0,
-          sub:`${d.message || 'Trạm 07 chưa đạt sau 3 chu kỳ'}${d.rounds ? ` (${d.rounds} vòng)` : ''} · tiêu chí kẹt: ${d.stuck || 'chưa rõ'}`};
+        const rawStuck = String(d.stuck || '').replace(/^Trạm\s+\d+\s+cần\s+hướng\s+dẫn:\s*/i, '').trim();
+        return {slug:d.slug, code:d.code, title:d.title, guidance:true, productGuidance:d.kind === 'product_guidance', guidanceRole:d.role || '', guidanceView:d.view || '', stuck:rawStuck || d.stuck || '', rounds:d.rounds || 0,
+          sub:`${d.message || 'Trạm 07 chưa đạt sau 3 chu kỳ'}${d.rounds ? ` (${d.rounds} vòng)` : ''} · tiêu chí kẹt: ${rawStuck || 'chưa rõ'}`};
       }
       return {slug:d.slug, code:d.code, title:d.title, gate:d.gate, styleScore:d.style_score || null, sub:`${d.count} điểm cần quyết`, btn:`Mở thẻ quyết định (${d.count})`};
     }),
@@ -2688,6 +2724,7 @@ async function refresh(){
     await loadProgress();
     loadMedanimLibrary(false).catch(()=>{});
   }catch(e){
+    if(updatingApp) return;
     wsOffline = true;
     $('offline').classList.add('show');
     if(!state){
@@ -2916,9 +2953,12 @@ function renderStage12DecisionSlot(b){
     return;
   }
   if(pvTab !== 'overview'){
+    const stNum = String(q.station || '12');
+    const qText = String(q.question || 'Chọn hướng xử lý tiếp theo.');
+    const stPrefix = qText.startsWith(`Trạm ${stNum}`) ? '' : `Trạm ${esc(stNum)}: `;
     slot.innerHTML = `
       <div class="s12-mini" id="pv-stage12-mini" role="status">
-        <span><b>Chờ ý kiến bác sĩ</b> · Trạm ${esc(q.station || '12')}: ${esc(q.question || 'Chọn hướng xử lý tiếp theo.')}</span>
+        <span><b>Chờ ý kiến bác sĩ</b> · ${stPrefix}${esc(qText)}</span>
         <button type="button" class="btn warn" id="pv-open-s12-overview">Mở phiếu quyết định</button>
       </div>`;
     const btn = slot.querySelector('#pv-open-s12-overview');
@@ -4715,6 +4755,130 @@ $('btn-start').onclick=()=>act('/api/factory/start');
 $('btn-stop').onclick=()=>act('/api/factory/stop', state&&state.agents.length?'Agent đang làm việc. Dừng xưởng bây giờ sẽ cắt ngang bước hiện tại. Vẫn dừng?':'Dừng xưởng nền?');
 $('btn-quit').onclick=()=>act('/api/app/quit','Tắt app? Xưởng nền vẫn chạy nếu đang bật.');
 
+function formatVersionDate(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  if(Number.isNaN(d.getTime())) return String(iso).slice(0, 16).replace('T', ' ');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  return `${dd}/${mm} ${hh}:${mi}`;
+}
+
+function renderVersion(info){
+  versionInfo = info || null;
+  const el = $('app-version');
+  const badge = $('btn-version-update');
+  const running = (info && info.running) || {};
+  const latest = (info && info.latest) || {};
+  if(el){
+    if(running.hash){
+      const dt = formatVersionDate(running.date);
+      el.textContent = dt ? `v${running.hash} · ${dt}` : `v${running.hash}`;
+      el.title = running.date ? `Phiên bản đang chạy: v${running.hash} (${running.date})` : `Phiên bản đang chạy: v${running.hash}`;
+    } else {
+      el.textContent = 'không rõ';
+      el.title = 'Không đọc được phiên bản git';
+    }
+  }
+  if(badge){
+    const avail = Boolean(info && info.update_available);
+    badge.hidden = !avail;
+    if(avail && latest.hash){
+      const subj = latest.subject ? ` — ${latest.subject}` : '';
+      badge.title = `Có code mới: v${latest.hash}${subj}. Bấm để cập nhật.`;
+    }
+  }
+}
+
+async function loadVersion(){
+  try{
+    const r = await fetch('/api/version', {cache: 'no-store'});
+    if(!r.ok) return null;
+    const data = await r.json();
+    renderVersion(data);
+    return data;
+  }catch(_e){
+    return null;
+  }
+}
+
+function setUpdateOverlay(show, msg){
+  const ov = $('update-overlay');
+  if(!ov) return;
+  ov.hidden = !show;
+  ov.classList.toggle('show', Boolean(show));
+  if(msg && $('update-overlay-msg')) $('update-overlay-msg').textContent = msg;
+}
+
+function waitForUpdatedApp(){
+  let attempts = 0;
+  const poll = async () => {
+    attempts += 1;
+    try{
+      const r = await fetch('/api/version', {cache: 'no-store'});
+      if(r.ok){
+        const data = await r.json().catch(() => null);
+        const newHash = data && data.running && data.running.hash ? data.running.hash : '';
+        try{
+          if(typeof sessionStorage !== 'undefined'){
+            sessionStorage.setItem('pyh_updated_version', newHash || 'mới');
+          }
+        }catch(_err){}
+        setUpdateOverlay(true, newHash ? `Đã kết nối lại (v${newHash}). Đang tải lại trang…` : 'Đã kết nối lại. Đang tải lại trang…');
+        window.location.reload();
+        return;
+      }
+    }catch(_e){}
+    if(attempts >= 45){
+      updatingApp = false;
+      setUpdateOverlay(false);
+      toast('Chờ app khởi động lại quá lâu. Hãy tải lại trang hoặc mở lại app từ Desktop.', true);
+      return;
+    }
+    setTimeout(poll, 2000);
+  };
+  setTimeout(poll, 2000);
+}
+
+async function triggerAppUpdate(){
+  if(busy || updatingApp) return;
+  busy = true;
+  const btnAdmin = $('btn-update-app');
+  const btnHead = $('btn-version-update');
+  if(btnAdmin) btnAdmin.disabled = true;
+  if(btnHead) btnHead.disabled = true;
+  try{
+    await postJson('/api/app/update');
+    updatingApp = true;
+    setAdminDrawer(false);
+    $('offline')?.classList.remove('show');
+    setUpdateOverlay(true, 'App đang tắt và khởi động lại với code mới. Tự động kết nối lại mỗi 2 giây…');
+    waitForUpdatedApp();
+  }catch(e){
+    toast(e.message || 'Không thể cập nhật code mới.', true);
+  }finally{
+    busy = false;
+    if(!updatingApp){
+      if(btnAdmin) btnAdmin.disabled = false;
+      if(btnHead) btnHead.disabled = false;
+    }
+  }
+}
+
+if($('btn-update-app')) $('btn-update-app').onclick = () => triggerAppUpdate();
+if($('btn-version-update')) $('btn-version-update').onclick = () => triggerAppUpdate();
+try{
+  if(typeof sessionStorage !== 'undefined'){
+    const justUpdated = sessionStorage.getItem('pyh_updated_version');
+    if(justUpdated){
+      sessionStorage.removeItem('pyh_updated_version');
+      setTimeout(() => toast(justUpdated === 'mới' ? 'Đã cập nhật app lên phiên bản mới.' : `Đã cập nhật app lên phiên bản v${justUpdated}.`), 350);
+    }
+  }
+}catch(_err){}
+
 /* ---------- 3D Isometric Workshop Renderer ---------- */
 const WS_LINE_1 = [
   {id:'researcher', num:'01', short:'Nghiên cứu & Kênh'},
@@ -6396,7 +6560,7 @@ document.querySelectorAll('[data-medanim-filter]').forEach(btn => {
 if($('btn-medanim-refresh')) $('btn-medanim-refresh').onclick = () => loadMedanimLibrary(true);
 window.addEventListener('hashchange', showHomeView);
 showHomeView();
-refresh(); loadChat(); setInterval(()=>{ if(!isOpen('pv')) refresh(); }, 3000);
+refresh(); loadChat(); loadVersion(); setInterval(()=>{ if(!isOpen('pv')) refresh(); }, 3000); setInterval(()=>{ if(!updatingApp) loadVersion(); }, 20000);
 </script>
 <script>
 /* Package C: app operations inside Quản trị menu */

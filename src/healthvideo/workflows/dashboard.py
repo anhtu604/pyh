@@ -6,6 +6,7 @@ verified here; the PIN is never stored, logged, or passed to agents.
 
 from __future__ import annotations
 
+import contextlib
 import errno
 import json
 import os
@@ -41,6 +42,7 @@ from healthvideo.project_codes import project_codes
 from healthvideo.storage.files import read_yaml, write_text_atomic, write_yaml_atomic
 from healthvideo.storage.queue import load_queue
 from healthvideo.workflows import (
+    app_update,
     asset_library,
     change_request,
     channel_analytics,
@@ -309,6 +311,26 @@ def production_running(
 ) -> list[dict]:
     """Active production runs verified by OS process creation token."""
     return _inspect_production_markers(root, now_dt=now())[0]
+
+
+def _active_work_blocker(root: Path) -> str | None:
+    """Return a Vietnamese refusal message if any agent or production step is currently running."""
+    prod = production_running(root)
+    if prod:
+        labels = ', '.join(str(item.get('title') or item.get('slug') or 'dự án') for item in prod[:3])
+        return f'Không thể cập nhật: đang có bước dựng video chạy dở ({labels}). Hãy chờ dựng xong rồi thử lại.'
+    jobs = _active_running_jobs(root)
+    if jobs:
+        labels = ', '.join(
+            str(item.get('step_label') or item.get('role') or item.get('slug') or 'agent')
+            for item in jobs[:3]
+        )
+        return f'Không thể cập nhật: đang có agent chạy dở ({labels}). Hãy chờ agent hoàn tất rồi thử lại.'
+    agents = running_agents(root)
+    if agents:
+        labels = ', '.join(agents[:3])
+        return f'Không thể cập nhật: đang có agent chạy dở ({labels}). Hãy chờ agent hoàn tất rồi thử lại.'
+    return None
 
 
 STEP_LABELS: dict[str, str] = {
@@ -2825,6 +2847,13 @@ class _Handler(BaseHTTPRequestHandler):
                 self._send(HTTPStatus.OK, html.encode('utf-8'), 'text/html; charset=utf-8')
             elif path == '/api/ping':
                 self._json({'app': APP_ID})
+            elif path == '/api/version':
+                self._json(
+                    app_update.version_payload(
+                        self.server.running_version,
+                        repo_dir=self.server.repo_dir,
+                    )
+                )
             elif path in {'/api/status', '/api/state'}:
                 self._json(snapshot(self.server.root, agents=self.server.agents))
             elif path == '/api/overview':
@@ -3001,9 +3030,16 @@ class DashboardServer(ThreadingHTTPServer):
 
     def __init__(self, root: Path, port: int, *, token: str | None = None,
                  agents: Callable[[], list[str]] | None = None,
-                 actions: dict[str, Callable[..., str]] | None = None) -> None:
+                 actions: dict[str, Callable[..., str]] | None = None,
+                 repo_dir: Path | None = None) -> None:
         hide_child_consoles()
         self.root = root.resolve()
+        self.repo_dir = (repo_dir or REPO_ROOT).resolve()
+        self.running_version = (
+            app_update.read_running_version(self.repo_dir)
+            if repo_dir is not None
+            else app_update.startup_version()
+        )
         self.token = token or _load_or_create_token(self.root)
         self.agents = agents
         self.limiter = PinLimiter()
@@ -3296,15 +3332,32 @@ def default_actions(server: DashboardServer) -> dict[str, Callable[..., str]]:
         return answer_doctor_question(root, slug, body)
 
     def quit_app() -> str:
+        from healthvideo.workflows import telegram_bot
+
+        with contextlib.suppress(OSError, RuntimeError, ValueError):
+            telegram_bot.stop_background(root)
         threading.Thread(target=server.shutdown, daemon=True).start()
         return 'App đã tắt (xưởng nền vẫn chạy nếu đang bật).'
+
+    def update_app() -> dict:
+        from healthvideo.workflows import telegram_bot
+
+        return app_update.trigger_app_update(
+            root=root,
+            port=server.server_address[1],
+            check_active_jobs=lambda: _active_work_blocker(root),
+            is_factory_running=lambda: factory.running_pid(root) is not None,
+            stop_factory=stop,
+            stop_telegram=lambda: telegram_bot.stop_background(root),
+            quit_app=lambda: threading.Thread(target=server.shutdown, daemon=True).start(),
+        )
 
     return {
         'factory/start': start, 'factory/stop': stop, 'review/open': review,
         'project/packet': packet, 'project/folder': folder, 'project/decide': decision,
         'project/comment': comment, 'project/answer-question': answer_question,
         'standards/add': add_standard, 'feedback/add': add_feedback,
-        'feedback/retry': retry_feedback, 'app/quit': quit_app,
+        'feedback/retry': retry_feedback, 'app/quit': quit_app, 'app/update': update_app,
     }
 
 

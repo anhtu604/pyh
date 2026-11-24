@@ -46,6 +46,7 @@ def _run_workshop_js(test_body: str, *, pre_storage: dict[str, str] | None = Non
         ' WS_AVATARS, wsIsoSvg, wsPersonSvg, wsPropSvg, wsGateEmptySvg,'
         ' pvFormatTc, pvParseJumpInput, stopPvVideoRuntime,'
         ' updateChatContext, closeProduct, postJson,'
+        ' renderVersion, renderStage12DecisionSlot,'
         ' getVideoState: () => ({ pv, pvTab, chatCtx, pvVideoState }),'
         ' setVideoState: (patch) => {'
         '   if ("pv" in patch) pv = patch.pv;'
@@ -1836,4 +1837,53 @@ def test_zero_hang_error_ui_active_repair_escalation_and_stopped_reminder():
     assert(startReminder && startReminder.textContent.includes('Bật xưởng xử lý ngay'), 'stopped factory reminder button rendered when blocked unhandled');
     await startReminder.onclick();
     assert(posts.some(p => p.url === '/api/factory/start'), 'reminder button starts factory');
+    ''')
+
+
+def test_version_header_and_stage12_no_duplicate_prefix():
+    html = DASHBOARD_HTML.read_text(encoding='utf-8')
+    assert 'id="app-version"' in html
+    assert 'id="btn-version-update"' in html
+    assert 'id="btn-update-app"' in html
+    assert 'id="update-overlay"' in html
+
+    _run_workshop_js(r'''
+    const { pyh, doc } = ctx;
+    const assert = (c, m) => { if (!c) throw new Error(m); };
+    const verEl = doc.getElementById('app-version');
+    const badge = doc.getElementById('btn-version-update');
+    badge.hidden = true;
+
+    pyh.renderVersion({
+      running: { hash: '9cbdf9a', date: '2026-11-24T19:35:23+07:00' },
+      latest: { hash: 'abcdef1', date: '2026-11-24T20:00:00+07:00', subject: 'feat: new' },
+      update_available: true,
+    });
+    assert(verEl.textContent.startsWith('v9cbdf9a · '), 'renders running short hash and date');
+    assert(badge.hidden === false, 'shows update badge when update_available is true');
+
+    pyh.renderVersion({
+      running: { hash: null, date: null },
+      latest: { hash: null, date: null, subject: null },
+      update_available: false,
+    });
+    assert(verEl.textContent === 'không rõ', 'renders fallback when git unavailable');
+    assert(badge.hidden === true, 'hides update badge when update_available is false');
+
+    // Trạm 12 mini-banner must not repeat "Trạm 12: Trạm 12 kẹt..."
+    pyh.setVideoState({ pvTab: 'video' });
+    pyh.renderStage12DecisionSlot({
+      slug: 'demo',
+      revision: '001',
+      gate: null,
+      doctor_question: {
+        id: 'q1',
+        station: '12',
+        status: 'open',
+        question: 'Trạm 12 kẹt cùng issue qua 2 vòng duyệt sản phẩm.',
+      },
+    });
+    const mini = doc.getElementById('pv-card-slot').textContent;
+    assert(mini.includes('Trạm 12 kẹt cùng issue'), 'contains stage 12 question');
+    assert(!mini.includes('Trạm 12: Trạm 12'), 'does not duplicate Trạm 12 prefix');
     ''')
