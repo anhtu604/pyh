@@ -81,9 +81,9 @@ entries:
     needs_doctor_review: true
     note: Đề xuất, cần bác sĩ xác nhận.
   - written: HBsAg
-    spoken: hát bê ét a gê
+    spoken: hát bê ét a dê
     needs_doctor_review: false
-    note: Bác sĩ chọn 2026-11-25.
+    note: Bác sĩ sửa 2026-11-25 (trước là a gê).
   - written: MASLD
     spoken: em a ét eo đê
     needs_doctor_review: false
@@ -104,3 +104,15 @@ entries:
     spoken: đi-lin
     needs_doctor_review: false
     note: Bác sĩ chọn 2026-11-25.
+  - written: viêm gan B hoặc C
+    spoken: viêm gan bê hoặc xê
+    needs_doctor_review: false
+    note: Bác sĩ 2026-11-25 - chữ B đọc bê (Vibi đọc thành bơ); C đọc xê theo HCV bác sĩ chọn.
+  - written: viêm gan B
+    spoken: viêm gan bê
+    needs_doctor_review: false
+    note: Bác sĩ 2026-11-25 - Vibi đọc thành bơ.
+  - written: viêm gan C
+    spoken: viêm gan xê
+    needs_doctor_review: false
+    note: Theo cách đọc HCV bác sĩ chọn 2026-11-25.
