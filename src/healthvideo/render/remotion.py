@@ -5,6 +5,7 @@ import shutil
 import subprocess
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from hashlib import sha256
 from pathlib import Path
 
 from healthvideo.process import resolve_pnpm_argv, run_with_deadline
@@ -126,7 +127,62 @@ def render_bundle_ready(bundle_dir: Path | None) -> bool:
     return bundle_dir is not None and bundle_dir.is_dir() and (bundle_dir / "index.html").is_file()
 
 
-def sync_bundle_public(public_dir: Path, bundle_dir: Path) -> None:
+def chunk_renderer_identity() -> dict[str, object]:
+    """Private cache identity; never changes the existing review-gate identity.
+
+    Hash executable bundle bytes separately from per-chunk public assets. When
+    no bundle was built (e.g. injected runners), hash renderer sources/configs.
+    Fonts and built-in media remain conservative shared dependencies.
+    """
+    root = Path(__file__).resolve().parents[3]
+    state = _ACTIVE_BUNDLE_STATE.get() or {}
+    bundle = state.get("bundle_dir")
+    files: dict[str, str] = {}
+    # Remotion 4.0.522 embeds public file sizes/mtimes in index.html. Those
+    # describe media, not executable code, and fresh TTS changes them on every
+    # run. Media bytes are hashed per chunk. Keep the entire inventory if a
+    # future renderer actually reads it (current R5 uses staticFile only).
+    uses_inventory = any(
+        any(token in p.read_text(encoding="utf-8")
+            for token in ("getStaticFiles", "remotion_staticFiles"))
+        for p in (root / "video/src").rglob("*")
+        if p.is_file() and p.suffix in {".ts", ".tsx", ".js", ".jsx"}
+    )
+    if isinstance(bundle, Path) and render_bundle_ready(bundle):
+        for p in sorted(bundle.rglob("*")):
+            if not p.is_file() or p.relative_to(bundle).parts[0] == "public":
+                continue
+            digest = sha256_file(p)
+            if p == bundle / "index.html" and not uses_inventory:
+                html = p.read_text(encoding="utf-8")
+                marker = "window.remotion_staticFiles = "
+                prefix, present, tail = html.partition(marker)
+                if present:
+                    try:
+                        inventory, end = json.JSONDecoder().raw_decode(tail)
+                        if isinstance(inventory, list):
+                            digest = sha256((prefix + marker + "[]" + tail[end:]).encode()).hexdigest()
+                    except ValueError:
+                        pass  # Unknown bundle format: hash all bytes conservatively.
+            files["bundle/" + p.relative_to(bundle).as_posix()] = digest
+    for directory in ("src", "public/fonts"):
+        base = root / "video" / directory
+        files.update({"video/" + p.relative_to(root / "video").as_posix(): sha256_file(p)
+                      for p in sorted(base.rglob("*")) if p.is_file()})
+    for name in ("package.json", "pnpm-lock.yaml", "remotion.config.ts", "tsconfig.json"):
+        path = root / "video" / name
+        if path.is_file():
+            files["video/" + name] = sha256_file(path)
+    for name in ("package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"):
+        path = root / name
+        if path.is_file():
+            files[name] = sha256_file(path)
+    for anim_id, assets_dir, asset in _iter_medanim_assets(root):
+        files[f"medanim/{anim_id}/{asset.relative_to(assets_dir).as_posix()}"] = sha256_file(asset)
+    return {"bundle_sha256": canonical_json_hash(files)}
+
+
+def sync_bundle_public(public_dir: Path, bundle_dir: Path, *, verify_bytes: bool = False) -> None:
     """Copy new or updated static assets/audio from ``public_dir`` into ``bundle_dir/public``."""
     src_root = public_dir.resolve()
     dst_root = (bundle_dir / "public").resolve()
@@ -141,7 +197,12 @@ def sync_bundle_public(public_dir: Path, bundle_dir: Path) -> None:
             continue
         if item.suffix.lower() in {".mp4", ".tmp"}:
             continue
-        _copy_if_newer(item, dst_root / rel)
+        target = dst_root / rel
+        if verify_bytes and (not target.is_file() or sha256_file(item) != sha256_file(target)):
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(item, target)
+        else:
+            _copy_if_newer(item, target)
 
 
 def build_bundle_argv(
@@ -249,6 +310,7 @@ def build_render_argv(
     bundle_dir: Path | None = None,
     gl: str | None = None,
     hardware_acceleration: str | None = None,
+    verify_public: bool = False,
 ) -> list[str]:
     """Build the cross-platform argv used to render the HealthVideo composition.
 
@@ -272,7 +334,7 @@ def build_render_argv(
         _stage_public_assets(repository_root, public_dir)
     if render_bundle_ready(bundle_dir):
         assert bundle_dir is not None
-        sync_bundle_public(public_dir, bundle_dir)
+        sync_bundle_public(public_dir, bundle_dir, verify_bytes=verify_public)
         argv = [
             "pnpm",
             "--dir",

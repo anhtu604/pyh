@@ -59,6 +59,7 @@ from healthvideo.domain.visual_budget import validate_visual_budget
 from healthvideo.render import remotion as remotion_module
 from healthvideo.render.beats import resolve_scene_beats
 from healthvideo.render.chapters import render_long_form
+from healthvideo.render.chunked import render_chunked
 from healthvideo.render.input import (
     R5RevisionAsset,
     audio_timing_qa,
@@ -131,7 +132,6 @@ from healthvideo.workflows.long_form import (
     _resolve_effective_clip_plan,
     load_clip_scenes,
     render_clips,
-    render_r5_long_form,
 )
 from healthvideo.workflows.shorts_plan import revision_tx_lock
 from healthvideo.workflows.visual_assets import (
@@ -983,13 +983,13 @@ def _produce_v2_inner(
                                 r5_assets=r5_assets,
                             )
                             if render_input.quality_profile == "r5_v1":
-                                chapter_parts = render_r5_long_form(
+                                chapter_parts = render_chunked(
                                     render_input_path=staged_render_input,
                                     render_input=render_input,
                                     public_dir=staging_dir,
                                     audio=staged_audio,
                                     output=staged_output,
-                                    cache_dir=layout.project_dir / CHAPTER_CACHE_DIRECTORY,
+                                    cache_dir=layout.artifact_root / "render-chunks",
                                     asset_hashes=asset_hashes,
                                     renderer_identity=renderer_identity_data,
                                     audio_identity={
@@ -1001,6 +1001,7 @@ def _produce_v2_inner(
                                         },
                                     },
                                     runner=render_runner,
+                                    verify_media=use_real_remotion,
                                 )
                             else:
                                 chapter_parts = render_long_form(
