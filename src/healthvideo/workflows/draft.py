@@ -48,12 +48,35 @@ def validate_estimated_layout(
 
     timed, _ = retime_storyboard(storyboard, estimate_line_ms(script, project_dir))
     errors: list[str] = []
+    if storyboard.quality_profile == 'r5_v1':
+        from healthvideo.domain.quality_standards import validate_r5_contract
+        from healthvideo.render.quality import (
+            R5RuntimeStoryboard,
+            measure_r5_quality,
+            resolve_r5_shots,
+            validate_r5_quality,
+        )
+
+        timed = R5RuntimeStoryboard.model_validate({**timed.model_dump(), 'estimated': True})
+        try:
+            validate_r5_contract(timed, script)
+        except ValueError as error:
+            errors.append(f'{error}; owner=storyboard_director')
+        report = measure_r5_quality(timed)
+        try:
+            validate_r5_quality(report, estimated=True)
+        except ValueError as error:
+            errors.append(str(error))
+        if not report.issues:
+            timed = resolve_r5_shots(timed)
     try:
         validate_visual_budget(timed, assets, margin_percent=1)
     except ValueError as error:
         errors.append(str(error) + '; scenes: ' + ', '.join(
             f'{s.id}={s.duration_frames} frames ({s.visual})' for s in timed.scenes))
     for scene in timed.scenes:
+        if storyboard.quality_profile == 'r5_v1':
+            continue  # Same frame measurement above is reused after TTS.
         try:
             resolved = resolve_scene_beats(scene)
             entrance_timing_qa(resolved)
@@ -143,7 +166,10 @@ def _validate(
     validate_anatomy_subjects(storyboard)
     from healthvideo.render.beats import draft_visual_rhythm_qa
 
-    draft_visual_rhythm_qa(storyboard.scenes)
+    if storyboard.quality_profile == 'r5_v1':
+        validate_estimated_layout(revision.parents[1], script, storyboard, assets)
+    else:
+        draft_visual_rhythm_qa(storyboard.scenes)
     validate_hook_outro(script, storyboard, require_brand=True, allow_line_references=True)
     resolve_citations(
         script,

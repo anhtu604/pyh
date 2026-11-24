@@ -164,3 +164,39 @@ def test_submit_draft_preserves_validation_value_error_when_staging_cleanup_hits
     with pytest.raises(ValueError, match="unsupported anatomy subject"):
         submit_draft(project, SOURCE / "script/script.yaml", board_file,
                      SOURCE / "assets/asset-manifest.yaml")
+
+
+def test_r5_estimated_precheck_aggregates_scenes_without_tts(tmp_path, monkeypatch):
+    from healthvideo.domain.script import Script
+    from healthvideo.render import timing
+    from healthvideo.workflows.draft import validate_estimated_layout
+    from tests.render.test_quality import board, shot, window
+
+    b = board([shot(0, 300, windows=[window(0, 250)])], 300)
+    second = b.scenes[0].model_copy(update={"id": "S2", "start_frame": 300,
+        "shots": tuple(s.model_copy(update={"id": "SH2"}) for s in b.scenes[0].shots)})
+    b = b.model_copy(update={"scenes": (*b.scenes, second)})
+    script = Script(title="Synthetic", lines=[{"id": "L1", "text": "w0 w250"}])
+    monkeypatch.setattr(timing, "estimate_line_ms", lambda *args: {"L1": 20000})
+    before = b.model_dump_json(), script.model_dump_json()
+    with pytest.raises(ValueError) as exc:
+        validate_estimated_layout(tmp_path, script, b)
+    message = str(exc.value)
+    assert "S1" in message and "S2" in message and "storyboard_director" in message
+    assert before == (b.model_dump_json(), script.model_dump_json())
+
+
+def test_r5_estimated_precheck_returns_runtime_and_preserves_sources(tmp_path, monkeypatch):
+    from healthvideo.domain.script import Script
+    from healthvideo.render import timing
+    from healthvideo.workflows.draft import validate_estimated_layout
+    from tests.render.test_quality import board, shot
+
+    b = board([shot(0, 90, kind="story")], 90)
+    script = Script(title="Synthetic", lines=[{"id": "L1", "text": "w0 Question1? Question2?"}])
+    monkeypatch.setattr(timing, "estimate_line_ms", lambda *args: {"L1": 2700})
+    before = b.model_dump_json(), script.model_dump_json()
+    runtime = validate_estimated_layout(tmp_path, script, b)
+    assert runtime.estimated is True
+    assert runtime.scenes[0].resolved_shots[0].end_frame == 90
+    assert before == (b.model_dump_json(), script.model_dump_json())

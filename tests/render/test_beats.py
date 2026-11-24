@@ -100,3 +100,25 @@ def test_duplicate_beat_times_rejected():
     with pytest.raises(ValueError, match="distinct increasing"):
         resolve_scene_beats(scene(beats=[{"at": 1, "action": "grow"},
                                          {"at": 1, "action": "deposit"}]))
+
+
+def test_r5_caption_words_and_legacy_beats_do_not_hide_static_shot():
+    from healthvideo.render.quality import resolve_r5_shots
+    from tests.render.test_quality import board, shot
+
+    b = resolve_r5_shots(board([shot(0, 300, kind="mechanism")], 300))
+    from healthvideo.domain.storyboard import CaptionWord
+
+    item = b.scenes[0].model_copy(update={"words": tuple(
+        CaptionWord(text=f"new{i}", start_frame=i, end_frame=i+1) for i in range(0, 300, 30))})
+    with pytest.raises(ValueError, match="S1.*SH1.*frame.*storyboard_director"):
+        visual_rhythm_qa(item)
+
+
+def test_r5_causal_actions_and_shot_cuts_reset_clock():
+    from healthvideo.render.quality import resolve_r5_shots
+    from tests.render.test_quality import action, board, shot
+
+    b = resolve_r5_shots(board([shot(0, 300, kind="mechanism", actions=[
+        action(0, 150), action(150, 300, 1)])], 300))
+    visual_rhythm_qa(b.scenes[0])

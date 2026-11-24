@@ -8,6 +8,10 @@ from healthvideo.render.word_timing import _keyword_frame, resolve_scene_entranc
 
 def resolve_scene_beats(scene: Scene, *, fps: int = 30, clamp_outside: bool = False) -> Scene:
     """Use existing Whisper word anchors; proportional tokens only for draft/offline fallback."""
+    if scene.shots:
+        # R5 timing belongs to explicit shot/action anchors. Do not synthesize
+        # caption or text entrances through the legacy percentage fallback.
+        return scene
     words = scene.words
     if not words:
         tokens = scene.narration.split()
@@ -46,6 +50,23 @@ def resolve_scene_beats(scene: Scene, *, fps: int = 30, clamp_outside: bool = Fa
 
 def visual_rhythm_qa(scene: Scene, *, fps: int = 30) -> None:
     """Cuts, changed focus/labels/actions and newly visible text reset the six-second clock."""
+    if scene.shots:
+        from healthvideo.domain.quality_standards import D2_ACTION_STEP_SECONDS
+        from healthvideo.render.quality import causal_actions
+
+        if not scene.resolved_shots:
+            raise ValueError(f"Scene {scene.id} shot * frame [0,{scene.duration_frames}): "
+                             "R5 requires resolved shots; owner=storyboard_director")
+        for shot in scene.resolved_shots:
+            if shot.kind not in {"story", "mechanism"}:
+                continue
+            changes = sorted({shot.start_frame, shot.end_frame,
+                              *(a.start_frame for a in causal_actions(shot))})
+            for start, end in pairwise(changes):
+                if end-start > D2_ACTION_STEP_SECONDS[1]*fps:
+                    raise ValueError(f"Scene {scene.id} shot {shot.id} frame [{start},{end}): "
+                                     "visual gap exceeds 6s; owner=storyboard_director")
+        return
     changes = {0, scene.duration_frames}
     focus, labels = None, ()
     useful_beats = 0
