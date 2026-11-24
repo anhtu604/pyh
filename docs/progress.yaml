@@ -478,5 +478,5 @@ phases:
     title: Thiết kế chuẩn mới (spec) và kế hoạch thực hiện, bác sĩ duyệt hướng
     status: doing
     owner: codex
-    note: 'Bác sĩ 2026-11-24 duyệt hướng bản thử chương 1 v6; codex viết spec và kế hoạch đưa chuẩn mới vào xưởng (lời sâu theo mạch cơ chế, hình giải phẫu có giấy phép, không phụ đề 16:9, chọn model nhanh, cắt vòng lặp), Claude duyệt.'
+    note: 'Spec và kế hoạch đã vào master (d96e8a8): docs/superpowers/specs/2026-11-24-r5-quality-standards-design.md. Chờ bác sĩ chốt 5 điểm D1–D5 (trần chữ, nhịp shot, nguồn cập nhật, hết vòng chấm, chủ đề chạy thử).'
 
