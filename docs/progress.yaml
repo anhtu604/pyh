@@ -480,3 +480,8 @@ phases:
     owner: codex
     note: 'Spec và kế hoạch đã vào master; bác sĩ chốt D1 ≤15% chữ, D2 ngưỡng nhịp cứng, D4 hết vòng thì dừng trình bác sĩ, D5 chạy thử chủ đề gan 10–15 phút. Tiếp theo: triển khai R5.3.1–R5.3.10.'
 
+  - id: R5.3.1
+    title: Hợp đồng dữ liệu chuẩn R5, giữ tương thích project cũ
+    status: doing
+    owner: codex
+    note: 'Thêm quality_profile r5_v1, hợp đồng câu hỏi-khối-câu chốt và shot (Python + TypeScript); project cũ giữ nguyên hash.'
