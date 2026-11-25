@@ -553,6 +553,6 @@ phases:
 
   - id: PLAY.1
     title: Sổ định hướng để xưởng tự sửa, tự học từ câu trả lời của bác sĩ
-    status: doing
+    status: done
     owner: agy
-    note: 'Bác sĩ chọn 2026-11-25: lỗi mạng tự thử lại; tình huống hay gặp xử lý theo sổ định hướng; mỗi câu trả lời của bác sĩ ghi thành luật mới (chỉ thêm). PIN, cổng duyệt, lời y khoa mới, cách đọc vẫn hỏi bác sĩ.'
+    note: 'Đã vào master: lỗi mạng tự thử lại (5/15/45 phút); sự cố khác tự chạy lại 2 lần; sổ profiles/factory-playbook.yaml (chỉ thêm) có 3 luật sẵn và tự thêm luật từ câu trả lời bác sĩ; khi phải hỏi thì đưa 2–3 phương án cụ thể. PIN, cổng duyệt, tài khoản, an toàn vẫn hỏi bác sĩ. pytest 3243 đạt.'
