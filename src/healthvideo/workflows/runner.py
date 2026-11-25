@@ -494,7 +494,14 @@ def _mark_blocked(
             if log_path is not None
             else f"{reason}\n"
         )
-        write_text_atomic(blocked_file, detail)
+        from healthvideo.workflows.external_revision import external_revision_id
+
+        revision = external_revision_id(root / 'projects' / slug)
+        if revision is not None:
+            write_yaml_atomic(blocked_file, {'revision': revision, 'reason': reason,
+                                            'log_path': str(log_path) if log_path else None})
+        else:
+            write_text_atomic(blocked_file, detail)
 
 
 def _unused_answers(project_dir: Path) -> str | None:
@@ -1535,6 +1542,8 @@ def _run_topic(
     max_steps_per_topic: int = 20,
 ) -> bool:
     """Advance queued topics automatically until a review gate or blocker."""
+    from healthvideo.workflows.external_revision import clear_obsolete_holds
+
     entries = [topic]
 
     for entry in entries:
@@ -1542,6 +1551,7 @@ def _run_topic(
             continue
         candidate_dir = root / "projects" / entry.slug
         if (candidate_dir / "project.yaml").is_file():
+            clear_obsolete_holds(root, candidate_dir)
             product_review.reconcile_doctor_question(root, candidate_dir)
             if _waiting_for_repair_idle(root, entry.slug, deps.read_state(candidate_dir)):
                 with _REPORT_LOCK:
@@ -1575,6 +1585,7 @@ def _run_topic(
                 if is_project_paused(root, entry.slug):
                     break
                 if (project_dir / "project.yaml").is_file():
+                    clear_obsolete_holds(root, project_dir)
                     product_review.reconcile_doctor_question(root, project_dir)
                 if doctor_questions.open_question(root, entry.slug) is not None:
                     with _REPORT_LOCK:
@@ -1646,10 +1657,12 @@ def _run_topic(
                             script_review as external_script_review,
                         )
 
-                        external_script_review.require_passed_review(project_dir)
-                    except ValueError:
-                        if forced_step is None:
-                            step = 'script_review'
+                        action = external_script_review.next_script_action(project_dir)
+                        if action == 'script_review' and forced_step is None:
+                            step = action
+                    except ValueError as exc:
+                        _mark_blocked(root, entry.slug, str(exc), report)
+                        break
                 if step is None:
                     with _REPORT_LOCK:
                         if state == WorkflowState.BLOCKED:
@@ -1667,11 +1680,7 @@ def _run_topic(
                     try:
                         produce_external(project_dir, hold=True)
                         # Preserve the existing product critic; never dispatch image/shorts makers.
-                        try:
-                            product_review.require_passed_review(project_dir)
-                            step = 'submit_video'
-                        except ValueError:
-                            step = 'product_review'
+                        step = product_review.next_product_action(project_dir)
                     except (OSError, ValueError) as exc:
                         _mark_blocked(root, entry.slug, f'Bản dựng ngoài: {exc}', report)
                         break

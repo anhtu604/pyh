@@ -103,8 +103,148 @@ def fake_probe(path, *, vertical):
             'audio_channels': 2, 'sha256': sha256_file(path)}
 
 
+def make_advisory(revision, *, product, blocking=False):
+    from healthvideo.workflows import product_review, script_review
+
+    critic = product_review if product else script_review
+    path = revision / critic.LOG
+    log = read_yaml(path)
+    latest = log['rounds'][-1]
+    key = next(iter(critic.CRITERIA))
+    latest.update(passed=False, summary='Nhận xét tham khảo <an toàn>')
+    latest['scores'][key] = 5
+    latest['issues'] = [{('at' if product else 'line'): 'L01', 'criterion': key,
+                         'problem': 'Ý dài <cần xem>', 'fix': 'Rút gọn',
+                         'blocking_safety': blocking, **({'fixable': False} if product else {})}]
+    write_yaml_atomic(path, log)
+    return critic
+
+
+@pytest.mark.parametrize('product', [False, True])
+@pytest.mark.parametrize('case', ['advisory', 'safety', 'missing', 'stale', 'schema'])
+def test_external_current_valid_review_required(tmp_path, monkeypatch, product, case):
+    from healthvideo.approver_pin import set_pin
+    from healthvideo.domain.gate_review import GateKind
+    from healthvideo.domain.project_v2 import ProjectManifestV2
+    from healthvideo.workflows import external_revision, factory, gate_review, produce
+    from tests.helpers import write_critic_review_fixture
+
+    target, revision = imported(tmp_path)
+    if product:
+        approve_medical(target)
+        monkeypatch.setattr(external_revision, 'probe_media', fake_probe)
+        external_revision.produce_external(target, hold=True)
+    write_critic_review_fixture(target, product=product)
+    critic = make_advisory(revision, product=product, blocking=case == 'safety')
+    path = revision / critic.LOG
+    if case == 'missing':
+        path.unlink()
+    elif case in {'stale', 'schema'}:
+        log = read_yaml(path)
+        if case == 'stale':
+            log['rounds'][-1]['render_sha256' if product else 'script_sha256'] = 'obsolete'
+        else:
+            log['rounds'][-1]['scores'] = {}
+        write_yaml_atomic(path, log)
+    pin_file = target / 'synthetic-pin.json'
+    if not pin_file.exists():
+        set_pin('fixture-only-pin', path=pin_file)
+    kind = GateKind.VIDEO if product else GateKind.MEDICAL
+    if case == 'advisory':
+        critic.require_passed_review(target)
+        action = critic.next_product_action(target) if product else critic.next_script_action(target)
+        assert action == ('submit_video' if product else 'submit_medical')
+        if product:
+            produce.submit_video(target)
+        manifest = ProjectManifestV2.model_validate(read_yaml(target / 'project.yaml'))
+        assert factory.gate_for_project(target, manifest) == kind.value
+        with pytest.raises(ValueError, match='PIN'):
+            gate_review.approve_gate(target, kind, reviewer='Fixture', now=datetime.now(UTC))
+        gate_review.approve_gate(target, kind, reviewer='Fixture', now=datetime.now(UTC),
+                                doctor_pin='fixture-only-pin', pin_file=pin_file)
+    else:
+        with pytest.raises(ValueError):
+            critic.require_passed_review(target)
+        if product:
+            with pytest.raises(ValueError):
+                produce.submit_video(target)
+        else:
+            with pytest.raises(ValueError):
+                gate_review.approve_gate(target, kind, reviewer='Fixture', now=datetime.now(UTC),
+                                        doctor_pin='fixture-only-pin', pin_file=pin_file)
+        assert not (revision / f'reviews/{kind.value}-approval.yaml').is_file()
+
+
+@pytest.mark.parametrize('tag', ['001', '002', None])
+def test_external_holds_only_clear_explicit_obsolete_revision(tmp_path, tag):
+    from healthvideo.workflows.external_revision import clear_obsolete_holds
+
+    target, _ = imported(tmp_path / 'projects')
+    logs = tmp_path / 'topics/logs' / target.name
+    data = {'status': 'open', 'reason': 'Synthetic old hold', **({'revision': tag} if tag else {})}
+    for name in ('blocked.txt', 'agent-retry.yaml', 'doctor-question.yaml'):
+        write_yaml_atomic(logs / name, data)
+    clear_obsolete_holds(tmp_path, target)
+    for name in ('blocked.txt', 'agent-retry.yaml', 'doctor-question.yaml'):
+        assert (logs / name).exists() is (tag != '001')
+
+
+@pytest.mark.parametrize('product', [False, True])
+def test_regular_revision_still_requires_passing_critic(tmp_path, monkeypatch, product):
+    from healthvideo.workflows import external_revision
+    from tests.helpers import write_critic_review_fixture
+
+    target, revision = imported(tmp_path)
+    if product:
+        approve_medical(target)
+        monkeypatch.setattr(external_revision, 'probe_media', fake_probe)
+        external_revision.produce_external(target, hold=True)
+    (revision / external_revision.EXTERNAL).unlink()
+    write_critic_review_fixture(target, product=product)
+    critic = make_advisory(revision, product=product)
+    with pytest.raises(ValueError, match='chưa đạt'):
+        critic.require_passed_review(target)
+
+
+def test_external_retry_keeps_current_and_untagged_steps(tmp_path):
+    from healthvideo.workflows.external_revision import clear_obsolete_holds
+
+    target, _ = imported(tmp_path / 'projects')
+    path = tmp_path / 'topics/logs' / target.name / 'agent-retry.yaml'
+    write_yaml_atomic(path, {'version': 1, 'steps': {
+        'old': {'revision': '001'}, 'current': {'revision': '002'}, 'unknown': {},
+    }})
+    clear_obsolete_holds(tmp_path, target)
+    assert set(read_yaml(path)['steps']) == {'current', 'unknown'}
+
+
+@pytest.mark.parametrize('relative', ['posts/posts.yaml', 'posts/thumbnail.png'])
+def test_external_product_review_binds_current_posts(tmp_path, monkeypatch, relative):
+    from healthvideo.workflows import external_revision, product_review
+    from tests.helpers import write_critic_review_fixture
+
+    target, revision = imported(tmp_path)
+    approve_medical(target)
+    monkeypatch.setattr(external_revision, 'probe_media', fake_probe)
+    external_revision.produce_external(target, hold=True)
+    write_critic_review_fixture(target, product=True)
+    make_advisory(revision, product=True)
+    product_review.require_passed_review(target)
+    path = revision / relative
+    if relative.endswith('.yaml'):
+        posts = read_yaml(path)
+        posts['facebook_post'] = 'Nội dung đã đổi'
+        write_yaml_atomic(path, posts)
+    else:
+        path.write_bytes(b'new synthetic thumbnail')
+    with pytest.raises(ValueError, match='hiện hành'):
+        product_review.require_passed_review(target)
+    assert product_review.next_product_action(target) == 'product_review'
+
+
 @pytest.mark.parametrize('relative', ['script/script.yaml', 'evidence/ledger.yaml',
-                                      'workflow/external.yaml', 'profiles/pronunciation.vi.yaml'])
+                                      'workflow/external.yaml', 'profiles/pronunciation.vi.yaml',
+                                      'reviews/script-review-log.yaml'])
 def test_medical_hash_invalidates_every_external_input(tmp_path, relative):
     from healthvideo.workflows.produce import _ensure_v2_medical_approval_current
 
@@ -118,7 +258,8 @@ def test_medical_hash_invalidates_every_external_input(tmp_path, relative):
         _ensure_v2_medical_approval_current(revision)
 
 
-def test_full_external_flow_preserves_critic_and_bytes(tmp_path, monkeypatch):
+@pytest.mark.parametrize('advisory', [False, True])
+def test_full_external_flow_preserves_critic_and_bytes(tmp_path, monkeypatch, advisory):
     import json
 
     from healthvideo.domain.gate_review import GateKind
@@ -141,7 +282,19 @@ def test_full_external_flow_preserves_critic_and_bytes(tmp_path, monkeypatch):
                                 doctor_pin='fixture-only-pin', pin_file=pin_file)
     assert 'Lời hiển thị' in render_medical_packet(revision)
     assert 'Nguồn thật' in render_medical_packet(revision)
-    approve_medical(target)
+    if advisory:
+        write_critic_review_fixture(target)
+        make_advisory(revision, product=False)
+        gate_review.approve_gate(target, GateKind.MEDICAL, reviewer='Fixture', now=datetime.now(UTC),
+                                doctor_pin='fixture-only-pin', pin_file=pin_file)
+    else:
+        approve_medical(target)
+    medical = read_yaml(revision / 'reviews/medical-approval.yaml')
+    assert 'reviews/script-review-log.yaml' in medical['artifact_hashes']
+    assert 'Ý kiến agent chấm (tham khảo)' in render_medical_packet(revision)
+    if advisory:
+        assert 'Ý dài &lt;cần xem&gt;' in render_medical_packet(revision)
+        assert 'Nhận xét tham khảo &lt;an toàn&gt;' in render_medical_packet(revision)
     monkeypatch.setattr(external_revision, 'probe_media', fake_probe)
     def forbidden(*args, **kwargs):
         pytest.fail('External branch called renderer/TTS')
@@ -152,11 +305,18 @@ def test_full_external_flow_preserves_critic_and_bytes(tmp_path, monkeypatch):
     with pytest.raises(ValueError, match='Trạm 12'):
         produce.submit_video(target)
     write_critic_review_fixture(target, product=True)
+    if advisory:
+        make_advisory(revision, product=True)
     produce.submit_video(target)
     assert read_yaml(target / 'project.yaml')['state'] == 'awaiting_video_review'
     assert 'CL01' in render_video_packet(revision)
+    assert 'Ý kiến agent chấm (tham khảo)' in render_video_packet(revision)
+    if advisory:
+        assert 'Ý dài &lt;cần xem&gt;' in render_video_packet(revision)
     gate_review.approve_gate(target, GateKind.VIDEO, reviewer='Fixture', now=datetime.now(UTC),
                             doctor_pin='fixture-only-pin', pin_file=pin_file)
+    video = read_yaml(revision / 'reviews/video-approval.yaml')
+    assert 'reviews/product-review-log.yaml' in video['artifact_hashes']
     output = package.package_project(target)
     manifest = json.loads((output / 'manifest.json').read_text(encoding='utf-8'))
     assert {'video.mp4', 'clips/CL01.mp4'} <= manifest['payload_sha256'].keys()
@@ -169,6 +329,14 @@ def test_full_external_flow_preserves_critic_and_bytes(tmp_path, monkeypatch):
         preview, asset = channel_publishing._validated(tmp_path, 'project', platform, clip_id, 0)
         assert preview['gates_current'] is True
         assert asset.is_file()
+    report_path = revision / 'reviews/product-review-log.yaml'
+    before_report = report_path.read_bytes()
+    report = read_yaml(report_path)
+    report['rounds'][-1]['summary'] = 'Nhận xét đã đổi sau PIN'
+    write_yaml_atomic(report_path, report)
+    with pytest.raises(ValueError, match='current video approval'):
+        package._ensure_v2_gate_approval(revision, GateKind.VIDEO)
+    report_path.write_bytes(before_report)
     (revision / 'renders/video.mp4').write_bytes(b'modified')
     with pytest.raises(ValueError, match='current video approval'):
         package._ensure_v2_gate_approval(revision, GateKind.VIDEO)
@@ -319,7 +487,8 @@ def test_adapter_reports_unmapped_claim_without_guessing(tmp_path):
 
 
 @pytest.mark.parametrize('stage', ['medical', 'product'])
-def test_runner_external_only_calls_critics(tmp_path, monkeypatch, stage):
+@pytest.mark.parametrize('advisory', [False, True, 'safety'])
+def test_runner_external_only_calls_critics(tmp_path, monkeypatch, stage, advisory):
     from healthvideo.domain.project_v2 import WorkflowState
     from healthvideo.domain.queue import QueueEntry
     from healthvideo.workflows import external_revision, produce, runner
@@ -330,6 +499,10 @@ def test_runner_external_only_calls_critics(tmp_path, monkeypatch, stage):
     import_revision(target, source, reason='External factory')
     if stage == 'product':
         approve_medical(target)
+    logs = tmp_path / 'topics/logs' / target.name
+    for name in ('blocked.txt', 'agent-retry.yaml', 'doctor-question.yaml'):
+        write_yaml_atomic(logs / name, {'revision': '001', 'status': 'open',
+                                      'reason': 'Hold from previous revision'})
     monkeypatch.setattr(external_revision, 'probe_media', fake_probe)
     calls = []
     def invoke(root, deps, entry, project_dir, report, *, step, **kwargs):
@@ -338,8 +511,15 @@ def test_runner_external_only_calls_critics(tmp_path, monkeypatch, stage):
         digest = critic.render_hash(project_dir) if step == 'product_review' else critic.script_hash(project_dir)
         # Synthetic reports only in tmp_path. The runner records them itself.
         write_yaml_atomic(project_dir / 'revisions/002' / critic.REPORT, {
-            'scores': dict.fromkeys(critic.CRITERIA, 8), 'summary': 'Synthetic critic fixture',
-            'issues': [], 'checked': ['Synthetic fixture'], 'decisions': [],
+            'scores': {key: 5 if advisory and n == 0 else 8
+                       for n, key in enumerate(critic.CRITERIA)},
+            'summary': 'Synthetic critic fixture',
+            'issues': ([{('at' if step == 'product_review' else 'line'): 'L01',
+                        'criterion': next(iter(critic.CRITERIA)), 'problem': 'Ý dài',
+                        'fix': 'Rút gọn', 'blocking_safety': advisory == 'safety',
+                        **({'fixable': False} if step == 'product_review' else {})}]
+                       if advisory else []),
+            'checked': ['Synthetic fixture'], 'decisions': [],
         })
         assert digest
         return 'ok', None, None, {}
@@ -361,6 +541,16 @@ def test_runner_external_only_calls_critics(tmp_path, monkeypatch, stage):
     report = runner.RunReport()
     runner._run_topic(tmp_path, deps, entry, report, once=False, max_steps_per_topic=4)
     assert calls == ['script_review' if stage == 'medical' else 'product_review']
+    log_name = 'script' if stage == 'medical' else 'product'
+    rounds = read_yaml(target / f'revisions/002/reviews/{log_name}-review-log.yaml')['rounds']
+    assert len(rounds) == 1
+    assert rounds[-1]['passed'] is (not bool(advisory))
+    if advisory == 'safety':
+        assert report.blocked == [target.name]
+        runner._run_topic(tmp_path, deps, entry, runner.RunReport(), max_steps_per_topic=4)
+        assert len(calls) == 1
+        assert not (target / 'revisions/002/reviews/video-approval.yaml').exists()
+        return
     assert report.blocked == []
     expected = 'awaiting_medical_review' if stage == 'medical' else 'awaiting_video_review'
     assert read_yaml(target / 'project.yaml')['state'] == expected

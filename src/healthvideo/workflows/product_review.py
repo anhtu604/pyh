@@ -194,7 +194,16 @@ def _cycle(root: Path) -> list[dict]:
 
 
 def render_hash(project: Path) -> str:
-    return sha256_file(_root(project) / RENDER_MANIFEST)
+    rev = _root(project)
+    from healthvideo.workflows.external_revision import is_external
+
+    if is_external(rev):
+        # The external critic also reads posts/thumbnail; editing them needs a new round.
+        paths = [RENDER_MANIFEST, 'posts/posts.yaml', 'posts/thumbnail.png',
+                 'posts/thumbnail-background.png', 'posts/license-ledger.yaml']
+        return canonical_json_hash({name: sha256_file(rev / name)
+                                    for name in paths if (rev / name).is_file()})
+    return sha256_file(rev / RENDER_MANIFEST)
 
 
 def _parse_utc_dt(value: object) -> datetime | None:
@@ -484,6 +493,10 @@ def reconcile_doctor_question(root: Path, project: Path) -> None:
         rev = _root(project)
     except (OSError, ValueError):
         return
+    from healthvideo.workflows.external_revision import is_external
+
+    if is_external(rev):
+        return  # External revisions never consume internal rewrite/rebuild answers.
     slug = project.name
     open_q = doctor_questions.open_question(root, slug)
     render_dt = _render_mtime_utc(rev)
@@ -540,6 +553,15 @@ def next_product_action(
 ) -> ProductAction:
     rev = _root(project)
     review_budget.recover_results(rev)
+    from healthvideo.workflows.external_revision import is_external, validate_render
+
+    if is_external(rev):
+        validate_render(rev)
+        history = _log(rev)['rounds']
+        if not history or history[-1].get('render_sha256') != render_hash(project):
+            return 'product_review'
+        require_passed_review(project)
+        return 'submit_video'
     if review_budget.enabled(rev):
         history = _log(rev)['rounds']
         current_pass = (history and history[-1].get('passed')
@@ -640,6 +662,7 @@ def _has_doctor_video_gate_override(
 
 
 def require_passed_review(project: Path, *, root: Path | None = None) -> None:
+    """Require a current pass, or a valid non-safety advisory round for external cuts."""
     rev_root = _root(project)
     review_budget.recover_results(rev_root)
     rounds = _log(rev_root)['rounds']
@@ -653,6 +676,13 @@ def require_passed_review(project: Path, *, root: Path | None = None) -> None:
     })
     style_required = style_a_active(rev_root)
     _validated(report, allow_legacy=not style_required, style_required=style_required)
+    from healthvideo.workflows.external_revision import is_external, validate_render
+
+    if is_external(rev_root):
+        validate_render(rev_root)
+        if any(i.blocking_safety for i in report.issues):
+            raise ValueError('Trạm 12 có lỗi an toàn đang mở; bác sĩ cần xem và sửa ở nguồn.')
+        return
     if (
         len(report.decisions) <= MAX_DECISIONS
         and not any(i.blocking_safety for i in report.issues)

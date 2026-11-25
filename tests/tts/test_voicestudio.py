@@ -90,7 +90,11 @@ def test_real_local_voicestudio(tmp_path):
 
     profile = load_voice_profile().voicestudio
     assert profile is not None
-    tts = VoiceStudioTTS(profile, root=Path(__file__).resolve().parents[2])
+    root = Path(__file__).resolve().parents[2]
+    if not (root / profile.ref_audio).is_file():
+        # The reference WAV is local data (cache/ is not in Git), absent in fresh worktrees.
+        pytest.skip(f'Thiếu giọng mẫu {profile.ref_audio} trong checkout này')
+    tts = VoiceStudioTTS(profile, root=root)
     try:
         tts.health()
     except VoiceStudioError:

@@ -158,6 +158,14 @@ def next_script_action(
     """Choose the next step for a draft_ready script from the recorded rounds."""
     artifact_root = _root(project)
     review_budget.recover_results(artifact_root)
+    from healthvideo.workflows.external_revision import is_external
+
+    if is_external(artifact_root):
+        rounds = _rounds(artifact_root)
+        if not rounds or rounds[-1].get('script_sha256') != script_hash(project):
+            return 'script_review'
+        require_passed_review(project)
+        return 'submit_medical'
     log = _log(artifact_root)
     current = script_hash(project)
     if review_budget.enabled(artifact_root):
@@ -245,6 +253,7 @@ def next_script_action(
 
 
 def require_passed_review(project: Path) -> None:
+    """Require a current pass, or a valid non-safety advisory round for external cuts."""
     review_budget.recover_results(_root(project))
     rounds = _rounds(_root(project))
     if not rounds:
@@ -257,6 +266,12 @@ def require_passed_review(project: Path) -> None:
     })
     script = read_yaml(script_path(project))
     _validated(report, {str(line.get('id')) for line in script.get('lines', [])})
+    from healthvideo.workflows.external_revision import is_external
+
+    if is_external(_root(project)):
+        if any(i.blocking_safety for i in report.issues):
+            raise ValueError('Trạm 07 có lỗi an toàn đang mở; bác sĩ cần xem và sửa ở nguồn.')
+        return
     if (latest.get('passed') is not True
             or any(score < PASS_SCORE for score in report.scores.values())
             or len(report.decisions) > MAX_DECISIONS

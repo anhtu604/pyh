@@ -179,6 +179,11 @@ def _render_script_review_section(
     heading: str = "Biên tập viên chấm kịch bản",
     weak: str = "giọng văn",
 ) -> str:
+    from healthvideo.workflows.external_revision import is_external
+
+    external = is_external(revision_root)
+    if external:
+        heading = 'Ý kiến agent chấm (tham khảo)'
     review = view(revision_root)
     if review is None:
         return ""
@@ -188,13 +193,17 @@ def _render_script_review_section(
     )
     issues = "".join(
         f"<li>{escape(item['line'])} · {escape(item['criterion'])}: {escape(item['problem'])} "
+        f"{'Cần xử lý an toàn. ' if external and item.get('blocking_safety') else ''}"
         f"Hướng sửa: {escape(item['fix'])}</li>"
         for item in review["issues"]
-    ) if view is not review_view else ""
+    ) if external or view is not review_view else ""
+    issue_section = f'<ul>{issues}</ul>' if issues else ''
+    if external:
+        issue_section = '<h3>Vấn đề đang mở</h3>' + (issue_section or '<p>Không có.</p>')
     return (
         f"<section><h2>{escape(heading)}</h2>"
         f"<p>Lần chấm {review['round']}: {verdict}. {escape(review['summary'])}</p>"
-        f"<ul>{scores}</ul>{f'<ul>{issues}</ul>' if issues else ''}</section>"
+        f"<ul>{scores}</ul>{issue_section}</section>"
     )
 
 
@@ -213,6 +222,7 @@ def _external_medical_packet(revision_root: Path) -> str:
                       for r in ledger['records'])
     return ('<!doctype html><html lang="vi"><meta charset="utf-8"><title>Duyệt y khoa</title>'
             f'<h1>{escape(script.title)}</h1><p>Bản dựng ngoài — cần critic lời và PIN bác sĩ.</p>'
+            + _render_script_review_section(revision_root) +
             '<h2>Lời từng dòng</h2><table><tr><th>ID</th><th>Hiển thị</th><th>Lời đọc</th><th>Claim</th></tr>'
             + lines + '</table><h2>Claim và nguồn</h2><table><tr><th>ID</th><th>Công chúng</th>'
             '<th>Kỹ thuật</th><th>Nguồn</th><th>Độ chắc chắn</th></tr>' + claims
@@ -232,6 +242,7 @@ def _external_video_packet(revision_root: Path) -> str:
         media += '<h2>Thumbnail</h2><img alt="Thumbnail" src="../posts/thumbnail.png">'
     return ('<!doctype html><html lang="vi"><meta charset="utf-8"><title>Duyệt video</title>'
             '<h1>Bản dựng ngoài</h1><p>QA kỹ thuật ffprobe; bác sĩ xem và nghe trước PIN.</p>'
+            + _render_script_review_section(revision_root, product_review.review_view)
             + media + _render_posts_section(revision_root) + '</html>')
 
 

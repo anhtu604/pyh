@@ -117,6 +117,9 @@ def projects(root: Path):
         except (TypeError, ValueError, yaml.YAMLError) as error:  # one stale project must not stop the whole factory
             print(f'Bỏ qua {path.name}: project.yaml không hợp lệ ({type(error).__name__})', file=sys.stderr)
             continue
+        from healthvideo.workflows.external_revision import clear_obsolete_holds
+
+        clear_obsolete_holds(root, path)
         yield path, project
 
 

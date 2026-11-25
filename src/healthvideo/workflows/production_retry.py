@@ -553,6 +553,11 @@ def record_agent_failure(root: Path, project_dir: Path, step: str, fingerprint: 
         deadline = (_now() + timedelta(seconds=TRANSIENT_BACKOFF_SECONDS[attempts])).isoformat()
     records[step] = {"fingerprint": observed_fingerprint or fingerprint, "kind": kind, "attempts": attempts,
                      "reason": reason, "retry_after": deadline, "consecutive_failures": consecutive}
+    from healthvideo.workflows.external_revision import external_revision_id
+
+    revision = external_revision_id(project_dir)
+    if revision is not None:
+        records[step]['revision'] = revision
     write_yaml_atomic(path, {"version": 1, "steps": records})
 
 

@@ -285,6 +285,11 @@ def ask(
         **({'pronunciation_terms': list(pronunciation_terms)} if pronunciation_terms is not None else {}),
         **({'tts_lines': list(tts_lines)} if tts_lines is not None else {}),
     }
+    from healthvideo.workflows.external_revision import external_revision_id
+
+    revision = external_revision_id(root / 'projects' / slug)
+    if revision is not None:
+        payload['revision'] = revision
     write_yaml_atomic(path, payload)
     return payload
 

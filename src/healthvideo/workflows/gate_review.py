@@ -333,6 +333,7 @@ def medical_reviewed_paths(revision_root: Path) -> dict[str, Path]:
                 (EXTERNAL, revision_root / EXTERNAL),
                 ('profiles/pronunciation.vi.yaml', pronunciation_module.PRONUNCIATION_PROFILE_PATH),
                 ('external/pronunciation.vi.yaml', revision_root / 'profiles/pronunciation.vi.yaml'),
+                ('reviews/script-review-log.yaml', revision_root / 'reviews/script-review-log.yaml'),
             ]
         }
     paths = {
@@ -378,6 +379,7 @@ def video_reviewed_paths(revision_root: Path) -> dict[str, Path]:
 
     if is_external(revision_root):
         paths[EXTERNAL] = revision_root / EXTERNAL
+        paths['reviews/product-review-log.yaml'] = revision_root / 'reviews/product-review-log.yaml'
         paths['reviews/video-qa.json'] = revision_root / 'reviews/video-qa.json'
         thumb = revision_root / 'posts/thumbnail.png'
         if thumb.is_file():
@@ -635,6 +637,12 @@ def approve_gate(
                 + "; ".join(post_errors)
             )
 
+    from healthvideo.workflows import product_review, script_review
+
+    if external:
+        script_review.require_passed_review(project_dir)
+        if kind is GateKind.VIDEO:
+            product_review.require_passed_review(project_dir)
     paths = _REVIEWED_PATHS[kind](revision_root)
     missing = [name for name, path in paths.items() if not path.is_file()]
     if missing:

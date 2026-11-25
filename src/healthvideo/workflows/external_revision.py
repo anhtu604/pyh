@@ -36,6 +36,51 @@ def is_external(revision: Path) -> bool:
     return path.is_file() and read_yaml(path).get('production_mode') == 'external'
 
 
+def external_revision_id(project_dir: Path) -> str | None:
+    """Identify external metadata without changing legacy projects."""
+    from healthvideo.storage.project_layout import resolve_project_layout
+
+    if not (project_dir / 'project.yaml').is_file():
+        return None
+    try:
+        layout = resolve_project_layout(project_dir)
+    except (OSError, ValueError, TypeError, yaml.YAMLError):
+        return None
+    return layout.manifest.active_revision if is_external(layout.artifact_root) else None
+
+
+def clear_obsolete_holds(root: Path, project_dir: Path) -> None:
+    """Discard only holds explicitly bound to a different external revision."""
+    revision = external_revision_id(project_dir)
+    if revision is None:
+        return
+    logs = root / 'topics/logs' / project_dir.name
+    for name in ('blocked.txt', 'agent-retry.yaml', 'doctor-question.yaml'):
+        path = logs / name
+        if not path.is_file():
+            continue
+        try:
+            data = read_yaml(path)
+        except (ValueError, TypeError, yaml.YAMLError):
+            continue  # Old untagged text cannot safely be assigned to a revision.
+        if not isinstance(data, dict):
+            continue
+        if data.get('revision') is not None and str(data['revision']) != revision:
+            if name == 'doctor-question.yaml':
+                from healthvideo.workflows import doctor_questions
+
+                doctor_questions.supersede(root, project_dir.name, reason='external_revision_changed')
+            else:
+                path.unlink()
+        elif name == 'agent-retry.yaml' and isinstance(data.get('steps'), dict):
+            steps = data['steps']
+            kept = {key: value for key, value in steps.items()
+                    if not isinstance(value, dict) or value.get('revision') is None
+                    or str(value['revision']) == revision}
+            if kept != steps:
+                write_yaml_atomic(path, {**data, 'steps': kept})
+
+
 def _load(root: Path, relative: str, model):
     try:
         return model.model_validate(read_yaml(root / relative))
