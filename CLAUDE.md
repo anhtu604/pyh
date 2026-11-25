@@ -15,7 +15,7 @@ dưới đây và làm đúng bước được giao, bỏ qua các mục còn l�
    nội dung `.env`.
 4. Dùng `pathlib.Path` cho đường dẫn nội bộ.
 5. Chạy test liên quan và lint trước commit.
-6. `profiles/doctor-feedback.yaml` và `profiles/factory-standards.yaml` chỉ thêm, không
+6. `profiles/doctor-feedback.yaml`, `profiles/factory-standards.yaml` và `profiles/factory-playbook.yaml` chỉ thêm, không
    sửa hay xóa mục cũ.
 7. NCBI đang chặn IP máy này: code xưởng dùng Europe PMC (và Scopus khi có khoá
    Elsevier), không gọi NCBI trực tiếp, không tìm cách lách. Bác sĩ 2026-11-19 cho phép
