@@ -544,3 +544,9 @@ phases:
     status: done
     owner: codex
     note: 'Đã vào master (03025d2, d4be58d): nhập bản dựng ngoài qua đủ hai cổng PIN, critic chỉ tham khảo với bản dựng ngoài. PYH-003 rev 004 (sửa 3 câu y khoa, clip dọc 74 s) đã duyệt và tự đăng YouTube công khai 2026-11-25 (video 4bYZDDWlydI); TikTok chờ bác sĩ đăng từng clip.'
+
+  - id: CLIP.1
+    title: Clip dọc xem riêng vẫn hiểu (mở và kết riêng cho clip)
+    status: doing
+    owner: codex
+    note: 'Bác sĩ chọn cách A 2026-11-25: mỗi clip dùng lại đoạn giữa của video dài, thêm câu mở 3–5 s và câu kết 5–8 s viết trong kịch bản, duyệt cùng cổng y khoa.'
