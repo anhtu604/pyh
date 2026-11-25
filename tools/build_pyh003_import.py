@@ -100,6 +100,12 @@ def build(source: Path, destination: Path) -> dict:
                                          ).model_dump(mode='json'))
         script_lines.append({'id': line_id, 'text': text, 'delivery': text, 'claim_id': claim_id,
                              'purpose': 'outro' if is_outro else 'content'})
+    # Dedicated clip hook/outro lines (approved at the medical gate, never in the 16:9 video).
+    clip_file = source / 'clip-lines.json'
+    if clip_file.is_file():
+        for item in json.loads(clip_file.read_text(encoding='utf-8'))['lines']:
+            script_lines.append({'id': item['id'], 'text': item['text'], 'delivery': item['text'],
+                                 'claim_id': None, 'purpose': item['purpose'], 'clip_id': item['clip_id']})
     report = {'lines': len(script_lines), 'claims': len(claims), 'source_claims': len(claim_rows),
               'sources': len(records), 'missing_support': missing,
               'critic_required': ['Trạm 07: critic lời nhập trước PIN y khoa',

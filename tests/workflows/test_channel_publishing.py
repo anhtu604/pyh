@@ -103,6 +103,21 @@ def test_youtube_success_and_explicit_privacy(approved, monkeypatch):
     assert 'session' not in json.dumps(result)
 
 
+
+def test_same_file_from_a_later_revision_is_not_uploaded_again(approved, monkeypatch):
+    root, slug, _ = approved
+    replies = iter([(200, {'Location': 'https://www.googleapis.com/upload/session'}, {}), (200, {}, {'id': 'video123'})])
+    monkeypatch.setattr(pub, '_request', lambda *a, **k: next(replies))
+    first = _publish(root, slug, platform='youtube', confirmed=True, expected_account_id='acct', privacy='private')
+    # A clip-only revision re-approves the identical long video under a new revision id.
+    receipt_path = next((root / 'topics/channel-publications').glob('*.json'))
+    receipt = json.loads(receipt_path.read_text(encoding='utf-8'))
+    receipt['revision'] = '000'
+    receipt_path.write_text(json.dumps(receipt), encoding='utf-8')
+    monkeypatch.setattr(pub, '_request', lambda *a, **k: pytest.fail('must not upload a duplicate'))
+    again = _publish(root, slug, platform='youtube', confirmed=True, expected_account_id='acct', privacy='private')
+    assert again['video_id'] == first['video_id']
+
 def test_concurrent_lock_suppresses(tmp_path):
     path = pub._receipt_path(tmp_path, 'a' * 64)
     with pub._lock(path), pytest.raises(ValueError, match='progress'), pub._lock(path):

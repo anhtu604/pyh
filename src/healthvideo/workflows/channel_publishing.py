@@ -176,6 +176,25 @@ def publication_preview(root, slug, platform, clip_id=None, title_index=0):
     return result
 
 
+def _prior_receipt(root, identity):
+    """Return a receipt for the same file on the same account from any revision.
+
+    A later revision that only changes clips keeps the identical long video; without
+    this, its revision-scoped key would upload a duplicate to the channel.
+    """
+    base = Path(root) / 'topics/channel-publications'
+    want = {k: identity[k] for k in ('platform', 'slug', 'clip_id', 'sha256')}
+    for path in sorted(base.glob('*.json')) if base.is_dir() else ():
+        try:
+            receipt = json.loads(path.read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            continue
+        if (isinstance(receipt, dict) and all(receipt.get(k) == v for k, v in want.items())
+                and (receipt.get('account') or {}).get('id') == identity['account']['id']):
+            return receipt
+    return None
+
+
 def _receipt_path(root, key):
     base = Path(root) / 'topics/channel-publications'
     base.mkdir(parents=True, exist_ok=True)
@@ -314,6 +333,9 @@ def publish_approved(root, slug, *, platform, clip_id=None, privacy=None, title_
     with _lock(path):
         if path.exists():
             return json.loads(path.read_text(encoding='utf-8'))
+        prior = _prior_receipt(root, identity)
+        if prior is not None:
+            return prior  # Same approved file already sent from an earlier revision.
         # Revalidate both gates immediately before recording the remote intent.
         fresh, _ = _validated(root, slug, platform, clip_id, title_index)
         if fresh != preview:
