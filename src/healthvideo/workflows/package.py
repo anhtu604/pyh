@@ -79,6 +79,10 @@ def package_project(project_dir: Path) -> Path:
 
 
 def _package_v2(layout: ProjectLayout) -> Path:
+    from healthvideo.workflows.external_revision import is_external
+
+    if is_external(layout.artifact_root):
+        return _package_external(layout)
     project = layout.manifest
     assert isinstance(project, ProjectManifestV2)
     if project.state is not WorkflowState.VIDEO_APPROVED:
@@ -228,6 +232,65 @@ def _package_v2(layout: ProjectLayout) -> Path:
         shutil.rmtree(staging_dir, ignore_errors=True)
         raise
     return publish_dir
+
+
+def _package_external(layout: ProjectLayout) -> Path:
+    """Package imported media using the same approval freshness and publisher bindings."""
+    from healthvideo.workflows.external_revision import validate_render
+
+    project = layout.manifest
+    revision = layout.artifact_root
+    if project.state is not WorkflowState.VIDEO_APPROVED:
+        raise ValueError('Packaging requires v2 project state video_approved')
+    medical = _ensure_v2_gate_approval(revision, GateKind.MEDICAL)
+    video = _ensure_v2_gate_approval(revision, GateKind.VIDEO)
+    validate_render(revision)
+    posts = PostSet.model_validate(read_yaml(revision / POSTS_ARTIFACT))
+    render = json.loads((revision / 'renders/render-manifest.json').read_text(encoding='utf-8'))
+    staging = Path(mkdtemp(prefix='.external-package-', dir=revision))
+    publish = revision / PUBLISH_DIRECTORY
+    try:
+        shutil.copy2(revision / 'renders/video.mp4', staging / OUTPUT_NAME)
+        _require_approved_hash(video, 'renders/video.mp4', sha256_file(staging / OUTPUT_NAME), staged=True)
+        for clip_id, relative in render['clips'].items():
+            target = staging / 'clips' / f'{clip_id}.mp4'
+            target.parent.mkdir(exist_ok=True)
+            shutil.copy2(revision / 'renders' / relative, target)
+            _require_approved_hash(video, f'renders/{relative}', sha256_file(target), staged=True)
+        shutil.copy2(revision / POSTS_ARTIFACT, staging / POSTS_YAML_NAME)
+        _require_approved_hash(video, POSTS_ARTIFACT, canonical_json_hash(read_yaml(staging / POSTS_YAML_NAME)), staged=True)
+        thumbnail = revision / 'posts/thumbnail.png'
+        if thumbnail.is_file():
+            shutil.copy2(thumbnail, staging / 'thumbnail.png')
+            _require_approved_hash(video, 'posts/thumbnail.png', sha256_file(staging / 'thumbnail.png'), staged=True)
+        ledger = read_yaml(revision / 'evidence/ledger.yaml')
+        script = Script.model_validate(read_yaml(revision / 'script/script.yaml'))
+        write_text_atomic(staging / CAPTION_NAME, posts.youtube_description)
+        write_text_atomic(staging / POSTS_MD_NAME, _posts_markdown(posts))
+        write_text_atomic(staging / SOURCES_NAME, '\n\n'.join(
+            r.title + '\n' + '\n'.join(_source_fields(r))
+            for r in [SourceRecord.model_validate(item) for item in ledger['records']]))
+        manifest = {
+            'schema_version': '1.0', 'slug': project.slug, 'language': project.language,
+            'title': script.title, 'production_mode': 'external', 'approval_stale': False,
+            'production_input_hash': render['input_hash'],
+            'approval_bindings': {'medical': _approval_binding(medical), 'video': _approval_binding(video)},
+            'payload_sha256': {p.relative_to(staging).as_posix(): sha256_file(p)
+                               for p in sorted(staging.rglob('*')) if p.is_file()},
+        }
+        write_text_atomic(staging / PACKAGE_MANIFEST_NAME, json.dumps(manifest, ensure_ascii=False, indent=2))
+        # Recheck approvals after copying so edits during packaging fail closed.
+        _ensure_v2_gate_approval(revision, GateKind.MEDICAL)
+        _ensure_v2_gate_approval(revision, GateKind.VIDEO)
+        replace_directory_atomic(staging, publish)
+        changed = transition_v2(project, WorkflowState.PACKAGED, TransitionContext(
+            active_revision=project.active_revision, current_input_hash=canonical_json_hash(manifest),
+            validated_artifacts=frozenset({'publish/manifest.json'})))
+        write_yaml_atomic(layout.project_dir / PROJECT_MANIFEST_NAME, changed.model_dump(mode='json'))
+    except Exception:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+    return publish
 
 
 def _ensure_v2_gate_approval(

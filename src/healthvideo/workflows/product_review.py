@@ -268,6 +268,14 @@ def render_is_stale(project: Path) -> bool:
         rev = _root(project)
     except (OSError, ValueError):
         return False
+    from healthvideo.workflows.external_revision import is_external, validate_render
+
+    if is_external(rev):
+        try:
+            validate_render(rev)
+            return False
+        except (OSError, ValueError, TypeError, KeyError):
+            return True
     if rebuild_requested(rev):
         return True
     manifest_path = rev / RENDER_MANIFEST

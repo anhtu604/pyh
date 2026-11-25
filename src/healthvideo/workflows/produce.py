@@ -435,9 +435,13 @@ def produce_project(
     With ``hold_for_product_review`` the final render waits for the product critic
     instead of entering the doctor's video gate; ``submit_video`` submits it later.
     """
+    from healthvideo.workflows.external_revision import is_external, produce_external
+
+    layout = resolve_project_layout(project_dir)
+    if is_external(layout.artifact_root):
+        return produce_external(project_dir, hold=hold_for_product_review, dry_run=dry_run)
     if provider_identity(tts)['provider'] == 'voicestudio':
         raise ValueError('Bản đăng cần giọng Vibi; Voice Studio chỉ dùng nghe thử bản nháp.')
-    layout = resolve_project_layout(project_dir)
     return _produce_v2(layout, tts, runner, dry_run=dry_run, music=music,
                        hold=hold_for_product_review)
 
@@ -1618,6 +1622,10 @@ def submit_video(project_dir: Path) -> None:
     script_review.require_passed_review(project_dir)
     require_passed_review(project_dir)
     _ensure_v2_medical_approval_current(layout.artifact_root)
+    from healthvideo.workflows.external_revision import is_external, validate_render
+
+    if is_external(layout.artifact_root):
+        validate_render(layout.artifact_root)
     write_yaml_atomic(
         layout.project_dir / "project.yaml",
         _completed_v2_project(project, input_hash).model_dump(mode="json"),

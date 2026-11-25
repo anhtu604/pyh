@@ -323,6 +323,18 @@ def check_revision_posts(
 
 def medical_reviewed_paths(revision_root: Path) -> dict[str, Path]:
     """Name the artifacts the medical gate covers; missing entries are dropped by the caller."""
+    from healthvideo.workflows.external_revision import EXTERNAL, is_external
+
+    if is_external(revision_root):
+        return {
+            name: path for name, path in [
+                ('script/script.yaml', revision_root / 'script/script.yaml'),
+                ('evidence/ledger.yaml', revision_root / 'evidence/ledger.yaml'),
+                (EXTERNAL, revision_root / EXTERNAL),
+                ('profiles/pronunciation.vi.yaml', pronunciation_module.PRONUNCIATION_PROFILE_PATH),
+                ('external/pronunciation.vi.yaml', revision_root / 'profiles/pronunciation.vi.yaml'),
+            ]
+        }
     paths = {
         "evidence/ledger.yaml": revision_root / "evidence" / "ledger.yaml",
         "script/script.yaml": revision_root / "script" / "script.yaml",
@@ -362,6 +374,14 @@ def video_reviewed_paths(revision_root: Path) -> dict[str, Path]:
         "renders/render-manifest.json": renders / "render-manifest.json",
         "renders/video.mp4": renders / "video.mp4",
     }
+    from healthvideo.workflows.external_revision import EXTERNAL, is_external
+
+    if is_external(revision_root):
+        paths[EXTERNAL] = revision_root / EXTERNAL
+        paths['reviews/video-qa.json'] = revision_root / 'reviews/video-qa.json'
+        thumb = revision_root / 'posts/thumbnail.png'
+        if thumb.is_file():
+            paths['posts/thumbnail.png'] = thumb
     board_path = revision_root / "storyboard/storyboard.yaml"
     if board_path.is_file() and read_yaml(board_path).get("quality_profile") == "r5_v1":
         paths.update(r5_reviewed_paths(revision_root))
@@ -468,6 +488,7 @@ def approve_gate(
     project_dir: Path, kind: GateKind, *, reviewer: str, note: str = "", now: datetime,
     accept_pronunciation: bool = False, pronunciation_pin: str | None = None,
     pin_file: Path | None = None,
+    doctor_pin: str | None = None,
 ) -> GateApprovalRecord:
     """Approve `kind`'s gate: validate, hash, write the record once, advance state."""
     project = _load_project(project_dir)
@@ -483,7 +504,22 @@ def approve_gate(
     if project.state is not expected:
         raise ValueError(f"{kind.value} gate requires project state {expected.value}")
 
-    if kind is GateKind.MEDICAL:
+    from healthvideo.workflows.external_revision import (
+        is_external,
+        validate_import,
+        validate_render,
+    )
+
+    external = is_external(revision_root)
+    if external and (not doctor_pin or not verify_pin(doctor_pin, path=pin_file)):
+        raise ValueError('Bản dựng ngoài cần PIN bác sĩ đúng để duyệt cổng')
+    if kind is GateKind.MEDICAL and external:
+        if (revision_root / 'workflow/pending-hook-outro.yaml').exists():
+            raise ValueError('medical gate refuses pending hook/outro authoring')
+        validate_import(revision_root)
+        pronunciation_module.load_pronunciation_lexicon(pronunciation_module.PRONUNCIATION_PROFILE_PATH)
+        pronunciation_module.load_pronunciation_lexicon(revision_root / 'profiles/pronunciation.vi.yaml')
+    if kind is GateKind.MEDICAL and not external:
         recover_chart_asset_binding(project_dir)
         if (revision_root / "workflow/pending-hook-outro.yaml").exists():
             raise ValueError("medical gate refuses pending hook/outro authoring")
@@ -566,7 +602,14 @@ def approve_gate(
         )
 
     if kind is GateKind.VIDEO:
-        if read_yaml(revision_root / "storyboard/storyboard.yaml").get("quality_profile") == "r5_v1":
+        if external:
+            from healthvideo.workflows.produce import (
+                _ensure_v2_medical_approval_current,
+            )
+
+            _ensure_v2_medical_approval_current(revision_root)
+            validate_render(revision_root)
+        if not external and read_yaml(revision_root / "storyboard/storyboard.yaml").get("quality_profile") == "r5_v1":
             approval = GateApprovalRecord.model_validate(read_yaml(revision_root / MEDICAL_APPROVAL_ARTIFACT))
             if hash_reviewed_artifacts(medical_reviewed_paths(revision_root)) != approval.artifact_hashes:
                 raise ValueError("R5 video gate requires current medical approval")

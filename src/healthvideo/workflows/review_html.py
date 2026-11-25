@@ -198,7 +198,48 @@ def _render_script_review_section(
     )
 
 
+def _external_medical_packet(revision_root: Path) -> str:
+    script = Script.model_validate(read_yaml(revision_root / 'script/script.yaml'))
+    ledger = read_yaml(revision_root / 'evidence/ledger.yaml')
+    lines = ''.join(f'<tr><td>{escape(line.id)}</td><td>{escape(line.text)}</td>'
+                    f'<td>{escape(line.tts_text())}</td><td>{escape(line.claim_id or "")}</td></tr>'
+                    for line in script.lines)
+    claims = ''.join('<tr>' + ''.join(f'<td>{escape(str(value))}</td>' for value in
+                                    (c['id'], c['text_public'], c['text_technical'],
+                                     ', '.join(c.get('sources', [])), c.get('certainty', 'unrated')))
+                     + '</tr>' for c in ledger['claims'])
+    records = ''.join(f'<tr><td>{escape(r["id"])}</td><td>{escape(r["title"])}</td>'
+                      f'<td>{escape(str(r.get("doi") or r.get("pmid") or r.get("url") or ""))}</td></tr>'
+                      for r in ledger['records'])
+    return ('<!doctype html><html lang="vi"><meta charset="utf-8"><title>Duyệt y khoa</title>'
+            f'<h1>{escape(script.title)}</h1><p>Bản dựng ngoài — cần critic lời và PIN bác sĩ.</p>'
+            '<h2>Lời từng dòng</h2><table><tr><th>ID</th><th>Hiển thị</th><th>Lời đọc</th><th>Claim</th></tr>'
+            + lines + '</table><h2>Claim và nguồn</h2><table><tr><th>ID</th><th>Công chúng</th>'
+            '<th>Kỹ thuật</th><th>Nguồn</th><th>Độ chắc chắn</th></tr>' + claims
+            + '</table><h2>Nguồn</h2><table>' + records + '</table></html>')
+
+
+def _external_video_packet(revision_root: Path) -> str:
+    from healthvideo.workflows.external_revision import validate_render
+
+    validate_render(revision_root)
+    manifest = read_yaml(revision_root / 'renders/render-manifest.json')
+    media = '<h2>Video</h2><video controls src="../renders/video.mp4"></video>'
+    for clip_id, relative in manifest['clips'].items():
+        media += f'<h2>{escape(clip_id)}</h2><video controls src="../renders/{escape(relative)}"></video>'
+    thumbnail = revision_root / 'posts/thumbnail.png'
+    if thumbnail.is_file():
+        media += '<h2>Thumbnail</h2><img alt="Thumbnail" src="../posts/thumbnail.png">'
+    return ('<!doctype html><html lang="vi"><meta charset="utf-8"><title>Duyệt video</title>'
+            '<h1>Bản dựng ngoài</h1><p>QA kỹ thuật ffprobe; bác sĩ xem và nghe trước PIN.</p>'
+            + media + _render_posts_section(revision_root) + '</html>')
+
+
 def render_medical_packet(revision_root: Path) -> str:
+    from healthvideo.workflows.external_revision import is_external
+
+    if is_external(revision_root):
+        return _external_medical_packet(revision_root)
     ledger = read_yaml(revision_root / "evidence" / "ledger.yaml")
     sources = {
         record["id"]: SourceRecord.model_validate(record)
@@ -412,6 +453,10 @@ def _render_posts_section(revision_root: Path) -> str:
 
 
 def render_video_packet(revision_root: Path) -> str:
+    from healthvideo.workflows.external_revision import is_external
+
+    if is_external(revision_root):
+        return _external_video_packet(revision_root)
     manifest_path = revision_root / "renders" / "render-manifest.json"
     manifest = read_yaml(manifest_path) if manifest_path.is_file() else {}
     mascot_warning = (

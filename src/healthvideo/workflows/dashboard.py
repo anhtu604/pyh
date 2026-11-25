@@ -2804,6 +2804,7 @@ def decide(root: Path, project_dir: Path, body: dict, *, limiter: PinLimiter,
     else:
         pronunciation = action == 'approve_pronunciation'
         approve_gate(project_dir, gate, reviewer=reviewer,
+                     doctor_pin=pin,
                      note=standards.compose_reason(
                          card_note if card_note is not None else str(body.get('note', '')), draft),
                      accept_pronunciation=pronunciation,

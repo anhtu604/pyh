@@ -35,6 +35,7 @@ class TransitionContext:
     new_revision_from: str | None = None
     run_published: bool | None = None
     staging_verified_unusable: bool | None = None
+    external_import: bool = False
 
 
 @dataclass(frozen=True)
@@ -389,6 +390,10 @@ def transition_v2(
     if project.state in SIDE_STATES:
         return _exit_side_state(project, target, context)
     rule = MAIN_RULES.get((project.state, target))
+    if context.external_import:
+        if (project.state, target) != (WorkflowState.DRAFT_READY, WorkflowState.AWAITING_MEDICAL_REVIEW):
+            raise TransitionError('external import may only submit medical review')
+        rule = _rule('script/script.yaml', 'evidence/ledger.yaml', 'workflow/external.yaml')
     if rule is None:
         raise TransitionError(f"invalid v2 transition: {project.state} -> {target}")
     if (

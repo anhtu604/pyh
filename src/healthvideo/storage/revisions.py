@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
@@ -23,7 +24,9 @@ REVISION_SOURCE_DIRS = (
 )
 
 
-def create_revision(project_dir: Path, reason: str, *, now: datetime, recover: bool = False) -> str:
+def create_revision(project_dir: Path, reason: str, *, now: datetime, recover: bool = False,
+                    prepare: Callable[[Path], None] | None = None,
+                    activate: Callable[[ProjectManifestV2], ProjectManifestV2] | None = None) -> str:
     """Copy the active revision into a new immutable revision and switch to it.
 
     Only ``topic/``, ``author/``, ``evidence/``, ``explainer/``, ``script/``, ``storyboard/``
@@ -47,6 +50,8 @@ def create_revision(project_dir: Path, reason: str, *, now: datetime, recover: b
             "Only project schema 2.0 is supported."
         )
     manifest = ProjectManifestV2.model_validate(manifest_data)
+    if recover and (prepare is not None or activate is not None):
+        raise ValueError('Custom revision staging cannot use recovery')
 
     parent_revision = manifest.active_revision
     new_revision = f"{int(parent_revision) + 1:03d}"
@@ -78,14 +83,27 @@ def create_revision(project_dir: Path, reason: str, *, now: datetime, recover: b
         _copy_revision_sources(parent_root, staging_dir)
         write_yaml_once(staging_dir / "workflow.yaml", record.model_dump(mode="json"))
         _validate_staged_revision(parent_root, staging_dir, record)
+        if prepare is not None:
+            prepare(staging_dir)
+            if RevisionRecord.model_validate(read_yaml(staging_dir / 'workflow.yaml')) != record:
+                raise ValueError('Custom staging changed the immutable revision record')
+        updated_manifest = dict(manifest_data)
+        updated_manifest['active_revision'] = new_revision
+        if activate is not None:
+            updated_manifest = activate(ProjectManifestV2.model_validate(updated_manifest)).model_dump(mode='json')
         promote_directory_once(staging_dir, destination)
     except Exception:
         shutil.rmtree(staging_dir, ignore_errors=True)
         raise
 
-    updated_manifest = dict(manifest_data)
-    updated_manifest["active_revision"] = new_revision
-    write_yaml_atomic(manifest_path, updated_manifest)
+    try:
+        write_yaml_atomic(manifest_path, updated_manifest)
+    except Exception:
+        if prepare is not None:
+            if destination.resolve().parent != revisions_dir.resolve():
+                raise ValueError('Refusing revision rollback outside revisions directory') from None
+            shutil.rmtree(destination)
+        raise
     return new_revision
 
 

@@ -438,7 +438,7 @@ def review_approve(
     note: Note = "",
 ) -> None:
     """Duyệt cổng bằng PIN do bác sĩ gõ trực tiếp trong terminal."""
-    _require_approval_pin()
+    approval_pin = _require_approval_pin()
     try:
         record = approve_gate(
             project_dir,
@@ -446,6 +446,8 @@ def review_approve(
             reviewer=reviewer,
             note=note,
             now=datetime.now().astimezone(),
+            doctor_pin=approval_pin,
+            pin_file=pin_path(),
         )
     except (FileNotFoundError, FileExistsError, TypeError, ValueError) as error:
         typer.echo(str(error))
@@ -643,6 +645,7 @@ def duyet(root: Root = Path('.')) -> None:
                     note = typer.prompt('Ghi chú (Enter để bỏ qua)', default='', show_default=False)
                     approval_pin = _require_approval_pin()
                     approve_gate(project_dir, gate, reviewer=reviewer, note=note,
+                                 doctor_pin=approval_pin,
                                  accept_pronunciation=action == 'P',
                                  pronunciation_pin=approval_pin if action == 'P' else None,
                                  pin_file=pin_path(),
@@ -903,6 +906,25 @@ def revision_create(
         typer.echo(str(error))
         raise typer.Exit(code=1) from error
     typer.echo(f"Created revision: {revision}")
+
+
+@app.command('import-revision')
+def import_external_revision(
+    slug: Annotated[str, typer.Argument(help='Slug dự án nhận bản dựng ngoài')],
+    source: Annotated[Path, typer.Option('--from', help='Thư mục hồ sơ nhập')],
+    reason: Annotated[str, typer.Option('--reason', help='Lý do tạo revision')],
+    root: Root = Path('.'),
+) -> None:
+    """Nhập bản dựng ngoài thành revision mới, chờ bác sĩ duyệt y khoa."""
+    from healthvideo.workflows.adopt_r5 import _resolve_project_dir_by_slug
+    from healthvideo.workflows.external_revision import import_revision
+
+    try:
+        revision = import_revision(_resolve_project_dir_by_slug(root, slug), source, reason=reason)
+    except (OSError, TypeError, ValueError) as exc:
+        _echo_error(exc)
+        raise typer.Exit(code=1) from exc
+    typer.echo(f'Đã nhập revision {revision}: awaiting_medical_review; cần critic lời trước PIN y khoa.')
 
 
 @project_app.command("adopt-r5")

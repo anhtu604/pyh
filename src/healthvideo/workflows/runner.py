@@ -822,6 +822,14 @@ def _run_agent_invocation(
     prompt = _build_step_prompt(
         root, deps, entry, project_dir, step, rewriting=rewriting, answering=answering
     )
+    from healthvideo.workflows.external_revision import is_external
+
+    external_root, _ = _revision_root_or_error(project_dir)
+    if external_root is not None and is_external(external_root):
+        prompt += ('\nHồ sơ này là bản dựng ngoài (external): không có storyboard/Remotion. '
+                   'Chỉ chấm lời nhập cùng evidence/ledger.yaml hoặc video/clip/posts nhập và QA ffprobe. '
+                   'Không viết lại lời, nguồn, video hay tạo storyboard. Không tự nhận đã nghe/xem nếu chưa kiểm. '
+                   'Giữ nguyên schema báo cáo critic, chấm theo bằng chứng thực tế; thiếu dữ liệu thì ghi vấn đề.')
     fingerprint = agent_fingerprint(root, project_dir, step, brief_context)
     with _topic_lock(entry.slug):
         status = agent_retry_status(root, project_dir, step, fingerprint)
@@ -1625,6 +1633,23 @@ def _run_topic(
                                   f"bước {forced_step}: {waiting}; {status['reason']}", report)
                     break
                 step = forced_step or next_step(state)
+                from healthvideo.workflows.external_revision import (
+                    is_external,
+                    produce_external,
+                )
+
+                external_root, _ = _revision_root_or_error(project_dir)
+                external = external_root is not None and is_external(external_root)
+                if external and state is WorkflowState.AWAITING_MEDICAL_REVIEW:
+                    try:
+                        from healthvideo.workflows import (
+                            script_review as external_script_review,
+                        )
+
+                        external_script_review.require_passed_review(project_dir)
+                    except ValueError:
+                        if forced_step is None:
+                            step = 'script_review'
                 if step is None:
                     with _REPORT_LOCK:
                         if state == WorkflowState.BLOCKED:
@@ -1638,6 +1663,22 @@ def _run_topic(
                     break
 
                 retrying_production = False
+                if step == 'produce' and external:
+                    try:
+                        produce_external(project_dir, hold=True)
+                        # Preserve the existing product critic; never dispatch image/shorts makers.
+                        try:
+                            product_review.require_passed_review(project_dir)
+                            step = 'submit_video'
+                        except ValueError:
+                            step = 'product_review'
+                    except (OSError, ValueError) as exc:
+                        _mark_blocked(root, entry.slug, f'Bản dựng ngoài: {exc}', report)
+                        break
+                if external and step not in {'script_review', 'product_review', 'submit_video', 'package', None}:
+                    _mark_blocked(root, entry.slug, 'Bản dựng ngoài cần sửa ở nguồn và nhập revision mới; '
+                                  'không giao agent sửa lời/hình/dựng trong xưởng.', report)
+                    break
                 if step == "produce":
                     try:
                         status = retry_status(root, project_dir, state)
@@ -1717,7 +1758,7 @@ def _run_topic(
                             break
 
                 answering = False
-                if step == "script_review":
+                if step == "script_review" and not external:
                     # Spec 5.8: open writer questions go to the medical expert; answered ones go
                     # back to the writer before the critic reads the script.
                     try:
@@ -1728,7 +1769,7 @@ def _run_topic(
                     except (OSError, TypeError, ValueError) as exc:
                         _mark_blocked(root, entry.slug, f"câu hỏi của biên kịch lỗi: {exc}", report)
                         break
-                if step == "script_review":
+                if step == "script_review" and not external:
                     try:
                         if pending_change:
                             if touches_script is None:
@@ -1836,6 +1877,11 @@ def _run_topic(
                             event_id = (invoke_meta or {}).get('review_event_id')
                             record(project_dir, reviewed_hash,
                                    **({'event_id': event_id} if event_id else {}))
+                            if external:
+                                if step == 'script_review':
+                                    external_script_review.require_passed_review(project_dir)
+                                else:
+                                    product_review.require_passed_review(project_dir)
                         except (OSError, ValueError) as exc:
                             reason = (
                                 f"{'chấm kịch bản' if step == 'script_review' else 'duyệt sản phẩm'} lỗi: {exc}"
