@@ -547,6 +547,6 @@ phases:
 
   - id: CLIP.1
     title: Clip dọc xem riêng vẫn hiểu (mở và kết riêng cho clip)
-    status: doing
+    status: done
     owner: codex
-    note: 'Bác sĩ chọn cách A 2026-11-25: mỗi clip dùng lại đoạn giữa của video dài, thêm câu mở 3–5 s và câu kết 5–8 s viết trong kịch bản, duyệt cùng cổng y khoa.'
+    note: 'Đã vào master bc4dc8c: với R5, mỗi clip 9:16 = câu mở riêng 3–5 s + đoạn giữa cắt từ video dài + câu kết riêng 5–8 s; lời riêng nằm trong script.yaml, duyệt cùng cổng y khoa (mục Lời riêng cho clip), không vào video dài. Codex làm phần lớn rồi hết lượt, agy hoàn tất. pytest 3226 đạt.'
