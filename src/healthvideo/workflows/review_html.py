@@ -239,7 +239,7 @@ def _external_medical_packet(revision_root: Path) -> str:
                       for r in ledger['records'])
     return ('<!doctype html><html lang="vi"><meta charset="utf-8"><title>Duyệt y khoa</title>'
             f'<h1>{escape(script.title)}</h1><p>Bản dựng ngoài — cần critic lời và PIN bác sĩ.</p>'
-            + _render_script_review_section(revision_root) +
+            + _render_script_review_section(revision_root) + _render_clip_lines_section(script) +
             '<h2>Lời từng dòng</h2><table><tr><th>ID</th><th>Hiển thị</th><th>Lời đọc</th><th>Claim</th></tr>'
             + lines + '</table><h2>Claim và nguồn</h2><table><tr><th>ID</th><th>Công chúng</th>'
             '<th>Kỹ thuật</th><th>Nguồn</th><th>Độ chắc chắn</th></tr>' + claims
