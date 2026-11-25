@@ -550,3 +550,9 @@ phases:
     status: done
     owner: codex
     note: 'Đã vào master bc4dc8c: với R5, mỗi clip 9:16 = câu mở riêng 3–5 s + đoạn giữa cắt từ video dài + câu kết riêng 5–8 s; lời riêng nằm trong script.yaml, duyệt cùng cổng y khoa (mục Lời riêng cho clip), không vào video dài. Codex làm phần lớn rồi hết lượt, agy hoàn tất. pytest 3226 đạt.'
+
+  - id: PLAY.1
+    title: Sổ định hướng để xưởng tự sửa, tự học từ câu trả lời của bác sĩ
+    status: doing
+    owner: agy
+    note: 'Bác sĩ chọn 2026-11-25: lỗi mạng tự thử lại; tình huống hay gặp xử lý theo sổ định hướng; mỗi câu trả lời của bác sĩ ghi thành luật mới (chỉ thêm). PIN, cổng duyệt, lời y khoa mới, cách đọc vẫn hỏi bác sĩ.'
