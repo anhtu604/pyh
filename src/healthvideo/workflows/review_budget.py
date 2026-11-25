@@ -55,6 +55,22 @@ def _read(revision: Path) -> dict:
                 or not isinstance(e.get('event_id'), str) for e in events)
                 or len({e['event_id'] for e in events}) != len(events)):
             raise ValueError('Invalid review budget events')
+    grants = data.get('grants')
+    if grants is not None:
+        if not isinstance(grants, dict):
+            raise ValueError('Invalid review budget grants')
+        for stage, rows in grants.items():
+            _limit(stage)
+            if (not isinstance(rows, list) or any(
+                not isinstance(g, dict)
+                or not isinstance(g.get('grant_id'), str)
+                or not g['grant_id'].strip()
+                or g.get('extra_rounds') != 1
+                or not isinstance(g.get('source'), str)
+                or not g['source'].strip()
+                for g in rows
+            ) or len({g['grant_id'] for g in rows}) != len(rows)):
+                raise ValueError('Invalid review budget grant entries')
     return data
 
 
@@ -73,16 +89,61 @@ def _historical_events(revision: Path, stage: str) -> list[dict]:
 
 def review_budget_status(revision: Path, stage: str) -> dict:
     """Read only, including when no ledger has been created yet."""
-    limit = _limit(stage)
-    events = _read(revision)['stages'].get(stage)
+    data = _read(revision)
+    base_limit = _limit(stage)
+    events = data['stages'].get(stage)
     if events is None:
         events = _historical_events(revision, stage)
+    grants = list((data.get('grants') or {}).get(stage) or [])
+    limit = base_limit + sum(int(g.get('extra_rounds', 0)) for g in grants)
     issue_sets = [{i.get('issue_id') for i in e.get('evidence', {}).get('issues', [])
                    if i.get('issue_id')} for e in events]
     repeated = sorted(issue_sets[-1] & issue_sets[-2]) if len(issue_sets) >= 2 else []
+    pending_grant = any(
+        isinstance(g.get('at_used'), int) and len(events) <= g['at_used']
+        for g in grants
+    )
+    repeated_blocks = bool(repeated) and not pending_grant
     return {'stage': stage, 'limit': limit, 'used': len(events), 'events': events,
-            'repeated_issues': repeated, 'exhausted': len(events) >= limit or bool(repeated),
+            'grants': grants, 'repeated_issues': repeated,
+            'exhausted': len(events) >= limit or repeated_blocks,
             'policy': D4_EXHAUSTED_POLICY}
+
+
+def grant_extra_round(
+    revision: Path,
+    stage: str,
+    *,
+    source: str,
+    issue_key: str,
+    grant_id: str,
+) -> dict:
+    """Grant exactly 1 extra review round for a matched issue with durable audit evidence."""
+    _limit(stage)
+    source_clean = str(source or '').strip()
+    issue_clean = str(issue_key or '').strip()
+    gid_clean = str(grant_id or '').strip()
+    if not source_clean or not issue_clean or not gid_clean:
+        raise ValueError('grant_extra_round requires nonempty source, issue_key, and grant_id')
+    with revision_lock(revision / 'reviews/budget'):
+        data = _read(revision)
+        events = data['stages'].setdefault(stage, _historical_events(revision, stage))
+        grants_map = data.setdefault('grants', {})
+        stage_grants = grants_map.setdefault(stage, [])
+        for existing in stage_grants:
+            if existing['grant_id'] == gid_clean:
+                return dict(existing)
+        entry = {
+            'grant_id': gid_clean,
+            'extra_rounds': 1,
+            'source': source_clean,
+            'issue_key': issue_clean,
+            'at_used': len(events),
+            'granted_at': datetime.now(UTC).isoformat(),
+        }
+        stage_grants.append(entry)
+        write_yaml_atomic(revision / LEDGER, data)
+        return dict(entry)
 
 
 def consume_review_budget(revision: Path, stage: str, event_id: str) -> int:

@@ -132,3 +132,45 @@ def test_identical_concurrent_reports_keep_distinct_event_identities(tmp_path):
     assert status['exhausted']
     with pytest.raises(ValueError):
         review_budget.report_event(tmp_path, 'product', report)
+
+
+def test_grant_extra_round_adds_exactly_one_round_with_evidence(tmp_path):
+    from healthvideo.workflows.review_budget import (
+        ReviewBudgetExhausted,
+        grant_extra_round,
+        record_evidence,
+        require_available,
+    )
+
+    for index in range(2):
+        event = f'ev-{index}'
+        consume_review_budget(tmp_path, 'script', event)
+        record_evidence(tmp_path, 'script', event, {
+            'issues': [{'issue_id': 'style-01', 'fix': 'Tighten hook'}],
+        })
+    with pytest.raises(ReviewBudgetExhausted):
+        require_available(tmp_path, 'script')
+
+    grant = grant_extra_round(
+        tmp_path,
+        'script',
+        source='playbook PB-002',
+        issue_key='repair:station07_review_budget_style',
+        grant_id='playbook:PB-002:repair:station07_review_budget_style:1',
+    )
+    assert grant['extra_rounds'] == 1
+    assert grant['source'] == 'playbook PB-002'
+    # Idempotent replay does not grant a second round.
+    grant_extra_round(
+        tmp_path,
+        'script',
+        source='playbook PB-002',
+        issue_key='repair:station07_review_budget_style',
+        grant_id='playbook:PB-002:repair:station07_review_budget_style:1',
+    )
+    status = review_budget_status(tmp_path, 'script')
+    assert status['limit'] == 3
+    assert status['exhausted'] is False
+    assert consume_review_budget(tmp_path, 'script', 'ev-extra') == 3
+    with pytest.raises(ReviewBudgetExhausted):
+        consume_review_budget(tmp_path, 'script', 'ev-fourth')

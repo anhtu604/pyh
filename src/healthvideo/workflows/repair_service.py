@@ -6,7 +6,6 @@ import argparse
 import contextlib
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -38,6 +37,7 @@ from healthvideo.workflows import (
     chat,
     doctor_questions,
     factory,
+    playbook,
     product_review,
     review_budget,
     scoped_review,
@@ -78,6 +78,7 @@ _IGNORED_SNAPSHOT_DIRS = frozenset({
 _CODE_BACKUP_DIRS = ('src', 'tools', 'tests', 'profiles', 'video/src')
 _RUNTIME_PROFILE_FILES = frozenset({
     'doctor-feedback.yaml',
+    'factory-playbook.yaml',
     'review-pin.yaml',
     'telegram.yaml',
 })
@@ -106,6 +107,30 @@ _POST_VIDEO_GATE_STATES = frozenset({
 })
 
 
+class DoctorOption(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    label: str = Field(min_length=1)
+    detail: str = Field(min_length=1)
+    action: Literal['retry_cycle', 'delegate']
+    delegate_role: Literal[
+        'writer',
+        'medical_expert',
+        'editor',
+        'storyboard_director',
+        'shorts_producer',
+        'voice_director',
+    ] | None = None
+    direction: str = Field(min_length=1)
+
+    @model_validator(mode='after')
+    def _validate_option(self) -> DoctorOption:
+        if self.action == 'delegate' and self.delegate_role is None:
+            raise ValueError('DoctorOption action=delegate yêu cầu delegate_role.')
+        if self.action != 'delegate' and self.delegate_role is not None:
+            raise ValueError('DoctorOption chỉ được đặt delegate_role khi action=delegate.')
+        return self
+
+
 class Diagnosis(BaseModel):
     model_config = ConfigDict(extra='forbid')
     action: Literal['repair', 'retry', 'delegate', 'hold']
@@ -122,6 +147,8 @@ class Diagnosis(BaseModel):
         'voice_director',
     ] | None = None
     brief: str = Field(min_length=1)
+    requires_doctor: Literal['pin', 'gate', 'account', 'safety'] | None = None
+    doctor_options: list[DoctorOption] = Field(default_factory=list)
 
     @model_validator(mode='after')
     def _validate_action_fields(self) -> Diagnosis:
@@ -132,6 +159,10 @@ class Diagnosis(BaseModel):
             )
         if self.action == 'repair' and self.delegate_role is not None:
             raise ValueError('action=repair không được đặt delegate_role.')
+        if len(self.doctor_options) > 3:
+            raise ValueError('doctor_options tối đa 3 phương án.')
+        if self.action == 'hold' and len(self.doctor_options) < 2:
+            raise ValueError('action=hold yêu cầu doctor_options gồm 2–3 phương án cụ thể cho bác sĩ.')
         return self
 
 
@@ -933,30 +964,283 @@ def _in_cooldown(record: dict, now: datetime) -> bool:
         return False
 
 
-_INCIDENT_PREFIX_PATTERNS = (
-    re.compile(r'^bước\s+\S+:\s+(?:đang chờ thử lại lúc \S+|cần sửa đầu vào hoặc cấu hình);\s*', re.IGNORECASE),
-    re.compile(r'^bước\s+\S+\s+lỗi:\s*', re.IGNORECASE),
-    re.compile(r'^visual_review\s+lỗi:\s*', re.IGNORECASE),
-    re.compile(r'^(?:ValueError|RuntimeError):\s*', re.IGNORECASE),
-)
-
-
 def _normalize_incident_reason(detail: str) -> str:
-    collapsed = ' '.join(
-        ' '.join(
-            line for line in detail.splitlines()
-            if not line.lstrip().startswith('log_path:')
-        ).split()
+    return playbook.normalize_incident_reason(detail)
+
+
+def apply_retry_repair_cycle(root: Path, slug: str, layout, *, wake: bool = True) -> None:
+    """Grant one fresh repair cycle and release holds, preserving durable playbook counters."""
+    repair_path = root / 'topics' / 'logs' / slug / REPORT
+    if repair_path.is_file():
+        try:
+            rep = read_yaml(repair_path)
+        except (OSError, TypeError, ValueError, yaml.YAMLError):
+            rep = None
+        if isinstance(rep, dict):
+            rep['attempts_before_incident'] = (
+                rep.get('attempts') if isinstance(rep.get('attempts'), int) else 0
+            )
+            rep['transient_failures'] = 0
+            for stale_key in ('phase', 'attention_reason', 'error', 'retry_after', 'transient_retry_pending'):
+                rep.pop(stale_key, None)
+            write_yaml_atomic(repair_path, rep)
+    if (
+        _is_repair_production_side_state(layout)
+        and (layout.artifact_root / product_review.LOG).is_file()
+    ):
+        change_request.mark_applied(layout.project_dir)
+        resume_gate(
+            layout.project_dir,
+            GateKind.VIDEO,
+            target=WorkflowState.PRODUCTION_IN_PROGRESS,
+            now=datetime.now(UTC),
+        )
+    _release(root, slug)
+    if wake:
+        factory.wake_background(root)
+
+
+def apply_reopen_or_delegate(
+    root: Path,
+    slug: str,
+    layout,
+    *,
+    direction: str = '',
+    source: str = 'doctor-escalation',
+    question_id: str | None = None,
+    rule_id: str | None = None,
+    delegate_role: str | None = None,
+    wake: bool = True,
+) -> str:
+    """Apply doctor or playbook delegation via change_request/guidance and release holds."""
+    now = datetime.now(UTC)
+    clean_direction = str(direction or '').strip()
+    state = layout.manifest.state
+    if clean_direction:
+        ctx: dict = {
+            'source': source,
+            'revision': layout.manifest.active_revision,
+        }
+        if question_id:
+            ctx['question_id'] = question_id
+        if rule_id:
+            ctx['playbook_rule'] = rule_id
+        if state in {
+            WorkflowState.DRAFT_READY,
+            WorkflowState.NEEDS_MEDICAL_REVISION,
+        }:
+            change_request.request_change(layout.project_dir, 'edit_script', clean_direction, ctx, now=now)
+        elif state in {
+            WorkflowState.MEDICALLY_APPROVED,
+            WorkflowState.PRODUCTION_IN_PROGRESS,
+            WorkflowState.NEEDS_PRODUCTION_REVISION,
+        }:
+            change_request.request_change(layout.project_dir, 'edit_production', clean_direction, ctx, now=now)
+        elif delegate_role == 'medical_expert' and state in _PRE_MEDICAL_GATE_STATES:
+            _append_expert_question(layout.project_dir, clean_direction, 0)
+        if delegate_role:
+            guidance_path = root / 'topics/logs' / slug / 'leader-guidance.yaml'
+            write_yaml_atomic(guidance_path, {
+                'revision': layout.manifest.active_revision,
+                'role': delegate_role,
+                'step': _DELEGATION_STEPS.get((delegate_role, state), ''),
+                'brief': clean_direction,
+                'source': source,
+                'at': now.isoformat(),
+            })
+    elif (
+        _is_repair_production_side_state(layout)
+        and (layout.artifact_root / product_review.LOG).is_file()
+    ):
+        change_request.mark_applied(layout.project_dir)
+        resume_gate(
+            layout.project_dir,
+            GateKind.VIDEO,
+            target=WorkflowState.PRODUCTION_IN_PROGRESS,
+            now=now,
+        )
+    escalation_note = ''
+    try:
+        _release(root, slug)
+        if wake:
+            factory.wake_background(root)
+    except ValueError as exc:
+        escalation_note = f' ({exc})'
+    return escalation_note
+
+
+def _try_apply_playbook(
+    root: Path,
+    slug: str,
+    layout,
+    *,
+    reason: str,
+    detail: str,
+    record: dict | None = None,
+) -> dict | None:
+    """Apply an active matching playbook rule or default auto-retry when safe and within budget."""
+    if playbook.is_auto_forbidden(
+        kind='escalation',
+        detail=detail,
+        reason=reason,
+        record=record,
+        artifact_root=layout.artifact_root,
+        state=layout.manifest.state.value,
+    ):
+        return None
+    signature = playbook.incident_signature('repair', detail)
+    rule = playbook.match_rule(root, station='repair', signature=signature)
+
+    record_path = root / 'topics/logs' / slug / REPORT
+    persisted: dict = {}
+    if record_path.is_file():
+        try:
+            loaded = read_yaml(record_path)
+            if isinstance(loaded, dict):
+                persisted = loaded
+        except (OSError, TypeError, ValueError, yaml.YAMLError):
+            persisted = {}
+    if persisted.get('revision') != layout.manifest.active_revision:
+        persisted = {
+            **(dict(record) if isinstance(record, dict) else {}),
+            'revision': layout.manifest.active_revision,
+        }
+    counts = dict(persisted.get('playbook_auto_counts') or {})
+    if isinstance(record, dict) and isinstance(record.get('playbook_auto_counts'), dict):
+        for key, value in record['playbook_auto_counts'].items():
+            if isinstance(value, int):
+                counts[key] = max(int(counts.get(key) or 0), value)
+
+    if rule is None:
+        # Never bypass an R5 diagnosis budget cap with default auto-retry.
+        if 'review budget exhausted: diagnosis:' in (detail or '').lower():
+            return None
+        default_key = f'default:{signature}'
+        used = int(counts.get(default_key) or 0)
+        if used >= playbook.DEFAULT_AUTO_RETRIES:
+            return None
+        new_count = used + 1
+        counts[default_key] = new_count
+        persisted['playbook_auto_counts'] = counts
+        write_yaml_atomic(record_path, persisted)
+
+        stage = playbook.review_budget_stage_from_detail(detail)
+        if stage and (review_budget.enabled(layout.artifact_root) or 'Review budget exhausted:' in detail):
+            review_budget.grant_extra_round(
+                layout.artifact_root,
+                stage,
+                source=f'default auto-retry {new_count}/{playbook.DEFAULT_AUTO_RETRIES}',
+                issue_key=signature,
+                grant_id=f'default:{signature}:{new_count}',
+            )
+
+        apply_retry_repair_cycle(root, slug, layout, wake=True)
+
+        now_iso = datetime.now(UTC).isoformat()
+        latest_record = read_yaml(record_path) if record_path.is_file() else persisted
+        if not isinstance(latest_record, dict):
+            latest_record = persisted
+        latest_record['playbook_auto_counts'] = counts
+        latest_record['phase'] = 'retry_requested'
+        latest_record['retry_requested_at'] = now_iso
+        for stale_key in ('attention_reason', 'error', 'retry_after', 'transient_retry_pending'):
+            latest_record.pop(stale_key, None)
+        write_yaml_atomic(record_path, latest_record)
+        if isinstance(record, dict):
+            record.clear()
+            record.update(latest_record)
+
+        doctor_questions.supersede_kind(
+            root,
+            slug,
+            'escalation',
+            reason=f'Xưởng tự chạy lại lần {new_count}/{playbook.DEFAULT_AUTO_RETRIES}.',
+        )
+        summary = ' '.join(str(reason or detail).split())[:180] or 'Sự cố tự động'
+        chat.post_coordinator_notice(
+            root,
+            slug,
+            f'Xưởng tự chạy lại lần {new_count}/{playbook.DEFAULT_AUTO_RETRIES}: {summary}',
+            {'slug': slug, 'revision': layout.manifest.active_revision, 'view': 'overview'},
+        )
+        return {
+            'playbook_applied': True,
+            'default_retry': True,
+            'attempt': new_count,
+            'action': 'retry_cycle',
+            'signature': signature,
+        }
+
+    used = int(counts.get(signature) or 0)
+    if used >= rule.max_auto_per_incident:
+        return None
+
+    new_count = used + 1
+    counts[signature] = new_count
+    persisted['playbook_auto_counts'] = counts
+    persisted['last_playbook_rule'] = rule.id
+    write_yaml_atomic(record_path, persisted)
+
+    stage = playbook.review_budget_stage_from_detail(detail)
+    if stage and (review_budget.enabled(layout.artifact_root) or 'Review budget exhausted:' in detail):
+        review_budget.grant_extra_round(
+            layout.artifact_root,
+            stage,
+            source=f'playbook {rule.id}',
+            issue_key=signature,
+            grant_id=f'playbook:{rule.id}:{signature}:{new_count}',
+        )
+
+    if rule.action == 'retry':
+        _release(root, slug)
+        factory.wake_background(root)
+    elif rule.action == 'retry_cycle':
+        apply_retry_repair_cycle(root, slug, layout, wake=True)
+    elif rule.action == 'delegate':
+        apply_reopen_or_delegate(
+            root,
+            slug,
+            layout,
+            direction=rule.direction or '',
+            source=f'playbook:{rule.id}',
+            rule_id=rule.id,
+            delegate_role=rule.delegate_role,
+            wake=True,
+        )
+
+    now_iso = datetime.now(UTC).isoformat()
+    latest_record = read_yaml(record_path) if record_path.is_file() else persisted
+    if not isinstance(latest_record, dict):
+        latest_record = persisted
+    latest_record['playbook_auto_counts'] = counts
+    latest_record['last_playbook_rule'] = rule.id
+    latest_record['phase'] = 'retry_requested'
+    latest_record['retry_requested_at'] = now_iso
+    for stale_key in ('attention_reason', 'error', 'retry_after', 'transient_retry_pending'):
+        latest_record.pop(stale_key, None)
+    write_yaml_atomic(record_path, latest_record)
+    if isinstance(record, dict):
+        record.clear()
+        record.update(latest_record)
+
+    doctor_questions.supersede_kind(
+        root,
+        slug,
+        'escalation',
+        reason=f'Xưởng tự xử lý theo định hướng {rule.id}.',
     )
-    text = collapsed
-    while text:
-        updated = text
-        for pattern in _INCIDENT_PREFIX_PATTERNS:
-            updated = pattern.sub('', updated, count=1).lstrip()
-        if updated == text:
-            break
-        text = updated
-    return text or collapsed
+    chat.post_coordinator_notice(
+        root,
+        slug,
+        f'Xưởng tự xử lý theo định hướng {rule.id} (ngày {rule.created}): {rule.direction}',
+        {'slug': slug, 'revision': layout.manifest.active_revision, 'view': 'overview'},
+    )
+    return {
+        'playbook_applied': True,
+        'rule_id': rule.id,
+        'action': rule.action,
+        'signature': signature,
+    }
 
 
 def waiting_idle_for_topic(root: Path, slug: str, state: WorkflowState | str) -> bool:
@@ -978,6 +1262,116 @@ def waiting_idle_for_topic(root: Path, slug: str, state: WorkflowState | str) ->
     return record.get('incident') == expected_incident
 
 
+def _build_doctor_options(diag: dict) -> list[dict]:
+    raw_opts = diag.get('doctor_options') if isinstance(diag, dict) else None
+    if isinstance(raw_opts, list) and 2 <= len(raw_opts) <= 3:
+        built: list[dict] = []
+        for idx, item in enumerate(raw_opts, start=1):
+            if not isinstance(item, dict):
+                continue
+            label = str(item.get('label') or '').strip()
+            action = str(item.get('action') or '').strip()
+            direction = str(item.get('direction') or '').strip()
+            if not label or action not in {'retry_cycle', 'delegate'} or not direction:
+                continue
+            opt: dict = {
+                'id': f'opt-{idx}',
+                'label': label,
+                'detail': str(item.get('detail') or '').strip(),
+                'action': action,
+                'direction': direction,
+            }
+            role = item.get('delegate_role')
+            if isinstance(role, str) and role.strip():
+                opt['delegate_role'] = role.strip()
+            built.append(opt)
+        if len(built) >= 2:
+            built.append({
+                'id': 'pause_project',
+                'label': 'Tạm dừng dự án này',
+                'detail': 'Tạm dừng tự động hóa cho dự án này để xem sau.',
+            })
+            return built
+    return [
+        {
+            'id': 'retry_repair_cycle',
+            'label': 'Cho phép xử lý / thử sửa thêm 1 chu kỳ',
+            'detail': 'Cấp lại lượt tự sửa và gỡ trạng thái giữ hiện tại để xưởng thử lại.',
+        },
+        {
+            'id': 'reopen_or_delegate',
+            'label': 'Giao làm lại theo chỉ đạo của tôi',
+            'detail': 'Ghi nhận chỉ đạo của bác sĩ và giao lại bước xử lý phù hợp.',
+        },
+        {
+            'id': 'pause_project',
+            'label': 'Tạm dừng dự án này',
+            'detail': 'Tạm dừng tự động hóa cho dự án này để xem sau.',
+        },
+    ]
+
+
+def _diagnose_editorial_stop(
+    root: Path,
+    slug: str,
+    layout,
+    *,
+    logs: Path,
+    reason: str,
+    detail: str,
+    record: dict,
+    record_path: Path,
+    invoke,
+) -> None:
+    """Run a bounded repair_diagnose for an editorial stop to obtain concrete doctor_options."""
+    incident = {'state': layout.manifest.state.value, 'reason': reason}
+    existing_diag = record.get('diagnosis')
+    if (
+        record.get('editorial_diagnosed_incident') == incident
+        or (isinstance(existing_diag, dict) and isinstance(existing_diag.get('doctor_options'), list)
+            and len(existing_diag['doctor_options']) >= 2)
+    ):
+        return
+    diagnosis_event = None
+    diagnosis_stage = 'diagnosis:' + canonical_json_hash({'reason': reason})
+    if review_budget.enabled(layout.artifact_root):
+        diagnosis_event = uuid4().hex
+        try:
+            review_budget.consume_review_budget(layout.artifact_root, diagnosis_stage, diagnosis_event)
+            review_budget.record_evidence(layout.artifact_root, diagnosis_stage, diagnosis_event,
+                                          {'incident': incident, 'reason': reason, 'outcome': 'diagnosing'})
+        except ValueError:
+            return
+    work = root / 'topics/logs/repair' / slug / f'editorial-{int(record.get("attempts") or 0) + 1}'
+    work.mkdir(parents=True, exist_ok=True)
+    error = _sanitize_reason(RuntimeError(detail))
+    prompt = (
+        f'Phiếu dừng biên tập đã hết lượt tự chạy lại. Project {layout.project_dir}; '
+        f'revision {layout.manifest.active_revision}. Lỗi: {error}. Đọc log trong {logs}. '
+        'Đề xuất action=hold kèm doctor_options gồm 2–3 phương án xử lý CỤ THỂ theo đúng lỗi '
+        '(ví dụ thiếu toàn văn: dùng abstract ghi rõ giới hạn / bác sĩ đặt PDF vào cache/fulltext/inbox / '
+        'bỏ ý khỏi kịch bản), phương án đề xuất đứng đầu, KHÔNG đưa phương án chung kiểu "thử lại". '
+        'Mỗi phương án có label, detail, action (retry_cycle hoặc delegate), delegate_role (khi delegate) và direction. '
+        'Chỉ đặt requires_doctor (pin|gate|account|safety) khi thật sự cần bác sĩ nhập PIN, mở/duyệt cổng, '
+        'đăng nhập tài khoản hoặc xử lý an toàn y khoa; nếu không thì để null. '
+        'Trong vòng này chỉ đọc và ghi báo cáo.'
+    )
+    try:
+        plan = _ask(root, slug, 'coordinator_senior', 'repair_diagnose', prompt,
+                    work / 'diagnosis.yaml', Diagnosis, invoke)
+    except Exception:  # noqa: BLE001 — fallback to generic options if diagnosis unavailable
+        return
+    if not isinstance(plan, Diagnosis):
+        return
+    if diagnosis_event:
+        review_budget.record_evidence(layout.artifact_root, diagnosis_stage, diagnosis_event,
+                                      {'cause': plan.cause, 'evidence': plan.evidence, 'outcome': 'diagnosed',
+                                       'incident': incident, 'report': str(work / 'diagnosis.yaml')})
+    record['diagnosis'] = plan.model_dump(mode='json')
+    record['editorial_diagnosed_incident'] = incident
+    write_yaml_atomic(record_path, record)
+
+
 def _escalate_to_supervisor(
     root: Path,
     slug: str,
@@ -986,8 +1380,14 @@ def _escalate_to_supervisor(
     reason: str,
     detail: str,
     record: dict | None = None,
+    skip_playbook: bool = False,
 ) -> dict | None:
-    """Create a deduplicated doctor-question escalation when repair hits an unresolvable stop."""
+    """Apply a matching playbook rule or default auto-retry when safe; otherwise ask the doctor."""
+    if not skip_playbook:
+        applied = _try_apply_playbook(root, slug, layout, reason=reason, detail=detail, record=record)
+        if applied is not None:
+            return applied
+
     existing = doctor_questions.open_question(root, slug)
     rec = record if isinstance(record, dict) else {}
     phase = str(rec.get('phase') or '')
@@ -996,6 +1396,7 @@ def _escalate_to_supervisor(
         1 for item in doctor_questions.history(root, slug)
         if item.get('kind') == 'escalation' and item.get('status') == 'answered'
     )
+    signature = playbook.incident_signature('repair', detail)
     fp = 'escalation:' + canonical_json_hash({
         'revision': layout.manifest.active_revision,
         'state': layout.manifest.state.value,
@@ -1035,25 +1436,10 @@ def _escalate_to_supervisor(
         kind='escalation',
         question=question,
         context=context,
-        options=[
-            {
-                'id': 'retry_repair_cycle',
-                'label': 'Cho phép xử lý / thử sửa thêm 1 chu kỳ',
-                'detail': 'Cấp lại lượt tự sửa và gỡ trạng thái giữ hiện tại để xưởng thử lại.',
-            },
-            {
-                'id': 'reopen_or_delegate',
-                'label': 'Giao làm lại theo chỉ đạo của tôi',
-                'detail': 'Ghi nhận chỉ đạo của bác sĩ và giao lại bước xử lý phù hợp.',
-            },
-            {
-                'id': 'pause_project',
-                'label': 'Tạm dừng dự án này',
-                'detail': 'Tạm dừng tự động hóa cho dự án này để xem sau.',
-            },
-        ],
+        options=_build_doctor_options(diag),
         allow_free_text=True,
         fingerprint=fp,
+        signature=signature,
     )
 
 
@@ -1107,11 +1493,22 @@ def repair_once(
             or 'Trạm 12 chưa đạt' in detail
             or 'Storyboard cần hướng dẫn:' in detail or 'Góp ý y khoa chưa có vị trí:' in detail):
         # This is an editorial stop awaiting doctor guidance, not a repair incident.
+        editorial_reason = _normalize_incident_reason(detail)
+        applied = _try_apply_playbook(
+            root, slug, layout, reason=editorial_reason, detail=detail, record=record,
+        )
+        if applied is not None:
+            return 'retry_requested'
+        _diagnose_editorial_stop(
+            root, slug, layout, logs=logs, reason=editorial_reason, detail=detail,
+            record=record, record_path=record_path, invoke=invoke,
+        )
         _escalate_to_supervisor(
             root, slug, layout,
-            reason=_normalize_incident_reason(detail),
+            reason=editorial_reason,
             detail=detail,
             record=record,
+            skip_playbook=True,
         )
         return 'needs_attention'
     # Each retry gets a new log path. It is evidence, not a new failure.
@@ -1121,10 +1518,13 @@ def repair_once(
         doctor_questions.supersede_kind(
             root, slug, 'escalation', reason='Xuất hiện sự cố mới khác trước.',
         )
-        # Keep attempt numbers monotonic so old diagnosis files remain available.
+        # Keep attempt numbers and playbook auto counts monotonic across incidents.
         attempts = record.get('attempts', 0)
+        auto_counts = dict(record.get('playbook_auto_counts') or {})
         record = {'revision': layout.manifest.active_revision, 'attempts': attempts,
                   'incident': incident, 'attempts_before_incident': attempts}
+        if auto_counts:
+            record['playbook_auto_counts'] = auto_counts
         write_yaml_atomic(record_path, record)
     resumed_plan: Diagnosis | None = None
     if record.get('phase') == 'waiting_idle':
@@ -1137,11 +1537,21 @@ def repair_once(
             except (TypeError, ValueError):
                 resumed_plan = None
     if record.get('phase') == 'needs_attention':
-        _escalate_to_supervisor(root, slug, layout, reason=reason, detail=detail, record=record)
+        outcome = _escalate_to_supervisor(root, slug, layout, reason=reason, detail=detail, record=record)
+        if isinstance(outcome, dict) and outcome.get('playbook_applied'):
+            return 'retry_requested'
         return 'needs_attention'
     now = datetime.now(UTC)
     if record.get('phase') == 'cooldown' and _in_cooldown(record, now):
         return 'cooldown'
+    if record.get('transient_retry_pending'):
+        record.pop('transient_retry_pending', None)
+        record.pop('retry_after', None)
+        _release(root, slug)
+        record['phase'] = 'retry_requested'
+        record['retry_requested_at'] = now.isoformat()
+        write_yaml_atomic(record_path, record)
+        return 'retry_requested'
     if respect_cooldown and record.get('phase') == 'repair_failed' and _in_cooldown(record, now):
         return 'cooldown'
     if (record.get('transient_failures', 0) >= MAX_TRANSIENT_FAILURES
@@ -1152,8 +1562,21 @@ def repair_once(
             'và quyết định hướng sửa trước khi cho thử lại.'
         )
         write_yaml_atomic(record_path, record)
-        _escalate_to_supervisor(root, slug, layout, reason=reason, detail=detail, record=record)
+        outcome = _escalate_to_supervisor(root, slug, layout, reason=reason, detail=detail, record=record)
+        if isinstance(outcome, dict) and outcome.get('playbook_applied'):
+            return 'retry_requested'
         return 'exhausted'
+    if playbook.is_transient_network_error(detail):
+        count = int(record.get('transient_failures') or 0) + 1
+        delay = playbook.TRANSIENT_BACKOFF_SECONDS[
+            min(count - 1, len(playbook.TRANSIENT_BACKOFF_SECONDS) - 1)
+        ]
+        record['transient_failures'] = count
+        record['phase'] = 'cooldown'
+        record['transient_retry_pending'] = True
+        record['retry_after'] = (now + timedelta(seconds=delay)).isoformat()
+        write_yaml_atomic(record_path, record)
+        return 'cooldown'
     diagnosis_event = None
     diagnosis_stage = 'diagnosis:' + canonical_json_hash({'reason': reason})
     if resumed_plan is None and review_budget.enabled(layout.artifact_root):
@@ -1166,7 +1589,9 @@ def repair_once(
             record['phase'] = 'needs_attention'
             record['attention_reason'] = str(exc)
             write_yaml_atomic(record_path, record)
-            _escalate_to_supervisor(root, slug, layout, reason=reason, detail=str(exc), record=record)
+            outcome = _escalate_to_supervisor(root, slug, layout, reason=reason, detail=str(exc), record=record)
+            if isinstance(outcome, dict) and outcome.get('playbook_applied'):
+                return 'retry_requested'
             return 'exhausted'
     # Keep diagnosis and engineer output separate from project approval artifacts.
     record.update(
@@ -1197,6 +1622,12 @@ def repair_once(
         '— kể cả khi đang ở needs_production_revision do leader-repair trước đó — chọn action=delegate, delegate_role=editor '
         'để định tuyến về revise_product sửa phần trình bày an toàn (không chọn hold đòi mở cổng y khoa). '
         'Nếu cần tài khoản, PIN hoặc thiếu dữ kiện để kết luận thì action=hold. '
+        'Khi action=hold, BẮT BUỘC điền doctor_options gồm 2–3 phương án cụ thể theo đúng lỗi '
+        '(ví dụ thiếu toàn văn: dùng abstract ghi giới hạn / bác sĩ bỏ PDF vào cache/fulltext/inbox / '
+        'bỏ ý khỏi kịch bản), phương án đề xuất đứng đầu, KHÔNG có phương án chung kiểu "thử lại". '
+        'Chỉ đặt requires_doctor (pin|gate|account|safety) khi thật sự cần bác sĩ nhập PIN, mở/duyệt cổng, '
+        'tài khoản hoặc xử lý an toàn y khoa; nếu không cần thì đặt null. '
+        'Lỗi mạng tạm thời đã được xưởng tự thử lại; không chọn hold chỉ vì thiếu bằng chứng lỗi đã hết. '
         'action=retry chỉ khi đã có bằng chứng lỗi tạm thời được khắc phục. '
         'Trong vòng này chỉ đọc và ghi báo cáo.'
     )
@@ -1371,7 +1802,9 @@ def repair_once(
     finally:
         write_yaml_atomic(record_path, record)
         if record.get('phase') == 'needs_attention':
-            _escalate_to_supervisor(root, slug, layout, reason=reason, detail=detail, record=record)
+            outcome = _escalate_to_supervisor(root, slug, layout, reason=reason, detail=detail, record=record)
+            if isinstance(outcome, dict) and outcome.get('playbook_applied'):
+                record['phase'] = 'retry_requested'
         maintenance.close()
     return record['phase']
 

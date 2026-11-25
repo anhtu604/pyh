@@ -1721,22 +1721,26 @@ function renderOverview(ov){
       const qObj = d.doctor_question || ovp.doctor_question || null;
       const isEsc = d.kind === 'escalation' || d.question_kind === 'escalation' || (qObj && qObj.kind === 'escalation');
       if(isEsc){
+        const fallbackOpts = (Array.isArray(d.options) && d.options.length) ? d.options : [
+          { id:'reopen_or_delegate', label:'Giao làm lại theo chỉ đạo của tôi' },
+          { id:'pause_project', label:'Tạm dừng dự án này' },
+        ];
+        const escQuestion = qObj ? {
+          ...qObj,
+          options: (Array.isArray(qObj.options) && qObj.options.length) ? qObj.options : fallbackOpts,
+        } : {
+          id: d.question_id || '',
+          kind: 'escalation',
+          question: d.question || 'Cần bác sĩ chỉ đạo hướng xử lý tiếp theo.',
+          context: d.context || [],
+          options: fallbackOpts,
+          allow_free_text: d.allow_free_text !== false,
+        };
         return {
           slug:d.slug, code:d.code || ovp.code || '', title:d.title || ovp.title || d.slug,
           revision:d.revision || ovp.revision || '001',
           escalation:true,
-          questionObj: qObj || {
-            id: d.question_id || '',
-            kind: 'escalation',
-            question: d.question || 'Cần bác sĩ chỉ đạo hướng xử lý tiếp theo.',
-            context: d.context || [],
-            options: d.options || [
-              { id:'retry_repair_cycle', label:'Cho phép xử lý / thử sửa thêm 1 chu kỳ' },
-              { id:'reopen_or_delegate', label:'Giao làm lại theo chỉ đạo của tôi' },
-              { id:'pause_project', label:'Tạm dừng dự án này' },
-            ],
-            allow_free_text: d.allow_free_text !== false,
-          },
+          questionObj: escQuestion,
         };
       }
       if(d.kind === 'doctor_question'){
@@ -1790,7 +1794,7 @@ function renderOverview(ov){
           const code = String(it.code || it.id || '').trim();
           return `<li>${code ? `<b>${esc(code)}</b> ` : ''}${loc ? `<span class="meta">${esc(loc)}</span> · ` : ''}${esc(friendlyError(sum) || sum)}</li>`;
         }).join('')}</ul>` : '';
-        const optsHtml = opts.map((opt, idx) => `<button type="button" class="btn ${idx === 0 ? 'primary' : ''}" data-esc-slug="${esc(r.slug)}" data-esc-qid="${esc(q.id || '')}" data-esc-rev="${esc(r.revision || '001')}" data-esc-opt="${esc(opt.id)}">${esc(opt.label || opt.id)}</button>`).join('');
+        const optsHtml = opts.map((opt, idx) => `<button type="button" class="btn ${idx === 0 ? 'primary' : ''}" data-esc-slug="${esc(r.slug)}" data-esc-qid="${esc(q.id || '')}" data-esc-rev="${esc(r.revision || '001')}" data-esc-opt="${esc(opt.id)}"${opt.detail ? ` title="${esc(opt.detail)}"` : ''}>${esc(opt.label || opt.id)}</button>`).join('');
         const freeHtml = q.allow_free_text !== false ? `
           <div class="todo-esc-free">
             <textarea class="inp" data-esc-text="${esc(r.slug)}" rows="2" maxlength="4000" placeholder="Nhập chỉ đạo thêm cho trưởng nhóm / kỹ sư (tuỳ chọn)…"></textarea>

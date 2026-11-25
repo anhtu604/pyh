@@ -112,7 +112,12 @@ def _normalize_options(options: Sequence[Mapping[str, Any]]) -> list[dict[str, s
         if opt_id in seen_ids:
             raise ValueError(f'Trùng mã phương án: {opt_id}')
         seen_ids.add(opt_id)
-        normalized.append({'id': opt_id, 'label': label, 'detail': detail})
+        entry: dict[str, str] = {'id': opt_id, 'label': label, 'detail': detail}
+        for extra_key in ('action', 'delegate_role', 'direction'):
+            val = str(item.get(extra_key) or '').strip()
+            if val:
+                entry[extra_key] = val
+        normalized.append(entry)
     return normalized
 
 
@@ -237,6 +242,7 @@ def ask(
     options: Sequence[Mapping[str, Any]],
     allow_free_text: bool = True,
     fingerprint: str | None = None,
+    signature: str | None = None,
     now: datetime | None = None,
     pronunciation_terms: Sequence[Mapping[str, Any]] | None = None,
     tts_lines: Sequence[Mapping[str, Any]] | None = None,
@@ -256,6 +262,7 @@ def ask(
     normalized_options = _normalize_options(options)
     normalized_context = _normalize_context(context)
     fp_clean = str(fingerprint or '').strip()
+    sig_clean = str(signature or '').strip()
 
     existing = open_question(root, slug)
     if (
@@ -279,6 +286,7 @@ def ask(
         'options': normalized_options,
         'allow_free_text': bool(allow_free_text),
         **({'fingerprint': fp_clean} if fp_clean else {}),
+        **({'signature': sig_clean} if sig_clean else {}),
         'created_at': (now or datetime.now(UTC)).isoformat(timespec='seconds'),
         'status': 'open',
         'answer': None,

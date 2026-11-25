@@ -1,0 +1,33 @@
+schema_version: '1.0'
+rules:
+- id: PB-001
+  created: '2026-11-25'
+  source: seed
+  match:
+    station: repair
+    signature: repair:research_missing_fulltext
+  action: delegate
+  delegate_role: medical_expert
+  direction: Tìm bản toàn văn mở khác qua Europe PMC (không gọi NCBI); nếu vẫn thiếu,
+    dùng abstract cho đúng phần abstract nói, ghi rõ giới hạn, không suy rộng.
+  max_auto_per_incident: 1
+- id: PB-002
+  created: '2026-11-25'
+  source: seed
+  match:
+    station: repair
+    signature: repair:station07_review_budget_style
+  action: delegate
+  delegate_role: writer
+  direction: Sửa đúng các issue critic nêu, giữ nguyên claim và nguồn.
+  max_auto_per_incident: 1
+- id: PB-003
+  created: '2026-11-25'
+  source: seed
+  match:
+    station: repair
+    signature: repair:station12_presentation_budget
+  action: delegate
+  delegate_role: editor
+  direction: Sửa phần trình bày theo issue, không đổi lời đọc/claim.
+  max_auto_per_incident: 1

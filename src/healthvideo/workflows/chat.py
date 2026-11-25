@@ -274,6 +274,24 @@ def _find(root: Path, slug: str | None, message_id: str) -> dict:
     raise LookupError('Không tìm thấy tin chat này.')
 
 
+def post_coordinator_notice(
+    root: Path,
+    slug: str | None,
+    text: str,
+    context: dict | None = None,
+) -> dict:
+    """Append an informational coordinator notice directly to project or global chat."""
+    clean = str(text or '').strip()[:4000]
+    if not clean:
+        raise ValueError('Thông báo điều phối viên không được rỗng.')
+    with locked(root):
+        return _append(
+            root,
+            slug,
+            _message('coordinator', clean, dict(context or {}), action='none', status='done'),
+        )
+
+
 def post(root: Path, slug: str | None, text: str, context: dict,
          *, source: str = 'web', start_worker: bool = True) -> dict:
     if not isinstance(text, str) or not text.strip() or len(text) > 4000:

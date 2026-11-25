@@ -44,7 +44,6 @@ from healthvideo.storage.queue import load_queue
 from healthvideo.workflows import (
     app_update,
     asset_library,
-    change_request,
     channel_analytics,
     chat,
     dashboard_operations,
@@ -53,6 +52,7 @@ from healthvideo.workflows import (
     factory,
     feedback_inbox,
     medanim_library,
+    playbook,
     product_review,
     production_retry,
     project_progress,
@@ -60,7 +60,7 @@ from healthvideo.workflows import (
     researcher,
     standards,
 )
-from healthvideo.workflows.gate_review import approve_gate, reject_gate, resume_gate
+from healthvideo.workflows.gate_review import approve_gate, reject_gate
 from healthvideo.workflows.script_review import (
     CRITERIA,
     CYCLE_LIMIT_REASON,
@@ -3536,80 +3536,139 @@ def answer_doctor_question(root: Path, slug: str, body: dict) -> dict:
         escalation_note = ''
         if str(answered.get('kind') or '') == 'escalation':
             opt_id = str(ans.get('option_id') or '').strip()
+            sig = str(answered.get('signature') or '').strip()
+            repair_path = root / 'topics' / 'logs' / slug / repair_service.REPORT
+            rep = _safe_yaml(repair_path) if repair_path.is_file() else {}
+            if not isinstance(rep, dict):
+                rep = {}
+            valid_roles = {
+                'writer',
+                'medical_expert',
+                'editor',
+                'storyboard_director',
+                'shorts_producer',
+                'voice_director',
+            }
+            diag_role = (rep.get('diagnosis') or {}).get('delegate_role') if isinstance(rep.get('diagnosis'), dict) else None
+            inferred_role = diag_role if diag_role in valid_roles else None
+            if inferred_role is None:
+                if layout.manifest.state in {
+                    WorkflowState.TOPIC_SELECTED,
+                    WorkflowState.RESEARCH_IN_PROGRESS,
+                    WorkflowState.EVIDENCE_READY,
+                }:
+                    inferred_role = 'medical_expert'
+                elif layout.manifest.state in {
+                    WorkflowState.DRAFT_READY,
+                    WorkflowState.NEEDS_MEDICAL_REVISION,
+                }:
+                    inferred_role = 'writer'
+                elif layout.manifest.state in {
+                    WorkflowState.MEDICALLY_APPROVED,
+                    WorkflowState.PRODUCTION_IN_PROGRESS,
+                    WorkflowState.NEEDS_PRODUCTION_REVISION,
+                }:
+                    inferred_role = 'editor'
+            can_learn = bool(sig) and not playbook.is_auto_forbidden(
+                kind='escalation',
+                detail=str(answered.get('question') or ''),
+                reason=extra_text,
+                record=rep,
+                artifact_root=layout.artifact_root,
+                state=layout.manifest.state.value,
+            )
+            selected_opt = next(
+                (o for o in (answered.get('options') or []) if isinstance(o, dict) and o.get('id') == opt_id),
+                None,
+            )
+            opt_action = str(selected_opt.get('action') or '').strip() if isinstance(selected_opt, dict) else ''
             if opt_id == 'pause_project':
                 dashboard_operations.pause_project(
                     root,
                     slug,
                     reason=extra_text or 'Bác sĩ chọn tạm dừng từ thẻ trình cấp trên.',
                 )
-            elif opt_id == 'retry_repair_cycle':
-                repair_path = root / 'topics' / 'logs' / slug / 'leader-repair.yaml'
-                if repair_path.is_file():
-                    rep = _safe_yaml(repair_path)
-                    if rep:
-                        rep['attempts_before_incident'] = (
-                            rep.get('attempts') if isinstance(rep.get('attempts'), int) else 0
-                        )
-                        for stale_key in ('phase', 'attention_reason', 'error', 'retry_after'):
-                            rep.pop(stale_key, None)
-                        write_yaml_atomic(repair_path, rep)
-                if (
-                    repair_service._is_repair_production_side_state(layout)
-                    and (layout.artifact_root / product_review.LOG).is_file()
-                ):
-                    change_request.mark_applied(layout.project_dir)
-                    resume_gate(
-                        layout.project_dir,
-                        GateKind.VIDEO,
-                        target=WorkflowState.PRODUCTION_IN_PROGRESS,
-                        now=datetime.now(UTC),
-                    )
-                dashboard_operations.retry_project(
-                    root,
-                    slug,
-                    expected_revision=layout.manifest.active_revision,
-                    allow_repair_release=True,
+            elif opt_action in {'retry_cycle', 'delegate'}:
+                raw_opt_role = str(selected_opt.get('delegate_role') or '').strip() if isinstance(selected_opt, dict) else ''
+                opt_role = raw_opt_role if raw_opt_role in valid_roles else inferred_role
+                base_dir = str(selected_opt.get('direction') or '').strip() if isinstance(selected_opt, dict) else ''
+                full_direction = (
+                    f'{base_dir}. {extra_text}'.strip()
+                    if (base_dir and extra_text)
+                    else (base_dir or extra_text or label)
                 )
-                factory.wake_background(root)
-            else:
-                if extra_text:
-                    ctx = {
-                        'source': 'doctor-escalation',
-                        'question_id': answered['id'],
-                        'revision': layout.manifest.active_revision,
-                    }
-                    if layout.manifest.state in {
-                        WorkflowState.DRAFT_READY,
-                        WorkflowState.NEEDS_MEDICAL_REVISION,
-                    }:
-                        change_request.request_change(layout.project_dir, 'edit_script', extra_text, ctx)
-                    elif layout.manifest.state in {
-                        WorkflowState.MEDICALLY_APPROVED,
-                        WorkflowState.PRODUCTION_IN_PROGRESS,
-                        WorkflowState.NEEDS_PRODUCTION_REVISION,
-                    }:
-                        change_request.request_change(layout.project_dir, 'edit_production', extra_text, ctx)
-                elif (
-                    repair_service._is_repair_production_side_state(layout)
-                    and (layout.artifact_root / product_review.LOG).is_file()
-                ):
-                    change_request.mark_applied(layout.project_dir)
-                    resume_gate(
-                        layout.project_dir,
-                        GateKind.VIDEO,
-                        target=WorkflowState.PRODUCTION_IN_PROGRESS,
-                        now=datetime.now(UTC),
-                    )
-                try:
-                    dashboard_operations.retry_project(
+                if opt_action == 'retry_cycle':
+                    repair_service.apply_retry_repair_cycle(root, slug, layout, wake=True)
+                    if can_learn:
+                        playbook.append_rule(
+                            root,
+                            source='doctor',
+                            station=station or 'repair',
+                            signature=sig,
+                            action='retry_cycle',
+                            direction=full_direction,
+                            question_id=str(answered.get('id') or ''),
+                            slug=slug,
+                        )
+                else:
+                    escalation_note = repair_service.apply_reopen_or_delegate(
                         root,
                         slug,
-                        expected_revision=layout.manifest.active_revision,
-                        allow_repair_release=True,
+                        layout,
+                        direction=full_direction,
+                        source='doctor-escalation',
+                        question_id=str(answered.get('id') or ''),
+                        delegate_role=opt_role,
+                        wake=True,
                     )
-                    factory.wake_background(root)
-                except ValueError as exc:
-                    escalation_note = f' ({exc})'
+                    if can_learn and opt_role:
+                        playbook.append_rule(
+                            root,
+                            source='doctor',
+                            station=station or 'repair',
+                            signature=sig,
+                            action='delegate',
+                            delegate_role=opt_role,
+                            direction=full_direction,
+                            question_id=str(answered.get('id') or ''),
+                            slug=slug,
+                        )
+            elif opt_id == 'retry_repair_cycle':
+                repair_service.apply_retry_repair_cycle(root, slug, layout, wake=True)
+                if can_learn:
+                    playbook.append_rule(
+                        root,
+                        source='doctor',
+                        station=station or 'repair',
+                        signature=sig,
+                        action='retry_cycle',
+                        direction=extra_text or label or 'Cấp lại 1 chu kỳ tự sửa.',
+                        question_id=str(answered.get('id') or ''),
+                        slug=slug,
+                    )
+            else:
+                escalation_note = repair_service.apply_reopen_or_delegate(
+                    root,
+                    slug,
+                    layout,
+                    direction=extra_text,
+                    source='doctor-escalation',
+                    question_id=str(answered.get('id') or ''),
+                    delegate_role=inferred_role,
+                    wake=True,
+                )
+                if opt_id == 'reopen_or_delegate' and extra_text and can_learn and inferred_role:
+                    playbook.append_rule(
+                        root,
+                        source='doctor',
+                        station=station or 'repair',
+                        signature=sig,
+                        action='delegate',
+                        delegate_role=inferred_role,
+                        direction=extra_text,
+                        question_id=str(answered.get('id') or ''),
+                        slug=slug,
+                    )
         decision_text = '. '.join(part for part in (label, extra_text) if part)
         chat_text = (
             f'Quyết định Trạm {station}: {decision_text}'

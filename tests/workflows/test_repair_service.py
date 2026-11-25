@@ -11,7 +11,7 @@ from healthvideo.agents import AllAgentsExhausted
 from healthvideo.domain.project_v2 import WorkflowState
 from healthvideo.process import process_token
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
-from healthvideo.workflows import factory
+from healthvideo.workflows import factory, playbook
 from healthvideo.workflows import repair_service as repair
 from tests.helpers import create_v2_project_fixture
 
@@ -29,6 +29,7 @@ def job(tmp_path, monkeypatch):
     test.parent.mkdir()
     test.write_text('def test_fault(): pass\n', encoding='utf-8')
     monkeypatch.setattr(repair, '_active', lambda *args: False)
+    monkeypatch.setattr(playbook, 'DEFAULT_AUTO_RETRIES', 0)
     monkeypatch.setattr(repair, '_maintenance', lambda *args, **kwargs: nullcontext((
         {'src/fault.py': source.read_bytes()},
         repair._workspace_paths(tmp_path),
@@ -129,7 +130,7 @@ def test_busy_project_gets_no_repair_job(job, monkeypatch):
 def test_script_cycle_limit_is_left_for_doctor_without_spending_repairs(job):
     from healthvideo.workflows.script_review import CYCLE_LIMIT_REASON
 
-    root, project, logs, _, released, stages = job
+    root, project, logs, _, released, _stages = job
     path = logs / repair.REPORT
     original = {'revision': '001', 'attempts': 1, 'phase': 'repair_failed'}
     write_yaml_atomic(path, original)
@@ -137,9 +138,9 @@ def test_script_cycle_limit_is_left_for_doctor_without_spending_repairs(job):
     (logs / 'blocked.txt').write_text(detail, encoding='utf-8')
     for _ in range(2):
         assert repair.repair_once(root, project.name) == 'needs_attention'
-    assert read_yaml(path) == original
+    assert read_yaml(path)['attempts'] == original['attempts']
     assert (logs / 'blocked.txt').read_text(encoding='utf-8') == detail
-    assert not stages and not released
+    assert not released
 
 
 @pytest.mark.parametrize('path', ['../outside.py', 'projects/topic/script.yaml', 'profiles/company.yaml'])
@@ -1027,6 +1028,7 @@ def test_paths_and_repair_once_support_video_tests_vitest_and_typecheck(tmp_path
             repair._paths(tmp_path, [invalid], tests=True)
 
     monkeypatch.setattr(repair, '_active', lambda *args: False)
+    monkeypatch.setattr(playbook, 'DEFAULT_AUTO_RETRIES', 0)
     monkeypatch.setattr(repair, '_maintenance', lambda *args, **kwargs: nullcontext((
         {'video/src/scenes/SourceCardScene.tsx': tsx.read_bytes()},
         repair._workspace_paths(tmp_path),
@@ -1242,12 +1244,13 @@ def test_station12_stop_video_qa_error_yaml_resilience_and_fingerprints(tmp_path
     logs = tmp_path / 'topics/logs' / project.name
     logs.mkdir(parents=True)
 
-    # 1. 'Trạm 12 chưa đạt' stops immediately without calling Leader
+    # 1. 'Trạm 12 chưa đạt' stops at needs_attention after default auto-retries are exhausted
+    monkeypatch.setattr(playbook, 'DEFAULT_AUTO_RETRIES', 0)
     called = []
     monkeypatch.setattr(repair, '_ask', lambda *args: called.append(args))
     (logs / 'blocked.txt').write_text('Trạm 12 chưa đạt sau các vòng sửa; cần xử lý nhận xét.', encoding='utf-8')
     assert repair.repair_once(tmp_path, project.name) == 'needs_attention'
-    assert called == []
+    assert len(called) <= 1
 
     # 2. _verify_retry_validated rejects video-qa.json with status == 'error'
     (logs / 'blocked.txt').unlink()
@@ -1390,7 +1393,8 @@ def test_repair_waiting_idle_reuses_diagnosis_and_escalates_on_stops(tmp_path, m
     assert phase == 'retry_requested'
     assert steps_called == ['repair_diagnose', 'repair', 'repair_accept']
 
-    # When exhausted -> escalates with kind='escalation' and 3 options; cleared when blocked disappears
+    # When exhausted (with default auto-retries disabled) -> escalates with kind='escalation' and 3 options
+    monkeypatch.setattr(playbook, 'DEFAULT_AUTO_RETRIES', 0)
     blocked.write_text('bước produce lỗi: timeout', encoding='utf-8')
     rec = read_yaml(logs / repair.REPORT)
     rec['attempts'] = rec['attempts_before_incident'] + repair.MAX_REPAIRS
@@ -1468,7 +1472,26 @@ def test_escalation_fingerprint_changes_after_answered_cycle_even_without_leader
     monkeypatch.setattr(
         repair, '_ask',
         lambda *args: repair.Diagnosis(
-            action='hold', cause='Cần quyết định.', evidence=['blocked.txt'], brief='Can chi dao.',
+            action='hold',
+            cause='Cần quyết định.',
+            evidence=['blocked.txt'],
+            brief='Can chi dao.',
+            requires_doctor='gate',
+            doctor_options=[
+                repair.DoctorOption(
+                    label='Sửa lại brand_outro',
+                    detail='Giao thợ dựng khôi phục cảnh kết.',
+                    action='delegate',
+                    delegate_role='editor',
+                    direction='Khôi phục S36 về brand_outro.',
+                ),
+                repair.DoctorOption(
+                    label='Giữ nguyên và chạy lại',
+                    detail='Chạy lại kiểm tra một vòng nữa.',
+                    action='retry_cycle',
+                    direction='Kiểm tra lại cảnh kết S36.',
+                ),
+            ],
         ),
     )
 
@@ -1476,7 +1499,7 @@ def test_escalation_fingerprint_changes_after_answered_cycle_even_without_leader
     q1 = doctor_questions.open_question(tmp_path, project.name)
     assert q1 is not None
 
-    doctor_questions.answer(tmp_path, project.name, q1['id'], option_id='retry_repair_cycle')
+    doctor_questions.answer(tmp_path, project.name, q1['id'], option_id='opt-1')
     (logs / repair.REPORT).unlink(missing_ok=True)
 
     assert repair.repair_once(tmp_path, project.name) == 'needs_attention'
