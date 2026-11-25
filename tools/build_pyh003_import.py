@@ -67,12 +67,12 @@ def build(source: Path, destination: Path) -> dict:
     # The voiced v4 text lives in the aligned words; script-full-lines.json predates the
     # revision cuts (e.g. 25 removed "Nói gọn"), so the gate must review what is spoken.
     spoken = {line['id']: ' '.join(w['word'] for w in line['words'])
-              for line in json.loads((source / 'timeline-full-v4.json').read_text(encoding='utf-8'))['lines']}
+              for line in json.loads((source / 'timeline-full-v5.json').read_text(encoding='utf-8'))['lines']}
     missing, claims, script_lines = [], [], []
     for item in lines:
         line_id = item['id']
         if line_id not in spoken:
-            raise ValueError(f'timeline-full-v4.json: thiếu dòng {line_id}')
+            raise ValueError(f'timeline-full-v5.json: thiếu dòng {line_id}')
         text = spoken[line_id].replace('**', '')
         groups = line_claims.get(line_id, [])
         ids = set()
