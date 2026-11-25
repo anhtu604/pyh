@@ -19,7 +19,8 @@ DEFAULT_USER_AGENT = "HealthVideo/0.1.0 (https://github.com/anhtu604/pyh; mailto
 
 
 def _default_transport(req: urllib.request.Request) -> bytes:
-    with urllib.request.urlopen(req, timeout=15) as resp:
+    # Europe PMC often answers in ~13 s from this machine; 15 s timed out most OA fetches.
+    with urllib.request.urlopen(req, timeout=60) as resp:
         return resp.read()
 
 
