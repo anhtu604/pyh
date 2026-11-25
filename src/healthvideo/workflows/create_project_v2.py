@@ -53,7 +53,9 @@ def create_project_v2(root: Path, slug: str, title: str, *, now: datetime) -> Pa
             or (root.parent / STANDARDS_FILE).exists()
             or (root.parent / STYLE_SPEC_FILE).exists()
         ):
-            pin_standards(root.parent, staging_dir)
+            # R5 is the current standard; a new project has no approvals to supersede,
+            # so it pins R5 here instead of needing the PIN-gated adopt-r5 later.
+            pin_standards(root.parent, staging_dir, quality_profile="r5_v1")
         _validate_staging(staging_dir, manifest)
         if project_dir.exists():
             raise FileExistsError(f"Project already exists: {project_dir}")

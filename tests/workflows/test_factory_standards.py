@@ -102,6 +102,7 @@ def test_new_project_pins_accepted_configuration(tmp_path):
     _seed_standards(tmp_path, [_standard_entry(stage) for stage in range(1, 5)])
     project = create_project_v2(tmp_path / 'projects', 'new-test', 'TEST', now=datetime.now(UTC))
     assert (project / 'revisions/001/workflow/standards.yaml').is_file()
+    assert read_yaml(project / 'revisions/001/workflow/standards.yaml')['quality_standard']['profile'] == 'r5_v1'
 
 
 def test_new_project_pins_only_the_standards_that_exist(tmp_path):
