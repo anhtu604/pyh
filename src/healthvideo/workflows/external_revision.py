@@ -152,6 +152,9 @@ def validate_import(root: Path, *, importing: bool = False) -> tuple[Script, dic
     for relative in ('renders/video.mp4', *(f'renders/{p}' for p in clips.values())):
         if not (root / relative).is_file() or not (root / relative).stat().st_size:
             raise ValueError(f'{relative}: thiếu hoặc tệp rỗng')
+    if importing and posts.thumbnail is None and (root / 'posts/thumbnail.png').is_file():
+        # Without the spec the publisher skips the image and YouTube picks a random frame (PYH-003).
+        raise ValueError('posts/posts.yaml.thumbnail: có thumbnail.png nhưng thiếu khai báo ảnh bìa')
     if posts.thumbnail is not None:
         for name in ('thumbnail.png', 'thumbnail-background.png', 'license-ledger.yaml'):
             if not (root / 'posts' / name).is_file():

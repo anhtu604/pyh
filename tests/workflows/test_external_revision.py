@@ -556,3 +556,14 @@ def test_runner_external_only_calls_critics(tmp_path, monkeypatch, stage, adviso
     assert read_yaml(target / 'project.yaml')['state'] == expected
     if stage == 'medical':
         write_critic_review_fixture(target)  # still no approval; only a test critic
+
+
+
+def test_import_refuses_thumbnail_file_without_spec(tmp_path):
+    """PYH-003: a bare thumbnail.png was packaged but never uploaded to YouTube."""
+    root = bundle(tmp_path)
+    validate_import(root, importing=True)
+    (root / 'posts/thumbnail.png').write_bytes(b'png')
+    with pytest.raises(ValueError, match='thiếu khai báo ảnh bìa'):
+        validate_import(root, importing=True)
+    validate_import(root)  # already-imported revisions keep working
