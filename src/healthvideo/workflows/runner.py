@@ -3,6 +3,7 @@
 import inspect
 import json
 import os
+import re
 import threading
 import time
 from collections.abc import Callable, Iterator, Mapping
@@ -631,6 +632,17 @@ def _r5_prompt_block(step: str, slug: str) -> str:
     return ""
 
 
+_DIAGNOSIS_ONLY_RE = re.compile(
+    r'[^.]*(?:lượt chẩn đoán này|trong (?:vòng|lượt) này)\s+chỉ\s+(?:đọc và\s+)?ghi báo cáo[^.]*\.?',
+    re.IGNORECASE,
+)
+
+
+def _execution_brief(brief: str) -> str:
+    """Drop the diagnosis round's own read-only limit; it must not bind the executing step."""
+    return _DIAGNOSIS_ONLY_RE.sub('', ' '.join(brief.split())).strip()
+
+
 def _build_step_prompt(
     root: Path,
     deps: RunDeps,
@@ -781,7 +793,7 @@ def _build_step_prompt(
             shorts_plan_note = f'Lỗi kế hoạch short cần sửa trong phạm vi bước này: {problem}'
     guidance = _active_leader_guidance(root, project_dir)
     guidance_note = (
-        "## Hướng dẫn xử lý lỗi từ Điều phối viên trưởng\n" + str(guidance["brief"]).strip()
+        "## Hướng dẫn xử lý lỗi từ Điều phối viên trưởng\n" + _execution_brief(str(guidance["brief"]))
         if guidance and str(guidance.get("brief") or "").strip()
         else ""
     )

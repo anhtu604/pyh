@@ -1354,7 +1354,8 @@ def _diagnose_editorial_stop(
         'Mỗi phương án có label, detail, action (retry_cycle hoặc delegate), delegate_role (khi delegate) và direction. '
         'Chỉ đặt requires_doctor (pin|gate|account|safety) khi thật sự cần bác sĩ nhập PIN, mở/duyệt cổng, '
         'đăng nhập tài khoản hoặc xử lý an toàn y khoa; nếu không thì để null. '
-        'Trong vòng này chỉ đọc và ghi báo cáo.'
+        'Lượt repair_diagnose hiện tại chỉ đọc và viết diagnosis.yaml; không chép giới hạn đó vào `brief`, '
+        'vì `brief` là nhiệm vụ cho vai nhận việc thực hiện.'
     )
     try:
         plan = _ask(root, slug, 'coordinator_senior', 'repair_diagnose', prompt,
@@ -1629,7 +1630,8 @@ def repair_once(
         'tài khoản hoặc xử lý an toàn y khoa; nếu không cần thì đặt null. '
         'Lỗi mạng tạm thời đã được xưởng tự thử lại; không chọn hold chỉ vì thiếu bằng chứng lỗi đã hết. '
         'action=retry chỉ khi đã có bằng chứng lỗi tạm thời được khắc phục. '
-        'Trong vòng này chỉ đọc và ghi báo cáo.'
+        'Lượt repair_diagnose hiện tại chỉ đọc và viết diagnosis.yaml; không chép giới hạn đó vào `brief`, '
+        'vì `brief` là nhiệm vụ cho vai nhận việc thực hiện.'
     )
     issue_id = 'repair-' + canonical_json_hash(incident)[:16]
     context += f'\nIssue ổn định: {issue_id}. Chỉ chẩn đoán lỗi đang mở trên phiếu này.'
