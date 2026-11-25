@@ -296,6 +296,8 @@ def test_adapter_reports_unmapped_claim_without_guessing(tmp_path):
     (source / 'script-full-lines.json').write_text(json.dumps([
         {'id': 'C1-L01', 'text': 'Missing mapping', 'sources': 'SRC'},
     ]), encoding='utf-8')
+    (source / 'timeline-full-v4.json').write_text(json.dumps({'lines': [
+        {'id': 'C1-L01', 'words': [{'word': 'Missing'}, {'word': 'mapping'}]}]}), encoding='utf-8')
     (source / 'script-full.md').write_text('Chủ đề: Gan\n', encoding='utf-8')
     (source / 'sources-full.md').write_text(
         '| [SRC] | Author; 2026; Journal | Source title | PMID 123 | Existing source |\n'

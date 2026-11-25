@@ -64,10 +64,16 @@ def build(source: Path, destination: Path) -> dict:
             line_claims[cells[0]] = re.findall(r'[FN]\d{2}', cells[2])
     if not records or not claim_rows:
         raise ValueError('sources-full.md: thiếu bảng nguồn hoặc bảng claim có cấu trúc')
+    # The voiced v4 text lives in the aligned words; script-full-lines.json predates the
+    # revision cuts (e.g. 25 removed "Nói gọn"), so the gate must review what is spoken.
+    spoken = {line['id']: ' '.join(w['word'] for w in line['words'])
+              for line in json.loads((source / 'timeline-full-v4.json').read_text(encoding='utf-8'))['lines']}
     missing, claims, script_lines = [], [], []
     for item in lines:
         line_id = item['id']
-        text = item['text'].replace('**', '')
+        if line_id not in spoken:
+            raise ValueError(f'timeline-full-v4.json: thiếu dòng {line_id}')
+        text = spoken[line_id].replace('**', '')
         groups = line_claims.get(line_id, [])
         ids = set()
         details = []
