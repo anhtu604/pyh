@@ -989,6 +989,7 @@ html[data-theme="light"] .ws-iso-stage{background:radial-gradient(ellipse 62% 46
           <button class="ver-badge" id="btn-version-update" type="button" hidden title="Có code mới — bấm để cập nhật">
             <span class="ver-dot" aria-hidden="true"></span>Có code mới
           </button>
+          <button class="ver-badge" id="btn-version-update-cancel" type="button" hidden title="Huỷ lịch chờ cập nhật">Huỷ</button>
         </div>
       </div>
     </div>
@@ -1230,6 +1231,7 @@ html[data-theme="light"] .ws-iso-stage{background:radial-gradient(ellipse 62% 46
         <button class="btn" id="btn-standards" type="button" title="Mọi góp ý của bác sĩ, agent áp dụng cho mọi chủ đề">
           Chuẩn đã ghi nhớ <span id="std-count" class="tag">0</span></button>
         <button class="btn" id="btn-update-app" type="button" title="Khởi động lại app để nạp code mới nhất trong thư mục dự án">Cập nhật code mới</button>
+        <button class="btn ghost" id="btn-update-cancel" type="button" hidden title="Huỷ lịch chờ cập nhật">Huỷ</button>
         <button class="btn ghost" id="btn-quit" type="button" title="Tắt app (xưởng nền vẫn chạy)">Tắt app</button>
         <button class="btn ghost" id="btn-admin-close" type="button" aria-label="Đóng menu Quản trị">×</button>
       </div>
@@ -2932,6 +2934,7 @@ async function refresh(opts = {}){
       }
       renderWorkshop();
       if(!busy) document.querySelectorAll('main button, header button').forEach(b=>{if(!b.closest('#channel')) b.disabled=false;});
+      if(versionInfo && versionInfo.update_pending) renderVersion(versionInfo);
       syncStartGate();
       syncChannelAnalysis();
       renderChannelPublish();
@@ -2946,6 +2949,13 @@ async function refresh(opts = {}){
       }
     }catch(e){
       if(updatingApp) return;
+      if(versionInfo && versionInfo.update_pending){
+        updatingApp = true;
+        $('offline')?.classList.remove('show');
+        setUpdateOverlay(true, 'Xưởng đã xong việc. App đang tự cập nhật và khởi động lại…');
+        waitForUpdatedApp();
+        return;
+      }
       wsOffline = true;
       $('offline').classList.add('show');
       if(!state){
@@ -5047,10 +5057,15 @@ function formatVersionDate(iso){
 
 function renderVersion(info){
   versionInfo = info || null;
+  versionInfo = info || null;
   const el = $('app-version');
   const badge = $('btn-version-update');
+  const badgeCancel = $('btn-version-update-cancel');
+  const btnAdmin = $('btn-update-app');
+  const btnAdminCancel = $('btn-update-cancel');
   const running = (info && info.running) || {};
   const latest = (info && info.latest) || {};
+  const pending = Boolean(info && info.update_pending);
   if(el){
     if(running.hash){
       const dt = formatVersionDate(running.date);
@@ -5063,11 +5078,32 @@ function renderVersion(info){
   }
   if(badge){
     const avail = Boolean(info && info.update_available);
-    badge.hidden = !avail;
-    if(avail && latest.hash){
-      const subj = latest.subject ? ` — ${latest.subject}` : '';
-      badge.title = `Có code mới: v${latest.hash}${subj}. Bấm để cập nhật.`;
+    if(pending){
+      badge.hidden = false;
+      badge.disabled = true;
+      badge.textContent = 'Đang chờ xưởng làm xong để cập nhật…';
+      badge.title = 'Đang chờ xưởng làm xong việc đang dở rồi tự cập nhật.';
+    } else {
+      badge.hidden = !avail;
+      badge.disabled = Boolean(busy || updatingApp);
+      badge.innerHTML = '<span class="ver-dot" aria-hidden="true"></span>Có code mới';
+      if(avail && latest.hash){
+        const subj = latest.subject ? ` — ${latest.subject}` : '';
+        badge.title = `Có code mới: v${latest.hash}${subj}. Bấm để cập nhật.`;
+      }
     }
+  }
+  if(badgeCancel){
+    badgeCancel.hidden = !pending;
+    badgeCancel.disabled = Boolean(busy || updatingApp);
+  }
+  if(btnAdmin){
+    btnAdmin.textContent = pending ? 'Đang chờ xưởng làm xong để cập nhật…' : 'Cập nhật code mới';
+    btnAdmin.disabled = pending || Boolean(busy || updatingApp);
+  }
+  if(btnAdminCancel){
+    btnAdminCancel.hidden = !pending;
+    btnAdminCancel.disabled = Boolean(busy || updatingApp);
   }
 }
 
@@ -5122,14 +5158,19 @@ function waitForUpdatedApp(){
 }
 
 async function triggerAppUpdate(){
-  if(busy || updatingApp) return;
+  if(busy || updatingApp || (versionInfo && versionInfo.update_pending)) return;
   busy = true;
   const btnAdmin = $('btn-update-app');
   const btnHead = $('btn-version-update');
   if(btnAdmin) btnAdmin.disabled = true;
   if(btnHead) btnHead.disabled = true;
   try{
-    await postJson('/api/app/update');
+    const res = await postJson('/api/app/update');
+    if(res && res.queued){
+      toast(res.message || 'Sẽ cập nhật ngay khi xưởng làm xong việc đang dở.');
+      await loadVersion();
+      return;
+    }
     updatingApp = true;
     setAdminDrawer(false);
     $('offline')?.classList.remove('show');
@@ -5140,14 +5181,34 @@ async function triggerAppUpdate(){
   }finally{
     busy = false;
     if(!updatingApp){
-      if(btnAdmin) btnAdmin.disabled = false;
-      if(btnHead) btnHead.disabled = false;
+      if(versionInfo) renderVersion(versionInfo);
+      else {
+        if(btnAdmin) btnAdmin.disabled = false;
+        if(btnHead) btnHead.disabled = false;
+      }
     }
+  }
+}
+
+async function cancelAppUpdate(){
+  if(busy || updatingApp) return;
+  busy = true;
+  try{
+    const res = await postJson('/api/app/update-cancel');
+    toast((res && res.message) || 'Đã huỷ lịch chờ cập nhật.');
+    await loadVersion();
+  }catch(e){
+    toast(e.message || 'Không thể huỷ lịch chờ cập nhật.', true);
+  }finally{
+    busy = false;
+    if(versionInfo) renderVersion(versionInfo);
   }
 }
 
 if($('btn-update-app')) $('btn-update-app').onclick = () => triggerAppUpdate();
 if($('btn-version-update')) $('btn-version-update').onclick = () => triggerAppUpdate();
+if($('btn-update-cancel')) $('btn-update-cancel').onclick = () => cancelAppUpdate();
+if($('btn-version-update-cancel')) $('btn-version-update-cancel').onclick = () => cancelAppUpdate();
 try{
   if(typeof sessionStorage !== 'undefined'){
     const justUpdated = sessionStorage.getItem('pyh_updated_version');

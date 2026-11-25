@@ -2915,6 +2915,7 @@ class _Handler(BaseHTTPRequestHandler):
                     app_update.version_payload(
                         self.server.running_version,
                         repo_dir=self.server.repo_dir,
+                        root=self.server.root,
                     )
                 )
             elif path in {'/api/status', '/api/state'}:
@@ -3059,9 +3060,12 @@ class _Handler(BaseHTTPRequestHandler):
             self._json({'error': str(error)}, HTTPStatus.BAD_REQUEST)
         else:
             self.server.invalidate_cache()
-            payload = {'ok': True, 'message': message}
             if isinstance(message, dict):
-                payload = {**message, **payload}
+                payload = {**message, 'ok': True}
+                if 'message' not in payload:
+                    payload['message'] = message
+            else:
+                payload = {'ok': True, 'message': message}
             self._json(payload)
 
 
@@ -3339,10 +3343,12 @@ class DashboardServer(ThreadingHTTPServer):
     def __init__(self, root: Path, port: int, *, token: str | None = None,
                  agents: Callable[[], list[str]] | None = None,
                  actions: dict[str, Callable[..., str]] | None = None,
-                 repo_dir: Path | None = None) -> None:
+                 repo_dir: Path | None = None,
+                 drain_interval: float = app_update.DRAIN_POLL_SECONDS) -> None:
         hide_child_consoles()
         self.root = root.resolve()
         self.repo_dir = (repo_dir or REPO_ROOT).resolve()
+        app_update.clear_pending_update(self.root)
         self.running_version = (
             app_update.read_running_version(self.repo_dir)
             if repo_dir is not None
@@ -3354,10 +3360,48 @@ class DashboardServer(ThreadingHTTPServer):
         self._studio_proc: object | None = None
         self._studio_log_handle: object | None = None
         self._studio_lock = threading.Lock()
+        self._update_lock = threading.Lock()
+        self._update_started = False
+        self._drain_stop = threading.Event()
+        self._drain_interval = max(0.01, float(drain_interval))
         self._cache = _ResponseCache()
         self._html_cache: tuple[tuple[int, int] | None, bytes] | None = None
         super().__init__(('127.0.0.1', port), _Handler)
         self.actions = actions or default_actions(self)
+        self._drain_thread = threading.Thread(
+            target=self._run_update_drain_loop,
+            name='pyh-update-drain',
+            daemon=True,
+        )
+        self._drain_thread.start()
+
+    def _check_pending_update(self) -> dict | None:
+        from healthvideo.workflows import telegram_bot
+
+        with self._update_lock:
+            if self._update_started:
+                return None
+            stop_fn = self.actions.get('factory/stop') or (lambda: factory.stop_background(self.root))
+            result = app_update.process_pending_update(
+                root=self.root,
+                port=self.server_address[1],
+                check_active_jobs=lambda: _active_work_blocker(self.root),
+                is_factory_running=lambda: factory.running_pid(self.root) is not None,
+                stop_factory=stop_fn,
+                stop_telegram=lambda: telegram_bot.stop_background(self.root),
+                quit_app=lambda: threading.Thread(target=self.shutdown, daemon=True).start(),
+            )
+            if result and result.get('updating'):
+                self._update_started = True
+                self._drain_stop.set()
+            return result
+
+    def _run_update_drain_loop(self) -> None:
+        while not self._drain_stop.wait(self._drain_interval):
+            with contextlib.suppress(Exception):
+                self._check_pending_update()
+            if self._update_started:
+                break
 
     def invalidate_cache(self) -> None:
         self._cache.invalidate()
@@ -3479,6 +3523,9 @@ class DashboardServer(ThreadingHTTPServer):
             return {'url': url}
 
     def server_close(self) -> None:
+        stop_event = getattr(self, '_drain_stop', None)
+        if stop_event is not None:
+            stop_event.set()
         handle = getattr(self, '_studio_log_handle', None)
         if handle is not None:
             try:
@@ -3771,15 +3818,32 @@ def default_actions(server: DashboardServer) -> dict[str, Callable[..., str]]:
     def update_app() -> dict:
         from healthvideo.workflows import telegram_bot
 
-        return app_update.trigger_app_update(
-            root=root,
-            port=server.server_address[1],
-            check_active_jobs=lambda: _active_work_blocker(root),
-            is_factory_running=lambda: factory.running_pid(root) is not None,
-            stop_factory=stop,
-            stop_telegram=lambda: telegram_bot.stop_background(root),
-            quit_app=lambda: threading.Thread(target=server.shutdown, daemon=True).start(),
-        )
+        with server._update_lock:
+            if server._update_started:
+                return {
+                    'updating': True,
+                    'message': 'Đang cập nhật code mới và khởi động lại app…',
+                }
+            result = app_update.trigger_app_update(
+                root=root,
+                port=server.server_address[1],
+                check_active_jobs=lambda: _active_work_blocker(root),
+                is_factory_running=lambda: factory.running_pid(root) is not None,
+                stop_factory=stop,
+                stop_telegram=lambda: telegram_bot.stop_background(root),
+                quit_app=lambda: threading.Thread(target=server.shutdown, daemon=True).start(),
+            )
+            if result.get('updating'):
+                server._update_started = True
+                server._drain_stop.set()
+            return result
+
+    def cancel_update_app() -> dict:
+        removed = app_update.clear_pending_update(root)
+        return {
+            'cancelled': removed,
+            'message': 'Đã huỷ lịch chờ cập nhật.' if removed else 'Không có lịch chờ cập nhật nào.',
+        }
 
     return {
         'factory/start': start, 'factory/stop': stop, 'review/open': review,
@@ -3787,6 +3851,7 @@ def default_actions(server: DashboardServer) -> dict[str, Callable[..., str]]:
         'project/comment': comment, 'project/answer-question': answer_question,
         'standards/add': add_standard, 'feedback/add': add_feedback,
         'feedback/retry': retry_feedback, 'app/quit': quit_app, 'app/update': update_app,
+        'app/update-cancel': cancel_update_app,
     }
 
 

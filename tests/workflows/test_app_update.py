@@ -6,13 +6,26 @@ import json
 import os
 import subprocess
 import threading
+import time
+from datetime import date
 from http.client import HTTPConnection
 from types import SimpleNamespace
 
 import pytest
 
+from healthvideo.domain.project_v2 import WorkflowState
+from healthvideo.domain.queue import QueueEntry
 from healthvideo.process import process_token
-from healthvideo.workflows import app_update, dashboard, factory, telegram_bot
+from healthvideo.storage.queue import add_to_queue
+from healthvideo.workflows import (
+    app_update,
+    chat,
+    dashboard,
+    factory,
+    repair_service,
+    runner,
+    telegram_bot,
+)
 
 
 def _completed(stdout: str = '', returncode: int = 0) -> subprocess.CompletedProcess:
@@ -108,6 +121,7 @@ def test_read_git_head_handles_missing_git(tmp_path):
         'running': {'hash': None, 'date': None},
         'latest': {'hash': None, 'date': None, 'subject': None},
         'update_available': False,
+        'update_pending': None,
     }
 
 
@@ -140,20 +154,26 @@ def test_build_relaunch_argv_preserves_dash_c_via_orig_argv():
     ]
 
 
-def test_trigger_app_update_rejects_when_job_running(tmp_path):
+def test_trigger_app_update_queues_when_job_running(tmp_path):
     events: list[str] = []
-    with pytest.raises(ValueError, match='Không thể cập nhật: đang có agent chạy dở'):
-        app_update.trigger_app_update(
-            root=tmp_path,
-            port=8793,
-            check_active_jobs=lambda: 'Không thể cập nhật: đang có agent chạy dở (Biên kịch).',
-            is_factory_running=lambda: True,
-            stop_factory=lambda: events.append('stop_factory'),
-            stop_telegram=lambda: events.append('stop_telegram'),
-            quit_app=lambda: events.append('quit_app'),
-            spawn_helper=lambda **_kw: events.append('spawn_helper') or tmp_path / 'job.json',
-        )
+    result = app_update.trigger_app_update(
+        root=tmp_path,
+        port=8793,
+        check_active_jobs=lambda: 'Không thể cập nhật: đang có agent chạy dở (Biên kịch).',
+        is_factory_running=lambda: True,
+        stop_factory=lambda: events.append('stop_factory'),
+        stop_telegram=lambda: events.append('stop_telegram'),
+        quit_app=lambda: events.append('quit_app'),
+        spawn_helper=lambda **_kw: events.append('spawn_helper') or tmp_path / 'job.json',
+    )
+    assert result['queued'] is True
+    assert result['message'] == 'Sẽ cập nhật ngay khi xưởng làm xong việc đang dở.'
     assert events == []
+    pending = app_update.read_pending_update(tmp_path)
+    assert pending is not None
+    assert pending['restart_factory'] is True
+    assert pending['requested_at']
+    assert app_update.update_pending(tmp_path) is True
 
 
 @pytest.mark.parametrize('factory_on', [False, True])
@@ -303,13 +323,14 @@ def test_http_version_and_update_endpoints(tmp_path, monkeypatch):
                 'subject': 'feat: version button',
             },
             'update_available': True,
+            'update_pending': None,
         }
 
         # POST /api/app/update without token -> 403
         status, _ = _request(srv, 'POST', '/api/app/update')
         assert status == 403
 
-        # Simulate a live agent job -> POST /api/app/update returns 400
+        # Simulate a live agent job -> POST /api/app/update queues drain instead of failing
         logs_dir = tmp_path / 'topics' / 'logs' / 'demo-slug'
         logs_dir.mkdir(parents=True, exist_ok=True)
         my_pid = os.getpid()
@@ -326,8 +347,27 @@ def test_http_version_and_update_endpoints(tmp_path, monkeypatch):
             encoding='utf-8',
         )
         status, body = _request(srv, 'POST', '/api/app/update', headers={'X-Dashboard-Token': 'tok-ver'})
-        assert status == 400
-        assert 'Không thể cập nhật' in json.loads(body)['error']
+        assert status == 200
+        queued_payload = json.loads(body)
+        assert queued_payload['ok'] is True
+        assert queued_payload['queued'] is True
+        assert queued_payload['message'] == 'Sẽ cập nhật ngay khi xưởng làm xong việc đang dở.'
+        assert app_update.update_pending(tmp_path) is True
+
+        # GET /api/version now exposes update_pending
+        status, body = _request(srv, 'GET', '/api/version')
+        assert status == 200
+        ver_with_pending = json.loads(body)
+        assert isinstance(ver_with_pending['update_pending'], dict)
+        assert ver_with_pending['update_pending']['requested_at']
+
+        # POST /api/app/update-cancel removes pending file
+        status, body = _request(srv, 'POST', '/api/app/update-cancel', headers={'X-Dashboard-Token': 'tok-ver'})
+        assert status == 200
+        assert json.loads(body)['cancelled'] is True
+        assert app_update.update_pending(tmp_path) is False
+        status, body = _request(srv, 'GET', '/api/version')
+        assert json.loads(body)['update_pending'] is None
 
         # Remove live job; mock spawn/telegram/shutdown -> POST /api/app/update succeeds
         (logs_dir / '.job-live123.json').unlink()
@@ -351,3 +391,100 @@ def test_http_version_and_update_endpoints(tmp_path, monkeypatch):
         # Restore real shutdown on the class so the test server thread exits cleanly
         dashboard.DashboardServer.shutdown(srv)
         srv.server_close()
+
+
+def test_update_pending_blocks_new_factory_and_repair_without_errors(tmp_path):
+    app_update.write_pending_update(tmp_path, restart_factory=True)
+
+    # 1. Factory / runner: no new project creation, agent invocation, or blocked errors
+    add_to_queue(
+        tmp_path,
+        QueueEntry(slug='demo-topic', title='Demo', question='Câu hỏi mẫu?', added=date(2026, 11, 25)),
+    )
+    called: list[str] = []
+    deps = runner.RunDeps(
+        create_project=lambda _root, _entry: called.append('create') or (tmp_path / 'projects/demo-topic'),
+        read_state=lambda _p: WorkflowState.TOPIC_SELECTED,
+        reject_note=lambda _p: None,
+        python_steps={'produce': lambda _p: called.append('produce')},
+        changed_code_paths=lambda _root: [],
+        invoke=lambda *_a, **_kw: called.append('invoke'),
+    )
+    report_seq = runner.run_queue(tmp_path, deps, max_parallel_topics=1)
+    report_par = runner.run_queue(tmp_path, deps, max_parallel_topics=2)
+    factory.run_factory(tmp_path, deps, once=True, sleep=lambda _d: None, notify=lambda *_a: True, echo=lambda _m: None)
+    assert called == []
+    assert report_seq.blocked == [] and report_seq.advanced == []
+    assert report_par.blocked == [] and report_par.advanced == []
+    assert not (tmp_path / 'topics/logs/demo-topic/blocked.txt').exists()
+
+    # 2. Repair service: returns 'busy' without invoking agents or writing repair record
+    status = repair_service.repair_once(
+        tmp_path,
+        'demo-topic',
+        invoke=lambda *_a, **_kw: called.append('repair_invoke'),
+    )
+    assert status == 'busy'
+    assert called == []
+    assert not (tmp_path / 'topics/logs/demo-topic' / repair_service.REPORT).exists()
+
+    # 3. Chat stays live: a doctor message must never be stranded while waiting; the
+    # drain loop simply waits for that short chat to finish.
+    assert chat.start.__module__ == 'healthvideo.workflows.chat'
+
+
+def test_drain_daemon_triggers_once_when_idle_and_preserves_file_on_spawn_error(tmp_path, monkeypatch):
+    app_update.clear_latest_cache()
+    monkeypatch.setattr(factory, 'running_pid', lambda _: 42424)
+    monkeypatch.setattr(factory, 'stop_background', lambda _: 42424)
+    monkeypatch.setattr(telegram_bot, 'stop_background', lambda _: None)
+
+    # Startup clears any stale pending file from a previous run
+    app_update.write_pending_update(tmp_path, restart_factory=True)
+    srv = dashboard.DashboardServer(tmp_path, 0, token='tok-drain', repo_dir=tmp_path, drain_interval=0.05)
+    assert app_update.update_pending(tmp_path) is False
+
+    # Case A: spawn error -> keeps pending file and writes cache/app-update.log
+    def failing_spawn(**_kwargs):
+        raise OSError('spawn boom')
+
+    monkeypatch.setattr(app_update, 'spawn_relaunch_helper', failing_spawn)
+    app_update.write_pending_update(tmp_path, restart_factory=True)
+    res = srv._check_pending_update()
+    assert res is None
+    assert app_update.update_pending(tmp_path) is True
+    log_text = (tmp_path / app_update.UPDATE_LOG_FILE).read_text(encoding='utf-8')
+    assert 'spawn relaunch helper failed: OSError: spawn boom' in log_text
+
+    # Case B: pending + idle in daemon thread -> triggers update path exactly once
+    events: list[tuple] = []
+    triggered = threading.Event()
+
+    def ok_spawn(**kwargs):
+        events.append(('spawn', kwargs['restart_factory'], kwargs['port']))
+        return tmp_path / 'cache/app-update-job.json'
+
+    def fake_shutdown():
+        events.append(('shutdown',))
+        triggered.set()
+
+    monkeypatch.setattr(app_update, 'spawn_relaunch_helper', ok_spawn)
+    monkeypatch.setattr(srv, 'shutdown', fake_shutdown)
+    try:
+        assert triggered.wait(timeout=2.0), 'drain daemon did not trigger update when idle'
+        time.sleep(0.15)
+        spawn_calls = [e for e in events if e[0] == 'spawn']
+        assert len(spawn_calls) == 1
+        assert spawn_calls[0] == ('spawn', True, srv.server_address[1])
+        assert ('shutdown',) in events
+    finally:
+        srv.server_close()
+
+
+def test_dashboard_html_has_pending_update_and_cancel_controls():
+    html = dashboard.HTML_PATH.read_text(encoding='utf-8')
+    assert 'btn-update-cancel' in html
+    assert 'btn-version-update-cancel' in html
+    assert '/api/app/update-cancel' in html
+    assert 'Đang chờ xưởng làm xong để cập nhật…' in html
+    assert 'res.queued' in html

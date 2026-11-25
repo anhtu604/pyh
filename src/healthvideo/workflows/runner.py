@@ -55,6 +55,7 @@ from healthvideo.storage.files import (
 from healthvideo.storage.project_layout import resolve_project_layout
 from healthvideo.storage.queue import load_queue
 from healthvideo.workflows import (
+    app_update,
     change_request,
     chat,
     doctor_questions,
@@ -1561,6 +1562,8 @@ def _run_topic(
     entries = [topic]
 
     for entry in entries:
+        if app_update.update_pending(root):
+            return False
         if is_project_paused(root, entry.slug):
             continue
         candidate_dir = root / "projects" / entry.slug
@@ -1596,6 +1599,8 @@ def _run_topic(
                                     "doctor_note": entry.doctor_note}, sort_keys=True)
         while True:
             with chat.step_boundary(root, entry.slug):
+                if app_update.update_pending(root):
+                    break
                 if is_project_paused(root, entry.slug):
                     break
                 if (project_dir / "project.yaml").is_file():
@@ -2160,6 +2165,8 @@ def run_queue(
 ) -> RunReport:
     """Isolate project, artifact and tool errors without swallowing interrupts."""
     report = RunReport()
+    if app_update.update_pending(root):
+        return report
     entries = load_queue(root)
 
     def _run_entry(entry: QueueEntry) -> bool:
@@ -2203,18 +2210,21 @@ def run_queue(
             completed = {}
             while True:
                 active = set(pending.values())
-                for entry in entries:
-                    if entry.slug in active:
-                        continue
-                    if completed.get(entry.slug) == dispatch_signature(entry):
-                        continue
-                    # A fresh retry replaces the previous blocked/gate summary.
-                    with _REPORT_LOCK:
-                        for items in (report.blocked, report.at_gate, report.waiting_model, report.waiting_doctor):
-                            if entry.slug in items:
-                                items.remove(entry.slug)
-                    pending[pool.submit(run_and_snapshot, entry)] = entry.slug
-                    active.add(entry.slug)
+                if not app_update.update_pending(root):
+                    for entry in entries:
+                        if app_update.update_pending(root):
+                            break
+                        if entry.slug in active:
+                            continue
+                        if completed.get(entry.slug) == dispatch_signature(entry):
+                            continue
+                        # A fresh retry replaces the previous blocked/gate summary.
+                        with _REPORT_LOCK:
+                            for items in (report.blocked, report.at_gate, report.waiting_model, report.waiting_doctor):
+                                if entry.slug in items:
+                                    items.remove(entry.slug)
+                        pending[pool.submit(run_and_snapshot, entry)] = entry.slug
+                        active.add(entry.slug)
                 if not pending:
                     break
                 finished, _ = wait(pending, timeout=1, return_when=FIRST_COMPLETED)
@@ -2224,6 +2234,8 @@ def run_queue(
         return report
 
     for entry in entries:
+        if app_update.update_pending(root):
+            break
         if _run_entry(entry) and once:
             break
     return report

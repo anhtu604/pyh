@@ -33,6 +33,7 @@ from healthvideo.storage.files import (
 )
 from healthvideo.storage.project_layout import resolve_project_layout
 from healthvideo.workflows import (
+    app_update,
     change_request,
     chat,
     doctor_questions,
@@ -1452,6 +1453,8 @@ def repair_once(
     run=subprocess.run,
     respect_cooldown: bool = False,
 ) -> str:
+    if app_update.update_pending(root):
+        return 'busy'
     recover_interrupted_repairs(root)
     logs = root / 'topics/logs' / slug
     if (logs / 'paused.yaml').is_file():
@@ -1890,31 +1893,34 @@ def main() -> None:
                     seen_factory = True
                     parent_pid, parent_token = _sync_parent(pid, parent_pid, parent_token)
                     _clear_factory_restarting(root)
-                    try:
-                        project_entries = list(factory.projects(root))
-                    except (OSError, TypeError, ValueError, RuntimeError, yaml.YAMLError) as error:
-                        print(_sanitize_reason(error), flush=True)
-                        project_entries = []
-                    for project, _ in project_entries:
-                        pid = factory.running_pid(root)
-                        if pid is None:
-                            if _maintenance_or_restarting(root):
-                                break
-                            return
-                        parent_pid, parent_token = _sync_parent(pid, parent_pid, parent_token)
+                    if not app_update.update_pending(root):
                         try:
-                            repair_once(root, project.name, respect_cooldown=True)
+                            project_entries = list(factory.projects(root))
                         except (OSError, TypeError, ValueError, RuntimeError, yaml.YAMLError) as error:
                             print(_sanitize_reason(error), flush=True)
-                        pid = factory.running_pid(root)
-                        if pid is not None:
-                            seen_factory = True
+                            project_entries = []
+                        for project, _ in project_entries:
+                            if app_update.update_pending(root):
+                                break
+                            pid = factory.running_pid(root)
+                            if pid is None:
+                                if _maintenance_or_restarting(root):
+                                    break
+                                return
                             parent_pid, parent_token = _sync_parent(pid, parent_pid, parent_token)
-                            _clear_factory_restarting(root)
-                        elif _maintenance_or_restarting(root):
-                            break
-                        else:
-                            return
+                            try:
+                                repair_once(root, project.name, respect_cooldown=True)
+                            except (OSError, TypeError, ValueError, RuntimeError, yaml.YAMLError) as error:
+                                print(_sanitize_reason(error), flush=True)
+                            pid = factory.running_pid(root)
+                            if pid is not None:
+                                seen_factory = True
+                                parent_pid, parent_token = _sync_parent(pid, parent_pid, parent_token)
+                                _clear_factory_restarting(root)
+                            elif _maintenance_or_restarting(root):
+                                break
+                            else:
+                                return
                 for _ in range(30):
                     pid = factory.running_pid(root)
                     if pid is not None:

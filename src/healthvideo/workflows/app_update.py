@@ -31,9 +31,12 @@ from healthvideo.process import is_same_process, process_token
 from healthvideo.storage.files import write_text_atomic
 
 LATEST_CACHE_TTL_SECONDS = 20.0
+DRAIN_POLL_SECONDS = 10.0
 UPDATE_LOG_FILE = 'cache/app-update.log'
 UPDATE_JOB_FILE = 'cache/app-update-job.json'
+UPDATE_PENDING_FILE = 'cache/app-update-pending.json'
 TOKEN_FILE = 'cache/dashboard-token.txt'
+QUEUED_UPDATE_MESSAGE = 'Sẽ cập nhật ngay khi xưởng làm xong việc đang dở.'
 
 _LATEST_CACHE_LOCK = threading.Lock()
 _LATEST_CACHE: dict[Path, tuple[float, dict[str, str | None]]] = {}
@@ -138,10 +141,71 @@ def read_latest_version(
     return fresh
 
 
+def pending_update_path(root: Path) -> Path:
+    """Return the path to the pending-update marker file."""
+    return root / UPDATE_PENDING_FILE
+
+
+def read_pending_update(root: Path) -> dict[str, Any] | None:
+    """Read cache/app-update-pending.json if present and valid, else None."""
+    path = pending_update_path(root)
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    requested_at = data.get('requested_at')
+    if not isinstance(requested_at, str) or not requested_at.strip():
+        return None
+    return {
+        'requested_at': requested_at.strip(),
+        'restart_factory': bool(data.get('restart_factory', False)),
+    }
+
+
+def update_pending(root: Path) -> bool:
+    """Return True when an app update is queued and waiting for the factory to drain."""
+    return read_pending_update(root) is not None
+
+
+def write_pending_update(
+    root: Path,
+    *,
+    restart_factory: bool,
+    requested_at: str | None = None,
+) -> dict[str, Any]:
+    """Atomically persist cache/app-update-pending.json."""
+    payload = {
+        'requested_at': requested_at or datetime.now(UTC).isoformat(timespec='seconds'),
+        'restart_factory': bool(restart_factory),
+    }
+    write_text_atomic(
+        pending_update_path(root),
+        json.dumps(payload, ensure_ascii=False, indent=2),
+    )
+    return payload
+
+
+def clear_pending_update(root: Path) -> bool:
+    """Delete cache/app-update-pending.json if it exists. Returns True if removed."""
+    path = pending_update_path(root)
+    if not path.exists():
+        return False
+    try:
+        path.unlink(missing_ok=True)
+        return True
+    except OSError:
+        return False
+
+
 def version_payload(
     running: dict[str, str | None],
     *,
     repo_dir: Path | None = None,
+    root: Path | None = None,
     ttl_seconds: float = LATEST_CACHE_TTL_SECONDS,
     monotonic: Callable[[], float] = time.monotonic,
     runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
@@ -156,6 +220,7 @@ def version_payload(
     run_hash = running.get('hash') or None
     lat_hash = latest.get('hash') or None
     update_available = bool(run_hash and lat_hash and run_hash != lat_hash)
+    pending = read_pending_update(root) if root is not None else None
     return {
         'running': {
             'hash': run_hash,
@@ -167,6 +232,7 @@ def version_payload(
             'subject': latest.get('subject') or None,
         },
         'update_available': update_available,
+        'update_pending': {'requested_at': pending['requested_at']} if pending else None,
     }
 
 
@@ -312,31 +378,91 @@ def trigger_app_update(
     stop_telegram: Callable[[], object],
     quit_app: Callable[[], object],
     spawn_helper: Callable[..., Path] | None = None,
+    restart_factory: bool | None = None,
 ) -> dict[str, Any]:
-    """Validate idle state, stop factory if needed, spawn detached relauncher, and quit cleanly."""
+    """Queue drain when busy, or stop factory, spawn detached relauncher, and quit cleanly."""
+    existing = read_pending_update(root)
+    was_factory_running = bool(is_factory_running())
+    effective_restart = (
+        bool(restart_factory)
+        if restart_factory is not None
+        else bool(was_factory_running or (existing and existing.get('restart_factory')))
+    )
+
     busy_reason = check_active_jobs()
     if busy_reason:
-        raise ValueError(busy_reason)
+        pending = write_pending_update(
+            root,
+            restart_factory=effective_restart,
+            requested_at=existing['requested_at'] if existing else None,
+        )
+        return {
+            'queued': True,
+            'requested_at': pending['requested_at'],
+            'restart_factory': pending['restart_factory'],
+            'message': QUEUED_UPDATE_MESSAGE,
+        }
 
-    was_factory_running = bool(is_factory_running())
     if was_factory_running:
         stop_factory()
 
     launcher = spawn_relaunch_helper if spawn_helper is None else spawn_helper
-    launcher(
-        root=root,
-        port=port,
-        restart_factory=was_factory_running,
-    )
+    try:
+        launcher(
+            root=root,
+            port=port,
+            restart_factory=effective_restart,
+        )
+    except Exception as exc:
+        _append_log(
+            root / UPDATE_LOG_FILE,
+            f'spawn relaunch helper failed: {type(exc).__name__}: {exc}',
+        )
+        raise
 
     with contextlib.suppress(OSError, RuntimeError, ValueError):
         stop_telegram()
     quit_app()
     return {
         'updating': True,
-        'restart_factory': was_factory_running,
+        'restart_factory': effective_restart,
         'message': 'Đang cập nhật code mới và khởi động lại app…',
     }
+
+
+def process_pending_update(
+    *,
+    root: Path,
+    port: int,
+    check_active_jobs: Callable[[], str | None],
+    is_factory_running: Callable[[], bool],
+    stop_factory: Callable[[], object],
+    stop_telegram: Callable[[], object],
+    quit_app: Callable[[], object],
+    spawn_helper: Callable[..., Path] | None = None,
+) -> dict[str, Any] | None:
+    """If an update is pending and no active work remains, trigger the update path."""
+    pending = read_pending_update(root)
+    if pending is None:
+        return None
+    if check_active_jobs():
+        return None
+    try:
+        result = trigger_app_update(
+            root=root,
+            port=port,
+            check_active_jobs=check_active_jobs,
+            is_factory_running=is_factory_running,
+            stop_factory=stop_factory,
+            stop_telegram=stop_telegram,
+            quit_app=quit_app,
+            spawn_helper=spawn_helper,
+            restart_factory=bool(pending.get('restart_factory', False)),
+        )
+    except (OSError, RuntimeError, ValueError, subprocess.SubprocessError):
+        # Keep cache/app-update-pending.json intact; trigger_app_update already logged spawn errors.
+        return None
+    return result if result.get('updating') else None
 
 
 def _wait_for_port_ready(

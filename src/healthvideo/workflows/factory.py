@@ -27,7 +27,7 @@ from healthvideo.env import (
 from healthvideo.storage.files import read_yaml, write_text_atomic, write_yaml_atomic
 from healthvideo.storage.queue import load_queue
 from healthvideo.storage.revisions import create_revision
-from healthvideo.workflows import doctor_questions
+from healthvideo.workflows import app_update, doctor_questions
 from healthvideo.workflows.gate_review import resume_gate
 from healthvideo.workflows.package import package_project
 from healthvideo.workflows.production_retry import clear_retry, retry_deadlines
@@ -412,6 +412,11 @@ def run_factory(root: Path, deps: RunDeps, *, interval: float = 120, once: bool 
             while True:
                 delay = interval
                 current = {}
+                if app_update.update_pending(root):
+                    if once:
+                        break
+                    _sleep_until_wakeup(root, min(delay, 5.0), sleep=sleep)
+                    continue
                 try:
                     prepare_semantic_revisions(root)
                     if 'max_parallel_topics' in inspect.signature(run_queue).parameters:
