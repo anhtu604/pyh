@@ -1,5 +1,5 @@
 version: 1
-updated: '2026-11-24'
+updated: '2026-11-25'
 phases:
 - id: R1
   title: Hoàn thiện xưởng trước khi làm video mới
@@ -538,3 +538,9 @@ phases:
     status: done
     owner: agy
     note: 'Đã vào master: kiểm toàn luồng R5 offline đạt (pytest 3022, Vitest 500); ghi chuẩn pyh_r5_quality_v1 D1–D4 vào factory-standards (chỉ thêm). Chưa nghiệm thu video thật.'
+
+  - id: IMP.1
+    title: Nhập PYH-003 bản 4 vào xưởng để duyệt và đăng
+    status: doing
+    owner: codex
+    note: 'Thêm lệnh nhập bản dựng ngoài xưởng thành bản sửa 002 (lời, nguồn, video, clip); bác sĩ duyệt PIN cổng y khoa rồi cổng video trong app, sau đó xưởng đóng gói và đăng.'
