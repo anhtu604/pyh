@@ -2,6 +2,7 @@
 
 from itertools import groupby
 
+from healthvideo.domain.long_form import long_form_lines
 from healthvideo.domain.script import Script
 from healthvideo.render.input import RenderInput
 
@@ -77,15 +78,19 @@ def render_subtitles(script: Script, render_input: RenderInput, timing: dict) ->
     """
     if render_input.format_profile != 'youtube_long':
         raise ValueError('Sidecar subtitles require youtube_long')
-    rows = timing['scenes']
+    clip_line_ids = {line.id for line in script.lines if line.clip_id is not None}
+    render_ids = {scene.id for scene in render_input.scenes}
+    rows = [row for row in timing['scenes']
+            if row['scene_id'] in render_ids or row['script_line_id'] not in clip_line_ids]
     if timing['fps'] != render_input.fps or len(rows) != len(render_input.scenes):
         raise ValueError('Subtitle timing does not match render input')
     for row, scene in zip(rows, render_input.scenes, strict=True):
         if any(row[key] != getattr(scene, key) for key in
                ('script_line_id', 'start_frame', 'duration_frames')) or row['scene_id'] != scene.id:
             raise ValueError('Subtitle timing does not match render input')
-    lines = {line.id: line.text for line in script.lines}
-    if len(lines) != len(script.lines):
+    long_lines = long_form_lines(script)
+    lines = {line.id: line.text for line in long_lines}
+    if len(lines) != len(long_lines):
         raise ValueError('Duplicate subtitle script line')
     seen: set[str] = set()
     cues = []

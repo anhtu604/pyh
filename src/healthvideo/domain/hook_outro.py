@@ -1,3 +1,4 @@
+from healthvideo.domain.long_form import long_form_script, long_form_storyboard
 from healthvideo.domain.script import Script
 from healthvideo.domain.storyboard import Storyboard
 
@@ -16,6 +17,8 @@ def validate_hook_outro(
     script: Script, storyboard: Storyboard, *, require_brand: bool = False,
     allow_line_references: bool = False,
 ) -> None:
+    script = long_form_script(script)
+    storyboard = long_form_storyboard(storyboard)
     if len(script.lines) < 2 or len(script.lines) != len(storyboard.scenes):
         raise ValueError("M6.4 script and storyboard must align with one outro")
     if [line.purpose for line in script.lines].count("outro") != 1:

@@ -1257,7 +1257,9 @@ def _diagnose_script_error(revision_root: Path) -> str | None:
     if not script.lines:
         return "script/script.yaml chưa có dòng lời thoại nào"
     if script.format_profile == "hook_outro_v1":
-        outro = script.lines[-1]
+        from healthvideo.domain.long_form import long_form_lines
+
+        outro = long_form_lines(script)[-1]
         if outro.purpose != "outro" or outro.text not in {CHANNEL_OUTRO_TEXT, OUTRO_TEXT}:
             return "M6.4 final outro must match pinned text (outro cuối trong script/script.yaml chưa khớp mẫu pin)"
     claims: list[EvidenceClaim] = []

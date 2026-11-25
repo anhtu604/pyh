@@ -240,6 +240,16 @@ def _normalize_sentence(sentence: str) -> list[str]:
 
 def lint_script_style(script: Script) -> list[StyleIssue]:
     """Check Vietnamese narration style rules and return block/warn issues."""
+    from healthvideo.domain.long_form import long_form_script
+
+    clip_ids = {line.clip_id for line in script.lines if line.clip_id is not None}
+    if clip_ids:
+        # Repeated phrases across separate deliverables are not repetition within a video.
+        groups = [long_form_script(script), *(script.model_copy(update={
+            "lines": [line.model_copy(update={"purpose": "content", "clip_id": None})
+                      for line in script.lines if line.clip_id == clip_id],
+        }) for clip_id in sorted(clip_ids))]
+        return [issue for group in groups for issue in lint_script_style(group)]
     issues: list[StyleIssue] = []
 
     sentence_occurrences: dict[str, list[tuple[str, str]]] = {}

@@ -16,6 +16,7 @@ from healthvideo.domain.clip_plan import (
     FPS,
     ClipPlan,
     ClipSpec,
+    resolve_clip_scenes,
     validate_clip_plan,
 )
 from healthvideo.domain.evidence import EvidenceClaim
@@ -82,6 +83,8 @@ class ShortClipSpec(BaseModel):
     hook_text: Nonblank
     start_scene_id: Nonblank
     end_scene_id: Nonblank
+    hook_scene_id: Nonblank | None = None
+    outro_scene_id: Nonblank | None = None
     target_seconds: int = Field(ge=45, le=90)
     loop_bridge: str = ""
     caption: Nonblank
@@ -206,7 +209,32 @@ def _validate_and_map_shorts_plan(
                 if cid not in claims:
                     raise ValueError(f"{clip.id}: unknown ledger claim {cid}")
 
-        for scene in storyboard.scenes[start_idx : end_idx + 1]:
+        dedicated: dict[str, str | None] = {}
+        for purpose, explicit in (
+            ("clip_hook", clip.hook_scene_id), ("clip_outro", clip.outro_scene_id),
+        ):
+            candidates = [
+                scene.id for scene in storyboard.scenes
+                if scene.clip_only == clip.id
+                and (line := line_by_id.get(scene.script_line_id)) is not None
+                and line.clip_id == clip.id and line.purpose == purpose
+            ]
+            if explicit is None and len(candidates) > 1:
+                raise ValueError(f"{clip.id}: ambiguous {purpose} scenes; select a scene ID")
+            dedicated[purpose] = explicit or (candidates[0] if candidates else None)
+
+        mapped = ClipSpec(
+            id=clip.id,
+            title=clip.title.strip()[:100],
+            first_scene_id=clip.start_scene_id,
+            last_scene_id=clip.end_scene_id,
+            hook_scene_id=dedicated["clip_hook"],
+            outro_scene_id=dedicated["clip_outro"],
+            mascot_max_width_percent=clip.mascot_max_width_percent,
+            subtitle_position=clip.subtitle_position,
+            hook_window_seconds=clip.hook_window_seconds,
+        )
+        for scene in resolve_clip_scenes(mapped, storyboard):
             if scene.script_line_id is not None:
                 line = line_by_id.get(scene.script_line_id)
                 if line is None or scene.narration != line.text:
@@ -214,17 +242,7 @@ def _validate_and_map_shorts_plan(
                         f"{clip.id}: scene {scene.id} narration diverges from approved script"
                     )
 
-        mapped_clips.append(
-            ClipSpec(
-                id=clip.id,
-                title=clip.title.strip()[:100],
-                first_scene_id=clip.start_scene_id,
-                last_scene_id=clip.end_scene_id,
-                mascot_max_width_percent=clip.mascot_max_width_percent,
-                subtitle_position=clip.subtitle_position,
-                hook_window_seconds=clip.hook_window_seconds,
-            )
-        )
+        mapped_clips.append(mapped)
 
     clip_plan = ClipPlan(clips=tuple(mapped_clips))
     if require_long_form_bounds:
@@ -232,6 +250,7 @@ def _validate_and_map_shorts_plan(
             clip_plan,
             storyboard,
             claims,
+            script=script,
             min_frames=CLIP_MIN_FRAMES,
             max_frames=SHORTS_CLIP_MAX_FRAMES,
             require_style_a=True,

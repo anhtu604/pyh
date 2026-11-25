@@ -1,6 +1,6 @@
-"""Vertical clip plan (script/clip-plan.yaml): clips cut from the approved long-form script.
+"""Vertical clip plan: approved dedicated hook/outro around a long-form scene range.
 
-A clip only points at existing storyboard scenes, so it cannot carry new wording;
+A clip only points at approved storyboard scenes, so it cannot carry new wording;
 ``extra="forbid"`` keeps free text, and therefore new claims, out of the plan.
 """
 
@@ -10,6 +10,8 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from healthvideo.domain.evidence import EvidenceClaim
+from healthvideo.domain.long_form import CLIP_PURPOSES, long_form_scenes
+from healthvideo.domain.script import Script
 from healthvideo.domain.storyboard import Scene, Storyboard
 
 FPS = 30
@@ -66,20 +68,57 @@ class ClipPlan(BaseModel):
 
 def resolve_clip_scenes(clip: ClipSpec, storyboard: Storyboard) -> tuple[Scene, ...]:
     """Return hook + contiguous range + outro scenes, in that order."""
-    index = {scene.id: position for position, scene in enumerate(storyboard.scenes)}
+    by_id = {scene.id: scene for scene in storyboard.scenes}
+    if len(by_id) != len(storyboard.scenes):
+        raise ValueError("clip plan requires unique scene IDs; duplicate scene ID")
+    long_scenes = long_form_scenes(storyboard)
+    index = {scene.id: position for position, scene in enumerate(long_scenes)}
     wanted = (clip.first_scene_id, clip.last_scene_id, clip.hook_scene_id, clip.outro_scene_id)
     for scene_id in wanted:
-        if scene_id is not None and scene_id not in index:
+        if scene_id is not None and scene_id not in by_id:
             raise ValueError(f"{clip.id}: unknown scene {scene_id}")
+    for scene_id in (clip.first_scene_id, clip.last_scene_id):
+        if by_id[scene_id].clip_only is not None:
+            raise ValueError(f"{clip.id}: clip-only scene {scene_id} cannot be a middle endpoint")
     first, last = index[clip.first_scene_id], index[clip.last_scene_id]
     if first > last:
         raise ValueError(f"{clip.id}: first scene must not come after last scene")
     for scene_id in (clip.hook_scene_id, clip.outro_scene_id):
-        if scene_id is not None and first <= index[scene_id] <= last:
+        if scene_id is not None and by_id[scene_id].clip_only not in (None, clip.id):
+            raise ValueError(f"{clip.id}: scene {scene_id} belongs to {by_id[scene_id].clip_only}")
+        if scene_id is not None and scene_id in index and first <= index[scene_id] <= last:
             raise ValueError(f"{clip.id}: scene {scene_id} is already inside the clip range")
-    hook = [storyboard.scenes[index[clip.hook_scene_id]]] if clip.hook_scene_id else []
-    outro = [storyboard.scenes[index[clip.outro_scene_id]]] if clip.outro_scene_id else []
-    return tuple(hook + list(storyboard.scenes[first : last + 1]) + outro)
+    hook = [by_id[clip.hook_scene_id]] if clip.hook_scene_id else []
+    outro = [by_id[clip.outro_scene_id]] if clip.outro_scene_id else []
+    return tuple(hook + list(long_scenes[first : last + 1]) + outro)
+
+
+def validate_clip_script(script: Script, storyboard: Storyboard) -> None:
+    """Require each clip-only scene to preserve its approved script line exactly."""
+    lines = {line.id: line for line in script.lines}
+    if len(lines) != len(script.lines):
+        raise ValueError("clip validation: duplicate script line ID")
+    if len({scene.id for scene in storyboard.scenes}) != len(storyboard.scenes):
+        raise ValueError("clip validation: duplicate scene ID")
+    referenced: set[str] = set()
+    for scene in storyboard.scenes:
+        line = lines.get(scene.script_line_id)
+        if scene.clip_only is None:
+            if line is not None and line.purpose in CLIP_PURPOSES:
+                raise ValueError(f"Scene {scene.id}: clip script line requires clip_only")
+            continue
+        if line is None or line.purpose not in CLIP_PURPOSES:
+            raise ValueError(f"Scene {scene.id}: clip_only requires an approved clip script line")
+        if (line.clip_id, line.text, line.claim_id) != (scene.clip_only, scene.narration, scene.claim_id):
+            raise ValueError(f"Scene {scene.id}: clip_id, narration and claim must match approved script")
+        if line.source_marker is not None and line.source_marker != scene.source_marker:
+            raise ValueError(f"Scene {scene.id}: source_marker must match approved script")
+        if line.id in referenced:
+            raise ValueError(f"Clip script line {line.id} must be referenced exactly once")
+        referenced.add(line.id)
+    missing = [line.id for line in script.lines if line.purpose in CLIP_PURPOSES and line.id not in referenced]
+    if missing:
+        raise ValueError(f"Clip script lines must be referenced: {', '.join(missing)}")
 
 
 def validate_style_a_vertical_clip(clip: ClipSpec) -> None:
@@ -103,7 +142,7 @@ def vertical_clip_storyboard(storyboard: Storyboard, scenes: Sequence[Scene]) ->
     retimed: list[Scene] = []
     start = 0
     for scene in scenes:
-        retimed.append(scene.model_copy(update={"start_frame": start, "chapter_id": None}))
+        retimed.append(scene.model_copy(update={"start_frame": start, "chapter_id": None, "clip_only": None}))
         start += scene.duration_frames
     return Storyboard(
         title=storyboard.title,
@@ -119,15 +158,33 @@ def validate_clip_plan(
     plan: ClipPlan, storyboard: Storyboard, claims: Mapping[str, EvidenceClaim],
     *, min_frames: int = CLIP_MIN_FRAMES, max_frames: int = CLIP_MAX_FRAMES,
     require_style_a: bool = False,
+    script: Script | None = None,
 ) -> dict[str, tuple[Scene, ...]]:
     """Block clips that run too short/long, cite unknown claims, or drop a caveat."""
     if storyboard.format_profile != "youtube_long":
         raise ValueError("clip plan requires a youtube_long storyboard")
+    if script is not None:
+        validate_clip_script(script, storyboard)
     resolved: dict[str, tuple[Scene, ...]] = {}
     for clip in plan.clips:
         if require_style_a:
             validate_style_a_vertical_clip(clip)
         scenes = resolve_clip_scenes(clip, storyboard)
+        if storyboard.quality_profile == "r5_v1" and (not clip.hook_scene_id or not clip.outro_scene_id):
+            raise ValueError(f"{clip.id}: R5 clip requires hook_scene_id and outro_scene_id")
+        for role, scene_id, max_seconds in (("hook", clip.hook_scene_id, 5), ("outro", clip.outro_scene_id, 8)):
+            if scene_id is None:
+                continue
+            scene = next(scene for scene in scenes if scene.id == scene_id)
+            if storyboard.quality_profile == "r5_v1" and scene.clip_only != clip.id:
+                raise ValueError(f"{clip.id}: R5 {role} requires clip_only={clip.id}")
+            if scene.clip_only is not None:
+                if scene.duration_frames > max_seconds * FPS:
+                    raise ValueError(f"{clip.id}: clip-only {role} exceeds {max_seconds}s")
+                if script is not None:
+                    line = next(line for line in script.lines if line.id == scene.script_line_id)
+                    if line.purpose != f"clip_{role}":
+                        raise ValueError(f"{clip.id}: {role} requires clip_{role} script purpose")
         try:
             vertical_clip_storyboard(storyboard, scenes)
         except ValueError as error:

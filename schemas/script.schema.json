@@ -73,6 +73,19 @@
           "default": null,
           "title": "Claim Id"
         },
+        "clip_id": {
+          "anyOf": [
+            {
+              "pattern": "^CL\\d{2}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Clip Id"
+        },
         "delivery": {
           "anyOf": [
             {
@@ -108,7 +121,9 @@
           "default": "content",
           "enum": [
             "content",
-            "outro"
+            "outro",
+            "clip_hook",
+            "clip_outro"
           ],
           "title": "Purpose",
           "type": "string"

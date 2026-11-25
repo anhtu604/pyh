@@ -57,12 +57,21 @@ class ScriptLine(BaseModel):
     schema_version: str = "1.0"
     id: str
     text: str
-    purpose: Literal["content", "outro"] = "content"
+    purpose: Literal["content", "outro", "clip_hook", "clip_outro"] = "content"
+    clip_id: str | None = Field(default=None, pattern=r"^CL\d{2}$", exclude_if=lambda v: v is None)
     claim_id: str | None = None
     source_marker: str | None = None
     arc_beat: int | None = Field(default=None, ge=1, le=7)
     explainer_layer_id: str | None = None
     delivery: str | Delivery | None = None
+
+    @model_validator(mode="after")
+    def validate_clip_purpose(self) -> "ScriptLine":
+        if (self.purpose in {"clip_hook", "clip_outro"}) != (self.clip_id is not None):
+            raise ValueError("clip_id is required exactly for clip_hook or clip_outro lines")
+        if self.purpose == "clip_hook" and self.claim_id is not None:
+            raise ValueError("clip_hook forbids claim_id")
+        return self
 
     @model_validator(mode="after")
     def validate_delivery(self) -> "ScriptLine":

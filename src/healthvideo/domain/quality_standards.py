@@ -297,6 +297,10 @@ def validate_r5_contract(board: Storyboard, script: Script) -> None:
 
     Manifest membership and aligned anchor resolution belong to later integration.
     """
+    from healthvideo.domain.long_form import long_form_script, long_form_storyboard
+
+    board = long_form_storyboard(board)
+    script = long_form_script(script)
     if board.quality_profile is None:
         return
     if board.r5_contract is None:

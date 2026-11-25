@@ -1135,6 +1135,19 @@
           "default": null,
           "title": "Claim Id"
         },
+        "clip_only": {
+          "anyOf": [
+            {
+              "pattern": "^CL\\d{2}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Clip Only"
+        },
         "duration_frames": {
           "exclusiveMinimum": 0,
           "title": "Duration Frames",

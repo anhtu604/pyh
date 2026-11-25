@@ -5,6 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from healthvideo.domain.long_form import long_form_storyboard
 from healthvideo.domain.storyboard import Storyboard
 
 MIN_TARGET_SECONDS = 10 * 60
@@ -56,6 +57,7 @@ class Outline(BaseModel):
 
 def validate_outline(outline: Outline, storyboard: Storyboard, claim_ids: AbstractSet[str]) -> None:
     """Chapters appear in storyboard order; every scene claim is planned in its chapter."""
+    storyboard = long_form_storyboard(storyboard)
     if outline.format_profile == "youtube_long" and storyboard.format_profile != "youtube_long":
         raise ValueError("outline requires a youtube_long storyboard")
     if outline.format_profile == "flexible_v1" and storyboard.format_profile not in {"youtube_long", "vertical_clip"}:

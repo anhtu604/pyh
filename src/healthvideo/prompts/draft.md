@@ -21,6 +21,7 @@ Chuẩn biên tập: đọc `docs/superpowers/specs/2026-11-14-agent-editorial-s
 - Nộp bằng `healthvideo step draft-script {project} --script <script.yaml> [--outline <outline.yaml>]`; không tạo khung storyboard/manifest/clip-plan/bảng/tab để qua validator. Storyboard_director thiết kế hình, shorts_producer sở hữu range; validator đòi hình thì trả coordinator. Không tự thiết kế SVG/FLUX/mascot_pose.
 - Viết xong lời thoại thì tự soát từng dòng theo `pyh-writer` và mục "Dấu hiệu văn AI cần tránh trong lời đọc" ở cuối prompt; sau `step draft-script`, sửa hết cảnh báo `ai_*` trong `reviews/style-lint.json`. Không tự chạy `submit-medical`.
 - Không thêm quan điểm, lập trường hay trải nghiệm cá nhân của bác sĩ ngoài `{doctor_note}`.
+- Với mỗi clip dự kiến, thêm lời riêng vào `script.yaml` trước cổng y khoa: dòng `purpose: clip_hook`, `clip_id: CL01` (CL02… tương ứng), câu hỏi/vấn đề 3–5 giây không thêm claim; dòng `purpose: clip_outro` cùng `clip_id`, 5–8 giây chốt hành động có căn cứ và mời xem video đầy đủ trên kênh, không bán hàng. Giữ caveat; hai dòng chỉ dùng cho clip, không thuộc chương hay lời video dài.
 
 ## Giọng văn và cách đọc
 - Nói như người thật kể cho bạn bè, xưng "mình", gọi người xem là "bạn"; câu ngắn, câu dài xen nhau; từ đệm tự nhiên không lạm dụng. Xéo xắt nhẹ với **hiểu lầm**, không bao giờ với người bệnh.

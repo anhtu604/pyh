@@ -180,6 +180,9 @@ _BEAT_RANGES = {1: (5, 10), 2: (10, 15), 3: (15, 20), 4: (20, 25),
 
 
 def _review_explain_first(script: Script, explainer: Explainer | None) -> list[QAIssue]:
+    from healthvideo.domain.long_form import long_form_script
+
+    script = long_form_script(script)
     issues: list[QAIssue] = []
     if explainer is None:
         issues.append(QAIssue(

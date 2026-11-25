@@ -466,7 +466,10 @@ def _record(
 
 def _caption(script: Script, citations: Mapping[str, list[SourceRecord]]) -> str:
     """Write the upload caption: a short hook, the disclaimer and the sources."""
-    hook = script.lines[0].text if script.lines else script.title
+    from healthvideo.domain.long_form import long_form_lines
+
+    lines = long_form_lines(script)
+    hook = lines[0].text if lines else script.title
     blocks = [script.title, hook, DISCLAIMER]
     if citations:
         sources = "\n".join(

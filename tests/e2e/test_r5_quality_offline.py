@@ -326,6 +326,20 @@ def _synthetic_r5_project(root: Path, *, slug: str = "r5-offline-fixture") -> Pa
             "purpose": "outro",
             "delivery": {"intent": "thank"},
         },
+        {
+            "id": "CL01_HOOK",
+            "text": "Vì sao phiếu xét nghiệm ghi men gan tăng cao bất ngờ?",
+            "purpose": "clip_hook",
+            "clip_id": "CL01",
+            "delivery": {"intent": "hook"},
+        },
+        {
+            "id": "CL01_OUTRO",
+            "text": "Mang phiếu đi khám bác sĩ để đánh giá đầy đủ. Xem video đầy đủ trên kênh nhé.",
+            "purpose": "clip_outro",
+            "clip_id": "CL01",
+            "delivery": {"intent": "thank"},
+        },
     ]
     script_data = {
         "schema_version": "1.0",
@@ -863,6 +877,54 @@ def _synthetic_r5_project(root: Path, *, slug: str = "r5-offline-fixture") -> Pa
                 }
             ],
         },
+        {
+            "id": "CL01_H",
+            "start_frame": 0,
+            "duration_frames": 120,
+            "script_line_id": "CL01_HOOK",
+            "narration": "Vì sao phiếu xét nghiệm ghi men gan tăng cao bất ngờ?",
+            "visual": "whiteboard",
+            "on_screen_text": "Men gan tăng là gì?",
+            "clip_only": "CL01",
+            "shots": [
+                {
+                    "id": "SH13",
+                    "kind": "story",
+                    "tier": None,
+                    "component": "TakeawayCard",
+                    "asset_paths": [],
+                    "question_ids": ["Q1"],
+                    "start": start_anc,
+                    "end": end_anc,
+                    "actions": [],
+                    "text_windows": [],
+                }
+            ],
+        },
+        {
+            "id": "CL01_O",
+            "start_frame": 0,
+            "duration_frames": 150,
+            "script_line_id": "CL01_OUTRO",
+            "narration": "Mang phiếu đi khám bác sĩ để đánh giá đầy đủ. Xem video đầy đủ trên kênh nhé.",
+            "visual": "whiteboard",
+            "on_screen_text": "Xem video đầy đủ trên kênh",
+            "clip_only": "CL01",
+            "shots": [
+                {
+                    "id": "SH14",
+                    "kind": "recap",
+                    "tier": None,
+                    "component": "TakeawayCard",
+                    "asset_paths": [],
+                    "question_ids": ["Q3"],
+                    "start": start_anc,
+                    "end": end_anc,
+                    "actions": [],
+                    "text_windows": [],
+                }
+            ],
+        },
     ]
 
     board_data = {
@@ -929,6 +991,8 @@ def _synthetic_r5_project(root: Path, *, slug: str = "r5-offline-fixture") -> Pa
                     "title": "Zoom gan và cơ chế men gan",
                     "first_scene_id": "S02",
                     "last_scene_id": "S06",
+                    "hook_scene_id": "CL01_H",
+                    "outro_scene_id": "CL01_O",
                 }
             ],
         },

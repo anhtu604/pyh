@@ -12,9 +12,14 @@ from healthvideo.domain.asset_manifest import (
     AssetManifest,
     validate_asset_manifest,
 )
-from healthvideo.domain.clip_plan import ClipPlan, validate_clip_plan
+from healthvideo.domain.clip_plan import (
+    ClipPlan,
+    validate_clip_plan,
+    validate_clip_script,
+)
 from healthvideo.domain.evidence import EvidenceClaim
 from healthvideo.domain.hook_outro import validate_hook_outro
+from healthvideo.domain.long_form import long_form_scenes
 from healthvideo.domain.mascot_usage import lint_mascot_usage
 from healthvideo.domain.outline import Outline
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
@@ -75,7 +80,10 @@ def validate_estimated_layout(
         except ValueError as error:
             errors.append(str(error))
         if not report.issues:
-            timed = resolve_r5_shots(timed)
+            try:
+                timed = resolve_r5_shots(timed)
+            except ValueError as error:
+                errors.append(str(error))
     try:
         validate_visual_budget(timed, assets, margin_percent=1)
     except ValueError as error:
@@ -105,7 +113,7 @@ def validate_estimated_layout(
         for clip in clip_plan.clips:
             try:
                 validate_clip_plan(ClipPlan(clips=(clip,)), timed, claims,
-                                   min_frames=1980, max_frames=4860)
+                                   min_frames=1980, max_frames=4860, script=script)
             except ValueError as error:
                 errors.append(str(error))
     if errors:
@@ -132,6 +140,7 @@ def _validate(
     ledger = read_yaml(revision / "evidence/ledger.yaml")
     if not script.lines or not storyboard.scenes:
         raise ValueError("draft requires nonempty script lines and storyboard scenes")
+    validate_clip_script(script, storyboard)
     claims = [EvidenceClaim.model_validate(item) for item in ledger.get("claims", [])]
     if script.format_profile != "explain_first_v1":
         raise ValueError(
@@ -176,7 +185,7 @@ def _validate(
     if storyboard.quality_profile == 'r5_v1':
         validate_estimated_layout(revision.parents[1], script, storyboard, assets)
     else:
-        draft_visual_rhythm_qa(storyboard.scenes)
+        draft_visual_rhythm_qa(long_form_scenes(storyboard))
     validate_hook_outro(script, storyboard, require_brand=True, allow_line_references=True)
     resolve_citations(
         script,

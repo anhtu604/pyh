@@ -105,6 +105,7 @@ _LOCKED_SCENE_FIELDS = (
     'narration',
     'claim_id',
     'chapter_id',
+    'clip_only',
     'source_marker',
     'source_card',
     'evidence_highlight',

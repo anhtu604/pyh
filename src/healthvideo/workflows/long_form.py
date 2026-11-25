@@ -25,6 +25,7 @@ from healthvideo.domain.clip_plan import (
 from healthvideo.domain.evidence import EvidenceClaim
 from healthvideo.domain.license_ledger import LicenseEntry, LicenseLedger
 from healthvideo.domain.outline import Outline, validate_outline
+from healthvideo.domain.script import Script
 from healthvideo.domain.storyboard import Scene, Storyboard
 from healthvideo.render.chapters import chapter_cache_key, chapter_spans
 from healthvideo.render.input import (
@@ -245,6 +246,10 @@ def load_clip_scenes(
         }
         outline = Outline.model_validate(read_yaml(revision / OUTLINE_ARTIFACT))
         validate_outline(outline, storyboard, claims.keys())
+        script_path = revision / "script/script.yaml"
+        script = Script.model_validate(read_yaml(script_path)) if script_path.is_file() else None
+        if script is None and any(scene.clip_only is not None for scene in storyboard.scenes):
+            raise ValueError("Clip-only scenes require the approved script/script.yaml")
         plan, from_shorts = _resolve_effective_clip_plan(
             revision, require_medical_approval=require_medical_approval
         )
@@ -256,8 +261,9 @@ def load_clip_scenes(
                 min_frames=CLIP_MIN_FRAMES,
                 max_frames=SHORTS_CLIP_MAX_FRAMES,
                 require_style_a=True,
+                script=script,
             )
-        return validate_clip_plan(plan, storyboard, claims)
+        return validate_clip_plan(plan, storyboard, claims, script=script)
 
 
 def clip_render_input(

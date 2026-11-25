@@ -15,6 +15,7 @@ from pathlib import Path
 
 from healthvideo.domain.asset_manifest import AssetManifest
 from healthvideo.domain.evidence import EvidenceClaim, SourceRecord
+from healthvideo.domain.long_form import long_form_lines, long_form_scenes
 from healthvideo.domain.outline import Outline
 from healthvideo.domain.posts import PostSet
 from healthvideo.domain.script import Script
@@ -124,6 +125,22 @@ def _render_mechanism_section(
         '<th>Nguồn</th><th>Lớp / Khái niệm / visual.motion</th></tr></thead><tbody>'
         + "".join(rows) + "</tbody></table></section>"
     )
+
+
+def _render_clip_lines_section(script: Script) -> str:
+    groups: dict[str, list] = {}
+    for line in script.lines:
+        if line.purpose in {"clip_hook", "clip_outro"} and line.clip_id:
+            groups.setdefault(line.clip_id, []).append(line)
+    if not groups:
+        return ""
+    return '<section><h2>Lời riêng cho clip</h2>' + ''.join(
+        f'<h3>{escape(clip_id)}</h3><ul>' + ''.join(
+            f'<li>{"Hook" if line.purpose == "clip_hook" else "Outro"} '
+            f'({escape(line.id)}): {escape(line.text)}</li>'
+            for line in lines
+        ) + '</ul>' for clip_id, lines in sorted(groups.items())
+    ) + '</section>'
 
 
 def _render_long_form_section(revision_root: Path, storyboard: Storyboard) -> str:
@@ -349,7 +366,8 @@ def render_medical_packet(revision_root: Path) -> str:
     )
     hook_outro_section = ""
     if script.format_profile == "hook_outro_v1":
-        final = storyboard.scenes[-1]
+        final = long_form_scenes(storyboard)[-1]
+        main_lines = long_form_lines(script)
         brand_records = {
             asset.path: asset for asset in asset_manifest.assets
             if asset.storyboard_role == "brand"
@@ -370,8 +388,8 @@ def render_medical_packet(revision_root: Path) -> str:
         hook_outro_section = (
             '<section><h2>Hook và outro đã khai báo</h2>'
             f"<p>Profile: {escape(script.format_profile)}</p>"
-            f"<p>Hook: {escape(script.lines[0].text)}</p>"
-            f"<p>Outro: {escape(script.lines[-1].text)}</p>"
+            f"<p>Hook: {escape(main_lines[0].text)}</p>"
+            f"<p>Outro: {escape(main_lines[-1].text)}</p>"
             f"<p>Timeline outro: {final.start_frame}–{final.start_frame + final.duration_frames} frame</p>"
             f"<p>Brand asset: {brand_paths or 'chưa khai báo'}</p></section>"
         )
@@ -397,6 +415,7 @@ def render_medical_packet(revision_root: Path) -> str:
         + visual_budget_section
         + style_section
         + hook_outro_section
+        + _render_clip_lines_section(script)
         + _render_long_form_section(revision_root, storyboard)
         + "</body></html>"
     )

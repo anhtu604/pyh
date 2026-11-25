@@ -5,6 +5,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from healthvideo.domain.format_profile import FORMAT_SPECS, FormatProfile
+from healthvideo.domain.long_form import long_form_storyboard
 from healthvideo.domain.quality_standards import QualityProfile, R5Contract
 from healthvideo.domain.storyboard import Scene, Storyboard, VisualStyle
 from healthvideo.domain.visual_budget import VisualBudgetProfile
@@ -142,6 +143,7 @@ def build_render_input(
     r5_assets: tuple[R5RevisionAsset, ...] | list[dict[str, Any]] = (),
 ) -> RenderInput:
     _validate_relative_posix_path(audio_file, "audio")
+    storyboard = long_form_storyboard(storyboard)
 
     expected_start = 0
     for scene in storyboard.scenes:

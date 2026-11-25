@@ -46,6 +46,11 @@ from healthvideo.domain.format_profile import FORMAT_SPECS
 from healthvideo.domain.gate_review import GateApprovalRecord, GateKind
 from healthvideo.domain.hook_outro import validate_hook_outro
 from healthvideo.domain.license_ledger import LicenseEntry, LicenseLedger
+from healthvideo.domain.long_form import (
+    long_form_scenes,
+    long_form_script,
+    long_form_storyboard,
+)
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.quality_standards import validate_r5_contract
 from healthvideo.domain.script import Script
@@ -532,7 +537,7 @@ def _produce_v2_inner(
     visual_budget_qa = visual_budget_report.model_dump(mode="json")
     r5_assets: tuple[R5RevisionAsset, ...] = ()
     if storyboard.quality_profile == "r5_v1":
-        validate_r5_contract(storyboard, script)
+        validate_r5_contract(long_form_storyboard(storyboard), long_form_script(script))
         r5_assets = load_r5_revision_assets(layout.artifact_root, storyboard)
     validate_hook_outro(
         script, storyboard, require_brand=script.format_profile == "hook_outro_v1",
@@ -636,7 +641,7 @@ def _produce_v2_inner(
         r5_assets=r5_assets,
     )
     approved_storyboard = storyboard
-    final_scene = storyboard.scenes[-1]
+    final_scene = long_form_scenes(storyboard)[-1]
     final_frame = final_scene.start_frame + final_scene.duration_frames
     require_timing = True
     renders_dir = layout.artifact_root / "renders"
@@ -657,7 +662,8 @@ def _produce_v2_inner(
             storyboard = restore_timed_storyboard(approved_storyboard, timing_record)
             visual_budget_report = validate_visual_budget(storyboard, asset_manifest)
             visual_budget_qa = visual_budget_report.model_dump(mode="json")
-            final_frame = storyboard.scenes[-1].start_frame + storyboard.scenes[-1].duration_frames
+            final_scene = long_form_scenes(storyboard)[-1]
+            final_frame = final_scene.start_frame + final_scene.duration_frames
             storyboard = apply_alignment(storyboard, _read_alignment(renders_dir, script))
             storyboard = storyboard.model_copy(update={"scenes": tuple(
                 resolve_scene_beats(scene, clamp_outside=True) for scene in storyboard.scenes
@@ -907,9 +913,22 @@ def _produce_v2_inner(
             storyboard = resolve_r5_shots(storyboard)
             r5_quality_report = measure_r5_quality(storyboard)
             validate_r5_quality(r5_quality_report, estimated=False)
-        timing_record["audio_alignment"] = concat_scene_audio(storyboard, line_wavs, staged_audio)
+        narration_board = long_form_storyboard(storyboard)
+        narration_lines = {scene.script_line_id for scene in narration_board.scenes
+                           if scene.script_line_id is not None}
+        timing_record["audio_alignment"] = concat_scene_audio(
+            narration_board, {line: line_wavs[line] for line in narration_lines}, staged_audio,
+        )
         # Keyword-timed SFX read the alignment just written to staging, not the previous run's.
-        sfx_events = resolve_sfx(storyboard, staging_dir)
+        sfx_events = resolve_sfx(narration_board, staging_dir)
+        narration_scene_ids = {scene.id for scene in narration_board.scenes}
+        clip_only_scenes = tuple(scene for scene in storyboard.scenes
+                                 if scene.id not in narration_scene_ids)
+        all_sfx_events = list(sfx_events)
+        if clip_only_scenes:
+            all_sfx_events.extend(resolve_sfx(
+                storyboard.model_copy(update={"scenes": clip_only_scenes}), staging_dir,
+            ))
         music_record = None
         generated_rights = list(illustration_rights)
         generated_visual_hashes: dict[str, str] = {}
@@ -948,14 +967,14 @@ def _produce_v2_inner(
                 path.relative_to(staging_dir).as_posix(): sha256_file(path)
                 for path in (voice_audio, staged_audio)
             }
-        if sfx_events:
-            for entry in sfx_rights(sfx_events, project.active_revision):
+        if all_sfx_events:
+            for entry in sfx_rights(all_sfx_events, project.active_revision):
                 target = staging_dir / entry.path
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(SFX_ROOT / Path(entry.path).name, target)
                 generated_audio_hashes[entry.path] = entry.sha256
                 generated_rights.append(entry)
-            _write_json_atomic(staging_dir / "sfx.json", sfx_events)
+            _write_json_atomic(staging_dir / "sfx.json", all_sfx_events)
             generated_audio_hashes["sfx.json"] = sha256_file(staging_dir / "sfx.json")
         if (
             provider_name != "silent"
@@ -972,7 +991,7 @@ def _produce_v2_inner(
             ledger_path = staging_dir / "license-ledger.yaml"
             write_yaml_atomic(ledger_path, rights.model_dump(mode="json"))
             ledger_hash = sha256_file(ledger_path)
-            if music_settings is not None or sfx_events:
+            if music_settings is not None or all_sfx_events:
                 generated_audio_hashes["license-ledger.yaml"] = ledger_hash
             if illustration_rights:
                 generated_visual_hashes = {entry.path: entry.sha256 for entry in illustration_rights}
@@ -984,7 +1003,8 @@ def _produce_v2_inner(
         render_input = build_render_input(
             storyboard, audio_file="audio/narration.wav", r5_assets=r5_assets,
         )
-        final_frame = storyboard.scenes[-1].start_frame + storyboard.scenes[-1].duration_frames
+        final_scene = long_form_scenes(storyboard)[-1]
+        final_frame = final_scene.start_frame + final_scene.duration_frames
         audio_report = inspect_wav(staged_audio)
         timing_qa = audio_timing_qa(
             audio_report.duration_ms, final_frame, timing_record=timing_record
@@ -1080,7 +1100,7 @@ def _produce_v2_inner(
                                 runner=render_runner,
                                 brand=clip_brand,
                                 revision=project.active_revision,
-                                sfx_events=sfx_events,
+                                sfx_events=all_sfx_events,
                                 r5_assets=r5_assets,
                             )
                             if render_input.quality_profile == "r5_v1":
@@ -1170,7 +1190,7 @@ def _produce_v2_inner(
                 "provider_identity": provider_identity_data,
                 "renderer_identity": renderer_identity_data,
                 "music": music_record,
-                "sfx": sfx_events,
+                "sfx": all_sfx_events,
                 "generated_audio_sha256": generated_audio_hashes,
                 "generated_visual_sha256": generated_visual_hashes,
                 **({"chapter_parts": list(chapter_parts)} if chapter_parts else {}),

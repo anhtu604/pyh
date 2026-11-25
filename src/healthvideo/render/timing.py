@@ -11,6 +11,7 @@ import wave
 from collections.abc import Mapping
 from pathlib import Path
 
+from healthvideo.domain.long_form import long_form_scenes
 from healthvideo.domain.script import Script
 from healthvideo.domain.storyboard import Scene, Storyboard
 from healthvideo.storage.files import canonical_json_hash, read_yaml, sha256_file
@@ -95,7 +96,8 @@ def _groups(board: Storyboard, lines: Mapping) -> list[tuple[Scene, ...]]:
             raise ValueError(f"Duplicate scene id {scene.id}")
         ids.add(scene.id)
         line = scene.script_line_id
-        if line is not None and groups and groups[-1][0].script_line_id == line:
+        if (line is not None and groups and groups[-1][0].script_line_id == line
+                and groups[-1][0].clip_only == scene.clip_only):
             groups[-1] += (scene,)
             continue
         if line is not None:
@@ -129,7 +131,11 @@ def retime_storyboard(
     board: Storyboard, line_ms: Mapping[str, int], fps: int = 30,
     pad_frames: int = PAD_FRAMES,
 ) -> tuple[Storyboard, dict]:
-    """Derive contiguous runtime timing without changing approved scene content."""
+    """Time the long track contiguously and dedicated clip speech locally.
+
+    Clip-only scenes retain their own measured durations in the record, but do
+    not consume long-form frames. Their final placement comes from the clip plan.
+    """
     _integer(fps, "fps", 1)
     _integer(pad_frames, "pad_frames")
     for line, duration in line_ms.items():
@@ -138,6 +144,10 @@ def retime_storyboard(
     rows: list[dict] = []
     start = 0
     for group in _groups(board, line_ms):
+        long_start = start
+        clip_only = board.format_profile == "youtube_long" and group[0].clip_only is not None
+        if clip_only:
+            start = 0
         line = group[0].script_line_id
         audio_ms = line_ms[line] if line is not None else 0
         durations = (
@@ -164,6 +174,8 @@ def retime_storyboard(
                 "duration_frames": duration,
             })
             start += duration
+        if clip_only:
+            start = long_start
     return board.model_copy(update={"scenes": tuple(scenes)}), {
         "schema_version": "1.0", "fps": fps, "pad_frames": pad_frames, "scenes": rows,
     }
@@ -191,7 +203,8 @@ def restore_timed_storyboard(approved: Storyboard, record: dict) -> Storyboard:
             raise ValueError("Timing record does not match the approved storyboard")
         if "audio_alignment" in record:
             alignment = record["audio_alignment"]
-            if not isinstance(alignment, list) or len(alignment) != len(board.scenes):
+            narration_scenes = long_form_scenes(board)
+            if not isinstance(alignment, list) or len(alignment) != len(narration_scenes):
                 raise ValueError("Invalid audio alignment scene count")
             expected_speech: dict[str, int | None] = {}
             for group in _groups(board, line_ms):
@@ -205,7 +218,7 @@ def restore_timed_storyboard(approved: Storyboard, record: dict) -> Storyboard:
                         if speech_end is not None and speech_end > scene.start_frame * 1000 / fps
                         else None
                     )
-            for scene, row in zip(board.scenes, alignment, strict=True):
+            for scene, row in zip(narration_scenes, alignment, strict=True):
                 base_fields = {"scene_id", "audio_start_ms", "video_start_ms"}
                 if set(row) not in (base_fields, base_fields | {"speech_end_ms"}):
                     raise ValueError("Invalid audio alignment fields")

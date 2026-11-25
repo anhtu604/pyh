@@ -12,6 +12,7 @@ from math import ceil
 from pydantic import Field
 
 from healthvideo.audio.align import normalize_word
+from healthvideo.domain.long_form import long_form_storyboard
 from healthvideo.domain.quality_standards import (
     D1_MAX_TEXT_PERCENT,
     D1_MAX_TEXT_SECONDS,
@@ -102,9 +103,12 @@ def _resolve(board: Storyboard) -> tuple[Storyboard, list[str]]:
     scenes, issues, ids = [], [], set()
     cursor = 0
     for scene in board.scenes:
-        if scene.start_frame != cursor or scene.duration_frames <= 0:
+        clip_only = board.format_profile == "youtube_long" and scene.clip_only is not None
+        expected_start = 0 if clip_only else cursor
+        if scene.start_frame != expected_start or scene.duration_frames <= 0:
             issues.append(_issue(scene, "*", scene.start_frame, cursor, "scene gap/overlap or invalid duration"))
-        cursor = scene.start_frame+scene.duration_frames
+        if not clip_only:
+            cursor = scene.start_frame+scene.duration_frames
         words = estimates.get(scene.id, scene.words)
         if not estimated and scene.script_line_id is not None and not words:
             issues.append(_issue(scene, "*", 0, scene.duration_frames, "missing word alignment; estimate must be explicit"))
@@ -182,6 +186,7 @@ def causal_actions(shot: ResolvedR5Shot) -> tuple[ResolvedR5Action, ...]:
 
 def measure_r5_quality(board: Storyboard) -> QualityReport:
     """Measure the same frame contract before the gate and after measured speech."""
+    board = long_form_storyboard(board)
     if board.quality_profile != "r5_v1":
         raise ValueError("R5 measurement requires quality_profile=r5_v1")
     resolved, issues = _resolve(board)

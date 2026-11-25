@@ -539,6 +539,9 @@ def approve_gate(
             load_r5_revision_assets(revision_root, storyboard)
         validate_visual_budget(storyboard, manifest)
         script = Script.model_validate(read_yaml(revision_root / "script/script.yaml"))
+        from healthvideo.domain.clip_plan import validate_clip_script
+
+        validate_clip_script(script, storyboard)
         if storyboard.quality_profile == "r5_v1":
             validate_r5_contract(storyboard, script)
             estimated = R5RuntimeStoryboard(**storyboard.model_dump(mode="python"), estimated=True)

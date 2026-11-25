@@ -137,6 +137,9 @@ def _effective_bounds(storyboard: Storyboard) -> dict[VisualCategory, PercentRan
 
 def calculate_visual_budget(storyboard: Storyboard, assets: AssetManifest | None = None,
                             *, margin_percent: int = 0) -> VisualBudgetReport:
+    from healthvideo.domain.long_form import long_form_storyboard
+
+    storyboard = long_form_storyboard(storyboard)
     bounds = _effective_bounds(storyboard)
     if margin_percent:
         bounds = {category: PercentRange(min_percent=bound.min_percent + margin_percent,

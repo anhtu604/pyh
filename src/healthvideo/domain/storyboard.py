@@ -361,6 +361,7 @@ class Scene(BaseModel):
     script_line_id: str | None = None
     claim_id: str | None = None
     chapter_id: str | None = Field(default=None, pattern=r"^CH\d{2}$")
+    clip_only: str | None = Field(default=None, pattern=r"^CL\d{2}$", exclude_if=lambda v: v is None)
     source_marker: str | None = Field(
         default=None, json_schema_extra={"pattern": r"\S"}
     )
@@ -395,6 +396,11 @@ class Scene(BaseModel):
 
     @model_validator(mode="after")
     def validate_scene(self) -> "Scene":
+        if self.clip_only is not None:
+            if self.start_frame != 0:
+                raise ValueError(f"Scene {self.id}: clip_only start_frame must be 0")
+            if self.chapter_id is not None:
+                raise ValueError(f"Scene {self.id}: clip_only forbids chapter_id")
         if self.visual == "whiteboard" and not (
             (self.on_screen_text or "").strip()
             or any(asset.role == "whiteboard" for asset in self.visual_assets)
@@ -562,14 +568,17 @@ class Storyboard(BaseModel):
             return self
         previous = None
         run = 0
-        for scene in self.scenes:
+        from healthvideo.domain.long_form import long_form_scenes
+
+        scenes = long_form_scenes(self)
+        for scene in scenes:
             key = (scene.visual, scene.anatomy.subject) if scene.anatomy else None
             run = run + 1 if key is not None and key == previous else 1
             if run > 4:
                 raise ValueError(f"Scene {scene.id}: more than 4 consecutive mechanism scenes "
                                  "with the same anatomy.subject and visual; vary the view")
             previous = key
-        mechanisms = [scene for scene in self.scenes if scene.anatomy is not None]
+        mechanisms = [scene for scene in scenes if scene.anatomy is not None]
         required = 4 if self.format_profile == "youtube_long" else 2
         if len(mechanisms) >= required and len({scene.anatomy.subject for scene in mechanisms}) < required:
             raise ValueError(f"{self.format_profile} requires at least {required} anatomy.subject values; "
@@ -582,6 +591,8 @@ class Storyboard(BaseModel):
             return self
         seen: list[str] = []
         for scene in self.scenes:
+            if scene.clip_only is not None:
+                continue
             if scene.chapter_id is None:
                 raise ValueError(f"Scene {scene.id}: youtube_long scene requires chapter_id")
             if seen and seen[-1] == scene.chapter_id:
@@ -637,13 +648,16 @@ def validate_anatomy_subjects(storyboard: Storyboard) -> None:
 
 def validate_style_a_mascot_poses(storyboard: Storyboard) -> None:
     """Require a valid ``mascot_pose`` on hook, each chapter opening, and outro (Style A §6)."""
-    if not storyboard.scenes:
+    from healthvideo.domain.long_form import long_form_scenes
+
+    scenes = long_form_scenes(storyboard)
+    if not scenes:
         return
     valid_poses = ", ".join(pose.value for pose in MascotPose)
     missing: list[str] = []
     seen_chapter: str | None = None
-    last_index = len(storyboard.scenes) - 1
-    for index, scene in enumerate(storyboard.scenes):
+    last_index = len(scenes) - 1
+    for index, scene in enumerate(scenes):
         roles: list[str] = []
         if index == 0:
             roles.append("hook")
