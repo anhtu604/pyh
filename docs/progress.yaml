@@ -1,5 +1,5 @@
 version: 1
-updated: '2026-11-25'
+updated: '2026-11-26'
 phases:
 - id: R1
   title: Hoàn thiện xưởng trước khi làm video mới
@@ -556,3 +556,9 @@ phases:
     status: done
     owner: agy
     note: 'Đã vào master: lỗi mạng tự thử lại (5/15/45 phút); sự cố khác tự chạy lại 2 lần; sổ profiles/factory-playbook.yaml (chỉ thêm) có 3 luật sẵn và tự thêm luật từ câu trả lời bác sĩ; khi phải hỏi thì đưa 2–3 phương án cụ thể. PIN, cổng duyệt, tài khoản, an toàn vẫn hỏi bác sĩ. pytest 3243 đạt.'
+
+  - id: UPD.1
+    title: Nút cập nhật app chờ xưởng làm xong rồi tự cập nhật
+    status: done
+    owner: agy
+    note: 'Đã vào master và GitHub (fc23e69): bấm Cập nhật khi xưởng bận thì app ghi lệnh chờ, không nhận việc mới, việc dở chạy xong thì tự cập nhật và mở lại; có nút Huỷ. Chat vẫn dùng được khi đang chờ.'
