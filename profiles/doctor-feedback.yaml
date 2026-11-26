@@ -559,3 +559,147 @@ entries:
     Scale Zoom đã duyệt y khoa và cách đọc ALT/AST mới; dựng lại video (kể cả giọng),
     rồi cho Trạm 12 chấm lại từ đầu.'
   items: []
+- at: '2026-11-23T11:23:35+07:00'
+  slug: thay-men-gan-tang-lien-voi-mua-thuoc-bo-gan-mat-gan-uong-coi
+  gate: tram-repair
+  revision: '001'
+  kind: comment
+  reviewer: Tu
+  text: 'Quyết định Trạm repair: Cho phép xử lý / thử sửa thêm 1 chu kỳ'
+  items: []
+- at: '2026-11-23T11:25:46+07:00'
+  slug: thay-men-gan-tang-lien-voi-mua-thuoc-bo-gan-mat-gan-uong-coi
+  gate: tram-repair
+  revision: '001'
+  kind: comment
+  reviewer: Tu
+  text: 'Quyết định Trạm repair: Cho phép xử lý / thử sửa thêm 1 chu kỳ'
+  items: []
+- at: '2026-11-23T11:29:14+07:00'
+  slug: thay-men-gan-tang-lien-voi-mua-thuoc-bo-gan-mat-gan-uong-coi
+  gate: tram-repair
+  revision: '001'
+  kind: comment
+  reviewer: Tu
+  text: 'Quyết định Trạm repair: Cho phép xử lý / thử sửa thêm 1 chu kỳ'
+  items: []
+- at: '2026-11-23T11:33:32+07:00'
+  slug: thay-men-gan-tang-lien-voi-mua-thuoc-bo-gan-mat-gan-uong-coi
+  gate: tram-repair
+  revision: '001'
+  kind: comment
+  reviewer: Tu
+  text: 'Quyết định Trạm repair: Giao làm lại theo chỉ đạo của tôi'
+  items: []
+- at: '2026-11-23T11:39:52+07:00'
+  slug: thay-men-gan-tang-lien-voi-mua-thuoc-bo-gan-mat-gan-uong-coi
+  gate: tram-repair
+  revision: '001'
+  kind: comment
+  reviewer: Tu
+  text: 'Quyết định Trạm repair: Cho phép xử lý / thử sửa thêm 1 chu kỳ'
+  items: []
+- at: '2026-11-23T13:42:50+07:00'
+  slug: thay-men-gan-tang-lien-voi-mua-thuoc-bo-gan-mat-gan-uong-coi
+  gate: tram-12
+  revision: '001'
+  kind: comment
+  reviewer: Tu
+  text: 'Quyết định Trạm 12: Sửa hình các cảnh bị nêu'
+  items: []
+- at: '2026-11-23T14:12:29+07:00'
+  slug: thay-men-gan-tang-lien-voi-mua-thuoc-bo-gan-mat-gan-uong-coi
+  gate: tram-12
+  revision: '001'
+  kind: comment
+  reviewer: Tu
+  text: 'Quyết định Trạm 12: Sửa hình các cảnh bị nêu'
+  items: []
+- at: '2026-11-23T15:49:31+07:00'
+  slug: thay-men-gan-tang-lien-voi-mua-thuoc-bo-gan-mat-gan-uong-coi
+  gate: tram-12
+  revision: '001'
+  kind: comment
+  reviewer: Tu
+  text: 'Quyết định Trạm 12: Chấp nhận như hiện tại và nộp bác sĩ duyệt video'
+  items: []
+- at: '2026-11-25T14:32:48+07:00'
+  slug: thay-men-gan-tang-lien-voi-mua-thuoc-bo-gan-mat-gan-uong-coi
+  gate: medical
+  revision: '004'
+  kind: approve_note
+  reviewer: Tu
+  text: Anh Tu Vuong Dinh
+  items: []
+- at: '2026-11-25T14:43:08+07:00'
+  slug: thay-men-gan-tang-lien-voi-mua-thuoc-bo-gan-mat-gan-uong-coi
+  gate: video
+  revision: '004'
+  kind: approve_note
+  reviewer: Tu
+  text: Anh Tu Vuong Dinh
+  items: []
+- at: '2026-11-25T16:57:00+07:00'
+  slug: an-gao-lut-muoi-me-de-bo-doi-ung-thu-tu-chua-lanh-hay-tu-day
+  gate: tram-repair
+  revision: '001'
+  kind: comment
+  reviewer: Tu
+  text: 'Quyết định Trạm repair: Cho phép xử lý / thử sửa thêm 1 chu kỳ'
+  items: []
+- at: '2026-11-25T18:26:05+07:00'
+  slug: an-gao-lut-muoi-me-de-bo-doi-ung-thu-tu-chua-lanh-hay-tu-day
+  gate: tram-repair
+  revision: '001'
+  kind: comment
+  reviewer: Tu
+  text: 'Quyết định Trạm repair: Cho phép xử lý / thử sửa thêm 1 chu kỳ'
+  items: []
+- at: '2026-11-25T19:31:47+07:00'
+  slug: an-gao-lut-muoi-me-de-bo-doi-ung-thu-tu-chua-lanh-hay-tu-day
+  gate: tram-repair
+  revision: '001'
+  kind: comment
+  reviewer: Tu
+  text: 'Quyết định Trạm repair: Cho phép xử lý / thử sửa thêm 1 chu kỳ'
+  items: []
+- at: '2026-11-25T20:39:24+07:00'
+  slug: an-gao-lut-muoi-me-de-bo-doi-ung-thu-tu-chua-lanh-hay-tu-day
+  gate: tram-repair
+  revision: '001'
+  kind: comment
+  reviewer: Tu
+  text: 'Quyết định Trạm repair: Cho phép xử lý / thử sửa thêm 1 chu kỳ'
+  items: []
+- at: '2026-11-25T23:48:04+07:00'
+  slug: thay-men-gan-tang-lien-voi-mua-thuoc-bo-gan-mat-gan-uong-coi
+  gate: medical
+  revision: '005'
+  kind: approve_note
+  reviewer: Tu
+  text: Anh Tu Vuong Dinh
+  items: []
+- at: '2026-11-25T23:48:24+07:00'
+  slug: an-gao-lut-muoi-me-de-bo-doi-ung-thu-tu-chua-lanh-hay-tu-day
+  gate: tram-repair
+  revision: '001'
+  kind: comment
+  reviewer: Tu
+  text: 'Quyết định Trạm repair: Cho phép xử lý / thử sửa thêm 1 chu kỳ'
+  items: []
+- at: '2026-11-26T07:58:31+07:00'
+  slug: an-gao-lut-muoi-me-de-bo-doi-ung-thu-tu-chua-lanh-hay-tu-day
+  gate: tram-repair
+  revision: '001'
+  kind: comment
+  reviewer: Tu
+  text: 'Quyết định Trạm repair: Cho phép xử lý / thử sửa thêm 1 chu kỳ'
+  items: []
+- at: '2026-11-26T09:05:53+07:00'
+  slug: an-gao-lut-muoi-me-de-bo-doi-ung-thu-tu-chua-lanh-hay-tu-day
+  gate: tram-repair
+  revision: '001'
+  kind: comment
+  reviewer: Tu
+  text: 'Quyết định Trạm repair: Cho phép xử lý / thử sửa thêm 1 chu kỳ'
+  items: []

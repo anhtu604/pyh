@@ -31,3 +31,39 @@ rules:
   delegate_role: editor
   direction: Sửa phần trình bày theo issue, không đổi lời đọc/claim.
   max_auto_per_incident: 1
+- id: PB-004
+  created: '2026-11-25'
+  source: doctor
+  question_id: dq-6fb6eaff4750
+  slug: an-gao-lut-muoi-me-de-bo-doi-ung-thu-tu-chua-lanh-hay-tu-day
+  match:
+    station: repair
+    signature: 'repair:valueerror:agent không làm đổi trạng thái (storyboard_design):
+      thiếu storyboard/storyboard.yaml, assets/asset-manifest.yaml'
+  action: retry_cycle
+  direction: Cho phép xử lý / thử sửa thêm 1 chu kỳ
+  max_auto_per_incident: 1
+- id: PB-005
+  created: '2026-11-26'
+  source: doctor
+  question_id: dq-2147b8fd36e2
+  slug: an-gao-lut-muoi-me-de-bo-doi-ung-thu-tu-chua-lanh-hay-tu-day
+  match:
+    station: repair
+    signature: 'repair:valueerror:agent không làm đổi trạng thái (storyboard_design):
+      thiếu storyboard/storyboard.yaml, assets/asset-manifest.yaml'
+  action: retry_cycle
+  direction: Cho phép xử lý / thử sửa thêm 1 chu kỳ
+  max_auto_per_incident: 1
+- id: PB-006
+  created: '2026-11-26'
+  source: doctor
+  question_id: dq-40fb8630253d
+  slug: an-gao-lut-muoi-me-de-bo-doi-ung-thu-tu-chua-lanh-hay-tu-day
+  match:
+    station: repair
+    signature: 'repair:valueerror:agent không làm đổi trạng thái (storyboard_design):
+      thiếu storyboard/storyboard.yaml, assets/asset-manifest.yaml'
+  action: retry_cycle
+  direction: Cho phép xử lý / thử sửa thêm 1 chu kỳ
+  max_auto_per_incident: 1
