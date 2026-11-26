@@ -1,5 +1,5 @@
 assets:
-- file: niaid-liver-230.svg
+- file: assets/niaid-liver-230.svg
   source_page: https://bioart.niaid.nih.gov/bioart/230
   original_url: https://bioart.niaid.nih.gov/api/bioarts/230/files/630883
   author: NIAID Visual & Medical Arts — Ryan Kissinger (Courtesy of NIAID)
@@ -10,7 +10,7 @@ assets:
   retrieved_at: null
   transformations: null
   license_evidence: null
-- file: servier-liver-lobule.png
+- file: assets/servier-liver-lobule.png
   source_page: https://smart.servier.com/smart_image/liver-overview/
   original_url: https://smart.servier.com/wp-content/uploads/2016/10/foie_coupe.png
   author: Servier Medical Art (Laboratoires Servier)
@@ -23,7 +23,7 @@ assets:
   retrieved_at: null
   transformations: null
   license_evidence: null
-- file: dbcls-hepatic-lobule.svg
+- file: assets/dbcls-hepatic-lobule.svg
   source_page: https://commons.wikimedia.org/wiki/File:201904_hepatic_lobule.svg
   original_url: https://upload.wikimedia.org/wikipedia/commons/d/dd/201904_hepatic_lobule.svg
   author: DataBase Center for Life Science (DBCLS)
@@ -36,7 +36,7 @@ assets:
   retrieved_at: null
   transformations: null
   license_evidence: null
-- file: niaid-hepatocyte-203.svg
+- file: assets/niaid-hepatocyte-203.svg
   source_page: https://bioart.niaid.nih.gov/bioart/203
   original_url: https://bioart.niaid.nih.gov/api/bioarts/203/files/630473
   author: NIAID Visual & Medical Arts — Ryan Kissinger (Courtesy of NIAID)
@@ -47,7 +47,7 @@ assets:
   retrieved_at: null
   transformations: null
   license_evidence: null
-- file: niaid-mitochondria-352.svg
+- file: assets/niaid-mitochondria-352.svg
   source_page: https://bioart.niaid.nih.gov/bioart/352
   original_url: https://bioart.niaid.nih.gov/api/bioarts/352/files/641583
   author: NIAID Visual & Medical Arts — Ryan Kissinger (Courtesy of NIAID)
@@ -58,7 +58,7 @@ assets:
   retrieved_at: null
   transformations: null
   license_evidence: null
-- file: niaid-blood-vessel-55.svg
+- file: assets/niaid-blood-vessel-55.svg
   source_page: https://bioart.niaid.nih.gov/bioart/55
   original_url: https://bioart.niaid.nih.gov/api/bioarts/55/files/627999
   author: NIAID Visual & Medical Arts — Ryan Kissinger (Courtesy of NIAID)
@@ -70,7 +70,7 @@ assets:
   retrieved_at: null
   transformations: null
   license_evidence: null
-- file: niaid-red-blood-cell-442.svg
+- file: assets/niaid-red-blood-cell-442.svg
   source_page: https://bioart.niaid.nih.gov/bioart/442
   original_url: https://bioart.niaid.nih.gov/api/bioarts/442/files/634619
   author: NIAID Visual & Medical Arts — Ryan Kissinger (Courtesy of NIAID)
@@ -81,7 +81,7 @@ assets:
   retrieved_at: null
   transformations: null
   license_evidence: null
-- file: niaid-blood-vial-52.svg
+- file: assets/niaid-blood-vial-52.svg
   source_page: https://bioart.niaid.nih.gov/bioart/52
   original_url: https://bioart.niaid.nih.gov/api/bioarts/52/files/627974
   author: NIAID Visual & Medical Arts — Ryan Kissinger (Courtesy of NIAID)
@@ -92,7 +92,7 @@ assets:
   retrieved_at: null
   transformations: null
   license_evidence: null
-- file: reactome-muscle-R-ICO-014108.svg
+- file: assets/reactome-muscle-R-ICO-014108.svg
   source_page: https://reactome.org/icon-lib/R-ICO-014108
   original_url: https://reactome.org/icon/R-ICO-014108.svg
   author: Cristoffer Sevilla (Designer), Marija Orlic-Milacic (Curator) — Reactome Icon Library
@@ -104,7 +104,7 @@ assets:
   retrieved_at: null
   transformations: null
   license_evidence: null
-- file: niaid-heart-228.svg
+- file: assets/niaid-heart-228.svg
   source_page: https://bioart.niaid.nih.gov/bioart/228
   original_url: https://bioart.niaid.nih.gov/api/bioarts/228/files/630873
   author: NIAID Visual & Medical Arts — Ryan Kissinger (Courtesy of NIAID)

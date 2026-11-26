@@ -1,0 +1,14 @@
+assets:
+- id: servier-kidney-section
+  file: servier-kidney-section.png
+  source_page: https://smart.servier.com/smart_image/kidney/
+  original_url: https://smart.servier.com/wp-content/uploads/2016/10/rein_01.png
+  author: Servier Medical Art (Laboratoires Servier)
+  license: CC BY 4.0
+  license_url: https://creativecommons.org/licenses/by/4.0/
+  sha256: c6be1fdfddb42c279bd71e5b0e3a2e267c3691c58cf9aa716cd9683b33549200
+  role: Mặt cắt dọc thận phân biệt vỏ thận (hồng), tháp tủy (trắng) và bể thận/niệu
+    quản (vàng); dùng cho cảnh vỏ thận
+  retrieved_at: '2026-11-26'
+  transformations: null
+  license_evidence: null
