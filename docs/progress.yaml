@@ -567,3 +567,8 @@ phases:
     status: done
     owner: agy
     note: 'Xong (f6e4334, 10f0eb8): mỗi video/clip đã đóng gói có nút Đăng (YouTube/TikTok, không gửi lại bài đã đăng); câu hỏi sự cố có nút Làm lại theo chuẩn R5.'
+  - id: M2
+    title: Model nhanh cho vai làm theo skill; chia nhỏ sản phẩm để chỉ làm lại phần chưa đạt
+    status: doing
+    owner: codex
+    note: 'Đã đổi phân cảnh và kỹ sư sửa lỗi sang Neon; Sol giữ cho y học, bản nháp kịch bản, câu hỏi khó. Đang làm: biên kịch sửa theo góp ý dùng Neon; kiểm đầu vào bằng code trước khi gọi agent; phân cảnh mỗi cảnh một file, chạy lại chỉ cảnh chưa đạt.'
