@@ -564,6 +564,6 @@ phases:
     note: 'Đã vào master và GitHub (fc23e69): bấm Cập nhật khi xưởng bận thì app ghi lệnh chờ, không nhận việc mới, việc dở chạy xong thì tự cập nhật và mở lại; có nút Huỷ. Chat vẫn dùng được khi đang chờ.'
   - id: PUB.1
     title: Nút Đăng ngay tại từng video/clip; nút R5 ngay trong câu hỏi của xưởng
-    status: doing
+    status: done
     owner: agy
-    note: 'Đang làm: mỗi video/clip đã đóng gói có nút Đăng (YouTube/TikTok, không gửi lại bài đã đăng); câu hỏi sự cố có nút Làm lại theo chuẩn R5.'
+    note: 'Xong (f6e4334, 10f0eb8): mỗi video/clip đã đóng gói có nút Đăng (YouTube/TikTok, không gửi lại bài đã đăng); câu hỏi sự cố có nút Làm lại theo chuẩn R5.'
