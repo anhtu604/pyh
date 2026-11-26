@@ -63,7 +63,7 @@ def test_every_role_uses_verified_direct_models_and_safe_fallbacks():
 
 def test_r534_primary_assignment_and_critic_independence():
     company = load_company()
-    sol = {'medical_expert', 'writer', 'storyboard_director', 'coordinator_senior', 'repair_engineer'}
+    sol = {'medical_expert', 'writer', 'coordinator_senior'}
     claude = {'art_director', 'product_critic'}
     for role in company.roles:
         if role in sol:

@@ -95,7 +95,9 @@ def test_liver_anatomy_library_catalog_valid_and_hashes_match(tmp_path: Path) ->
     for record in records:
         if record.id != "niaid-human-anatomy-519":
             assert record.license == "CC BY 4.0"
-        assert record.retrieved_at is None
+        # 2026-11-26: gallbladder re-fetched from original_url, SHA-256 identical.
+        expected = date(2026, 11, 26) if record.id == "servier-liver-gallbladder" else None
+        assert record.retrieved_at == expected
         png_path = LIVER_CATALOG.parent / record.file
         assert png_path.is_file()
         assert sha256_file(png_path) == record.sha256

@@ -1,3 +1,5 @@
+# M2 (2026-11-26): bác sĩ: vai làm theo skill dùng model nhanh (Neon). Sol chỉ cho chuyên gia y học
+# biên kịch và điều phối chuyên sâu (chỉ nhận câu hỏi khó). Kiểm duyệt giữ Terra/Sonnet, khác model người làm.
 # M1 (2026-11-24): doctor-approved model rebalance — Sol for medical_expert & storyboard_director,
 # Claude Sonnet 5.5 (Terra fallback) for art_director & product_critic, Terra for script_critic,
 # Neon for remaining light roles. Existing OmniRoute IDs only as fallback; direct/proxy aliases share identity.
@@ -75,7 +77,7 @@ roles:
     models:
     - {cli: codex, model: gpt-6.1-sol}
     - {cli: omniroute, model: codex/gpt-6.1-sol}
-  # 2026-11-24: Sol primary for storyboard quality; stays disjoint from Terra/Claude critics.
+  # 2026-11-26: bác sĩ: vai làm theo skill dùng Neon; chất lượng do skill + kiểm duyệt bảo đảm.
   storyboard_director:
     name: Đạo diễn Phân cảnh & Đồ họa
     skills:
@@ -85,9 +87,6 @@ roles:
     steps:
     - storyboard_design
     tier: medium
-    models:
-    - {cli: codex, model: gpt-6.1-sol}
-    - {cli: omniroute, model: codex/gpt-6.1-sol}
   voice_director:
     name: Đạo diễn Giọng đọc & Phiên âm
     skills:
@@ -174,6 +173,3 @@ roles:
     steps:
     - repair
     tier: medium
-    models:
-    - {cli: codex, model: gpt-6.1-sol}
-    - {cli: omniroute, model: codex/gpt-6.1-sol}
