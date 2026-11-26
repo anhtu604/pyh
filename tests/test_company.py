@@ -44,9 +44,9 @@ def test_critic_first_slot_differs_from_maker():
 
 def test_chain_uses_override_then_tier():
     company = load_company()
-    assert company.chain('script_critic')[0] == ModelSlot(cli='codex', model='gpt-6.1-terra')
-    assert company.chain('writer')[0] == ModelSlot(cli='codex', model='gpt-6.1-sol')
-    assert company.chain('medical_expert')[0] == ModelSlot(cli='codex', model='gpt-6.1-sol')
+    assert company.chain('script_critic')[0] == ModelSlot(cli='agy', model='gemini-4-carbon-medium')
+    assert company.chain('writer')[0] == ModelSlot(cli='agy', model='claude-sonnet-5-5-medium')
+    assert company.chain('medical_expert')[0] == ModelSlot(cli='agy', model='claude-sonnet-5-5-medium')
     assert company.chain('scout') == company.tiers['bulk']
 
 
@@ -67,11 +67,11 @@ def test_r534_primary_assignment_and_critic_independence():
     claude = {'art_director', 'product_critic'}
     for role in company.roles:
         if role in sol:
-            expected = ('codex', 'gpt-6.1-sol')
+            expected = ('agy', 'claude-sonnet-5-5-medium')  # TEMP 2026-11-26: codex quota out
         elif role in claude:
             expected = ('claude', 'claude-sonnet-5-5')
         elif role == 'script_critic':
-            expected = ('codex', 'gpt-6.1-terra')
+            expected = ('agy', 'gemini-4-carbon-medium')
         else:
             expected = ('agy', 'gemini-4-neon-medium')
         assert company.chain(role)[0].model_identity == expected, role

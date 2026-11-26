@@ -65,6 +65,7 @@ from healthvideo.workflows.script_review import (
     CRITERIA,
     CYCLE_LIMIT_REASON,
     PASS_SCORE,
+    require_passed_review,
     review_view,
 )
 
@@ -3612,10 +3613,14 @@ def answer_doctor_question(root: Path, slug: str, body: dict) -> dict:
                     WorkflowState.EVIDENCE_READY,
                 }:
                     inferred_role = 'medical_expert'
-                elif layout.manifest.state in {
-                    WorkflowState.DRAFT_READY,
-                    WorkflowState.NEEDS_MEDICAL_REVISION,
-                }:
+                elif layout.manifest.state == WorkflowState.DRAFT_READY:
+                    # Script already passed review: the next owner is the storyboard, not the writer.
+                    try:
+                        require_passed_review(layout.project_dir)
+                        inferred_role = 'storyboard_director'
+                    except (OSError, ValueError):
+                        inferred_role = 'writer'
+                elif layout.manifest.state == WorkflowState.NEEDS_MEDICAL_REVISION:
                     inferred_role = 'writer'
                 elif layout.manifest.state in {
                     WorkflowState.MEDICALLY_APPROVED,

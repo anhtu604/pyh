@@ -1029,7 +1029,8 @@ def apply_reopen_or_delegate(
         if state in {
             WorkflowState.DRAFT_READY,
             WorkflowState.NEEDS_MEDICAL_REVISION,
-        }:
+        } and delegate_role in {None, 'writer', 'medical_expert'}:
+            # Other roles get leader-guidance only; an edit_script request would route to the writer.
             change_request.request_change(layout.project_dir, 'edit_script', clean_direction, ctx, now=now)
         elif state in {
             WorkflowState.MEDICALLY_APPROVED,

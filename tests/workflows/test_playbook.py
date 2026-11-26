@@ -9,6 +9,7 @@ import pytest
 
 from healthvideo.domain.project_v2 import WorkflowState
 from healthvideo.storage.files import read_yaml, write_yaml_atomic
+from healthvideo.storage.project_layout import resolve_project_layout
 from healthvideo.workflows import (
     change_request,
     chat,
@@ -581,3 +582,22 @@ def test_selecting_doctor_option_opt_n_applies_action_and_learns_rule(tmp_path, 
     assert 'Ưu tiên nguồn Europe PMC trước' in (learned.direction or '')
     assert change_request.pending(project)
 
+
+
+def test_storyboard_delegation_in_draft_ready_does_not_request_script_edit(tmp_path, monkeypatch):
+    # PYH-001 2026-11-26: a storyboard direction became edit_script and woke the writer three times.
+    project = create_v2_project_fixture(tmp_path / 'projects', state=WorkflowState.DRAFT_READY)
+    (tmp_path / 'topics/logs' / project.name).mkdir(parents=True)
+    monkeypatch.setattr(repair_service, '_release', lambda root, slug: None)
+    layout = resolve_project_layout(project)
+    repair_service.apply_reopen_or_delegate(
+        tmp_path, project.name, layout, direction='Tiếp tục tạo storyboard.',
+        delegate_role='storyboard_director', wake=False,
+    )
+    assert not change_request.pending(project)
+    guidance = read_yaml(tmp_path / 'topics/logs' / project.name / 'leader-guidance.yaml')
+    assert (guidance['role'], guidance['step']) == ('storyboard_director', 'storyboard_design')
+    repair_service.apply_reopen_or_delegate(
+        tmp_path, project.name, layout, direction='Sửa câu mở đầu.', delegate_role='writer', wake=False,
+    )
+    assert change_request.pending(project)

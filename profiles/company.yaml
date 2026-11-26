@@ -1,3 +1,5 @@
+# TẠM 2026-11-26: codex hết hạn mức → vai Sol chạy agy Claude Sonnet 5.5 medium, kiểm duyệt kịch bản chạy
+# agy Carbon medium; codex giữ làm dự phòng. Trả lại khi codex có hạn mức.
 # M2 (2026-11-26): bác sĩ: vai làm theo skill dùng model nhanh (Neon). Sol chỉ cho chuyên gia y học
 # biên kịch và điều phối chuyên sâu (chỉ nhận câu hỏi khó). Kiểm duyệt giữ Terra/Sonnet, khác model người làm.
 # M1 (2026-11-24): doctor-approved model rebalance — Sol for medical_expert & storyboard_director,
@@ -32,6 +34,7 @@ roles:
     - chat_deep
     tier: medium
     models:
+    - {cli: agy, model: claude-sonnet-5-5-medium}
     - {cli: codex, model: gpt-6.1-sol}
     - {cli: omniroute, model: codex/gpt-6.1-sol}
   researcher:
@@ -60,6 +63,7 @@ roles:
     - research
     tier: medium
     models:
+    - {cli: agy, model: claude-sonnet-5-5-medium}
     - {cli: codex, model: gpt-6.1-sol}
     - {cli: omniroute, model: codex/gpt-6.1-sol}
     - {cli: codex, model: gpt-6.1-terra}
@@ -75,6 +79,7 @@ roles:
     - revise_medical
     tier: hard
     models:
+    - {cli: agy, model: claude-sonnet-5-5-medium}
     - {cli: codex, model: gpt-6.1-sol}
     - {cli: omniroute, model: codex/gpt-6.1-sol}
   # 2026-11-26: bác sĩ: vai làm theo skill dùng Neon; chất lượng do skill + kiểm duyệt bảo đảm.
@@ -104,6 +109,7 @@ roles:
     - script_review
     tier: hard
     models:
+    - {cli: agy, model: gemini-4-carbon-medium}
     - {cli: codex, model: gpt-6.1-terra}
     - {cli: omniroute, model: codex/gpt-6.1-terra}
   # 2026-11-24: Claude Sonnet 5.5 primary (Terra fallback) reviews images independently of storyboard Sol.

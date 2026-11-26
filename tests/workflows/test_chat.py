@@ -51,7 +51,7 @@ def test_fast_coordinator_escalates_hard_question_once(tmp_path, project):
 
     result = chat.run_coordinator(tmp_path, message['id'], invoke=invoke)
     assert [role for role, _ in roles] == ['coordinator', 'coordinator_senior']
-    assert roles[0][1] == 'gemini-4-neon-medium' and roles[1][1] == 'gpt-6.1-sol'
+    assert roles[0][1] == 'gemini-4-neon-medium' and roles[1][1] == 'claude-sonnet-5-5-medium'
     assert result['text'] == 'Đã kiểm: bản sửa có ở N15.'
     replies = [row['text'] for row in chat.load(tmp_path, project.name) if row['who'] == 'coordinator']
     assert replies == ['Em đang kiểm kỹ.', 'Đã kiểm: bản sửa có ở N15.']

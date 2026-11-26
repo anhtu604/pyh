@@ -408,7 +408,7 @@ def test_factory_uses_moderate_models_and_critics_away_from_the_author():
     for role in company.roles:
         assert company.chain(role)[0].cli in {'agy', 'codex', 'claude'}, role
     for step in ('research', 'draft', 'revise_medical', 'chat_deep'):
-        assert company.chain(company.role_for_step(step).id)[0].model_identity == ('codex', 'gpt-6.1-sol'), step
+        assert company.chain(company.role_for_step(step).id)[0].model_identity == ('agy', 'claude-sonnet-5-5-medium'), step  # TEMP codex quota
     for step in ('storyboard_design', 'repair'):
         assert company.chain(company.role_for_step(step).id)[0].model_identity == ('agy', 'gemini-4-neon-medium'), step
     for step in ('visual_review', 'product_review'):
@@ -416,7 +416,7 @@ def test_factory_uses_moderate_models_and_critics_away_from_the_author():
     for role in ('coordinator', 'scout', 'copywriter', 'feedback_analyst', 'researcher',
                  'editor', 'shorts_producer', 'voice_director'):
         assert company.chain(role)[0].model_identity == ('agy', 'gemini-4-neon-medium'), role
-    assert company.chain('script_critic')[0].model_identity == ('codex', 'gpt-6.1-terra')
+    assert company.chain('script_critic')[0].model_identity == ('agy', 'gemini-4-carbon-medium')
     for role in company.roles:
         for slot in company.chain(role):
             assert 'opus' not in slot.model and 'astra' not in slot.model and 'carbon-high' not in slot.model, (role, slot)
