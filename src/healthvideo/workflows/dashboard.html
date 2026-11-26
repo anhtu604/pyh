@@ -538,6 +538,14 @@ html[data-theme="light"]{
 .pv-source-pills{display:flex;align-items:center;gap:5px;flex-wrap:wrap;min-width:0}
 .pv-src-btn{min-height:28px;padding:3px 10px;border-radius:8px;font-size:12px;font-weight:600;background:rgba(148,173,255,.08);border:1px solid var(--line);color:var(--muted)}
 .pv-src-btn.on{background:hsl(168 78% 52% / .16);border-color:hsl(168 78% 52% / .55);color:var(--teal)}
+.pv-src-item{display:inline-flex;align-items:center;gap:3px}
+.pv-pub-btn{min-height:28px;padding:3px 9px;border-radius:8px;font-size:11.5px;font-weight:700;background:hsl(168 78% 52% / .14);border:1px solid hsl(168 78% 52% / .45);color:var(--teal);cursor:pointer}
+.pv-pub-btn:hover{background:hsl(168 78% 52% / .24)}
+.pv-pub-panel{padding:10px 12px;border-radius:10px;background:var(--nle-bg);border:1px solid var(--line-strong);display:grid;gap:8px}
+.pv-pub-panel[hidden]{display:none}
+.pv-pub-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.pv-pub-caption{margin:0;padding:8px 10px;border-radius:8px;background:rgba(148,173,255,.06);border:1px solid var(--line);font-size:12.5px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:140px;overflow:auto}
+.pv-pub-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .pv-stage-actions{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
 .pv-stage-actions .btn{min-height:28px;padding:3px 9px;font-size:12px}
 #pv-safezone-toggle[aria-pressed="true"]{background:hsl(204 95% 62% / .18);border-color:var(--sky);color:var(--sky)}
@@ -3231,6 +3239,11 @@ function renderStage12DecisionSlot(b){
       ${opt.detail ? `<span class="s12-opt-detail">${esc(opt.detail)}</span>` : ''}
     </button>
   `).join('');
+  const projMeta = (overviewData?.projects || state?.projects || []).find(p => p.slug === b.slug);
+  const showAdoptR5 = q.kind === 'escalation' && Boolean(projMeta && projMeta.r5 === false);
+  const adoptR5BtnHtml = showAdoptR5
+    ? `<button type="button" class="btn s12-opt-btn" id="dq-adopt-r5"><span>Làm lại theo chuẩn R5</span></button>`
+    : '';
   const freeTextHtml = q.allow_free_text ? `
     <div class="s12-free-wrap">
       <textarea class="inp" id="dq-free-text" rows="2" maxlength="4000" placeholder="${q.kind === 'tts_qa' ? 'Đổi cách đọc, mỗi dòng: từ/cụm = cách đọc. Cần duyệt lại y khoa.' : 'Ghi chú thêm hoặc nhập ý kiến riêng cho trạm này…'}"></textarea>
@@ -3257,7 +3270,7 @@ function renderStage12DecisionSlot(b){
         </select>
         <input class="inp" maxlength="200" aria-label="Tự nhập cách đọc ${esc(term.written)}" placeholder="Hoặc tự nhập cách đọc">
         </fieldset>`).join('') + '<button class="btn primary" id="dq-submit-free">Gửi cách đọc</button>' :
-        `<div class="s12-actions">${optionsHtml}</div>${freeTextHtml}`}
+        `<div class="s12-actions">${optionsHtml}${adoptR5BtnHtml}</div>${freeTextHtml}`}
     </section>
   `;
   const optBtns = [...slot.querySelectorAll('[data-dq-option]')];
@@ -3314,6 +3327,28 @@ function renderStage12DecisionSlot(b){
   });
   if(freeBtn){
     freeBtn.onclick = () => submitAnswer(null);
+  }
+  const adoptR5Btn = slot.querySelector('#dq-adopt-r5');
+  if(adoptR5Btn){
+    adoptR5Btn.onclick = async () => {
+      setAdminDrawer(true);
+      const queueTabBtn = $('ops-tabs')?.querySelector('[data-ops-tab="queue"]');
+      if(queueTabBtn && typeof queueTabBtn.onclick === 'function'){
+        await queueTabBtn.onclick();
+      }
+      const sel = $('ops-project');
+      if(sel){
+        sel.value = b.slug;
+        if(typeof sel.onchange === 'function') sel.onchange();
+      }
+      const form = $('ops-adopt-r5');
+      if(form){
+        form.hidden = false;
+        form.scrollIntoView({behavior:'smooth', block:'center'});
+        const reasonEl = form.elements?.reason || form.querySelector('[name="reason"]');
+        if(reasonEl) reasonEl.focus();
+      }
+    };
   }
 }
 
@@ -3752,9 +3787,18 @@ function tabVideo(b,dm){
   const fps = model.fps;
   const safeDenom = Math.max(1, totalF);
 
-  const srcPills = mediaList.map((m, idx) =>
-    `<button type="button" class="pv-src-btn ${idx === defaultIdx ? 'on' : ''}" data-pv-src="${idx}">${esc(m.label || ('Nguồn ' + (idx + 1)))}</button>`
-  ).join('');
+  const isPackaged = b.state === 'packaged';
+  const srcPills = mediaList.map((m, idx) => {
+    const label = m.label || ('Nguồn ' + (idx + 1));
+    const isMp4 = m.kind === 'mp4';
+    const clipMatch = isMp4 ? /^Clip\s+(.+)$/i.exec(label.trim()) : null;
+    const pubPlatform = clipMatch ? 'tiktok' : 'youtube';
+    const pubClipId = clipMatch ? clipMatch[1].trim() : '';
+    const pubBtn = (isPackaged && isMp4)
+      ? `<button type="button" class="pv-pub-btn" data-pv-pub="${idx}" data-pub-platform="${esc(pubPlatform)}" data-pub-clip="${esc(pubClipId)}" title="Đăng ${esc(label)}">Đăng</button>`
+      : '';
+    return `<span class="pv-src-item"><button type="button" class="pv-src-btn ${idx === defaultIdx ? 'on' : ''}" data-pv-src="${idx}">${esc(label)}</button>${pubBtn}</span>`;
+  }).join('');
 
   const rulerTicks = (() => {
     if(!model.durationS) return '';
@@ -3851,6 +3895,7 @@ function tabVideo(b,dm){
               <div class="pv-sz-center"></div><div class="pv-sz-social"></div>
             </div>
           </div>
+          <div id="pv-pub-panel" class="pv-pub-panel ops-form" hidden aria-live="polite"></div>
           <div class="pv-transport" id="pv-transport">
             <div class="pv-tr-readouts">
               <div>
@@ -4348,6 +4393,146 @@ function wireVideoNle(body, b){
       seekToFrame(0, {pause: true});
     };
   });
+
+  const pubPanel = body.querySelector('#pv-pub-panel');
+  let pubReqSeq = 0;
+  let pubSending = false;
+  const renderPubStatus = (panel, titleText, receipt) => {
+    panel.innerHTML = `
+      <div class="pv-pub-head">
+        <b>${esc(titleText)}</b>
+        <button type="button" class="btn ghost" data-pv-pub-close>Đóng</button>
+      </div>
+      <p role="status" data-pv-pub-status>${esc(publicationLabel(receipt))}</p>
+      ${receipt?.receipt_id ? `<div class="pv-pub-actions"><button type="button" class="btn ghost" data-pv-pub-check="${esc(receipt.receipt_id)}">Kiểm tra trạng thái đăng</button></div>` : ''}
+    `;
+    const closeBtn = panel.querySelector('[data-pv-pub-close]');
+    if(closeBtn) closeBtn.onclick = () => { pubReqSeq++; panel.hidden = true; panel.innerHTML = ''; };
+    const checkBtn = panel.querySelector('[data-pv-pub-check]');
+    if(checkBtn){
+      checkBtn.onclick = async () => {
+        checkBtn.disabled = true;
+        try{
+          const updated = await postJson('/api/channel/publish-status', {receipt_id: checkBtn.dataset.pvPubCheck});
+          const st = panel.querySelector('[data-pv-pub-status]');
+          if(st) st.textContent = publicationLabel(updated);
+          toast(publicationLabel(updated));
+        }catch(e){ toast(e.message, true); }
+        finally{ checkBtn.disabled = false; }
+      };
+    }
+  };
+  if(pubPanel){
+    body.querySelectorAll('[data-pv-pub]').forEach(btn => {
+      btn.onclick = async () => {
+        const platform = btn.dataset.pubPlatform === 'tiktok' ? 'tiktok' : 'youtube';
+        const clipId = btn.dataset.pubClip ? btn.dataset.pubClip : null;
+        const titleText = platform === 'tiktok' ? `Đăng TikTok · Clip ${clipId}` : 'Đăng YouTube · Video hoàn chỉnh';
+        const seq = ++pubReqSeq;
+        pubPanel.hidden = false;
+        pubPanel.innerHTML = `
+          <div class="pv-pub-head">
+            <b>${esc(titleText)}</b>
+            <button type="button" class="btn ghost" data-pv-pub-close>Đóng</button>
+          </div>
+          <p class="sub" role="status">Đang tải thông tin xem trước…</p>
+        `;
+        const loadingClose = pubPanel.querySelector('[data-pv-pub-close]');
+        if(loadingClose) loadingClose.onclick = () => { pubReqSeq++; pubPanel.hidden = true; pubPanel.innerHTML = ''; };
+        try{
+          const p = await postJson('/api/channel/publish-preview', {platform, slug: b.slug, clip_id: clipId, title_index: 0});
+          if(seq !== pubReqSeq || pubPanel.hidden) return;
+          if(p.existing_receipt){
+            renderPubStatus(pubPanel, titleText, p.existing_receipt);
+            return;
+          }
+          if(!p.gates_current || !p.account?.id) throw Error('Gói hoặc tài khoản chưa đủ điều kiện đăng.');
+          const privacyLabels = {public:'Công khai', unlisted:'Không công khai', private:'Riêng tư', SELF_ONLY:'Chỉ mình tôi'};
+          const opts = Array.isArray(p.privacy_options) ? p.privacy_options : [];
+          const isTikTok = p.platform === 'tiktok';
+          const defaultPrivacy = !isTikTok && opts.includes('public') ? 'public' : '';
+          const privacyHtml = (isTikTok || !defaultPrivacy ? '<option value="">Chọn quyền hiển thị…</option>' : '')
+            + opts.map(v => `<option value="${esc(v)}"${v === defaultPrivacy ? ' selected' : ''}>${esc(privacyLabels[v] || v)}</option>`).join('');
+          pubPanel.innerHTML = `
+            <div class="pv-pub-head">
+              <b>${esc(titleText)}</b>
+              <button type="button" class="btn ghost" data-pv-pub-close>Đóng</button>
+            </div>
+            <p>Tài khoản nhận: <b>${esc(p.account.name || p.account.id)}</b></p>
+            ${!isTikTok && p.title ? `<p><b>${esc(p.title)}</b></p>` : ''}
+            <pre class="pv-pub-caption">${esc(p.caption || '')}</pre>
+            ${p.connection_method === 'browser_session' ? '<p class="sub">Gửi bằng phiên trình duyệt (thử nghiệm). Sau khi gửi, cần kiểm tra trực tiếp trên TikTok để xác minh video.</p>' : ''}
+            <label>Quyền hiển thị<select class="inp" data-pv-pub-privacy>${privacyHtml}</select></label>
+            ${isTikTok ? `
+              <label><input type="checkbox" data-pv-pub-music> Tôi đồng ý <a href="https://www.tiktok.com/legal/page/global/music-usage-confirmation/en" target="_blank" rel="noopener noreferrer">sử dụng nhạc TikTok</a> cho lượt đăng này.</label>
+              <label><input type="checkbox" data-pv-pub-noncommercial> Tôi xác nhận nội dung phi thương mại.</label>
+            ` : ''}
+            <div class="pv-pub-actions">
+              <button type="button" class="btn primary" data-pv-pub-send disabled>${isTikTok ? 'Đăng TikTok' : 'Đăng YouTube'}</button>
+            </div>
+          `;
+          const closeBtn = pubPanel.querySelector('[data-pv-pub-close]');
+          if(closeBtn) closeBtn.onclick = () => { pubReqSeq++; pubPanel.hidden = true; pubPanel.innerHTML = ''; };
+          const privacyEl = pubPanel.querySelector('[data-pv-pub-privacy]');
+          const musicEl = pubPanel.querySelector('[data-pv-pub-music]');
+          const ncEl = pubPanel.querySelector('[data-pv-pub-noncommercial]');
+          const sendBtn = pubPanel.querySelector('[data-pv-pub-send]');
+          const canSend = () => Boolean(!pubSending && privacyEl?.value && (!isTikTok || (musicEl?.checked && ncEl?.checked)));
+          const syncSend = () => { if(sendBtn) sendBtn.disabled = !canSend(); };
+          syncSend();
+          for(const inp of [privacyEl, musicEl, ncEl]) if(inp) inp.onchange = syncSend;
+          if(sendBtn){
+            sendBtn.onclick = async () => {
+              if(!canSend()) return;
+              pubSending = true;
+              sendBtn.disabled = true;
+              try{
+                const r = await postJson('/api/channel/publish', {
+                  platform: p.platform,
+                  slug: p.slug,
+                  clip_id: p.clip_id ?? null,
+                  title_index: 0,
+                  privacy: privacyEl.value,
+                  expected_account_id: p.account.id,
+                  expected_revision: p.revision,
+                  expected_sha256: p.sha256,
+                  confirmed: true,
+                  ...(isTikTok ? {music_usage_confirmed: musicEl.checked, noncommercial_confirmed: ncEl.checked} : {}),
+                });
+                renderPubStatus(pubPanel, titleText, r);
+                toast(publicationLabel(r));
+              }catch(e){
+                pubPanel.innerHTML = `
+                  <div class="pv-pub-head">
+                    <b>${esc(titleText)}</b>
+                    <button type="button" class="btn ghost" data-pv-pub-close>Đóng</button>
+                  </div>
+                  <p role="status">Chưa rõ kết quả. Kiểm tra trạng thái trước khi đăng lại.</p>
+                `;
+                const errClose = pubPanel.querySelector('[data-pv-pub-close]');
+                if(errClose) errClose.onclick = () => { pubReqSeq++; pubPanel.hidden = true; pubPanel.innerHTML = ''; };
+                toast(e.message, true);
+              }finally{
+                pubSending = false;
+              }
+            };
+          }
+        }catch(e){
+          if(seq !== pubReqSeq || pubPanel.hidden) return;
+          pubPanel.innerHTML = `
+            <div class="pv-pub-head">
+              <b>${esc(titleText)}</b>
+              <button type="button" class="btn ghost" data-pv-pub-close>Đóng</button>
+            </div>
+            <p role="status">${esc(e.message)}</p>
+          `;
+          const errClose = pubPanel.querySelector('[data-pv-pub-close]');
+          if(errClose) errClose.onclick = () => { pubReqSeq++; pubPanel.hidden = true; pubPanel.innerHTML = ''; };
+          toast(e.message, true);
+        }
+      };
+    });
+  }
 
   if(followBtn){
     followBtn.onclick = () => {

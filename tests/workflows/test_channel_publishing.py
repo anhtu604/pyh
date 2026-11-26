@@ -369,3 +369,64 @@ def test_browser_acceptance_remains_pending_and_never_resends(tmp_path, monkeypa
     assert pub.publication_status(tmp_path, result['receipt_id']) == result
     assert _publish(tmp_path, 'valid-slug', **options) == result
     assert len(calls) == 1
+
+
+def test_publication_preview_includes_existing_receipt(approved, monkeypatch):
+    root, slug, _ = approved
+    before = pub.publication_preview(root, slug, 'youtube')
+    assert before['existing_receipt'] is None
+
+    replies = iter([(200, {'Location': 'https://www.googleapis.com/upload/session'}, {}), (200, {}, {'id': 'video999'})])
+    monkeypatch.setattr(pub, '_request', lambda *a, **k: next(replies))
+    receipt = _publish(root, slug, platform='youtube', confirmed=True, expected_account_id='acct', privacy='public')
+    assert receipt['status'] == 'posted'
+
+    after = pub.publication_preview(root, slug, 'youtube')
+    assert after['existing_receipt'] == receipt
+
+
+def test_publication_preview_tiktok_browser_session_includes_existing_receipt(tmp_path, monkeypatch):
+    from healthvideo.workflows import tiktok_browser
+
+    asset = tmp_path / 'clip.mp4'
+    asset.write_bytes(b'approved-clip')
+    base_preview = {
+        'platform': 'tiktok',
+        'slug': 'valid-slug',
+        'revision': '001',
+        'clip_id': 'CL01',
+        'sha256': pub.sha256_file(asset),
+        'account': {'id': '123', 'name': 'TikTok · UID 123'},
+        'title': 'approved',
+        'caption': 'approved caption',
+        'gates_current': True,
+    }
+    fake = SimpleNamespace(
+        authorized_account=lambda *a, **k: {
+            'account_id': '123',
+            'connection_method': 'browser_session',
+            'session': {'cookies': 'SECRET'},
+        }
+    )
+    monkeypatch.setattr(pub, '_connections', lambda: fake)
+    monkeypatch.setattr(pub, '_validated', lambda *a: (dict(base_preview), asset))
+    monkeypatch.setattr(pub, '_account', lambda *a: base_preview['account'])
+    monkeypatch.setattr(tiktok_browser, 'upload_snapshot', lambda *a, **k: {'storage_video_id': 'st1'})
+
+    before = pub.publication_preview(tmp_path, 'valid-slug', 'tiktok', clip_id='CL01')
+    assert before['connection_method'] == 'browser_session'
+    assert before['existing_receipt'] is None
+
+    receipt = _publish(
+        tmp_path,
+        'valid-slug',
+        platform='tiktok',
+        clip_id='CL01',
+        confirmed=True,
+        privacy='public',
+        expected_account_id='123',
+        music_usage_confirmed=True,
+        noncommercial_confirmed=True,
+    )
+    after = pub.publication_preview(tmp_path, 'valid-slug', 'tiktok', clip_id='CL01')
+    assert after['existing_receipt'] == receipt

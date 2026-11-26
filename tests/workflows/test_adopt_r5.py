@@ -442,3 +442,20 @@ def test_adopt_r5_releases_old_revision_repair_holds(tmp_path: Path) -> None:
 
     assert sorted(p.name for p in logs.iterdir() if p.name != "doctor-questions-history.yaml") == []
     assert doctor_questions.open_question(tmp_path, "men-gan-tang") is None
+
+
+def test_overview_projects_include_r5_flag(tmp_path: Path) -> None:
+    from healthvideo.workflows.dashboard import overview
+
+    _seed_v2_project(tmp_path, slug="r5-topic", pin_r5=True)
+    _seed_v2_project(tmp_path, slug="legacy-topic", pin_r5=False)
+    broken_dir = _seed_v2_project(tmp_path, slug="broken-snap", pin_r5=False)
+    (broken_dir / "revisions" / "001" / "workflow" / "standards-snapshot.yaml").write_text(
+        ":\n  - [bad yaml", encoding="utf-8"
+    )
+
+    data = overview(tmp_path)
+    by_slug = {p["slug"]: p for p in data["projects"]}
+    assert by_slug["r5-topic"]["r5"] is True
+    assert by_slug["legacy-topic"]["r5"] is False
+    assert by_slug["broken-snap"]["r5"] is False

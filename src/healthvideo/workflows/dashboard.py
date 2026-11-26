@@ -1470,6 +1470,8 @@ def overview(
     done_30d = 0
     lead_days: list[float] = []
 
+    from healthvideo.workflows.adopt_r5 import r5_active
+
     for path, project in factory.projects(root):
         note = _blocked_note(root, path, project)
         open_q = doctor_questions.open_question(root, path.name)
@@ -1569,6 +1571,10 @@ def overview(
 
         is_paused = (logs / path.name / 'paused.yaml').is_file()
         rev_dir = path / 'revisions' / project.active_revision
+        try:
+            is_r5 = bool(r5_active(rev_dir))
+        except (OSError, ValueError, TypeError, yaml.YAMLError):
+            is_r5 = False
         claims_raw = _safe_yaml(rev_dir / 'evidence/ledger.yaml').get('claims')
         lines_raw = _safe_yaml(rev_dir / 'script/script.yaml').get('lines')
         scenes_raw = _safe_yaml(rev_dir / 'storyboard/storyboard.yaml').get('scenes')
@@ -1614,6 +1620,7 @@ def overview(
             'state_label': state_label,
             'gate': gate,
             'revision': project.active_revision,
+            'r5': is_r5,
             'blocked': note,
             'doctor_question': open_q,
             'paused': is_paused,

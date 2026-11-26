@@ -155,6 +155,7 @@ def _tt(endpoint, token, body):
 
 def publication_preview(root, slug, platform, clip_id=None, title_index=0):
     result, _ = _validated(root, slug, platform, clip_id, title_index)
+    result['existing_receipt'] = _prior_receipt(root, result)
     if platform == 'tiktok':
         authorization = _connections().authorized_account(root, platform, required_scopes=('video.publish',))
         if authorization['account_id'] != result['account']['id']:
