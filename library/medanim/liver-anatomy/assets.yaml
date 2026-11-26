@@ -34,7 +34,7 @@ assets:
   sha256: 4769ba659b015920ac960fe06c41d66ef9751fe97ad757e861928126e932bfcf
   role: Gan cận cảnh có túi mật mặt dưới, nhánh tĩnh mạch cửa (xanh dương) và động
     mạch gan (đỏ) (Cảnh R02/R03)
-  retrieved_at: null
+  retrieved_at: '2026-11-26'
   transformations: null
   license_evidence: null
 - id: servier-liver-lobule
