@@ -1749,7 +1749,7 @@ function renderOverview(ov){
         return {
           slug:d.slug, code:d.code || ovp.code || '', title:d.title || ovp.title || d.slug,
           revision:d.revision || ovp.revision || '001',
-          escalation:true,
+          escalation:true, r5: ovp.r5,
           questionObj: escQuestion,
         };
       }
@@ -1764,7 +1764,7 @@ function renderOverview(ov){
       }
       return {slug:d.slug, code:d.code, title:d.title, gate:d.gate, styleScore:d.style_score || null, sub:`${d.count} điểm cần quyết`, btn:`Mở thẻ quyết định (${d.count})`};
     }),
-    ...escOnly.map(p => ({slug:p.slug, code:p.code || '', title:p.title || p.slug, revision:p.revision || '001', escalation:true, questionObj:p.doctor_question})),
+    ...escOnly.map(p => ({slug:p.slug, code:p.code || '', title:p.title || p.slug, revision:p.revision || '001', escalation:true, r5:p.r5, questionObj:p.doctor_question})),
     ...gateOnly.map(p => ({slug:p.slug, code:p.code, title:p.title, gate:p.gate, styleScore:null, sub:'Gói đã sẵn sàng để duyệt', btn:'Mở gói duyệt'})),
     ...(unhandledBlocked.length ? [{
       factoryStoppedReminder: true,
@@ -1821,7 +1821,7 @@ function renderOverview(ov){
         </div>
         <div class="todo-esc-q">${esc(friendlyError(q.question || '') || q.question || '')}</div>
         ${ctxHtml}
-        <div class="todo-esc-opts">${optsHtml}</div>
+        <div class="todo-esc-opts">${optsHtml}${r.r5 === false ? `<button type="button" class="btn" data-esc-r5="${esc(r.slug)}">Làm lại theo chuẩn R5</button>` : ''}</div>
         ${freeHtml}
       </div>`;
       }
@@ -1905,6 +1905,7 @@ function renderOverview(ov){
         btns.forEach(x => { x.disabled = false; });
       }
     };
+    decBox.querySelectorAll('[data-esc-r5]').forEach(b => { b.onclick = () => openAdoptR5(b.dataset.escR5); });
     decBox.querySelectorAll('[data-esc-opt]').forEach(b => {
       b.onclick = () => submitEsc(b.dataset.escSlug, b.dataset.escQid, b.dataset.escRev, b.dataset.escOpt);
     });
@@ -3330,25 +3331,27 @@ function renderStage12DecisionSlot(b){
   }
   const adoptR5Btn = slot.querySelector('#dq-adopt-r5');
   if(adoptR5Btn){
-    adoptR5Btn.onclick = async () => {
-      setAdminDrawer(true);
-      const queueTabBtn = $('ops-tabs')?.querySelector('[data-ops-tab="queue"]');
-      if(queueTabBtn && typeof queueTabBtn.onclick === 'function'){
-        await queueTabBtn.onclick();
-      }
-      const sel = $('ops-project');
-      if(sel){
-        sel.value = b.slug;
-        if(typeof sel.onchange === 'function') sel.onchange();
-      }
-      const form = $('ops-adopt-r5');
-      if(form){
-        form.hidden = false;
-        form.scrollIntoView({behavior:'smooth', block:'center'});
-        const reasonEl = form.elements?.reason || form.querySelector('[name="reason"]');
-        if(reasonEl) reasonEl.focus();
-      }
-    };
+    adoptR5Btn.onclick = () => openAdoptR5(b.slug);
+  }
+}
+
+async function openAdoptR5(slug){
+  setAdminDrawer(true);
+  const queueTabBtn = $('ops-tabs')?.querySelector('[data-ops-tab="queue"]');
+  if(queueTabBtn && typeof queueTabBtn.onclick === 'function'){
+    await queueTabBtn.onclick();
+  }
+  const sel = $('ops-project');
+  if(sel){
+    sel.value = slug;
+    if(typeof sel.onchange === 'function') sel.onchange();
+  }
+  const form = $('ops-adopt-r5');
+  if(form){
+    form.hidden = false;
+    form.scrollIntoView({behavior:'smooth', block:'center'});
+    const reasonEl = form.elements?.reason || form.querySelector('[name="reason"]');
+    if(reasonEl) reasonEl.focus();
   }
 }
 
