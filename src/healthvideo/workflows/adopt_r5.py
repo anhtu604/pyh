@@ -68,6 +68,24 @@ def _resolve_project_dir(root: Path, slug_or_project: str | Path) -> Path:
     return project_dir
 
 
+_PARENT_HOLDS = ("blocked.txt", "agent-retry.yaml", "production-retry.yaml", "leader-guidance.yaml")
+
+
+def _release_parent_holds(root: Path, slug: str) -> None:
+    """The doctor's PIN-approved restart supersedes the old revision's repair holds."""
+    from healthvideo.workflows import doctor_questions
+
+    logs = root / "topics" / "logs" / slug
+    for name in _PARENT_HOLDS:
+        (logs / name).unlink(missing_ok=True)
+    repair = logs / "leader-repair.yaml"
+    if repair.is_file():
+        data = read_yaml(repair)
+        if isinstance(data, dict) and data.get("phase") in {"needs_attention", "repair_failed"}:
+            repair.unlink()
+    doctor_questions.supersede_kind(root, slug, "escalation", reason="Bác sĩ đã làm lại theo chuẩn R5.")
+
+
 def adopt_r5_project(
     root: Path,
     slug: str,
@@ -170,6 +188,7 @@ def adopt_r5_project(
         }
     )
     write_yaml_atomic(manifest_path, updated_manifest.model_dump(mode="json"))
+    _release_parent_holds(root, slug)
     return {
         "ok": True,
         "slug": slug,

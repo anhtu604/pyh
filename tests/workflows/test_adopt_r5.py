@@ -422,3 +422,23 @@ def test_dashboard_adopt_r5_route_enforces_confirm_and_pin(
     assert res["revision"] == "002"
     assert res["state"] == "evidence_ready"
     assert res["quality_profile"] == "r5_v1"
+
+
+def test_adopt_r5_releases_old_revision_repair_holds(tmp_path: Path) -> None:
+    from healthvideo.workflows import doctor_questions
+
+    _seed_v2_project(tmp_path)
+    pin_file = tmp_path / "approver-pin.json"
+    set_pin("654321", path=pin_file)
+    logs = tmp_path / "topics" / "logs" / "men-gan-tang"
+    logs.mkdir(parents=True)
+    for name in ("blocked.txt", "agent-retry.yaml", "leader-guidance.yaml"):
+        (logs / name).write_text("revision: '001'\n", encoding="utf-8")
+    (logs / "leader-repair.yaml").write_text("revision: '001'\nphase: needs_attention\n", encoding="utf-8")
+    doctor_questions.ask(tmp_path, "men-gan-tang", station="repair", kind="escalation",
+                         question="Kẹt storyboard", options=[{"id": "a", "label": "A"}, {"id": "b", "label": "B"}])
+
+    adopt_r5_project(tmp_path, "men-gan-tang", reason="R5", pin="654321", pin_file=pin_file)
+
+    assert sorted(p.name for p in logs.iterdir() if p.name != "doctor-questions-history.yaml") == []
+    assert doctor_questions.open_question(tmp_path, "men-gan-tang") is None
