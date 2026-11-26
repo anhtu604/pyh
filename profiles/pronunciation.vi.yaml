@@ -74,12 +74,12 @@ entries:
     note: Đề xuất, cần bác sĩ xác nhận.
   - written: like
     spoken: lai
-    needs_doctor_review: true
-    note: Đề xuất, cần bác sĩ xác nhận.
+    needs_doctor_review: false
+    note: Bác sĩ chọn 2026-11-26
   - written: subscribe
     spoken: xáp-xcrai
-    needs_doctor_review: true
-    note: Đề xuất, cần bác sĩ xác nhận.
+    needs_doctor_review: false
+    note: Bác sĩ chọn 2026-11-26
   - written: HBsAg
     spoken: hát bê ét a dê
     needs_doctor_review: false
@@ -116,3 +116,31 @@ entries:
     spoken: viêm gan xê
     needs_doctor_review: false
     note: Theo cách đọc HCV bác sĩ chọn 2026-11-25.
+  - written: amin
+    spoken: a-min
+    needs_doctor_review: false
+    note: Bác sĩ chọn 2026-11-26
+  - written: axit
+    spoken: a-xít
+    needs_doctor_review: false
+    note: Bác sĩ chọn 2026-11-26
+  - written: ESPEN
+    spoken: ét-pen
+    needs_doctor_review: false
+    note: Bác sĩ chọn 2026-11-26
+  - written: glycerol
+    spoken: gli-xê-rôn
+    needs_doctor_review: false
+    note: Bác sĩ chọn 2026-11-26
+  - written: kia
+    spoken: kia
+    needs_doctor_review: false
+    note: Bác sĩ chọn 2026-11-26
+  - written: lactate
+    spoken: lác-tát
+    needs_doctor_review: false
+    note: Bác sĩ chọn 2026-11-26
+  - written: protein
+    spoken: prô-tê-in
+    needs_doctor_review: false
+    note: Bác sĩ chọn 2026-11-26
