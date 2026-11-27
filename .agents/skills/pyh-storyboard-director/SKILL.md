@@ -24,6 +24,7 @@ missing_data_to: medical_expert xác minh cấu trúc; shorts_producer chốt ra
   chưa xác định phạm vi, báo cần xác định vị trí trước, không tự nhận toàn bài.
 
 ## Đầu vào
+- Code preflight đã kiểm script và catalog R5 (file, SHA-256, author/license/source_page/original_url/retrieved_at) trước khi gọi agent. Không tự kiểm lại provenance catalog đã qua preflight; dùng trực tiếp dữ liệu đã kiểm. Asset mới vẫn phải có provenance thật và đi qua validator hiện hành.
 - Đọc `project.yaml` lấy `active_revision`; làm việc trong `revisions/<rev>/`.
 - Đọc `workflow/standards.yaml` (nếu có) và chuẩn phong cách đã ghim `docs/superpowers/specs/2026-11-17-pyh-style-a-mascot-host.md` (Hướng A "Mascot dẫn chuyện").
 - Đọc `script/script.yaml`, `script/outline.yaml`, `explainer/explainer.yaml`, `evidence/ledger.yaml`, và `docs/reference/image-prompting.md`, `docs/reference/motion-vocabulary.md`.
@@ -54,6 +55,9 @@ missing_data_to: medical_expert xác minh cấu trúc; shorts_producer chốt ra
 - Kiểm `reviews/style-lint.json` và bố cục thực; cảnh báo mascot cũ không cho phép chen mascot vào giải phẫu cận R5. Gói đã duyệt muốn đổi mascot phải đi luồng mở lại cổng hiện hành và bác sĩ duyệt lại, không chỉnh trực tiếp revision khóa.
 
 ## Đầu ra & Lệnh
+- Khi prompt có mục “Phân cảnh từng phần”: lưu ngay mỗi scene vào `storyboard/parts/<scene_id>.yaml`, cùng trường Scene và `script_sha256` được prompt cấp. Một dòng script tương ứng một scene theo thứ tự (`S01`, `S02`, ...), kể cả dòng clip riêng. Chỉ sửa pending; cảnh “đã khoá, không sửa” giữ nguyên byte.
+- Scene xong ghi `status: ok`, xóa `validation_error`/`missing` đã giải quyết, giữ `rework_request` nếu có. Thiếu hình ghi `status: needs_asset` và `missing:` mô tả hình cần, rồi tiếp tục cảnh khác. Không dừng cả bài vì một cảnh thiếu hình.
+- Trong chế độ parts, ghi metadata cấp Storyboard (title/format_profile/quality_profile/r5_contract/visual_style và các trường chung cần thiết, không scenes) vào `storyboard/parts-metadata.yaml`. Python ghép và chạy validator hiện hành; không tự gọi submit storyboard. Manifest/clip-plan vẫn theo schema hiện hành. Luồng cũ không có mục parts dùng lệnh dưới đây.
 - Ghi `revisions/<rev>/storyboard/storyboard.yaml`, `revisions/<rev>/assets/asset-manifest.yaml`, và `revisions/<rev>/script/clip-plan.yaml` (nếu là `youtube_long`).
 - Chạy `healthvideo step storyboard {project} --storyboard <path> --assets <path> [--clip-plan <path>]` trong budget được giao; lỗi lặp hoặc ngoài quyền thì trả coordinator, không lặp vô hạn.
 

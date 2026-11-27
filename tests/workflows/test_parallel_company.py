@@ -105,9 +105,12 @@ def test_dispatches_newly_ready_topic_while_another_is_running(tmp_path, monkeyp
     assert failures == []
 
 
+@pytest.mark.parametrize('granular', [False, True])
 def test_submit_script_draft_then_parallel_storyboard_and_voice_prep_before_critic(
-    tmp_path: Path, monkeypatch,
+    tmp_path: Path, monkeypatch, granular,
 ):
+    from healthvideo.workflows import storyboard_parts
+
     project_dir = _evidence_ready(tmp_path / "projects")
     manifest = submit_script_draft(
         project_dir,
@@ -116,6 +119,10 @@ def test_submit_script_draft_then_parallel_storyboard_and_voice_prep_before_crit
     assert manifest.state is WorkflowState.DRAFT_READY
     assert not (project_dir / "revisions/001/storyboard/storyboard.yaml").is_file()
     assert not (project_dir / "revisions/001/script/voice-prep.yaml").is_file()
+    if not granular:
+        # Existing incomplete monolithic projects keep the legacy submit transaction.
+        write_yaml_atomic(project_dir / 'revisions/001/storyboard/storyboard.yaml',
+                          {'title': 'Legacy incomplete board', 'scenes': []})
 
     slug = project_dir.name
     write_yaml_atomic(
@@ -144,6 +151,15 @@ def test_submit_script_draft_then_parallel_storyboard_and_voice_prep_before_crit
         promote_revision(staging, revision)
 
     monkeypatch.setattr(storyboard_design, "replace_directory_atomic", promote_after_voice_starts)
+    validate_parts = storyboard_parts._validation_error
+
+    def validate_after_voice_starts(root):
+        prepared_revision.set()
+        assert voice_saving.wait(5)
+        assert not voice_saved.wait(0.2)
+        return validate_parts(root)
+
+    monkeypatch.setattr(storyboard_parts, '_validation_error', validate_after_voice_starts)
 
     def fake_invoke(slots, prompt, **kwargs):
         nonlocal active_parallel, max_parallel
@@ -159,11 +175,24 @@ def test_submit_script_draft_then_parallel_storyboard_and_voice_prep_before_crit
             if step in {"storyboard_design", "voice_prep"}:
                 active_parallel -= 1
         if step == "storyboard_design":
-            storyboard_design.submit_storyboard_design(
-                project_dir,
-                SOURCE / "storyboard/storyboard.yaml",
-                SOURCE / "assets/asset-manifest.yaml",
-            )
+            if granular:
+                revision = project_dir / 'revisions/001'
+                board = read_yaml(SOURCE / 'storyboard/storyboard.yaml')
+                write_yaml_atomic(revision / storyboard_parts.METADATA,
+                                  {k: v for k, v in board.items() if k != 'scenes'})
+                hashes = storyboard_parts.script_hashes(revision)
+                for index, scene in enumerate(board['scenes'], 1):
+                    scene_id = f'S{index:02}'
+                    write_yaml_atomic(revision / f'storyboard/parts/{scene_id}.yaml',
+                                      scene | {'id': scene_id, 'script_sha256': hashes[scene_id]})
+                write_yaml_atomic(revision / 'assets/asset-manifest.yaml',
+                                  read_yaml(SOURCE / 'assets/asset-manifest.yaml'))
+            else:
+                storyboard_design.submit_storyboard_design(
+                    project_dir,
+                    SOURCE / "storyboard/storyboard.yaml",
+                    SOURCE / "assets/asset-manifest.yaml",
+                )
         elif step == "voice_prep":
             vp_file = tmp_path / "vp.yaml"
             write_yaml_atomic(

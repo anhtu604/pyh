@@ -669,10 +669,20 @@ def _build_step_prompt(
         from healthvideo.workflows import rework
 
         prompt_fields['reject_note'] = rework.context(project_dir, prompt_fields['reject_note'])
+    parts_note = ''
     if step == 'storyboard_design' and (project_dir / 'project.yaml').is_file():
-        from healthvideo.workflows import rework
+        from healthvideo.workflows import rework, storyboard_parts
 
-        prompt_fields['reject_note'] += '\n' + rework.storyboard_context(project_dir)
+        parts_root = resolve_project_layout(project_dir).artifact_root
+        if storyboard_parts.enabled(parts_root):
+            try:
+                parts_note = storyboard_parts.prompt_context(parts_root)
+            except (OSError, ValueError, TypeError, yaml.YAMLError) as exc:
+                # Prompt previews may inspect an incomplete draft. Invocation preflight
+                # rejects this input before any agent can be charged for it.
+                parts_note = f'Chưa lập được danh sách cảnh; cần sửa đầu vào script: {exc}'
+        else:
+            prompt_fields['reject_note'] += '\n' + rework.storyboard_context(project_dir)
     if rewriting:
         if not answering:
             from healthvideo.workflows.script_review import ensure_repair_baseline
@@ -807,6 +817,7 @@ def _build_step_prompt(
             stale_visual_note,
             shorts_plan_note,
             guidance_note,
+            parts_note,
         )
         if part
     )
@@ -839,6 +850,15 @@ def _run_agent_invocation(
     mark_blocked_on_failure: bool = True,
 ) -> tuple[str, Path | None, str | None, dict[str, str] | None]:
     """Run one agent step with fingerprint retry gating, failover & quarantine."""
+    from healthvideo.workflows import storyboard_parts
+    from healthvideo.workflows.step_preflight import preflight
+
+    errors = preflight(step, project_dir)
+    if errors:
+        reason = f'Đầu vào bước {step}:\n' + '\n'.join(f'- {error}' for error in errors)
+        if mark_blocked_on_failure:
+            _mark_blocked(root, entry.slug, reason, report)
+        return 'blocked', None, None, {'error': reason}
     prompt = _build_step_prompt(
         root, deps, entry, project_dir, step, rewriting=rewriting, answering=answering
     )
@@ -880,6 +900,39 @@ def _run_agent_invocation(
     invoke_kwargs: dict[str, object] = {}
     checkpoint: dict[Path, bytes] = {}
     restore_repair: Callable[[], None] | None = None
+    parts_root = (resolve_project_layout(project_dir).artifact_root
+                  if step == 'storyboard_design' and (project_dir / 'project.yaml').is_file() else None)
+    granular = parts_root is not None and storyboard_parts.enabled(parts_root)
+    parts_before = storyboard_parts.part_status(parts_root) if granular else {}
+    locked_parts = {parts_root / f'storyboard/parts/{scene_id}.yaml':
+                    (parts_root / f'storyboard/parts/{scene_id}.yaml').read_bytes()
+                    for scene_id, status in parts_before.items() if status == 'ok'}
+    final_path = parts_root / 'storyboard/storyboard.yaml' if granular else None
+    final_before = final_path.read_bytes() if final_path is not None and final_path.is_file() else None
+    parts_errors: list[str] = []
+
+    def invoke_agent(*args, **kwargs):
+        try:
+            return deps.invoke(*args, **kwargs)
+        finally:
+            for path, raw in locked_parts.items():
+                path.parent.mkdir(parents=True, exist_ok=True)
+                if not path.is_file() or path.read_bytes() != raw:
+                    path.write_bytes(raw)
+            # In parts mode Python alone promotes the final, even if an agent follows
+            # an obsolete submit instruction or stops after writing a partial board.
+            if final_path is not None:
+                if final_before is None:
+                    final_path.unlink(missing_ok=True)
+                else:
+                    final_path.parent.mkdir(parents=True, exist_ok=True)
+                    final_path.write_bytes(final_before)
+
+    def part_artifact(path: Path) -> bool:
+        return bool(granular and (path.is_relative_to(parts_root / 'storyboard/parts')
+                                  or path in {parts_root / storyboard_parts.METADATA,
+                                             parts_root / 'storyboard/parts-validation.yaml'}))
+
     try:
         from healthvideo.workflows import script_review
 
@@ -895,12 +948,14 @@ def _run_agent_invocation(
         checkpoint = ({p: p.read_bytes() for p in repair_root.rglob('*.yaml')}
                       | {project_dir / 'project.yaml': (project_dir / 'project.yaml').read_bytes()}
                       if scoped_script or scoped_product or scoped_medical or scoped_storyboard else {})
+        checkpoint = {p: raw for p, raw in checkpoint.items() if not part_artifact(p)}
         storyboard_before = (read_yaml(repair_root / 'reviews/storyboard-rework.yaml')
                              if scoped_storyboard else None)
         product_before = product_review.repair_files(project_dir) if scoped_product else {}
         protected_dirs = (('script', 'storyboard', 'assets', 'evidence', 'explainer', 'posts', 'reviews')
                           if scoped_script or scoped_product or scoped_medical or scoped_storyboard else ())
         protected_before = {p for name in protected_dirs for p in (repair_root / name).rglob('*.yaml')}
+        protected_before = {p for p in protected_before if not part_artifact(p)}
         # Voice preparation owns this sibling artifact and may save it concurrently.
         sibling_files = {repair_root / 'script/voice-prep.yaml'} if scoped_storyboard else set()
         protected_before -= sibling_files
@@ -908,7 +963,8 @@ def _run_agent_invocation(
             checkpoint.pop(sibling, None)
 
         def restore_repair() -> None:
-            current_paths = {p for name in protected_dirs for p in (repair_root / name).rglob('*.yaml')}
+            current_paths = {p for name in protected_dirs for p in (repair_root / name).rglob('*.yaml')
+                             if not part_artifact(p)}
             for path in current_paths - protected_before - sibling_files:
                 path.unlink(missing_ok=True)
             for path, raw in checkpoint.items():
@@ -921,7 +977,12 @@ def _run_agent_invocation(
                 for relative, raw in product_before.items():
                     (repo / relative).parent.mkdir(parents=True, exist_ok=True)
                     (repo / relative).write_bytes(raw)
-        slots = deps.company.chain(role.id)
+        slots = deps.company.chain(
+            role.id, rework=scoped_script or scoped_medical or scoped_product or scoped_storyboard)
+        # Retry status is already scoped by the input fingerprint (including revision).
+        # Preserve its allow/block decision; escalation never resets a retry hold.
+        if role.tier == 'medium' and status.get('consecutive_failures', 0) >= 2:
+            slots = list(deps.company.tiers['hard'])
         if critic_step:
             excluded = _maker_slots_for_critic(root, entry.slug, role.id, company=deps.company)
             identities = {slot.model_identity for slot in excluded}
@@ -946,7 +1007,7 @@ def _run_agent_invocation(
                 budget_event = uuid4().hex
                 review_budget.consume_review_budget(revision, budget_stage, budget_event)
         try:
-            result = deps.invoke(
+            result = invoke_agent(
                 slots,
                 prompt,
                 cwd=root,
@@ -967,6 +1028,9 @@ def _run_agent_invocation(
                 outcome='reported' if result.ok else 'failed', detail=str(result.log_path),
                 report=budget_root / f'reviews/{step.replace("_", "-")}.yaml' if result.ok else None)
 
+        if granular:
+            parts_errors = storyboard_parts.assemble(parts_root)
+
         for correction in range(2):
             if not (scoped_script or scoped_product or scoped_medical or scoped_storyboard):
                 if result.ok:
@@ -976,7 +1040,8 @@ def _run_agent_invocation(
                 if result.ok:
                     _validate_agent_step_files(project_dir, step)
                 protected_after = {p for name in protected_dirs
-                                   for p in (repair_root / name).rglob('*.yaml')} - sibling_files
+                                   for p in (repair_root / name).rglob('*.yaml')
+                                   if not part_artifact(p)} - sibling_files
                 extra_allowed = ({repair_root / 'script/questions.yaml'} if scoped_medical
                                  and deps.read_state(project_dir) == WorkflowState.RESEARCH_IN_PROGRESS
                                  else set())
@@ -1027,13 +1092,25 @@ def _run_agent_invocation(
                 write_text_atomic(log_dir / 'repair-scope-rejection.txt', str(scope_error))
                 if correction or not result.ok:
                     raise
-                result = deps.invoke(
-                    deps.company.chain(role.id),
-                    prompt + '\nĐầu ra bị trả lại: ' + str(scope_error)
+                correction_prompt = prompt
+                if granular:
+                    correction_prompt = _build_step_prompt(
+                        root, deps, entry, project_dir, step, rewriting=rewriting, answering=answering)
+                    for scene_id, part_state in storyboard_parts.part_status(parts_root).items():
+                        if part_state == 'ok':
+                            path = parts_root / f'storyboard/parts/{scene_id}.yaml'
+                            locked_parts[path] = path.read_bytes()
+                result = invoke_agent(
+                    slots,
+                    correction_prompt + '\nĐầu ra bị trả lại: ' + str(scope_error)
                     + '\nĐã khôi phục checkpoint. Sửa lại đúng phạm vi một lần duy nhất.',
                     cwd=root, log_dir=log_dir, role=role.id, slug=entry.slug, step=step,
                     **invoke_kwargs,
                 )
+                if granular:
+                    parts_errors = storyboard_parts.assemble(parts_root)
+        if granular and scoped_storyboard and result.ok and not parts_errors:
+            (parts_root / 'reviews/storyboard-rework.yaml').unlink(missing_ok=True)
     except AllAgentsExhausted as exc:
         if checkpoint and restore_repair is not None:
             restore_repair()
@@ -1108,6 +1185,20 @@ def _run_agent_invocation(
                 log_path=result.log_path,
             )
         return "blocked", result.log_path, None, {"error": blocked_reason}
+
+    if granular and parts_errors and result.ok:
+        _record_code_changes(root, entry.slug, deps, report, before)
+        after_parts = storyboard_parts.part_status(parts_root)
+        progress = any(status == 'ok' and parts_before.get(scene_id) != 'ok'
+                       for scene_id, status in after_parts.items())
+        reason = 'Phân cảnh chưa hoàn tất:\n' + '\n'.join(parts_errors)
+        if progress:
+            return 'partial', result.log_path, None, {'error': reason}
+        _record_agent_validation_failure(
+            root, entry.slug, project_dir, step, brief_context, fingerprint, reason)
+        if mark_blocked_on_failure:
+            _mark_blocked(root, entry.slug, reason, report, log_path=result.log_path)
+        return 'blocked', result.log_path, None, {'error': reason}
 
     if not defer_validation_record:
         observed_fp = agent_fingerprint(root, project_dir, step, brief_context)
@@ -1535,6 +1626,8 @@ def _run_parallel_branches(
         return "blocked", len(branches)
     if any(outcomes[b_step][0] == "waiting_model" for b_step in branches):
         return "waiting_model", len(branches)
+    if any(outcomes[b_step][0] == "partial" for b_step in branches):
+        return "partial", len(branches)
     with _topic_lock(entry.slug):
         clear_model_resume(root, entry.slug)
     _mark_advanced(root, entry.slug, report)

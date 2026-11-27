@@ -40,7 +40,8 @@ def _project(root: Path) -> Path:
 
 def _script(project: Path, text: str) -> None:
     write_yaml_atomic(project / 'revisions/001/script/script.yaml',
-                      {'lines': [{'id': 'N01', 'text': text}]})
+                      {'title': 'Kịch bản tổng hợp cho kiểm thử',
+                       'lines': [{'id': 'N01', 'text': text}]})
 
 
 def _report(project: Path, score: int = 8, **changes) -> None:
@@ -348,7 +349,8 @@ def test_run_reviews_rewrites_with_notes_then_submits_without_approving(tmp_path
     report = run_queue(tmp_path, _deps(state, invoke))
 
     # The critic never starts on the writer's model.
-    assert calls == [('gemini-4-carbon-medium', 'review'), ('claude-sonnet-5-5-medium', 'draft'), ('gemini-4-carbon-medium', 'review')]
+    assert calls == [('gemini-4-carbon-medium', 'review'), ('gemini-4-neon-medium', 'draft'),
+                     ('gemini-4-carbon-medium', 'review')]
     assert state['submitted'] is True
     assert report.at_gate == [SLUG]
     assert report.blocked == []

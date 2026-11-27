@@ -78,6 +78,9 @@ roles:
     - draft
     - revise_medical
     tier: hard
+    rework_models:
+    - {cli: agy, model: gemini-4-neon-medium}
+    - {cli: omniroute, model: agy/gemini-4-hydrogen-medium}
     models:
     - {cli: agy, model: claude-sonnet-5-5-medium}
     - {cli: codex, model: gpt-6.1-sol}

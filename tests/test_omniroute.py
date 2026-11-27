@@ -213,7 +213,8 @@ def test_company_rejects_same_maker_model_through_different_transport(tmp_path):
     from healthvideo.company import COMPANY_PATH, load_company
 
     data = yaml.safe_load(COMPANY_PATH.read_text(encoding='utf-8'))
-    data['roles']['script_critic']['models'] = [{'cli': 'codex', 'model': 'gpt-6.1-sol'}]
+    first = data['roles']['writer']['models'][0]
+    data['roles']['script_critic']['models'] = [{'cli': 'omniroute', 'model': f"{first['cli']}/{first['model']}"}]
     path = tmp_path / 'company.yaml'
     path.write_text(yaml.safe_dump(data, allow_unicode=True), encoding='utf-8')
     with pytest.raises(ValueError, match='cùng model'):

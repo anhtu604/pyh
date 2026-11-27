@@ -23,6 +23,13 @@ from healthvideo.workflows import (
 from tests.helpers import create_v2_project_fixture
 
 
+@pytest.fixture(autouse=True)
+def offline_repair_diagnosis(monkeypatch):
+    # Editorial escalation can request diagnosis now. Unit tests use its generic
+    # fallback unless they explicitly install a synthetic diagnosis below.
+    monkeypatch.setattr(repair_service, '_ask', lambda *args, **kwargs: None)
+
+
 def test_repo_seed_playbook_validates_and_matches_known_signatures():
     repo_root = Path(__file__).resolve().parents[2]
     pb = playbook.load_playbook(repo_root)

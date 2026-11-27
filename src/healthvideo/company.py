@@ -116,6 +116,7 @@ class Role(BaseModel):
     steps: list[str]
     tier: Literal['hard', 'medium', 'bulk']
     models: list[ModelSlot] | None = None
+    rework_models: list[ModelSlot] | None = Field(default=None, min_length=1)
 
 
 class Company(BaseModel):
@@ -124,8 +125,10 @@ class Company(BaseModel):
     tiers: dict[str, list[ModelSlot]]
     roles: dict[str, Role]
 
-    def chain(self, role_id: str) -> list[ModelSlot]:
+    def chain(self, role_id: str, *, rework: bool = False) -> list[ModelSlot]:
         role = self.roles[role_id]
+        if rework and role.rework_models is not None:
+            return list(role.rework_models)
         return list(role.models if role.models is not None else self.tiers[role.tier])
 
     def role_for_step(self, step: str) -> Role:
@@ -162,7 +165,7 @@ def load_company(path: Path = COMPANY_PATH) -> Company:
     missing = AGENT_STEPS - owner.keys()
     if missing:
         raise ValueError(f'{path.name}: các bước chưa có vai: {", ".join(sorted(missing))}')
-    for critic, makers in CRITIC_OF.items():
+    for critic, makers in {**CRITIC_OF, 'art_director': ('storyboard_director',)}.items():
         if critic not in company.roles:
             continue
         maker_ids = (makers,) if isinstance(makers, str) else tuple(makers)
@@ -170,6 +173,10 @@ def load_company(path: Path = COMPANY_PATH) -> Company:
             if (maker in company.roles and company.chain(critic)[0].model_identity
                     == company.chain(maker)[0].model_identity):
                 raise ValueError(f'{path.name}: {critic!r} không được bắt đầu cùng model với {maker!r}')
+            if maker in company.roles and company.roles[maker].rework_models is not None:
+                critic_models = {slot.model_identity for slot in company.chain(critic)}
+                if critic_models & {slot.model_identity for slot in company.chain(maker, rework=True)}:
+                    raise ValueError(f'{path.name}: {critic!r} trùng model sửa của {maker!r}')
     return company
 
 
