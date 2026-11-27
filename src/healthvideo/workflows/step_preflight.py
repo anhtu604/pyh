@@ -70,11 +70,12 @@ def preflight(step: str, project_dir: Path) -> list[str]:
                 if not str(item.get(field) or '').strip():
                     errors.append(f"Hình {item.get('id', '?')}: thiếu trường {field}.")
         records = load_asset_catalog(catalog)
-        # Reuse the acquisition boundary's path, size and SHA checks, offline.
+        # Reuse the acquisition boundary's path, size and SHA checks, offline. Revision
+        # catalog paths are revision-relative (assets/r5/...), as gate_review reads them.
         with TemporaryDirectory(prefix='pyh-preflight-') as temporary:
             for record in records:
                 try:
-                    copy_used_assets(records, [record.id], catalog.parent, Path(temporary))
+                    copy_used_assets(records, [record.id], root, Path(temporary))
                 except (OSError, ValueError) as exc:
                     errors.append(f'Hình {record.id}: file/SHA-256 không hợp lệ: {exc}')
     except (OSError, ValueError, TypeError, AttributeError, yaml.YAMLError) as exc:

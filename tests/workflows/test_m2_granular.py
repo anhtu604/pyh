@@ -110,11 +110,13 @@ def test_catalog_preflight_and_zero_agent_calls(storyboard_job, defect):
     data = record(retrieved_at='2026-11-26').model_dump(mode='json')
     catalog = root / 'assets/r5/catalog.yaml'
     catalog.parent.mkdir(parents=True, exist_ok=True)
-    (catalog.parent / data['file']).write_bytes(DATA)
+    # Revision catalogs are revision-relative, like gate_review.snapshot_r5_assets reads them.
+    (root / data['file']).parent.mkdir(parents=True, exist_ok=True)
+    (root / data['file']).write_bytes(DATA)
     if defect == 'sha256':
         data['sha256'] = '0' * 64
     elif defect == 'file':
-        (catalog.parent / data['file']).unlink()
+        (root / data['file']).unlink()
     elif defect:
         data[defect] = None
     write_yaml_atomic(catalog, {'assets': [data]})
