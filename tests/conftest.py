@@ -104,3 +104,11 @@ def synthetic_workflow_alignment(monkeypatch):
     from healthvideo.workflows import produce
 
     monkeypatch.setattr(produce, "align_lines", lambda *args, **kwargs: {})
+
+
+@pytest.fixture(autouse=True)
+def legacy_fixture_speech_rate(monkeypatch):
+    """Synthetic R5 fixtures were sized at the retired voice's 16.39 chars/s."""
+    from healthvideo.render import timing
+
+    monkeypatch.setattr(timing, 'FALLBACK_CHARACTERS_PER_SECOND', 16.39181649101054)

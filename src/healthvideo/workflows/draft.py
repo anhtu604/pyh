@@ -48,11 +48,16 @@ def validate_estimated_layout(
 ) -> Storyboard:
     """Pre-gate timing check; source artifacts stay immutable, draft audio may be cached."""
     from healthvideo.render.beats import resolve_scene_beats, visual_rhythm_qa
-    from healthvideo.render.timing import estimate_line_ms, retime_storyboard
+    from healthvideo.render.timing import (
+        calibrated_rate,
+        estimate_line_ms,
+        retime_storyboard,
+    )
     from healthvideo.render.word_timing import entrance_timing_qa
 
     measured = None
-    if storyboard.quality_profile == 'r5_v1':
+    # The draft voice is another speaker; once the published voice has receipts its rate wins.
+    if storyboard.quality_profile == 'r5_v1' and calibrated_rate(project_dir, script.language) is None:
         from healthvideo.workflows.voice_preview import draft_line_ms
 
         measured = draft_line_ms(project_dir, script)

@@ -19,16 +19,49 @@ from healthvideo.storage.files import canonical_json_hash, read_yaml, sha256_fil
 TIMING_POLICY_VERSION = "1.1"
 PAD_FRAMES = 9
 
-# Measured 2026-11-12 on gout revision 001: renders/render-input.json narration
-# paired by script_line_id with renders/audio/lines/N01.wav through N30.wav.
-# After the same tts_text/apply_pronunciation preprocessing used below:
-# 9,254 characters / 564.55 WAV seconds = 16.39181649101054 characters/second.
-# One pooled constant (no per-line fitting); absolute scene errors <= 9.642%
-# on this calibration set, not an independent validation set. See report-codex-p1.md.
-# Voice: vibi_minimax / speech-2.8-hd / 1d90e9bd-a67b-4d63-a415-032eb9ce91b5,
-# speed 1.0. This fallback is an estimate, never a medical approval or TTS call.
-FALLBACK_CHARACTERS_PER_SECOND = 16.39181649101054
+# Measured 2026-11-27 on PYH-001 (an-gao-lut-muoi-me...) revision 002: 53 verified
+# cache/tts receipts, 11,164 request characters / 530.59 WAV seconds = 21.0408 chars/s.
+# Voice: vibi_minimax / speech-2.8-hd / c081d39a-4922-4c88-9615-78bb240337cd (the
+# doctor's clone), speed 1.0. The 2026-11-12 gout constant (16.39) belonged to the
+# retired voice 1d90e9bd and overestimated this voice by ~28%. Estimate only.
+FALLBACK_CHARACTERS_PER_SECOND = 21.040809209217663
 VOICE_PROFILE_PATH = Path(__file__).resolve().parents[3] / 'profiles/voice.yaml'
+
+
+def calibrated_rate(project_dir: Path, language: str, *,
+                    voice_profile: dict | None = None) -> float | None:
+    """Characters/second of the published voice from verified cache receipts, or None."""
+    profile = voice_profile if voice_profile is not None else read_yaml(VOICE_PROFILE_PATH)
+    settings = profile.get('settings', {})
+    runtime = 'rest-' + hashlib.sha256(json.dumps(settings, sort_keys=True).encode()).hexdigest()[:24]
+    characters, seconds = 0, 0.0
+    for receipt in sorted((project_dir / 'cache/tts').glob('*.json')):
+        try:
+            data = read_yaml(receipt)
+            provider, request = data['provider'], data['request']
+            if any(provider.get(k) != profile.get(k) for k in ('provider', 'voice_id', 'model_id')):
+                continue
+            # Loudness normalization keeps duration, so its '-loudnorm' runtime still calibrates.
+            if (provider.get('runtime_id') not in {runtime, f'{runtime}-loudnorm'}
+                    and provider.get('settings') != settings):
+                continue
+            # Request speed is additional to the voice profile's speed.
+            if request.get('speed', 1.0) != 1.0 or request.get('language') != language:
+                continue
+            if canonical_json_hash({'request': request, 'provider': provider}) != receipt.stem:
+                continue
+            wav = receipt.with_suffix('.wav')
+            if data['sha256'] != sha256_file(wav):
+                continue
+            with wave.open(str(wav), 'rb') as source:
+                duration = source.getnframes() / source.getframerate()
+            text = request['text']
+            if isinstance(text, str) and text.strip() and duration > 0:
+                characters += len(text)
+                seconds += duration
+        except (OSError, ValueError, TypeError, KeyError, AttributeError, EOFError, wave.Error):
+            continue
+    return characters / seconds if characters and seconds else None
 
 
 def estimate_line_ms(script: Script, project_dir: Path, *,
@@ -44,35 +77,7 @@ def estimate_line_ms(script: Script, project_dir: Path, *,
         load_pronunciation_lexicon,
     )
 
-    profile = voice_profile if voice_profile is not None else read_yaml(VOICE_PROFILE_PATH)
-    settings = profile.get('settings', {})
-    runtime = 'rest-' + hashlib.sha256(json.dumps(settings, sort_keys=True).encode()).hexdigest()[:24]
-    characters, seconds = 0, 0.0
-    for receipt in sorted((project_dir / 'cache/tts').glob('*.json')):
-        try:
-            data = read_yaml(receipt)
-            provider, request = data['provider'], data['request']
-            if any(provider.get(k) != profile.get(k) for k in ('provider', 'voice_id', 'model_id')):
-                continue
-            if provider.get('runtime_id') != runtime and provider.get('settings') != settings:
-                continue
-            # Request speed is additional to the voice profile's speed.
-            if request.get('speed', 1.0) != 1.0 or request.get('language') != script.language:
-                continue
-            if canonical_json_hash({'request': request, 'provider': provider}) != receipt.stem:
-                continue
-            wav = receipt.with_suffix('.wav')
-            if data['sha256'] != sha256_file(wav):
-                continue
-            with wave.open(str(wav), 'rb') as source:
-                duration = source.getnframes() / source.getframerate()
-            text = request['text']
-            if isinstance(text, str) and text.strip() and duration > 0:
-                characters += len(text)
-                seconds += duration
-        except (OSError, ValueError, TypeError, KeyError, AttributeError, EOFError, wave.Error):
-            continue
-    rate = characters / seconds if characters and seconds else FALLBACK_CHARACTERS_PER_SECOND
+    rate = calibrated_rate(project_dir, script.language, voice_profile=voice_profile)         or FALLBACK_CHARACTERS_PER_SECOND
     lexicon = load_pronunciation_lexicon(PRONUNCIATION_PROFILE_PATH)
     if len({line.id for line in script.lines}) != len(script.lines):
         raise ValueError('Script line IDs must be unique for estimated timing')
