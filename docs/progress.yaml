@@ -582,3 +582,8 @@ phases:
     status: done
     owner: agy
     note: 'Xong (4c239af): dải đỏ trên cùng khi có cổng/câu hỏi chờ, nút Xem ngay, phím N nhảy tới việc chờ; bấm nút chuông cạnh Sáng/Tối để bật chuông và thông báo trình duyệt; tiếng ding khi xử lý xong.'
+  - id: R5.STORY
+    title: Thêm component StoryShot cho shot kể chuyện không chữ (R5)
+    status: doing
+    owner: agy
+    note: 'Đang làm: storyboard gán TakeawayCard không chữ cho ~100 shot mỗi video vì R5 chưa có component cho shot kể chuyện thuần; thêm StoryShot (TS+Python), kiểm điều kiện component trước cổng.'
