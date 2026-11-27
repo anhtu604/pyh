@@ -35,7 +35,8 @@ def validate_hook_outro(
         raise ValueError("M6.4 script line IDs must be unique")
     for line, scene in zip(script.lines, storyboard.scenes, strict=True):
         if scene.script_line_id != line.id or scene.narration != line.text:
-            raise ValueError("M6.4 line and scene mismatch")
+            # Name the scene so storyboard rework can scope the fix to it.
+            raise ValueError(f"M6.4 line and scene mismatch: {scene.id} ({line.id})")
     final = storyboard.scenes[-1]
     if final.visual != "brand_outro" or final.claim_id or final.source_marker:
         raise ValueError("M6.4 final scene must be nonmedical brand_outro")
