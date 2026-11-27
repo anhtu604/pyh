@@ -188,7 +188,7 @@ def sync_bundle_public(public_dir: Path, bundle_dir: Path, *, verify_bytes: bool
     dst_root = (bundle_dir / "public").resolve()
     if not src_root.is_dir():
         return
-    dst_root.mkdir(parents=True, exist_ok=True)
+    os.makedirs(_fs_path(dst_root), exist_ok=True)
     for item in src_root.rglob("*"):
         if not item.is_file():
             continue
@@ -198,9 +198,12 @@ def sync_bundle_public(public_dir: Path, bundle_dir: Path, *, verify_bytes: bool
         if item.suffix.lower() in {".mp4", ".tmp"}:
             continue
         target = dst_root / rel
-        if verify_bytes and (not target.is_file() or sha256_file(item) != sha256_file(target)):
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(item, target)
+        # Bundles sit under long project slugs: every touch of target must be MAX_PATH-safe.
+        target_fs = Path(_fs_path(target))
+        if verify_bytes and (not target_fs.is_file()
+                             or sha256_file(Path(_fs_path(item))) != sha256_file(target_fs)):
+            os.makedirs(os.path.dirname(target_fs), exist_ok=True)
+            shutil.copy2(_fs_path(item), target_fs)
         else:
             _copy_if_newer(item, target)
 
