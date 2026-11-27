@@ -574,6 +574,6 @@ phases:
     note: 'Xong (8f603cc, 4677b9c): phân cảnh/sửa lỗi chạy Neon; biên kịch sửa theo góp ý chạy Neon; code kiểm đầu vào trước khi gọi agent; phân cảnh lưu từng cảnh, chạy lại chỉ cảnh chưa đạt.'
   - id: M3
     title: Sửa gốc 4 nhóm lỗi lặp (sản phẩm tự cập nhật theo nhau, ghi chú cũ tự hết hạn, lỗi chỉ đúng chỗ, sửa lỗi không đụng code)
-    status: doing
+    status: done
     owner: agy
-    note: 'Hai nhánh song song: M3a (storyboard tự tách cảnh, tự định vị lỗi, luật chỉ học từ bác sĩ) và M3b (yêu cầu sửa không lặp, phiếu sửa code cho dev lead, kiểm đầu vào mọi bước). Có bộ test tái hiện sự cố PYH-001.'
+    note: 'Xong: storyboard cũ tự tách cảnh trước cổng y khoa; lỗi tự định vị cảnh; luật chỉ học khi bác sĩ chọn rõ và chỉ áp cho đúng dự án; cảnh kết do code chuẩn hoá; yêu cầu sửa kịch bản tự đóng sau 2 lần; kỹ sư sửa lỗi mở phiếu topics/dev-tickets thay vì sửa code; kiểm đầu vào cho draft/script_review/voice_prep/shorts_plan. pytest 3293 đạt.'
