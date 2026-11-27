@@ -17,6 +17,7 @@ import {
   type R5RevisionAsset,
   type ScaleTier,
 } from '../components/r5/ScaleChain';
+import {StoryShot, type StoryShotMascot} from '../components/r5/StoryShot';
 import {TakeawayCard, type TakeawayMascotConfig} from '../components/r5/TakeawayCard';
 import {VnLabSheet, type VnLabRow} from '../components/r5/VnLabSheet';
 import {ZoomChain, type ZoomAnchor, type ZoomLandmark} from '../components/r5/ZoomChain';
@@ -379,6 +380,25 @@ const renderLiverLeakSignature: R5ShotRenderer = ({
   );
 };
 
+const renderStoryShot: R5ShotRenderer = ({scene, shot, layout, assets, frame}) => {
+  const mascotAsset = (scene.visual_assets ?? []).find((a) => a.role === 'mascot');
+  const mascot: StoryShotMascot | null = mascotAsset
+    ? {assetPath: mascotAsset.path, pose: mascotAsset.pose ?? 'explain'}
+    : null;
+  if (assets.length === 0 && !mascot) {
+    failShot(scene.id, shot.id, 'StoryShot requires at least one licensed asset_path or a scene mascot');
+  }
+  return (
+    <StoryShot
+      shot={shot}
+      layout={layout}
+      assets={assets}
+      mascot={mascot}
+      frame={frame}
+    />
+  );
+};
+
 /** Fixed registry of allowed R5 shot components. Unknown component IDs always fail closed. */
 export const R5_COMPONENT_REGISTRY: Readonly<Record<R5ComponentId, R5ShotRenderer>> = Object.freeze({
   ScaleChain: renderScaleChain,
@@ -388,6 +408,7 @@ export const R5_COMPONENT_REGISTRY: Readonly<Record<R5ComponentId, R5ShotRendere
   ReferenceDistribution: renderReferenceDistribution,
   CreditCard: renderCreditCard,
   R5LiverLeakSignature: renderLiverLeakSignature,
+  StoryShot: renderStoryShot,
 });
 
 export type ActiveR5ShotResolution = {

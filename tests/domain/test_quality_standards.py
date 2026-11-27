@@ -210,5 +210,58 @@ def test_takeaway_card_without_text_window_is_rejected():
     board = Storyboard(title="Synthetic", quality_profile="r5_v1", r5_contract=contract_payload(),
                        scenes=[{"id": "S05", "start_frame": 0, "duration_frames": 120, "narration": "Synthetic.",
                                 "visual": "whiteboard", "on_screen_text": "Synthetic", "shots": [shot]}])
-    with pytest.raises(ValueError, match="S05 shot SH1: TakeawayCard requires a takeaway or question text_window"):
+    with pytest.raises(
+        ValueError,
+        match="S05 shot SH1: TakeawayCard requires a takeaway or question text_window; dùng StoryShot",
+    ):
         validate_r5_contract(board, script)
+
+
+def test_reference_distribution_without_text_or_action_is_rejected():
+    script = Script(title="Synthetic", lines=[{"id": f"L{i}", "text": "First? Second?" if i == 1 else "Synthetic."}
+                                               for i in range(1, 4)])
+    shot = {**shot_payload(), "kind": "story", "tier": None, "component": "ReferenceDistribution",
+            "asset_paths": [], "actions": [], "text_windows": []}
+    board = Storyboard(title="Synthetic", quality_profile="r5_v1", r5_contract=contract_payload(),
+                       scenes=[{"id": "S06", "start_frame": 0, "duration_frames": 120, "narration": "Synthetic.",
+                                "visual": "whiteboard", "on_screen_text": "Synthetic", "shots": [shot]}])
+    with pytest.raises(
+        ValueError,
+        match="S06 shot SH1: ReferenceDistribution requires at least one text_window or action",
+    ):
+        validate_r5_contract(board, script)
+
+
+def test_story_shot_without_text_passes_with_asset_or_mascot_and_rejects_empty():
+    script = Script(title="Synthetic", lines=[{"id": f"L{i}", "text": "First? Second?" if i == 1 else "Synthetic."}
+                                               for i in range(1, 4)])
+    base_shot = {**shot_payload(), "kind": "story", "tier": None, "component": "StoryShot",
+                 "actions": [], "text_windows": []}
+    # Passes with licensed asset_paths and no text_windows/actions.
+    board_with_asset = Storyboard(
+        title="Synthetic", quality_profile="r5_v1", r5_contract=contract_payload(),
+        scenes=[{"id": "S07", "start_frame": 0, "duration_frames": 120, "narration": "Synthetic.",
+                 "visual": "whiteboard", "on_screen_text": "Synthetic",
+                 "shots": [{**base_shot, "asset_paths": ["assets/r5/story.svg"]}]}],
+    )
+    validate_r5_contract(board_with_asset, script)
+
+    # Passes with empty asset_paths when scene has a mascot visual_asset.
+    board_with_mascot = Storyboard(
+        title="Synthetic", quality_profile="r5_v1", r5_contract=contract_payload(),
+        scenes=[{"id": "S08", "start_frame": 0, "duration_frames": 120, "narration": "Synthetic.",
+                 "visual": "whiteboard", "on_screen_text": "Synthetic",
+                 "visual_assets": [{"path": "assets/brand/explain.png", "role": "mascot", "pose": "explain"}],
+                 "shots": [{**base_shot, "asset_paths": []}]}],
+    )
+    validate_r5_contract(board_with_mascot, script)
+
+    # Rejected when neither asset_paths nor scene mascot is present.
+    board_empty = Storyboard(
+        title="Synthetic", quality_profile="r5_v1", r5_contract=contract_payload(),
+        scenes=[{"id": "S09", "start_frame": 0, "duration_frames": 120, "narration": "Synthetic.",
+                 "visual": "whiteboard", "on_screen_text": "Synthetic",
+                 "shots": [{**base_shot, "asset_paths": []}]}],
+    )
+    with pytest.raises(ValueError, match="S09 shot SH1: StoryShot requires asset_paths or a scene mascot"):
+        validate_r5_contract(board_empty, script)

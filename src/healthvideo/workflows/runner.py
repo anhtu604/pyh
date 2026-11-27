@@ -645,7 +645,7 @@ def _r5_prompt_block(step: str, slug: str) -> str:
             "## Revision này dùng chuẩn R5 (quality_profile: r5_v1)\n"
             "- Revision này đã ghim chuẩn chất lượng R5 (`workflow/standards.yaml` -> `quality_standard.profile: r5_v1`).\n"
             "- `storyboard/storyboard.yaml` BẮT BUỘC khai `quality_profile: r5_v1` và `r5_contract` (`questions` 2–4 câu khớp `hook_line_id`/`answer_line_ids` trong `script/script.yaml`; `blocks` có `line_ids`, `question_ids`, `takeaway_line_id`, ít nhất 1 khối `professional_update: true`).\n"
-            "- Mỗi scene BẮT BUỘC có `shots` dùng component trong registry cố định (`ScaleChain`, `ZoomChain`, `TakeawayCard`, `VnLabSheet`, `ReferenceDistribution`, `CreditCard`, `R5LiverLeakSignature`), anchor cụm thật thuộc lời đọc, `actions` và `text_windows` đạt D1/D2 (cấm tab layout).\n"
+            "- Mỗi scene BẮT BUỘC có `shots` dùng component trong registry cố định (`ScaleChain`, `ZoomChain`, `TakeawayCard`, `VnLabSheet`, `ReferenceDistribution`, `CreditCard`, `R5LiverLeakSignature`, `StoryShot`), anchor cụm thật thuộc lời đọc, `actions` và `text_windows` đạt D1/D2 (cấm tab layout). Shot kể chuyện không chữ, không dữ liệu dùng `StoryShot`; `TakeawayCard` chỉ khi có takeaway/question.\n"
             f"- Asset y khoa/giải phẫu phải lấy từ `assets/r5/catalog.yaml` (dàn từ thư viện repo bằng `healthvideo step stage-r5-assets {slug} --catalog library/medanim/<chủ đề>/assets.yaml --ids <id,...>`, không chép hash tay, không tải mạng) và khai báo đầy đủ trong `assets/asset-manifest.yaml`."
         )
     if step == "shorts_plan":

@@ -549,7 +549,8 @@
             "VnLabSheet",
             "ReferenceDistribution",
             "CreditCard",
-            "R5LiverLeakSignature"
+            "R5LiverLeakSignature",
+            "StoryShot"
           ],
           "title": "Component",
           "type": "string"
@@ -764,7 +765,8 @@
             "VnLabSheet",
             "ReferenceDistribution",
             "CreditCard",
-            "R5LiverLeakSignature"
+            "R5LiverLeakSignature",
+            "StoryShot"
           ],
           "title": "Component",
           "type": "string"

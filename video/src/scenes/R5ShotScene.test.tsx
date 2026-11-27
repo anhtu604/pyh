@@ -40,10 +40,10 @@ const makeShotForComponent = (
       ? 'credit'
       : component === 'TakeawayCard'
         ? 'recap'
-        : component === 'VnLabSheet'
+        : component === 'VnLabSheet' || component === 'StoryShot'
           ? 'story'
           : 'mechanism') as ResolvedR5Shot['kind'],
-    tier: component === 'CreditCard' ? null : 'organ',
+    tier: component === 'CreditCard' || component === 'StoryShot' ? null : 'organ',
     component,
     asset_paths:
       component === 'TakeawayCard'
@@ -157,15 +157,17 @@ const makeShotForComponent = (
                         end_frame: 180,
                       },
                     ]
-                  : [
-                      {
-                        kind: 'label' as const,
-                        text: 'Tế bào gan',
-                        claim_ids: ['C01'],
-                        start_frame: 0,
-                        end_frame: 90,
-                      },
-                    ],
+                  : component === 'StoryShot'
+                    ? []
+                    : [
+                        {
+                          kind: 'label' as const,
+                          text: 'Tế bào gan',
+                          claim_ids: ['C01'],
+                          start_frame: 0,
+                          end_frame: 90,
+                        },
+                      ],
   };
 
   return ResolvedR5ShotSchema.parse({...base, ...overrides});
@@ -335,5 +337,34 @@ describe('R5ShotScene registry routing and caption policy', () => {
       entrances: [{text: 'ALT\t240 U/L\t< 40', start_frame: 0}],
     });
     expect(() => renderScene(tabScene, LAYOUTS.youtube_long)).toThrow(/S95.*tab layout/i);
+  });
+
+  it('routes StoryShot with asset, with mascot-only fallback, and fails closed when neither exists', () => {
+    expect(R5_COMPONENT_REGISTRY.StoryShot).toBeTypeOf('function');
+
+    const assetShot = makeShotForComponent('StoryShot', {
+      id: 'SH-STORY-A',
+      asset_paths: ['assets/medanim/sample-organ.svg'],
+      actions: [],
+      text_windows: [],
+    });
+    const assetHtml = renderScene(makeScene([assetShot], {visual_assets: []}), LAYOUTS.youtube_long, 30);
+    expect(assetHtml).toContain('data-r5-component="StoryShot"');
+    expect(assetHtml).toContain('data-story-mode="asset"');
+
+    const mascotOnlyShot = makeShotForComponent('StoryShot', {
+      id: 'SH-STORY-M',
+      asset_paths: [],
+      actions: [],
+      text_windows: [],
+    });
+    const mascotHtml = renderScene(makeScene([mascotOnlyShot]), LAYOUTS.vertical_clip, 30);
+    expect(mascotHtml).toContain('data-r5-component="StoryShot"');
+    expect(mascotHtml).toContain('data-story-mode="mascot"');
+    expect(mascotHtml).toContain('aria-label="Phụ đề đang đọc"');
+
+    expect(() =>
+      renderScene(makeScene([mascotOnlyShot], {id: 'S94', visual_assets: []}), LAYOUTS.youtube_long, 30),
+    ).toThrow(/S94\/SH-STORY-M.*StoryShot requires/i);
   });
 });

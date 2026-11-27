@@ -66,11 +66,11 @@ def r5_standard_snapshot() -> dict[str, object]:
 # IDs reserved for R5.3.5/.6/.7, never module names or executable paths.
 R5Component = Literal[
     "ScaleChain", "ZoomChain", "TakeawayCard", "VnLabSheet",
-    "ReferenceDistribution", "CreditCard", "R5LiverLeakSignature",
+    "ReferenceDistribution", "CreditCard", "R5LiverLeakSignature", "StoryShot",
 ]
 R5_COMPONENT_IDS = (
     "ScaleChain", "ZoomChain", "TakeawayCard", "VnLabSheet",
-    "ReferenceDistribution", "CreditCard", "R5LiverLeakSignature",
+    "ReferenceDistribution", "CreditCard", "R5LiverLeakSignature", "StoryShot",
 )
 ShotKind = Literal["story", "mechanism", "recap", "credit"]
 TextKind = Literal[
@@ -304,17 +304,22 @@ def validate_r5_contract(board: Storyboard, script: Script) -> None:
         # Report every card at once so one rework round fixes them all.
         too_long = []
         for scene in board.scenes:
+            has_mascot = any(asset.role == "mascot" for asset in scene.visual_assets)
             for shot in scene.shots:
                 # Mirror R5ShotScene.tsx preconditions so the storyboard fails here, not in Remotion.
                 kinds = {w.kind for w in shot.text_windows}
                 where = f"Scene {scene.id} shot {shot.id}: {shot.component}"
                 if shot.component == "VnLabSheet" and not kinds & {"lab_sheet", "table"}:
                     too_long.append(f"{where} requires a lab_sheet or table text_window")
+                if shot.component == "ReferenceDistribution" and not (shot.text_windows or shot.actions):
+                    too_long.append(f"{where} requires at least one text_window or action")
+                if shot.component == "StoryShot" and not (shot.asset_paths or has_mascot):
+                    too_long.append(f"{where} requires asset_paths or a scene mascot in visual_assets")
                 if shot.component != "TakeawayCard":
                     continue
                 if not any(w.kind in {"takeaway", "question"} for w in shot.text_windows):
                     too_long.append(f"Scene {scene.id} shot {shot.id}: TakeawayCard requires a takeaway or "
-                                    "question text_window; use another component for shots without card text")
+                                    "question text_window; dùng StoryShot cho shot kể chuyện không chữ")
                 for window in shot.text_windows:
                     words = len(window.text.split())
                     if window.kind in {"takeaway", "question"} and not 1 <= words <= R5_MAX_TAKEAWAY_WORDS:

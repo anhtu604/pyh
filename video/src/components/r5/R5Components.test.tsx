@@ -29,6 +29,7 @@ import {
   type R5RevisionAsset,
   type ScaleTier,
 } from './ScaleChain';
+import {computeStoryShotGeometry, StoryShot} from './StoryShot';
 import {
   computeTakeawayGeometry,
   R5_MAX_MASCOT_AREA_RATIO,
@@ -499,8 +500,125 @@ describe('determinism across all R5 components', () => {
         <CreditCard shot={shot} layout={layout} assets={revisionAssets.slice(0, 1)} frame={42} />,
         layout,
       ),
+      renderWithLayout(
+        <StoryShot
+          shot={makeShot({component: 'StoryShot', kind: 'story', tier: null, actions: [], text_windows: []})}
+          layout={layout}
+          assets={revisionAssets}
+          frame={42}
+        />,
+        layout,
+      ),
     ];
 
     expect(renderAll()).toEqual(renderAll());
+  });
+});
+
+describe('StoryShot', () => {
+  it.each([
+    ['16:9', LAYOUTS.youtube_long],
+    ['9:16', LAYOUTS.vertical_clip],
+  ] as const)('renders licensed asset with frame-driven push-in/pan and no text in %s', (label, layout) => {
+    const shot = makeShot({
+      id: 'SH-STORY-ASSET',
+      kind: 'story',
+      tier: null,
+      component: 'StoryShot',
+      asset_paths: ['assets/medanim/sample-organ.svg'],
+      actions: [],
+      text_windows: [],
+    });
+    const earlyGeom = computeStoryShotGeometry({shot, layout, assets: revisionAssets, frame: 10});
+    const lateGeom = computeStoryShotGeometry({shot, layout, assets: revisionAssets, frame: 200});
+    const html = renderWithLayout(
+      <StoryShot shot={shot} layout={layout} assets={revisionAssets} frame={60} />,
+      layout,
+    );
+
+    expect(earlyGeom.mode).toBe('asset');
+    expect(lateGeom.motion.scale).toBeGreaterThan(earlyGeom.motion.scale);
+    expect(lateGeom.motion.tx).not.toBe(earlyGeom.motion.tx);
+    expect(html).toContain('data-r5-component="StoryShot"');
+    expect(html).toContain(`data-layout="${label}"`);
+    expect(html).toContain('data-story-mode="asset"');
+    expect(html).toContain('static://assets/medanim/sample-organ.svg');
+    expect(html).not.toContain('data-story-label=');
+    expect(html).not.toContain('data-story-mascot=');
+
+    if (label === '9:16') {
+      assertClearsPortraitCaptions(earlyGeom.stageBox, layout);
+    }
+  });
+
+  it.each([
+    ['16:9', LAYOUTS.youtube_long],
+    ['9:16', LAYOUTS.vertical_clip],
+  ] as const)('falls back to scene mascot with gentle breathing/tilt when no asset is present in %s', (label, layout) => {
+    const shot = makeShot({
+      id: 'SH-STORY-MASCOT',
+      kind: 'story',
+      tier: null,
+      component: 'StoryShot',
+      asset_paths: [],
+      actions: [],
+      text_windows: [],
+    });
+    const mascot = {assetPath: 'assets/brand/mascot/explain.png', pose: 'explain' as const};
+    const geomA = computeStoryShotGeometry({shot, layout, assets: [], mascot, frame: 5});
+    const geomB = computeStoryShotGeometry({shot, layout, assets: [], mascot, frame: 25});
+    const html = renderWithLayout(
+      <StoryShot shot={shot} layout={layout} assets={[]} mascot={mascot} frame={25} />,
+      layout,
+    );
+
+    expect(geomA.mode).toBe('mascot');
+    expect(geomA.mascotBox).not.toBeNull();
+    expect(geomB.motion.ty).not.toBe(geomA.motion.ty);
+    expect(geomB.motion.rotateDeg).not.toBe(geomA.motion.rotateDeg);
+    expect(html).toContain('data-story-mode="mascot"');
+    expect(html).toContain('data-story-mascot="true"');
+    expect(html).toContain('static://assets/brand/mascot/explain.png');
+
+    if (label === '9:16' && geomA.mascotBox) {
+      assertClearsPortraitCaptions(geomA.mascotBox, layout);
+    }
+  });
+
+  it('renders optional label text_windows only and throws when neither asset nor mascot exists', () => {
+    const withLabel = makeShot({
+      id: 'SH-STORY-LABEL',
+      kind: 'story',
+      tier: null,
+      component: 'StoryShot',
+      asset_paths: ['assets/medanim/sample-organ.svg'],
+      actions: [],
+      text_windows: [
+        {kind: 'label', text: 'Bữa ăn tối', claim_ids: [], exception_reason: null, start_frame: 0, end_frame: 120},
+        {kind: 'takeaway', text: 'Không vẽ chữ này', claim_ids: [], exception_reason: null, start_frame: 0, end_frame: 120},
+      ],
+    });
+    const html = renderWithLayout(
+      <StoryShot shot={withLabel} layout={LAYOUTS.youtube_long} assets={revisionAssets} frame={30} />,
+      LAYOUTS.youtube_long,
+    );
+    expect(html).toContain('Bữa ăn tối');
+    expect(html).not.toContain('Không vẽ chữ này');
+
+    const emptyShot = makeShot({
+      id: 'SH-STORY-EMPTY',
+      kind: 'story',
+      tier: null,
+      component: 'StoryShot',
+      asset_paths: [],
+      actions: [],
+      text_windows: [],
+    });
+    expect(() =>
+      renderWithLayout(
+        <StoryShot shot={emptyShot} layout={LAYOUTS.youtube_long} assets={[]} mascot={null} frame={15} />,
+        LAYOUTS.youtube_long,
+      ),
+    ).toThrow(/SH-STORY-EMPTY.*licensed asset or a scene mascot/i);
   });
 });

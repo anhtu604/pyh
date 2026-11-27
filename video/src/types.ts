@@ -8,7 +8,7 @@ const safeRelativePath = z.string().regex(/^(?!\.?\/?$)(?![A-Za-z]:)(?!\/)(?!.*\
 
 // Wire contracts shared with domain/quality_standards.py. All R5 objects fail closed.
 export const R5_COMPONENT_IDS = ['ScaleChain', 'ZoomChain', 'TakeawayCard', 'VnLabSheet',
-  'ReferenceDistribution', 'CreditCard', 'R5LiverLeakSignature'] as const;
+  'ReferenceDistribution', 'CreditCard', 'R5LiverLeakSignature', 'StoryShot'] as const;
 const r5Nonblank = z.string().regex(/\S/);
 export const R5RevisionAssetSchema = z.object({
   id: r5Nonblank, path: safeRelativePath, title: r5Nonblank, author: r5Nonblank,
