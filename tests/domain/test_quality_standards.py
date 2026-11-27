@@ -192,6 +192,10 @@ def test_takeaway_card_word_limit_covers_clip_only_scenes():
                               "start": {"kind": "scene_start"}, "end": {"kind": "scene_end"}}]}
     scene = {"id": "S52", "start_frame": 0, "duration_frames": 120, "narration": "Synthetic.",
              "clip_only": "CL01", "visual": "brand_outro", "shots": [shot]}
-    board = Storyboard(title="Synthetic", quality_profile="r5_v1", r5_contract=contract_payload(), scenes=[scene])
-    with pytest.raises(ValueError, match="S52 shot SH1: TakeawayCard question needs 1..8 words, got 10"):
+    other = copy.deepcopy(scene)
+    other["id"], other["shots"][0]["id"] = "S53", "SH2"
+    board = Storyboard(title="Synthetic", quality_profile="r5_v1", r5_contract=contract_payload(),
+                       scenes=[scene, other])
+    with pytest.raises(ValueError, match="S52 shot SH1: TakeawayCard question needs 1..8 words, got 10") as error:
         validate_r5_contract(board, script)
+    assert "S53 shot SH2" in str(error.value)

@@ -301,6 +301,8 @@ def validate_r5_contract(board: Storyboard, script: Script) -> None:
 
     if board.quality_profile is not None:
         # Clip-only scenes are filtered below, yet Remotion renders them too (TakeawayCard.tsx).
+        # Report every card at once so one rework round fixes them all.
+        too_long = []
         for scene in board.scenes:
             for shot in scene.shots:
                 if shot.component != "TakeawayCard":
@@ -308,8 +310,10 @@ def validate_r5_contract(board: Storyboard, script: Script) -> None:
                 for window in shot.text_windows:
                     words = len(window.text.split())
                     if window.kind in {"takeaway", "question"} and not 1 <= words <= R5_MAX_TAKEAWAY_WORDS:
-                        raise ValueError(f"Scene {scene.id} shot {shot.id}: TakeawayCard {window.kind} needs "
-                                         f"1..{R5_MAX_TAKEAWAY_WORDS} words, got {words}")
+                        too_long.append(f"Scene {scene.id} shot {shot.id}: TakeawayCard {window.kind} needs "
+                                        f"1..{R5_MAX_TAKEAWAY_WORDS} words, got {words}")
+        if too_long:
+            raise ValueError("\n".join(too_long))
     board = long_form_storyboard(board)
     script = long_form_script(script)
     if board.quality_profile is None:
