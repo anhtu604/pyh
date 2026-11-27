@@ -579,6 +579,6 @@ phases:
     note: 'Xong: storyboard cũ tự tách cảnh trước cổng y khoa; lỗi tự định vị cảnh; luật chỉ học khi bác sĩ chọn rõ và chỉ áp cho đúng dự án; cảnh kết do code chuẩn hoá; yêu cầu sửa kịch bản tự đóng sau 2 lần; kỹ sư sửa lỗi mở phiếu topics/dev-tickets thay vì sửa code; kiểm đầu vào cho draft/script_review/voice_prep/shorts_plan. pytest 3293 đạt.'
   - id: UI.ALERT
     title: App báo bằng âm thanh và thông báo khi có việc chờ bác sĩ (học từ giao diện agent-office)
-    status: doing
+    status: done
     owner: agy
-    note: 'Đang làm: chuông + thông báo trình duyệt + dải đỏ khi có cổng/câu hỏi mới; nút nhảy tới việc đang chờ; tiếng ding khi dự án qua bước.'
+    note: 'Xong (4c239af): dải đỏ trên cùng khi có cổng/câu hỏi chờ, nút Xem ngay, phím N nhảy tới việc chờ; bấm nút chuông cạnh Sáng/Tối để bật chuông và thông báo trình duyệt; tiếng ding khi xử lý xong.'
