@@ -238,6 +238,9 @@ def test_medical_submission_marks_review_cycle_without_losing_history(tmp_path):
     submit_medical_review(project)
     log = read_yaml(project / 'revisions/001' / LOG)
     assert log['submitted'] == len(log['rounds']) == 2
+    # An unchanged script keeps its pass; any edit after submission needs a new round.
+    assert next_script_action(project) == 'submit_medical'
+    _script(project, 'Sửa sau khi nộp')
     assert next_script_action(project) == 'script_review'
 
 
@@ -721,3 +724,16 @@ def test_r5_reset_cannot_grant_new_review_budget(tmp_path):
         with pytest.raises(ValueError, match='budget'):
             next_script_action(project, create_question=False)
     assert review_budget_status(revision, 'script')['used'] == 2
+
+
+def test_identical_resubmission_keeps_passed_review(tmp_path):
+    # PYH-001 2026-11-27: a storyboard-only reopen resubmitted the unchanged script and the
+    # factory demanded a fourth critic round, exhausting the review budget.
+    from healthvideo.workflows import script_review
+
+    project = _project(tmp_path)
+    assert _review(project, 8)['passed'] is True
+    script_review.mark_submitted(project / 'revisions/001')
+    assert next_script_action(project) == 'submit_medical'
+    _script(project, 'Đổi lời sau khi nộp lại')
+    assert next_script_action(project) == 'script_review'

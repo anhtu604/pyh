@@ -244,7 +244,16 @@ def next_script_action(
         total = len(log['rounds']) - start
         raise ValueError(f'{CYCLE_LIMIT_REASON} ({total} vòng); tiêu chí kẹt: {stuck}. '
                          'Bác sĩ gửi hướng dẫn cho Biên kịch qua chat để mở chu kỳ mới.')
-    if not rounds or rounds[-1]['script_sha256'] != current:
+    if not rounds:
+        # Resubmitting a byte-identical script (e.g. after a storyboard-only reopen) keeps its
+        # passed review; a new critic round would only burn the revision budget. A pending
+        # change request still forces a fresh review.
+        from healthvideo.workflows import change_request
+
+        rounds = _rounds(artifact_root)[-1:]
+        if not (rounds and rounds[-1]['passed']) or change_request.pending(project):
+            return 'script_review'
+    if rounds[-1]['script_sha256'] != current:
         return 'script_review'
     if rounds[-1]['passed']:
         require_passed_review(project)

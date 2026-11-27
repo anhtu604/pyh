@@ -130,10 +130,11 @@ def test_edit_script_without_line_ids_unchanged_script_marks_applied_and_advance
     if retry_file.is_file():
         assert "draft" not in (read_yaml(retry_file).get("steps") or {})
 
-    # Next step: script_review (since script has not passed review yet).
+    # Next step: the fixture's passed review still matches the unchanged script, so no
+    # critic round is spent; the python submit_medical step runs instead.
     calls.clear()
     run_queue(tmp_path, _deps(fake_invoke, storyboard_ready=True), once=True)
-    assert calls == ["script_review"]
+    assert calls == []
 
     # When review already passed and storyboard is not ready -> next step is storyboard_design.
     _record_passing_script_review(project)

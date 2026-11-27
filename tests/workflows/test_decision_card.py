@@ -90,7 +90,8 @@ def test_resubmission_starts_new_review_cycle(tmp_path):
         report(project)
     assert sr.next_script_action(project) == 'submit_medical'
     sr.mark_submitted(project / 'revisions/001')
-    assert sr.next_script_action(project) == 'script_review'
+    # An unchanged resubmission keeps its pass (edits are covered in test_script_review).
+    assert sr.next_script_action(project) == 'submit_medical'
     assert sr.review_view(project / 'revisions/001')['round'] == sr.MAX_REVIEWS
 
 

@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pytest
@@ -340,7 +340,9 @@ def test_extracted_liver_catalog_preserves_original_provenance():
     assert all(isinstance(asset_id, str) for asset_id in raw['assets'])
     entry = load_medanim_entry(path)
     assert len(entry.assets) == 10
-    assert all(a.id and a.retrieved_at is None for a in entry.assets)
+    # Dates are only added after a re-download whose SHA-256 matches the pinned bytes.
+    verified = {'reactome-muscle-r-ico-014108': date(2026, 11, 27)}
+    assert all(a.id and a.retrieved_at == verified.get(a.id) for a in entry.assets)
     assert entry.assets[0].sha256 == '4eb567dbe9159feae60c151d688f441378ce24447bcc04128ef1f6f52774bf24'
 
 
