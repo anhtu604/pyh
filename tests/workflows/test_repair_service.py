@@ -58,63 +58,78 @@ def test_leader_assigns_independent_engineer_and_accepts_before_retry(job):
     commands = []
 
     def run(argv, **kwargs):
-        assert kwargs['shell'] is False
-        assert not released
         commands.append(argv)
         return CompletedProcess(argv, 0, 'passed', '')
 
-    assert repair.repair_once(root, project.name, run=run) == 'retry_requested'
-    assert stages == [('coordinator_senior', 'repair_diagnose'), ('repair_engineer', 'repair'),
-                      ('coordinator_senior', 'repair_accept')]
-    assert len(commands) == 2
-    assert any('test_script_review.py' in str(part) for part in commands[0])
-    assert released == [(root, project.name)]
-    assert 'False' in source.read_text()
-    assert read_yaml(logs / repair.REPORT)['acceptance']['passed'] is True
+    assert repair.repair_once(root, project.name, run=run) == 'awaiting_dev'
+    assert stages == [('coordinator_senior', 'repair_diagnose')]
+    assert commands == []
+    assert released == []
+    assert 'True' in source.read_text()
+    report = read_yaml(logs / repair.REPORT)
+    assert report['phase'] == 'awaiting_dev'
+    assert report['attempts'] == 0
+    tickets = list((root / 'topics/dev-tickets').glob(f'*-{project.name}.yaml'))
+    assert len(tickets) == 1
+    assert 'Chờ dev lead sửa code:' in (logs / 'blocked.txt').read_text(encoding='utf-8')
 
 
-def test_failed_tests_restore_original_code_and_never_release_retry(job):
+def test_failed_tests_restore_original_code_and_never_release_retry(job, monkeypatch):
     root, project, logs, source, released, stages = job
     before = source.read_bytes()
-    run = lambda argv, **kwargs: CompletedProcess(argv, 1, '', 'failed regression')
-    assert repair.repair_once(root, project.name, run=run) == 'repair_failed'
+
+    def ask_retry_declined(root, slug, role, step, *args):
+        stages.append((role, step))
+        if step == 'repair_diagnose':
+            return repair.Diagnosis(action='retry', cause='Fixture fault', evidence=['fixture log'],
+                                    brief='Verify transient recovery.')
+        return repair.Acceptance(passed=False, reason='Cause still unresolved')
+
+    monkeypatch.setattr(repair, '_ask', ask_retry_declined)
+    assert repair.repair_once(root, project.name) == 'repair_failed'
     assert source.read_bytes() == before
     assert released == []
-    assert not any(step == 'repair_accept' for _, step in stages)
-    repair.repair_once(root, project.name, run=run)
-    assert repair.repair_once(root, project.name, run=run) == 'exhausted'
+    repair.repair_once(root, project.name)
+    assert repair.repair_once(root, project.name) == 'exhausted'
     assert read_yaml(logs / repair.REPORT)['attempts'] == repair.MAX_REPAIRS
     assert read_yaml(logs / repair.REPORT)['phase'] == 'needs_attention'
 
 
-def test_new_block_reason_gets_repair_after_previous_budget_is_exhausted(job):
+def test_new_block_reason_gets_repair_after_previous_budget_is_exhausted(job, monkeypatch):
     root, project, logs, _, _, stages = job
     blocked = logs / 'blocked.txt'
-    run = lambda argv, **kwargs: CompletedProcess(argv, 1, '', 'failed regression')
+
+    def ask_retry_declined(root, slug, role, step, *args):
+        stages.append((role, step))
+        if step == 'repair_diagnose':
+            return repair.Diagnosis(action='retry', cause='Fixture fault', evidence=['fixture log'],
+                                    brief='Verify transient recovery.')
+        return repair.Acceptance(passed=False, reason='Still failing')
+
+    monkeypatch.setattr(repair, '_ask', ask_retry_declined)
     for attempt in range(repair.MAX_REPAIRS):
         blocked.write_text(f'First fault\nlog_path: attempt-{attempt}.log\n', encoding='utf-8')
-        assert repair.repair_once(root, project.name, run=run) == 'repair_failed'
+        assert repair.repair_once(root, project.name) == 'repair_failed'
     blocked.write_text('First fault\nlog_path: latest.log\n', encoding='utf-8')
-    assert repair.repair_once(root, project.name, run=run) == 'exhausted'
+    assert repair.repair_once(root, project.name) == 'exhausted'
 
     blocked.write_text('Different fault\nlog_path: current.log\n', encoding='utf-8')
-    assert repair.repair_once(root, project.name, run=run) == 'repair_failed'
+    assert repair.repair_once(root, project.name) == 'repair_failed'
     assert stages.count(('coordinator_senior', 'repair_diagnose')) == repair.MAX_REPAIRS + 1
 
 
 def test_declined_acceptance_restores_code_and_keeps_hold(job, monkeypatch):
     root, project, _, source, released, _ = job
-    ask = repair._ask
 
     def decline(root, slug, role, step, *args):
-        if step == 'repair_accept':
-            return repair.Acceptance(passed=False, reason='Cause still unresolved')
-        return ask(root, slug, role, step, *args)
+        if step == 'repair_diagnose':
+            return repair.Diagnosis(action='retry', cause='Fixture fault', evidence=['fixture log'],
+                                    brief='Verify transient recovery.')
+        return repair.Acceptance(passed=False, reason='Cause still unresolved')
 
     monkeypatch.setattr(repair, '_ask', decline)
     before = source.read_bytes()
-    assert repair.repair_once(root, project.name, run=lambda argv, **kw:
-                              CompletedProcess(argv, 0, 'passed', '')) == 'repair_failed'
+    assert repair.repair_once(root, project.name) == 'repair_failed'
     assert source.read_bytes() == before
     assert released == []
 
@@ -274,27 +289,31 @@ def test_scope_violation_detects_new_and_out_of_scope_files_and_rolls_back(tmp_p
     test_file.parent.mkdir(parents=True)
     test_file.write_text('def test_ok(): pass\n', encoding='utf-8')
 
-    monkeypatch.setattr(repair, '_active', lambda *args: False)
-    monkeypatch.setattr(factory, 'stop_background', lambda root: None)
-    monkeypatch.setattr(factory, 'running_pid', lambda root: None)
+    before_bytes = {'src/assigned.py': assigned.read_bytes(), 'src/other.py': other.read_bytes()}
+    before_paths = repair._workspace_paths(tmp_path)
+    assigned.write_text('v = 2\n', encoding='utf-8')
+    other.write_text('hijacked = True\n', encoding='utf-8')
+    (tmp_path / 'src/rogue.py').write_text('rogue = True\n', encoding='utf-8')
+    with pytest.raises(ValueError, match='ngoài phạm vi'):
+        repair._check_scope(tmp_path, [assigned], before_bytes, before_paths)
+    repair._restore_workspace(tmp_path, before_bytes, before_paths)
+    assert assigned.read_text(encoding='utf-8') == 'v = 1\n'
+    assert other.read_text(encoding='utf-8') == 'uncommitted_by_other = True\n'
+    assert not (tmp_path / 'src/rogue.py').exists()
 
-    def ask_out_of_scope(root, slug, role, step, *args):
+    monkeypatch.setattr(repair, '_active', lambda *args: False)
+
+    def ask_repair(root, slug, role, step, *args):
         if step == 'repair_diagnose':
             return repair.Diagnosis(action='repair', cause='Bug', evidence=['log'],
                                     files=['src/assigned.py'], tests=['tests/test_assigned.py'],
                                     brief='Fix assigned.py only')
-        # Engineer modifies assigned.py AND touches other.py AND creates rogue.py
-        assigned.write_text('v = 2\n', encoding='utf-8')
-        other.write_text('hijacked = True\n', encoding='utf-8')
-        (tmp_path / 'src/rogue.py').write_text('rogue = True\n', encoding='utf-8')
-        return repair.RepairResult(status='ready', summary='Done')
+        pytest.fail('repair_engineer must not be invoked')
 
-    monkeypatch.setattr(repair, '_ask', ask_out_of_scope)
-    assert repair.repair_once(tmp_path, project.name) == 'repair_failed'
+    monkeypatch.setattr(repair, '_ask', ask_repair)
+    assert repair.repair_once(tmp_path, project.name) == 'awaiting_dev'
     assert assigned.read_text(encoding='utf-8') == 'v = 1\n'
     assert other.read_text(encoding='utf-8') == 'uncommitted_by_other = True\n'
-    assert not (tmp_path / 'src/rogue.py').exists()
-    assert 'ngoài phạm vi' in read_yaml(logs / repair.REPORT)['error']
 
 
 def test_retry_requested_requires_actual_retry_and_passing_validator_before_validated(tmp_path, monkeypatch):
@@ -436,15 +455,13 @@ def test_quota_and_timeout_enter_cooldown_without_burning_attempts(job, monkeypa
     # Immediate retry respects cooldown
     assert repair.repair_once(root, project.name) == 'cooldown'
 
-    # Timeout during repair also rolls back and enters cooldown
+    # Timeout during acceptance also enters cooldown without burning attempts
     write_yaml_atomic(logs / repair.REPORT, {'revision': '001', 'attempts': 0})
 
     def ask_timeout(root, slug, role, step, *args):
         if step == 'repair_diagnose':
-            return repair.Diagnosis(action='repair', cause='Bug', evidence=['log'],
-                                    files=['src/fault.py'], tests=['tests/test_fault.py'],
-                                    brief='Fix it')
-        source.write_text('partial = True\n', encoding='utf-8')
+            return repair.Diagnosis(action='retry', cause='Bug', evidence=['log'],
+                                    brief='Verify transient fix')
         raise subprocess.TimeoutExpired(['codex'], 600)
 
     monkeypatch.setattr(repair, '_ask', ask_timeout)
@@ -453,27 +470,11 @@ def test_quota_and_timeout_enter_cooldown_without_burning_attempts(job, monkeypa
 
 
 def test_isolated_smoke_chain_leader_engineer_test_accept_retry_validated(tmp_path, monkeypatch):
-    """End-to-end isolated smoke fixture: Leader -> engineer -> real pytest -> Leader accept -> retry -> validated."""
+    """End-to-end isolated smoke fixture: Leader retry -> accept -> retry -> validated."""
     project = create_v2_project_fixture(tmp_path / 'projects', state=WorkflowState.DRAFT_READY)
     logs = tmp_path / 'topics/logs' / project.name
     logs.mkdir(parents=True)
     (logs / 'blocked.txt').write_text('ZeroDivisionError in helper', encoding='utf-8')
-
-    src = tmp_path / 'src/calc.py'
-    src.parent.mkdir(parents=True)
-    src.write_text('def ratio(a, b):\n    return a / b\n', encoding='utf-8')
-
-    unit_test = tmp_path / 'tests/test_calc.py'
-    unit_test.parent.mkdir(parents=True)
-    unit_test.write_text(
-        'import sys\nfrom pathlib import Path\nsys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))\n'
-        'from calc import ratio\n\ndef test_ratio():\n    assert ratio(4, 2) == 2\n    assert ratio(4, 0) == 0\n',
-        encoding='utf-8',
-    )
-    gate_dir = tmp_path / 'tests/workflows'
-    gate_dir.mkdir(parents=True)
-    (gate_dir / 'test_script_review.py').write_text('def test_gate_s(): pass\n', encoding='utf-8')
-    (gate_dir / 'test_product_review.py').write_text('def test_gate_p(): pass\n', encoding='utf-8')
 
     monkeypatch.setattr(factory, 'stop_background', lambda root: None)
     monkeypatch.setattr(factory, 'running_pid', lambda root: None)
@@ -482,23 +483,14 @@ def test_isolated_smoke_chain_leader_engineer_test_accept_retry_validated(tmp_pa
     def ask_smoke(root, slug, role, step, *args):
         if step == 'repair_diagnose':
             return repair.Diagnosis(
-                action='repair', cause='Division by zero', evidence=['blocked.txt'],
-                files=['src/calc.py'], tests=['tests/test_calc.py'],
-                brief='Handle b == 0 in ratio()',
+                action='retry', cause='Transient glitch resolved', evidence=['blocked.txt'],
+                brief='Retry step after transient fix',
             )
-        if step == 'repair':
-            src.write_text('def ratio(a, b):\n    return 0 if b == 0 else a / b\n', encoding='utf-8')
-            return repair.RepairResult(status='ready', summary='Handled zero divisor')
-        return repair.Acceptance(passed=True, reason='Real pytest passed')
+        return repair.Acceptance(passed=True, reason='Verified ready to retry')
 
     monkeypatch.setattr(repair, '_ask', ask_smoke)
 
-    def run_pytest_only(argv, **kwargs):
-        if 'ruff' in argv:
-            return CompletedProcess(argv, 0, '', '')
-        return subprocess.run(argv, check=False, **kwargs)
-
-    assert repair.repair_once(tmp_path, project.name, run=run_pytest_only) == 'retry_requested'
+    assert repair.repair_once(tmp_path, project.name) == 'retry_requested'
     assert not (logs / 'blocked.txt').exists()
     assert repair.repair_once(tmp_path, project.name) == 'waiting_retry'
 
@@ -653,8 +645,8 @@ def test_recover_interrupted_diagnoses_refunds_attempt_and_cleans_dead_markers(j
     assert recovered['attempts'] == 0
     assert recovered['phase'] == 'interrupted'
 
-    # Subsequent repair_once can run normally
-    assert repair.repair_once(root, project.name, run=lambda argv, **kw: CompletedProcess(argv, 0, 'ok', '')) == 'retry_requested'
+    # Subsequent repair_once can run normally (action=repair opens dev ticket)
+    assert repair.repair_once(root, project.name) == 'awaiting_dev'
 
 
 def test_repair_once_returns_busy_when_diagnosing_attempt_is_live(job):
@@ -837,37 +829,12 @@ def test_repair_once_does_not_burn_max_repairs_when_maintenance_infrastructure_f
         pytest.fail('repair_engineer must not run when _maintenance failed')
 
     monkeypatch.setattr(repair, '_ask', ask_repair)
-    assert repair.repair_once(tmp_path, project.name) == 'repair_failed'
+    assert repair.repair_once(tmp_path, project.name) == 'awaiting_dev'
     report = read_yaml(logs / repair.REPORT)
     assert report['attempts'] == 0
     assert report.get('transient_failures', 0) == 0
-    assert restarted == [tmp_path]
-
-    # Subsequent real repair attempts still have the full MAX_REPAIRS budget.
-    monkeypatch.setattr(repair, '_maintenance', lambda *args, **kwargs: nullcontext((
-        {'src/fix.py': src.read_bytes()},
-        repair._workspace_paths(tmp_path),
-    )))
-
-    def ask_with_engineer(root, slug, role, step, *args):
-        if step == 'repair_diagnose':
-            return repair.Diagnosis(
-                action='repair',
-                cause='Fixture fault',
-                evidence=['blocked.txt'],
-                files=['src/fix.py'],
-                tests=['tests/test_fix.py'],
-                brief='Fix fault',
-            )
-        if step == 'repair':
-            src.write_text('ok = True\n', encoding='utf-8')
-            return repair.RepairResult(status='ready', summary='Fixed')
-        return repair.Acceptance(passed=True, reason='Verified')
-
-    monkeypatch.setattr(repair, '_ask', ask_with_engineer)
-    monkeypatch.setattr(repair, '_release', lambda *args: None)
-    assert repair.repair_once(tmp_path, project.name, run=lambda argv, **kw: CompletedProcess(argv, 0, 'ok', '')) == 'retry_requested'
-    assert read_yaml(logs / repair.REPORT)['attempts'] == 1
+    assert restarted == []
+    assert list((tmp_path / 'topics/dev-tickets').glob(f'*-{project.name}.yaml'))
 
 
 def test_main_updates_parent_identity_and_survives_maintenance_restart(tmp_path, monkeypatch):
@@ -972,7 +939,7 @@ def _make_v2_project_in_state(projects_root, state: WorkflowState):
     raise AssertionError(f'Unsupported helper state: {state}')
 
 
-def test_normalize_incident_reason_preserves_cooldown_and_max_repairs(job):
+def test_normalize_incident_reason_preserves_cooldown_and_max_repairs(job, monkeypatch):
     root, project, logs, _source, released, stages = job
     blocked = logs / 'blocked.txt'
     base_reason = 'agent không làm đổi trạng thái (revise_medical, trạng thái needs_medical_revision): giữ nguyên'
@@ -984,15 +951,22 @@ def test_normalize_incident_reason_preserves_cooldown_and_max_repairs(job):
     ]
     assert {repair._normalize_incident_reason(text) for text in variants} == {base_reason}
 
-    run_fail = lambda argv, **kwargs: CompletedProcess(argv, 1, '', 'still failing')
+    def ask_retry_declined(root, slug, role, step, *args):
+        stages.append((role, step))
+        if step == 'repair_diagnose':
+            return repair.Diagnosis(action='retry', cause='Fixture fault', evidence=['fixture log'],
+                                    brief='Verify transient recovery.')
+        return repair.Acceptance(passed=False, reason='Still failing')
+
+    monkeypatch.setattr(repair, '_ask', ask_retry_declined)
     blocked.write_text(variants[0], encoding='utf-8')
-    assert repair.repair_once(root, project.name, run=run_fail, respect_cooldown=True) == 'repair_failed'
+    assert repair.repair_once(root, project.name, respect_cooldown=True) == 'repair_failed'
 
     # Runner ticks wrap the same reason with a hold prefix and drop log_path: cooldown & budget stay intact.
     blocked.write_text(variants[1], encoding='utf-8')
-    assert repair.repair_once(root, project.name, run=run_fail, respect_cooldown=True) == 'cooldown'
-    assert repair.repair_once(root, project.name, run=run_fail, respect_cooldown=False) == 'repair_failed'
-    assert repair.repair_once(root, project.name, run=run_fail, respect_cooldown=False) == 'exhausted'
+    assert repair.repair_once(root, project.name, respect_cooldown=True) == 'cooldown'
+    assert repair.repair_once(root, project.name, respect_cooldown=False) == 'repair_failed'
+    assert repair.repair_once(root, project.name, respect_cooldown=False) == 'exhausted'
     assert stages.count(('coordinator_senior', 'repair_diagnose')) == repair.MAX_REPAIRS
     assert not released
 
@@ -1029,13 +1003,8 @@ def test_paths_and_repair_once_support_video_tests_vitest_and_typecheck(tmp_path
 
     monkeypatch.setattr(repair, '_active', lambda *args: False)
     monkeypatch.setattr(playbook, 'DEFAULT_AUTO_RETRIES', 0)
-    monkeypatch.setattr(repair, '_maintenance', lambda *args, **kwargs: nullcontext((
-        {'video/src/scenes/SourceCardScene.tsx': tsx.read_bytes()},
-        repair._workspace_paths(tmp_path),
-    )))
     released = []
     monkeypatch.setattr(repair, '_release', lambda *args: released.append(args))
-    monkeypatch.setattr(repair, 'resolve_pnpm_argv', lambda args: ['pnpm', *args])
 
     def ask(root, slug, role, step, *args):
         if step == 'repair_diagnose':
@@ -1047,41 +1016,24 @@ def test_paths_and_repair_once_support_video_tests_vitest_and_typecheck(tmp_path
                 tests=['video/src/scenes/SourceCardScene.test.tsx'],
                 brief='Split on semicolon.',
             )
-        if step == 'repair':
-            tsx.write_text('export const ok = true;\n', encoding='utf-8')
-            return repair.RepairResult(status='ready', summary='Fixed TSX')
-        return repair.Acceptance(passed=True, reason='Vitest and typecheck passed')
+        pytest.fail('repair_engineer must not be invoked')
 
     monkeypatch.setattr(repair, '_ask', ask)
     commands = []
 
     def run_ok(argv, **kwargs):
-        assert kwargs['shell'] is False
         commands.append(argv)
         return CompletedProcess(argv, 0, f'ok {argv[-1]}\n', '')
 
-    assert repair.repair_once(tmp_path, project.name, run=run_ok) == 'retry_requested'
-    assert commands[0][1:3] == ['-m', 'pytest']
-    assert commands[1] == [
-        'pnpm', '--dir', str(tmp_path / 'video'), 'exec', 'vitest', 'run', 'src/scenes/SourceCardScene.test.tsx',
-    ]
-    assert commands[2] == ['pnpm', '--dir', str(tmp_path / 'video'), 'typecheck']
-    assert len(commands) == 3
-    assert released == [(tmp_path, project.name)]
-
-    # Failing typecheck rolls back TSX changes and raises repair_failed without releasing.
-    released.clear()
-    tsx.write_text('export const ok = false;\n', encoding='utf-8')
-    write_yaml_atomic(logs / repair.REPORT, {'revision': '001', 'attempts': 0})
-
-    def run_fail_typecheck(argv, **kwargs):
-        code = 1 if 'typecheck' in argv else 0
-        return CompletedProcess(argv, code, 'vitest out\n', 'typecheck err\n')
-
-    assert repair.repair_once(tmp_path, project.name, run=run_fail_typecheck) == 'repair_failed'
+    assert repair.repair_once(tmp_path, project.name, run=run_ok) == 'awaiting_dev'
+    assert commands == []
+    assert released == []
     assert tsx.read_text(encoding='utf-8') == 'export const ok = false;\n'
-    assert not released
-    assert 'Test/typecheck video chưa đạt' in read_yaml(logs / repair.REPORT)['error']
+    tickets = list((tmp_path / 'topics/dev-tickets').glob(f'*-{project.name}.yaml'))
+    assert len(tickets) == 1
+    ticket = read_yaml(tickets[0])
+    assert ticket['files'] == ['video/src/scenes/SourceCardScene.tsx']
+    assert ticket['tests'] == ['video/src/scenes/SourceCardScene.test.tsx']
 
 
 def test_delegate_content_fix_routes_new_roles_writes_leader_guidance_and_respects_gates(tmp_path, monkeypatch):
@@ -1382,21 +1334,26 @@ def test_repair_waiting_idle_reuses_diagnosis_and_escalates_on_stops(tmp_path, m
     monkeypatch.setattr(repair, '_ask', fake_ask)
     monkeypatch.setattr(repair, '_check_scope', lambda *a, **k: [])
 
-    # First call while active -> waiting_idle (no escalation yet)
-    assert repair.repair_once(tmp_path, project.name, run=lambda *a, **k: CompletedProcess(a[0], 0, 'ok', '')) == 'waiting_idle'
+    # action=repair opens a dev ticket immediately without waiting for idle or running repair_engineer
+    assert repair.repair_once(tmp_path, project.name) == 'awaiting_dev'
     assert doctor_questions.open_question(tmp_path, project.name) is None
     assert steps_called == ['repair_diagnose']
+    assert list((tmp_path / 'topics/dev-tickets').glob(f'*-{project.name}.yaml'))
 
-    # Second call when idle -> reuses stored diagnosis without calling repair_diagnose again
+    # Second call stays awaiting_dev without re-diagnosing
     active['value'] = False
-    phase = repair.repair_once(tmp_path, project.name, run=lambda *a, **k: CompletedProcess(a[0], 0, 'ok', ''))
-    assert phase == 'retry_requested'
-    assert steps_called == ['repair_diagnose', 'repair', 'repair_accept']
+    assert repair.repair_once(tmp_path, project.name) == 'awaiting_dev'
+    assert steps_called == ['repair_diagnose']
 
     # When exhausted (with default auto-retries disabled) -> escalates with kind='escalation' and 3 options
     monkeypatch.setattr(playbook, 'DEFAULT_AUTO_RETRIES', 0)
     blocked.write_text('bước produce lỗi: timeout', encoding='utf-8')
     rec = read_yaml(logs / repair.REPORT)
+    rec['phase'] = 'repair_failed'
+    rec['incident'] = {
+        'state': read_yaml(project / 'project.yaml')['state'],
+        'reason': repair._normalize_incident_reason('bước produce lỗi: timeout'),
+    }
     rec['attempts'] = rec['attempts_before_incident'] + repair.MAX_REPAIRS
     write_yaml_atomic(logs / repair.REPORT, rec)
     assert repair.repair_once(tmp_path, project.name) == 'exhausted'
@@ -1508,15 +1465,23 @@ def test_escalation_fingerprint_changes_after_answered_cycle_even_without_leader
     assert q2['fingerprint'] != q1['fingerprint']
 
 
-def test_r5_diagnosis_cannot_restart_sixty_times(job):
+def test_r5_diagnosis_cannot_restart_sixty_times(job, monkeypatch):
     root, project, logs, _source, released, stages = job
     revision = project / 'revisions/001'
     write_yaml_atomic(revision / 'workflow/standards.yaml',
                       {'quality_standard': {'profile': 'r5_v1'}})
-    run = lambda argv, **kwargs: CompletedProcess(argv, 1, '', 'failed regression')
+
+    def ask_retry_declined(root, slug, role, step, *args):
+        stages.append((role, step))
+        if step == 'repair_diagnose':
+            return repair.Diagnosis(action='retry', cause='Fixture fault', evidence=['fixture log'],
+                                    brief='Verify transient recovery.')
+        return repair.Acceptance(passed=False, reason='Still failing')
+
+    monkeypatch.setattr(repair, '_ask', ask_retry_declined)
     for _ in range(60):
         # Simulate recovery/reset of the old ephemeral incident counter.
         (logs / repair.REPORT).unlink(missing_ok=True)
-        repair.repair_once(root, project.name, run=run)
+        repair.repair_once(root, project.name)
     assert sum(step == 'repair_diagnose' for _, step in stages) == 2
     assert released == []

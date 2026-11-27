@@ -27,6 +27,63 @@ def _storyboard_plan(root: Path) -> dict:
     return plan
 
 
+def _locate_storyboard_scenes(root: Path, board_raw: str, error_text: str) -> list[str]:
+    try:
+        board_data = yaml.safe_load(board_raw)
+    except yaml.YAMLError:
+        return []
+    if not isinstance(board_data, dict) or not isinstance(board_data.get('scenes'), list):
+        return []
+    script_path = root / 'script/script.yaml'
+    if not script_path.is_file():
+        return []
+    try:
+        script_data = read_yaml(script_path)
+    except (OSError, TypeError, ValueError, yaml.YAMLError):
+        return []
+    if not isinstance(script_data, dict) or not isinstance(script_data.get('lines'), list):
+        return []
+    lines = [line for line in script_data['lines'] if isinstance(line, dict)]
+    scenes = [scene for scene in board_data['scenes'] if isinstance(scene, dict)]
+
+    found: list[str] = []
+    for line, scene in zip(lines, scenes):
+        if scene.get('script_line_id') != line.get('id') or scene.get('narration') != line.get('text'):
+            scene_id = str(scene.get('id') or '')
+            if scene_id and scene_id not in found:
+                found.append(scene_id)
+
+    line_to_scenes: dict[str, list[str]] = {}
+    for scene in scenes:
+        scene_id = str(scene.get('id') or '')
+        line_id = str(scene.get('script_line_id') or '')
+        if scene_id and line_id:
+            line_to_scenes.setdefault(line_id, []).append(scene_id)
+    for line, scene in zip(lines, scenes):
+        scene_id = str(scene.get('id') or '')
+        line_id = str(line.get('id') or '')
+        if scene_id and line_id and scene_id not in line_to_scenes.get(line_id, []):
+            line_to_scenes.setdefault(line_id, []).append(scene_id)
+
+    mentioned: list[str] = []
+    for token in re.findall(r'(?<!\w)N\d+(?!\w)', error_text):
+        if token not in mentioned:
+            mentioned.append(token)
+    for line in lines:
+        line_id = str(line.get('id') or '')
+        if (
+            line_id
+            and line_id not in mentioned
+            and re.search(r'(?<!\w)' + re.escape(line_id) + r'(?!\w)', error_text)
+        ):
+            mentioned.append(line_id)
+    for line_id in mentioned:
+        for scene_id in line_to_scenes.get(line_id, []):
+            if scene_id not in found:
+                found.append(scene_id)
+    return found
+
+
 def storyboard_failure(project: Path, files: dict[str, Path], error: ValueError) -> None:
     root = resolve_project_layout(project).artifact_root
     path = root / STORYBOARD_PLAN
@@ -44,13 +101,18 @@ def storyboard_failure(project: Path, files: dict[str, Path], error: ValueError)
         items = data.get(COLLECTIONS[relative], []) if isinstance(data, dict) else []
         identities = [str(item.get('id') or item.get('path', '')) for item in items]
         scope[relative] = [identity for identity in identities if identity and identity in str(error)]
+    if 'storyboard/storyboard.yaml' in scope and not scope['storyboard/storyboard.yaml']:
+        scope['storyboard/storyboard.yaml'] = _locate_storyboard_scenes(
+            root, snapshot['storyboard/storyboard.yaml'], str(error)
+        )
     criterion = re.sub(r'\d+(?:\.\d+)?', '#', str(error))
     issue_id = 'storyboard-' + canonical_json_hash({'scope': scope, 'criterion': criterion})[:16]
+    same_issue = previous.get('issue_id') == issue_id and previous.get('scope') == scope
     write_yaml_atomic(path, {'issue_id': issue_id, 'problem': str(error),
                             'scope': scope, 'snapshot': snapshot,
                             'script_sha256': canonical_json_hash(read_yaml(root / 'script/script.yaml')),
                             'still_open_rounds': (int(previous.get('still_open_rounds', 0)) + 1
-                                                  if previous.get('issue_id') == issue_id else 1)})
+                                                  if same_issue else 1)})
 
 
 def check_storyboard(project: Path, files: dict[str, Path], *, plan: dict | None = None) -> None:

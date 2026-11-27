@@ -32,8 +32,11 @@ def _queue(root: Path) -> Path:
 
 
 def _script(project: Path, text: str) -> None:
-    write_yaml_atomic(project / REV / 'script/script.yaml',
-                      {'lines': [{'id': 'N01', 'text': text}]})
+    write_yaml_atomic(
+        project / REV / 'script/script.yaml',
+        {'schema_version': '1.0', 'title': 'Muối', 'language': 'vi',
+         'lines': [{'id': 'N01', 'text': text}]},
+    )
 
 
 def _questions(project: Path, *questions: dict) -> None:
@@ -79,6 +82,7 @@ def test_question_helpers_read_open_and_answered(tmp_path):
 
 def test_writer_questions_route_back_to_research(tmp_path):
     project = _queue(tmp_path)
+    (project / REV / EXPERT_BRIEF).write_text('# Brief\n', encoding='utf-8')
     _questions(project, {'id': 'Q1', 'line': 'N01', 'ask': 'Muối giữ nước ở đâu?'})
     state = {'value': WorkflowState.DRAFT_READY}
     steps: list[tuple[str, str]] = []
@@ -125,6 +129,7 @@ def test_unanswered_questions_after_research_block(tmp_path):
 
 def test_writer_must_use_expert_answers(tmp_path):
     project = _queue(tmp_path)
+    (project / REV / EXPERT_BRIEF).write_text('# Brief\n', encoding='utf-8')
     _questions(project, {'id': 'Q1', 'ask': 'Muối giữ nước ở đâu?', 'answer': 'Trong mạch.'})
     state = {'value': WorkflowState.DRAFT_READY}
     steps = []

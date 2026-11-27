@@ -18,6 +18,7 @@ EARLY = frozenset({WorkflowState.TOPIC_SELECTED, WorkflowState.RESEARCH_IN_PROGR
 PRODUCTION = frozenset({WorkflowState.PRODUCTION_IN_PROGRESS, WorkflowState.AWAITING_VIDEO_REVIEW,
                         WorkflowState.VIDEO_APPROVED, WorkflowState.PACKAGED})
 MEDICAL = PRODUCTION | {WorkflowState.MEDICALLY_APPROVED, WorkflowState.AWAITING_MEDICAL_REVIEW}
+MAX_EDIT_SCRIPT_ATTEMPTS = 2
 
 
 def request_change(project_dir: Path, kind: Literal['edit_production', 'edit_script'],
@@ -99,6 +100,14 @@ def pending_note(project_dir: Path) -> str | None:
     return f"{record['brief']}\n{context_label(record['context'])}".strip()
 
 
-def mark_applied(project_dir: Path) -> None:
+def record_attempt(path: Path) -> int:
+    record = read_yaml(path)
+    attempts = int(record.get('attempts') or 0) + 1
+    write_yaml_atomic(path, {**record, 'attempts': attempts})
+    return attempts
+
+
+def mark_applied(project_dir: Path, *, outcome: str | None = None) -> None:
+    extra = {'outcome': outcome} if outcome else {}
     for path, record in pending(project_dir):
-        write_yaml_atomic(path, {**record, 'applied': True})
+        write_yaml_atomic(path, {**record, 'applied': True, **extra})

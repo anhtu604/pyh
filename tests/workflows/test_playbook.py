@@ -280,13 +280,13 @@ def test_doctor_answer_learns_rule_and_auto_applies_next_time(tmp_path, monkeypa
     q = doctor_questions.open_question(tmp_path, project.name)
     assert q is not None and q['signature']
 
-    # Doctor answers with reopen_or_delegate + direction -> learns PB-001
+    # Doctor answers with retry_repair_cycle -> learns PB-001 (explicit action, not inferred role)
     dashboard.answer_doctor_question(
         tmp_path,
         project.name,
         {
             'question_id': q['id'],
-            'option_id': 'reopen_or_delegate',
+            'option_id': 'retry_repair_cycle',
             'text': 'Rút ngắn dòng chú thích dưới 12 từ rồi chạy lại.',
             'expected_revision': '001',
         },
@@ -294,8 +294,7 @@ def test_doctor_answer_learns_rule_and_auto_applies_next_time(tmp_path, monkeypa
     learned = playbook.match_rule(tmp_path, station='repair', signature=q['signature'])
     assert learned is not None
     assert learned.source == 'doctor'
-    assert learned.action == 'delegate'
-    assert learned.delegate_role == 'writer'
+    assert learned.action == 'retry_cycle'
     assert learned.question_id == q['id']
     assert learned.slug == project.name
     assert '12 từ' in (learned.direction or '')
@@ -317,9 +316,10 @@ def test_doctor_answer_learns_rule_and_auto_applies_next_time(tmp_path, monkeypa
         'attempts_before_incident': 0,
         'incident': {'state': WorkflowState.DRAFT_READY.value, 'reason': repair_service._normalize_incident_reason(detail)},
     })
-    assert repair_service.repair_once(tmp_path, project2.name) == 'retry_requested'
-    assert doctor_questions.open_question(tmp_path, project2.name) is None
-    assert any(learned.id in m['text'] for m in chat.load(tmp_path, project2.name))
+    # M3 2026-11-27: a learned rule is scoped to its project; another project asks the doctor.
+    assert repair_service.repair_once(tmp_path, project2.name) == 'exhausted'
+    assert doctor_questions.open_question(tmp_path, project2.name) is not None
+    assert not any(learned.id in m['text'] for m in chat.load(tmp_path, project2.name))
 
 
 def test_doctor_pause_project_never_learns_rule(tmp_path, monkeypatch):

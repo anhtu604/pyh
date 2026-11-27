@@ -11,6 +11,7 @@ import yaml
 
 from healthvideo.domain.asset_manifest import AssetManifest
 from healthvideo.domain.clip_plan import ClipPlan
+from healthvideo.domain.hook_outro import CHANNEL_OUTRO_TEXT, OUTRO_TEXT
 from healthvideo.domain.outline import Outline, validate_outline
 from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
 from healthvideo.domain.script import Script
@@ -27,6 +28,49 @@ from healthvideo.storage.files import (
 from healthvideo.storage.revision_lock import revision_lock
 from healthvideo.workflows.draft import _project, _validate, validate_estimated_layout
 from healthvideo.workflows.factory_standards import style_a_active
+
+_PINNED_OUTRO_TEXTS = frozenset({CHANNEL_OUTRO_TEXT, OUTRO_TEXT})
+
+
+def normalize_outro(data: dict, script) -> dict:
+    """Normalize the final long-form scene to nonmedical brand_outro when script ends with pinned outro."""
+    if not isinstance(data, dict) or not isinstance(data.get("scenes"), list) or not data["scenes"]:
+        return data
+    lines = script.get("lines", []) if isinstance(script, dict) else getattr(script, "lines", [])
+    main_lines = [
+        line
+        for line in lines
+        if not (line.get("clip_id") if isinstance(line, dict) else getattr(line, "clip_id", None))
+    ]
+    if not main_lines:
+        return data
+    last_line = main_lines[-1]
+    last_text = last_line.get("text") if isinstance(last_line, dict) else getattr(last_line, "text", None)
+    if last_text not in _PINNED_OUTRO_TEXTS:
+        return data
+    scenes = data["scenes"]
+    last_idx = None
+    for idx in range(len(scenes) - 1, -1, -1):
+        scene = scenes[idx]
+        if isinstance(scene, dict) and not scene.get("clip_only"):
+            last_idx = idx
+            break
+    if last_idx is None:
+        return data
+    current = scenes[last_idx]
+    if (
+        current.get("visual") == "brand_outro"
+        and current.get("claim_id") is None
+        and current.get("source_marker") is None
+    ):
+        return data
+    updated_scenes = list(scenes)
+    final_scene = dict(current)
+    final_scene["visual"] = "brand_outro"
+    final_scene["claim_id"] = None
+    final_scene["source_marker"] = None
+    updated_scenes[last_idx] = final_scene
+    return {**data, "scenes": updated_scenes}
 
 
 def storyboard_validation_error(project_dir: Path) -> str | None:
@@ -149,7 +193,10 @@ def _submit_storyboard_design(
         raise ValueError("storyboard submission requires script/script.yaml first")
     script_data = read_yaml(script_path)
     script = Script.model_validate(script_data)
-    storyboard = Storyboard.model_validate(read_agent_yaml(storyboard_file))
+    raw_storyboard = read_agent_yaml(storyboard_file)
+    normalized_storyboard = normalize_outro(raw_storyboard, script)
+    outro_normalized = normalized_storyboard != raw_storyboard
+    storyboard = Storyboard.model_validate(normalized_storyboard)
     assets = AssetManifest.model_validate(read_agent_yaml(assets_file))
     clip_plan = ClipPlan.model_validate(read_agent_yaml(clip_plan_file)) if clip_plan_file else None
     outline = Outline.model_validate(read_agent_yaml(outline_file)) if outline_file else None
@@ -214,7 +261,11 @@ def _submit_storyboard_design(
                          'assets/asset-manifest.yaml': assets_file,
                          'script/clip-plan.yaml': clip_plan_file, 'script/outline.yaml': outline_file}
             for relative, original in originals.items():
-                if original is not None:
+                if original is None:
+                    continue
+                if relative == 'storyboard/storyboard.yaml' and outro_normalized:
+                    write_yaml_atomic(staging / relative, normalized_storyboard)
+                else:
                     (staging / relative).write_bytes(original.read_bytes())
         replace_directory_atomic(staging, revision)
         promoted = True

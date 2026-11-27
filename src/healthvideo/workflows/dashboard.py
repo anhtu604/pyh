@@ -3649,7 +3649,8 @@ def answer_doctor_question(root: Path, slug: str, body: dict) -> dict:
                 )
             elif opt_action in {'retry_cycle', 'delegate'}:
                 raw_opt_role = str(selected_opt.get('delegate_role') or '').strip() if isinstance(selected_opt, dict) else ''
-                opt_role = raw_opt_role if raw_opt_role in valid_roles else inferred_role
+                explicit_opt_role = raw_opt_role if raw_opt_role in valid_roles else None
+                opt_role = explicit_opt_role or inferred_role
                 base_dir = str(selected_opt.get('direction') or '').strip() if isinstance(selected_opt, dict) else ''
                 full_direction = (
                     f'{base_dir}. {extra_text}'.strip()
@@ -3680,14 +3681,14 @@ def answer_doctor_question(root: Path, slug: str, body: dict) -> dict:
                         delegate_role=opt_role,
                         wake=True,
                     )
-                    if can_learn and opt_role:
+                    if can_learn and explicit_opt_role:
                         playbook.append_rule(
                             root,
                             source='doctor',
                             station=station or 'repair',
                             signature=sig,
                             action='delegate',
-                            delegate_role=opt_role,
+                            delegate_role=explicit_opt_role,
                             direction=full_direction,
                             question_id=str(answered.get('id') or ''),
                             slug=slug,
@@ -3716,18 +3717,6 @@ def answer_doctor_question(root: Path, slug: str, body: dict) -> dict:
                     delegate_role=inferred_role,
                     wake=True,
                 )
-                if opt_id == 'reopen_or_delegate' and extra_text and can_learn and inferred_role:
-                    playbook.append_rule(
-                        root,
-                        source='doctor',
-                        station=station or 'repair',
-                        signature=sig,
-                        action='delegate',
-                        delegate_role=inferred_role,
-                        direction=extra_text,
-                        question_id=str(answered.get('id') or ''),
-                        slug=slug,
-                    )
         decision_text = '. '.join(part for part in (label, extra_text) if part)
         chat_text = (
             f'Quyết định Trạm {station}: {decision_text}'

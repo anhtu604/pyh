@@ -222,6 +222,30 @@ def _change_touches_script(project_dir: Path, note: str) -> bool:
     return not (any(scope.values()) and not scope.get("script/script.yaml"))
 
 
+_SCRIPT_LINE_ID_RE = re.compile(r"(?<![\w])L\d+(?![\w])")
+
+
+def _request_mentions_script_lines(project_dir: Path, note: str) -> bool:
+    """Return True when the change-request note explicitly names a script line ID."""
+    if _SCRIPT_LINE_ID_RE.search(note):
+        return True
+    try:
+        script_file = resolve_project_layout(project_dir).artifact_root / "script/script.yaml"
+        if not script_file.is_file():
+            return False
+        data = read_yaml(script_file)
+        lines = data.get("lines", []) if isinstance(data, dict) else []
+        for item in lines:
+            if not isinstance(item, dict):
+                continue
+            line_id = str(item.get("id") or "").strip()
+            if line_id and re.search(r"(?<![\w])" + re.escape(line_id) + r"(?![\w])", note):
+                return True
+    except (OSError, TypeError, ValueError, yaml.YAMLError):
+        return False
+    return False
+
+
 def _has_open_questions(project_dir: Path) -> bool:
     if not (project_dir / "project.yaml").is_file():
         return False
@@ -848,12 +872,15 @@ def _run_agent_invocation(
     answering: bool = False,
     defer_validation_record: bool = False,
     mark_blocked_on_failure: bool = True,
+    allow_missing_storyboard: bool = False,
 ) -> tuple[str, Path | None, str | None, dict[str, str] | None]:
     """Run one agent step with fingerprint retry gating, failover & quarantine."""
     from healthvideo.workflows import storyboard_parts
     from healthvideo.workflows.step_preflight import preflight
 
     errors = preflight(step, project_dir)
+    if allow_missing_storyboard and step == 'voice_prep':
+        errors = [e for e in errors if 'storyboard/storyboard.yaml' not in e]
     if errors:
         reason = f'Đầu vào bước {step}:\n' + '\n'.join(f'- {error}' for error in errors)
         if mark_blocked_on_failure:
@@ -962,12 +989,16 @@ def _run_agent_invocation(
         for sibling in sibling_files:
             checkpoint.pop(sibling, None)
 
+        changes_dir = repair_root / 'reviews/changes'
+
         def restore_repair() -> None:
             current_paths = {p for name in protected_dirs for p in (repair_root / name).rglob('*.yaml')
-                             if not part_artifact(p)}
+                             if not part_artifact(p) and not p.is_relative_to(changes_dir)}
             for path in current_paths - protected_before - sibling_files:
                 path.unlink(missing_ok=True)
             for path, raw in checkpoint.items():
+                if path.is_relative_to(changes_dir):
+                    continue
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(raw)
             if scoped_product:
@@ -1573,6 +1604,7 @@ def _run_parallel_branches(
             log_dir=b_log_dir,
             defer_validation_record=True,
             mark_blocked_on_failure=False,
+            allow_missing_storyboard=(b_step == "voice_prep" and "storyboard_design" in branches),
         )
         if status != "ok":
             return status, log_p, (meta or {}).get("error")
@@ -1711,18 +1743,44 @@ def _run_topic(
                             report.blocked.append(entry.slug)
                     break
                 pending_change = change_request.pending_note(project_dir)
+                pending_edit_script: tuple[Path, dict[str, Any]] | None = None
                 touches_script: bool | None = None
                 if pending_change and state in {
                     WorkflowState.DRAFT_READY, WorkflowState.NEEDS_MEDICAL_REVISION,
                 }:
                     requests = change_request.pending(project_dir)
                     if requests and requests[-1][1].get('kind') == 'edit_script':
-                        touches_script = _change_touches_script(project_dir, pending_change)
-                        reset_for_doctor_guidance(
-                            project_dir,
-                            str(requests[-1][0]),
-                            require_script_rewrite=touches_script,
-                        )
+                        req_path, req_data = requests[-1]
+                        if int(req_data.get('attempts') or 0) >= change_request.MAX_EDIT_SCRIPT_ATTEMPTS:
+                            change_request.mark_applied(project_dir, outcome='abandoned')
+                            reset_for_doctor_guidance(
+                                project_dir,
+                                str(req_path),
+                                require_script_rewrite=False,
+                            )
+                            with _topic_lock(entry.slug):
+                                clear_agent_retry(root, entry.slug, "draft")
+                                clear_agent_retry(root, entry.slug, "revise_medical")
+                                clear_model_resume(root, entry.slug)
+                            chat.post_coordinator_notice(
+                                root,
+                                entry.slug,
+                                (
+                                    "Yêu cầu sửa kịch bản đã thử quá "
+                                    f"{change_request.MAX_EDIT_SCRIPT_ATTEMPTS} lần; "
+                                    "tự đóng (abandoned) để tránh lặp."
+                                ),
+                                context=req_data.get('context') if isinstance(req_data.get('context'), dict) else {},
+                            )
+                            pending_change = change_request.pending_note(project_dir)
+                        else:
+                            pending_edit_script = (req_path, req_data)
+                            touches_script = _change_touches_script(project_dir, pending_change)
+                            reset_for_doctor_guidance(
+                                project_dir,
+                                str(req_path),
+                                require_script_rewrite=touches_script,
+                            )
                 with _topic_lock(entry.slug):
                     quota_step = model_resume_step(root, project_dir, brief_context)
                     outstanding = outstanding_agent_retry(root, project_dir, brief_context)
@@ -1964,7 +2022,20 @@ def _run_topic(
                 result_log_path: Path | None = None
                 pre_fingerprint: str | None = None
 
+                pre_script_hash: str | None = None
                 if step in AGENT_STEPS:
+                    if rewriting and pending_edit_script is not None:
+                        try:
+                            pre_script_hash = script_hash(project_dir)
+                        except (OSError, ValueError, TypeError, yaml.YAMLError):
+                            pre_script_hash = None
+                    if pending_edit_script is not None and step in {"draft", "revise_medical"}:
+                        from healthvideo.workflows.step_preflight import (
+                            preflight as _step_preflight,
+                        )
+
+                        if not _step_preflight(step, project_dir):
+                            change_request.record_attempt(pending_edit_script[0])
                     reviewing = step in {"script_review", "product_review"}
                     reviewed_hash = (
                         script_hash(project_dir)
@@ -2138,25 +2209,43 @@ def _run_topic(
                                 report.waiting_doctor.append(entry.slug)
                         break
                     if rewrite_action == "draft":
-                        rev_root, _ = _revision_root_or_error(project_dir)
-                        detail = _diagnose_script_error(rev_root) if rev_root is not None else None
-                        reason = (
-                            f"agent không sửa kịch bản theo nhận xét biên tập: {detail}"
-                            if detail
-                            else "agent không sửa kịch bản theo nhận xét biên tập (script/script.yaml chưa thay đổi sau phê bình)"
-                        )
-                        _record_agent_validation_failure(
-                            root, entry.slug, project_dir, step, brief_context, pre_fingerprint, reason
-                        )
-                        _mark_blocked(
-                            root,
-                            entry.slug,
-                            reason,
-                            report,
-                            log_path=result_log_path,
-                        )
-                        break
-                    _mark_advanced(root, entry.slug, report)
+                        if (
+                            pending_edit_script is not None
+                            and pre_script_hash is not None
+                            and script_hash(project_dir) == pre_script_hash
+                            and not _request_mentions_script_lines(project_dir, pending_change or "")
+                        ):
+                            change_request.mark_applied(project_dir, outcome="no_script_change")
+                            reset_for_doctor_guidance(
+                                project_dir,
+                                str(pending_edit_script[0]),
+                                require_script_rewrite=False,
+                            )
+                            with _topic_lock(entry.slug):
+                                clear_agent_retry(root, entry.slug, "draft")
+                                clear_model_resume(root, entry.slug)
+                            _mark_advanced(root, entry.slug, report)
+                        else:
+                            rev_root, _ = _revision_root_or_error(project_dir)
+                            detail = _diagnose_script_error(rev_root) if rev_root is not None else None
+                            reason = (
+                                f"agent không sửa kịch bản theo nhận xét biên tập: {detail}"
+                                if detail
+                                else "agent không sửa kịch bản theo nhận xét biên tập (script/script.yaml chưa thay đổi sau phê bình)"
+                            )
+                            _record_agent_validation_failure(
+                                root, entry.slug, project_dir, step, brief_context, pre_fingerprint, reason
+                            )
+                            _mark_blocked(
+                                root,
+                                entry.slug,
+                                reason,
+                                report,
+                                log_path=result_log_path,
+                            )
+                            break
+                    else:
+                        _mark_advanced(root, entry.slug, report)
                 elif step in {"posts", "storyboard_design", "voice_prep", "shorts_plan"}:
                     nonstate_problem = _validate_nonstate_agent_step(deps, project_dir, step)
                     if nonstate_problem:

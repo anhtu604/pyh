@@ -6,18 +6,92 @@ from pathlib import Path
 import yaml
 from pydantic import ValidationError
 
+from healthvideo.domain.project_v2 import WorkflowState
 from healthvideo.domain.script import Script
 from healthvideo.domain.storyboard import Scene, Storyboard
 from healthvideo.storage.files import canonical_json_hash, read_yaml, write_yaml_atomic
+from healthvideo.storage.project_layout import resolve_project_layout
 from healthvideo.storage.revision_lock import revision_lock
 
 PART_FIELDS = {'script_sha256', 'status', 'missing', 'validation_error', 'rework_request'}
 METADATA = 'storyboard/parts-metadata.yaml'
+_PRE_GATE_STATES = frozenset({WorkflowState.DRAFT_READY, WorkflowState.NEEDS_MEDICAL_REVISION})
+
+
+def _can_migrate(root: Path) -> bool:
+    if (root / 'storyboard/parts').is_dir() or not (root / 'storyboard/storyboard.yaml').is_file():
+        return False
+    if not (root / 'script/script.yaml').is_file():
+        return False
+    try:
+        project_dir = root.parents[1]
+    except IndexError:
+        return False
+    if not (project_dir / 'project.yaml').is_file():
+        return False
+    try:
+        layout = resolve_project_layout(project_dir)
+        if layout.manifest.state not in _PRE_GATE_STATES:
+            return False
+        board = read_yaml(root / 'storyboard/storyboard.yaml')
+        if not isinstance(board, dict) or not isinstance(board.get('scenes'), list):
+            return False
+        return len(board['scenes']) == len(_lines(root))
+    except (OSError, ValueError, TypeError, AttributeError, yaml.YAMLError):
+        return False
+
+
+def migrate(root: Path) -> None:
+    """Split a pre-gate 1-to-1 monolithic storyboard into scene parts once."""
+    with revision_lock(root):
+        if (root / 'storyboard/parts').is_dir():
+            return
+        board = read_yaml(root / 'storyboard/storyboard.yaml')
+        scenes = board.get('scenes') if isinstance(board, dict) else None
+        lines = _lines(root)
+        if not isinstance(board, dict) or not isinstance(scenes, list) or len(scenes) != len(lines):
+            raise ValueError('Storyboard không ánh xạ 1-1 theo thứ tự với kịch bản.')
+        hashes = script_hashes(root)
+        write_yaml_atomic(root / METADATA, {k: v for k, v in board.items() if k != 'scenes'})
+        for (scene_id, line), raw_scene in zip(lines.items(), scenes, strict=True):
+            part = (
+                {k: v for k, v in raw_scene.items() if k not in PART_FIELDS}
+                if isinstance(raw_scene, dict)
+                else {}
+            )
+            part['id'] = scene_id
+            part['script_sha256'] = hashes[scene_id]
+            mismatches = []
+            if part.get('script_line_id') != line.id:
+                mismatches.append('script_line_id')
+            if part.get('narration') != line.text:
+                mismatches.append('narration')
+            if part.get('claim_id') != line.claim_id:
+                mismatches.append('claim_id')
+            if part.get('clip_only') != line.clip_id:
+                mismatches.append('clip_only')
+            if mismatches:
+                part['status'] = 'invalid'
+                part['validation_error'] = 'không khớp dòng kịch bản: ' + ', '.join(mismatches)
+            else:
+                try:
+                    Scene.model_validate(_scene(part))
+                except (ValueError, TypeError) as exc:
+                    part['status'] = 'invalid'
+                    part['validation_error'] = str(exc)
+                else:
+                    part['status'] = 'ok'
+            write_yaml_atomic(root / f'storyboard/parts/{scene_id}.yaml', part)
 
 
 def enabled(root: Path) -> bool:
-    """Never silently split an existing monolithic storyboard."""
-    return (root / 'storyboard/parts').is_dir() or not (root / 'storyboard/storyboard.yaml').is_file()
+    """Enable scene parts for new boards, existing parts, or pre-gate 1-to-1 legacy boards."""
+    if (root / 'storyboard/parts').is_dir() or not (root / 'storyboard/storyboard.yaml').is_file():
+        return True
+    if _can_migrate(root):
+        migrate(root)
+        return True
+    return False
 
 
 def _lines(root: Path) -> dict:
@@ -146,6 +220,10 @@ def _assemble(artifact_root: Path) -> list[str]:
         data = dict(metadata)
         data['scenes'] = [_scene(read_yaml(root / f'storyboard/parts/{scene_id}.yaml'))
                           for scene_id in details]
+        from healthvideo.workflows.storyboard_design import normalize_outro
+
+        script = Script.model_validate(read_yaml(root / 'script/script.yaml'))
+        data = normalize_outro(data, script)
         Storyboard.model_validate(data)
         write_yaml_atomic(target, data)
         error = _validation_error(root)

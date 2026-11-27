@@ -295,7 +295,10 @@ def test_storyboard_rework_unlocks_only_named_part(storyboard_job, monkeypatch):
 def test_legacy_storyboard_is_not_split(storyboard_job):
     from healthvideo.workflows import storyboard_parts as parts
 
-    _, root, calls, run = storyboard_job
+    project, root, calls, run = storyboard_job
+    manifest = read_yaml(project / 'project.yaml')
+    manifest['state'] = 'medically_approved'
+    write_yaml_atomic(project / 'project.yaml', manifest)
     assert not parts.enabled(root)
     assert run()[0][0] == 'ok'
     assert '## Phân cảnh từng phần' not in calls[0][1]

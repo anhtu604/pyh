@@ -322,7 +322,9 @@ def _deps(state: dict, invoke) -> RunDeps:
 def _queue(root: Path) -> Path:
     add_to_queue(root, QueueEntry(slug=SLUG, title='Muối', question='Vì sao?',
                                   added=date(2026, 11, 6)))
-    return _project(root)
+    project = _project(root)
+    (project / 'revisions/001/evidence/expert-brief.md').write_text('# Brief\n', encoding='utf-8')
+    return project
 
 
 def test_run_reviews_rewrites_with_notes_then_submits_without_approving(tmp_path):

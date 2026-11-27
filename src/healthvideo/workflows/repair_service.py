@@ -23,7 +23,7 @@ from healthvideo.company import load_company, role_skill_block
 from healthvideo.domain.project_v2 import WorkflowState
 from healthvideo.env import background_popen_kwargs, background_python, child_env
 from healthvideo.failures import classify_failure
-from healthvideo.process import is_same_process, process_token, resolve_pnpm_argv
+from healthvideo.process import is_same_process, process_token
 from healthvideo.storage.files import (
     canonical_json_hash,
     read_agent_yaml,
@@ -1091,7 +1091,7 @@ def _try_apply_playbook(
     ):
         return None
     signature = playbook.incident_signature('repair', detail)
-    rule = playbook.match_rule(root, station='repair', signature=signature)
+    rule = playbook.match_rule(root, station='repair', signature=signature, slug=slug)
 
     record_path = root / 'topics/logs' / slug / REPORT
     persisted: dict = {}
@@ -1493,6 +1493,8 @@ def repair_once(
             return 'waiting_retry'
         return 'idle'
     detail = blocked.read_text(encoding='utf-8', errors='replace')
+    if detail.strip().startswith('Chờ dev lead sửa code:'):
+        return 'awaiting_dev'
     if ('Review budget exhausted:' in detail or script_review.CYCLE_LIMIT_REASON in detail
             or 'Trạm 07 cần hướng dẫn:' in detail or 'Trạm 12 cần hướng dẫn:' in detail
             or 'Trạm 12 chưa đạt' in detail
@@ -1541,6 +1543,8 @@ def repair_once(
                 resumed_plan = Diagnosis.model_validate(raw_diag)
             except (TypeError, ValueError):
                 resumed_plan = None
+    if record.get('phase') == 'awaiting_dev':
+        return 'awaiting_dev'
     if record.get('phase') == 'needs_attention':
         outcome = _escalate_to_supervisor(root, slug, layout, reason=reason, detail=detail, record=record)
         if isinstance(outcome, dict) and outcome.get('playbook_applied'):
@@ -1662,104 +1666,33 @@ def repair_once(
             if phase == 'retry_requested':
                 record['retry_requested_at'] = datetime.now(UTC).isoformat()
             record['phase'] = phase
+        elif plan.action == 'repair':
+            # Repair engineer no longer edits code directly; open a dev ticket and hold for dev lead.
+            record['attempts'] = max(0, record['attempts'] - 1)
+            ticket_now = datetime.now(UTC)
+            ticket_path = (
+                root / 'topics/dev-tickets' / f"{ticket_now.strftime('%Y%m%dT%H%M%S')}-{slug}.yaml"
+            )
+            write_yaml_atomic(ticket_path, {
+                'slug': slug,
+                'revision': layout.manifest.active_revision,
+                'cause': plan.cause,
+                'files': list(plan.files),
+                'tests': list(plan.tests),
+                'brief': plan.brief,
+                'created_at': ticket_now.isoformat(),
+                'status': 'open',
+            })
+            short_cause = ' '.join(plan.cause.split())[:160]
+            blocked_reason = f'Chờ dev lead sửa code: {short_cause}'
+            write_text_atomic(blocked, blocked_reason + '\n')
+            record['dev_ticket'] = ticket_path.relative_to(root).as_posix()
+            record['incident'] = {
+                'state': layout.manifest.state.value,
+                'reason': _normalize_incident_reason(blocked_reason),
+            }
+            record['phase'] = 'awaiting_dev'
         else:
-            if plan.action == 'repair':
-                files = _paths(root, plan.files)
-                tests = _paths(root, plan.tests, tests=True)
-                if not files or not tests:
-                    raise ValueError('Phiếu sửa cần file và test nghiệm thu cụ thể.')
-                # Editing shared runtime code waits until production/other agents are idle.
-                if _active(root):
-                    record['attempts'] -= 1
-                    record['phase'] = 'waiting_idle'
-                    write_yaml_atomic(record_path, record)
-                    return 'waiting_idle'
-                record['phase'] = 'repairing'
-                write_yaml_atomic(record_path, record)
-                try:
-                    before_bytes, before_paths = maintenance.enter_context(
-                        _maintenance(root, slug=slug, attempt=record['attempts'], assigned_files=files, work_dir=work)
-                    )
-                except (OSError, ValueError, RuntimeError) as error:
-                    # Infrastructure failure before repair_engineer runs must not consume MAX_REPAIRS.
-                    record['attempts'] = max(0, record['attempts'] - 1)
-                    if _active(root):
-                        record['phase'] = 'waiting_idle'
-                        record.pop('retry_after', None)
-                        record.pop('error', None)
-                    else:
-                        record['phase'] = 'repair_failed'
-                        record['retry_after'] = (
-                            datetime.now(UTC) + timedelta(seconds=REPAIR_COOLDOWN_SECONDS)
-                        ).isoformat()
-                        record['error'] = _sanitize_reason(error)
-                    return record['phase']
-                outcome = _ask(root, slug, 'repair_engineer', 'repair',
-                               plan.brief + '\nChỉ sửa: ' + ', '.join(map(str, files))
-                               + '\nTuyệt đối không tạo file mới, không sửa file ngoài danh sách, '
-                               'không sửa claim, dữ liệu y khoa hay báo cáo critic.'
-                               + '\nLỗi đã phân tích: ' + plan.cause,
-                               work / 'repair.yaml', RepairResult, invoke)
-                if outcome.status != 'ready':
-                    raise ValueError(outcome.summary)
-                changed = _check_scope(root, files, before_bytes, before_paths)
-                py_tests = [p for p in tests if p.suffix == '.py']
-                ts_tests = [p for p in tests if p not in py_tests]
-                gate_tests = [root / 'tests/workflows' / f'test_{name}.py'
-                              for name in ('script_review', 'product_review')]
-                checked = run([sys.executable, '-m', 'pytest', *map(str, [*py_tests, *gate_tests]), '-q'],
-                              cwd=root, capture_output=True, text=True, encoding='utf-8',
-                              errors='replace', timeout=300, shell=False)
-                record['test_exit_code'] = checked.returncode
-                tests_log = (checked.stdout or '') + (checked.stderr or '')
-                (work / 'tests.log').write_text(tests_log, encoding='utf-8')
-                if checked.returncode:
-                    raise ValueError('Test nghiệm thu chưa đạt; xem tests.log.')
-                root_resolved = root.resolve()
-                has_video_files = any(
-                    p.resolve().relative_to(root_resolved).parts[0] == 'video'
-                    for p in files
-                )
-                if ts_tests or has_video_files:
-                    video_dir = root / 'video'
-                    video_resolved = video_dir.resolve()
-                    vitest_args = (
-                        ['--dir', str(video_dir), 'exec', 'vitest', 'run',
-                         *[p.resolve().relative_to(video_resolved).as_posix() for p in ts_tests]]
-                        if ts_tests
-                        else ['--dir', str(video_dir), 'test']
-                    )
-                    for argv in (
-                        resolve_pnpm_argv(vitest_args),
-                        resolve_pnpm_argv(['--dir', str(video_dir), 'typecheck']),
-                    ):
-                        video_checked = run(
-                            argv,
-                            cwd=root,
-                            capture_output=True,
-                            text=True,
-                            encoding='utf-8',
-                            errors='replace',
-                            timeout=300,
-                            shell=False,
-                        )
-                        if tests_log and not tests_log.endswith('\n'):
-                            tests_log += '\n'
-                        tests_log += (video_checked.stdout or '') + (video_checked.stderr or '')
-                        (work / 'tests.log').write_text(tests_log, encoding='utf-8')
-                        record['test_exit_code'] = video_checked.returncode
-                        if video_checked.returncode:
-                            raise ValueError('Test/typecheck video chưa đạt; xem tests.log.')
-                python_files = [str(p) for p in files if p.suffix == '.py']
-                if python_files:
-                    lint = run([sys.executable, '-m', 'ruff', 'check', *python_files],
-                               cwd=root, capture_output=True, text=True, encoding='utf-8',
-                               errors='replace', timeout=60, shell=False)
-                    (work / 'lint.log').write_text(lint.stdout + lint.stderr, encoding='utf-8')
-                    if lint.returncode:
-                        raise ValueError('Lint chưa đạt; xem lint.log.')
-                _check_scope(root, files, before_bytes, before_paths)
-                record['changed_files'] = changed
             repair_after = {relative: (root / relative).read_bytes()
                             for relative in record.get('changed_files', []) if relative in before_bytes}
             diff = scoped_review.packet(

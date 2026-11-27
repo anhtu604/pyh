@@ -260,18 +260,26 @@ def disable_rule(
     return _append_raw_entry(root, rule)
 
 
-def match_rule(root: Path, *, station: str, signature: str) -> PlaybookRule | None:
-    """Return the latest active rule matching ``station`` and ``signature``, if any."""
+def match_rule(
+    root: Path,
+    *,
+    station: str,
+    signature: str,
+    slug: str | None = None,
+) -> PlaybookRule | None:
+    """Return the latest active rule matching ``station``, ``signature``, and optional ``slug``."""
     pb = load_playbook(root)
     station_clean = station.strip()
     sig_clean = signature.strip()
     if not station_clean or not sig_clean:
         return None
+    slug_clean = slug.strip() if isinstance(slug, str) and slug.strip() else None
     matched = [
         rule for rule in active_rules(pb)
         if rule.match is not None
         and rule.match.station == station_clean
         and rule.match.signature == sig_clean
+        and (slug_clean is None or rule.slug is None or rule.slug == slug_clean)
     ]
     return matched[-1] if matched else None
 
