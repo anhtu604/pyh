@@ -1035,16 +1035,14 @@ def test_r5_full_offline_pipeline_and_two_layout_shapes(tmp_path: Path, monkeypa
     )
     assert manifest.state == WorkflowState.DRAFT_READY
 
-    # 2. Snapshot R5 licensed assets before medical gate, record script review in D4 ledger, submit.
-    board = Storyboard.model_validate(read_yaml(revision / "storyboard" / "storyboard.yaml"))
-    snapshot_r5_assets(revision, board)
-    assert (revision / R5_USED_ASSETS).is_file()
-    assert (revision / R5_LICENSE_LEDGER).is_file()
-
+    # 2. Submitting (any path, incl. the factory) pins the R5 used-asset snapshot itself.
+    assert not (revision / R5_USED_ASSETS).exists()
     write_critic_review_fixture(project, product=False)
     assert review_budget.review_budget_status(revision, "script")["used"] == 1
     manifest = submit_medical_review(project)
     assert manifest.state == WorkflowState.AWAITING_MEDICAL_REVIEW
+    assert (revision / R5_USED_ASSETS).is_file()
+    assert (revision / R5_LICENSE_LEDGER).is_file()
 
     # 3. Attempting production before Gate 1 approval must be blocked.
     with pytest.raises(ValueError, match="medically_approved|medical approval"):

@@ -361,6 +361,11 @@ def submit_medical_review(project_dir: Path) -> ProjectManifestV2:
     assets = AssetManifest.model_validate(read_yaml(revision / "assets/asset-manifest.yaml"))
     validate_estimated_layout(project_dir, script, storyboard, assets)
     _validate(revision, script, storyboard, assets, project=project)
+    if storyboard.quality_profile == "r5_v1":
+        # Every submit path (CLI or factory) pins the R5 used-asset snapshot the gate reviews.
+        from healthvideo.workflows.gate_review import snapshot_r5_assets
+
+        snapshot_r5_assets(revision, storyboard)
     context = TransitionContext(
         active_revision=project.active_revision,
         current_input_hash=canonical_json_hash(script_data),

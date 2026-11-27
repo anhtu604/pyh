@@ -10,8 +10,6 @@ from typing import Annotated
 
 import typer
 
-from healthvideo.domain.project_v2 import ProjectManifestV2, WorkflowState
-from healthvideo.domain.storyboard import Storyboard
 from healthvideo.domain.topic import TopicCard
 from healthvideo.storage.files import read_yaml
 from healthvideo.workflows.create_project_v2 import create_project_v2
@@ -20,7 +18,6 @@ from healthvideo.workflows.draft import (
     submit_medical_review,
     submit_script_draft,
 )
-from healthvideo.workflows.gate_review import snapshot_r5_assets
 from healthvideo.workflows.operator import get_next_action, render_status
 from healthvideo.workflows.shorts_plan import save_shorts_plan
 from healthvideo.workflows.storyboard_design import submit_storyboard_design
@@ -112,16 +109,6 @@ def submit_medical(
 ) -> None:
     """Submit a validated draft to the doctor's medical review gate."""
     try:
-        manifest_path = project_dir / "project.yaml"
-        if manifest_path.is_file():
-            manifest = ProjectManifestV2.model_validate(read_yaml(manifest_path))
-            if manifest.state is WorkflowState.DRAFT_READY:
-                revision_root = project_dir / "revisions" / manifest.active_revision
-                board_path = revision_root / "storyboard/storyboard.yaml"
-                if board_path.is_file():
-                    board = Storyboard.model_validate(read_yaml(board_path))
-                    if board.quality_profile == "r5_v1":
-                        snapshot_r5_assets(revision_root, board)
         if not check_before_medical(project_dir):
             typer.echo('Chờ bác sĩ chọn cách đọc trong app trước khi nộp cổng y khoa.')
             return
