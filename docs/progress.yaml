@@ -569,6 +569,11 @@ phases:
     note: 'Xong (f6e4334, 10f0eb8): mỗi video/clip đã đóng gói có nút Đăng (YouTube/TikTok, không gửi lại bài đã đăng); câu hỏi sự cố có nút Làm lại theo chuẩn R5.'
   - id: M2
     title: Model nhanh cho vai làm theo skill; chia nhỏ sản phẩm để chỉ làm lại phần chưa đạt
-    status: doing
+    status: done
     owner: codex
-    note: 'Đã đổi phân cảnh và kỹ sư sửa lỗi sang Neon; Sol giữ cho y học, bản nháp kịch bản, câu hỏi khó. Đang làm: biên kịch sửa theo góp ý dùng Neon; kiểm đầu vào bằng code trước khi gọi agent; phân cảnh mỗi cảnh một file, chạy lại chỉ cảnh chưa đạt.'
+    note: 'Xong (8f603cc, 4677b9c): phân cảnh/sửa lỗi chạy Neon; biên kịch sửa theo góp ý chạy Neon; code kiểm đầu vào trước khi gọi agent; phân cảnh lưu từng cảnh, chạy lại chỉ cảnh chưa đạt.'
+  - id: M3
+    title: Sửa gốc 4 nhóm lỗi lặp (sản phẩm tự cập nhật theo nhau, ghi chú cũ tự hết hạn, lỗi chỉ đúng chỗ, sửa lỗi không đụng code)
+    status: doing
+    owner: agy
+    note: 'Hai nhánh song song: M3a (storyboard tự tách cảnh, tự định vị lỗi, luật chỉ học từ bác sĩ) và M3b (yêu cầu sửa không lặp, phiếu sửa code cho dev lead, kiểm đầu vào mọi bước). Có bộ test tái hiện sự cố PYH-001.'
