@@ -299,6 +299,17 @@ def validate_r5_contract(board: Storyboard, script: Script) -> None:
     """
     from healthvideo.domain.long_form import long_form_script, long_form_storyboard
 
+    if board.quality_profile is not None:
+        # Clip-only scenes are filtered below, yet Remotion renders them too (TakeawayCard.tsx).
+        for scene in board.scenes:
+            for shot in scene.shots:
+                if shot.component != "TakeawayCard":
+                    continue
+                for window in shot.text_windows:
+                    words = len(window.text.split())
+                    if window.kind in {"takeaway", "question"} and not 1 <= words <= R5_MAX_TAKEAWAY_WORDS:
+                        raise ValueError(f"Scene {scene.id} shot {shot.id}: TakeawayCard {window.kind} needs "
+                                         f"1..{R5_MAX_TAKEAWAY_WORDS} words, got {words}")
     board = long_form_storyboard(board)
     script = long_form_script(script)
     if board.quality_profile is None:

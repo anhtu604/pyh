@@ -181,3 +181,17 @@ def test_cross_document_references_fail_closed(target):
                                 "narration": "Synthetic.", "shots": [shot]}])
     with pytest.raises(ValueError):
         validate_r5_contract(board, script)
+
+
+def test_takeaway_card_word_limit_covers_clip_only_scenes():
+    # PYH-001 2026-11-27: clip-only S52 carried a 10-word question; only Remotion caught it.
+    script = Script(title="Synthetic", lines=[{"id": f"L{i}", "text": "First? Second?" if i == 1 else "Synthetic."}
+                                               for i in range(1, 4)])
+    shot = {**shot_payload(), "kind": "story", "tier": None, "component": "TakeawayCard", "asset_paths": [],
+            "text_windows": [{"kind": "question", "text": "một hai ba bốn năm sáu bảy tám chín mười",
+                              "start": {"kind": "scene_start"}, "end": {"kind": "scene_end"}}]}
+    scene = {"id": "S52", "start_frame": 0, "duration_frames": 120, "narration": "Synthetic.",
+             "clip_only": "CL01", "visual": "brand_outro", "shots": [shot]}
+    board = Storyboard(title="Synthetic", quality_profile="r5_v1", r5_contract=contract_payload(), scenes=[scene])
+    with pytest.raises(ValueError, match="S52 shot SH1: TakeawayCard question needs 1..8 words, got 10"):
+        validate_r5_contract(board, script)
