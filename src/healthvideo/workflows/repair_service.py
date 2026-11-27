@@ -1032,8 +1032,11 @@ def apply_reopen_or_delegate(
         } and delegate_role in {None, 'writer', 'medical_expert'}:
             # Other roles get leader-guidance only; an edit_script request would route to the writer.
             change_request.request_change(layout.project_dir, 'edit_script', clean_direction, ctx, now=now)
+        elif state == WorkflowState.MEDICALLY_APPROVED:
+            # Script and storyboard are in the medical hash: any change reopens that gate.
+            change_request.request_change(layout.project_dir, 'edit_script', clean_direction, ctx, now=now)
+            state = WorkflowState.NEEDS_MEDICAL_REVISION
         elif state in {
-            WorkflowState.MEDICALLY_APPROVED,
             WorkflowState.PRODUCTION_IN_PROGRESS,
             WorkflowState.NEEDS_PRODUCTION_REVISION,
         }:

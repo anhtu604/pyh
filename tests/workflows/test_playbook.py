@@ -608,3 +608,24 @@ def test_storyboard_delegation_in_draft_ready_does_not_request_script_edit(tmp_p
         tmp_path, project.name, layout, direction='Sửa câu mở đầu.', delegate_role='writer', wake=False,
     )
     assert change_request.pending(project)
+
+
+def test_storyboard_delegation_after_medical_approval_reopens_medical_gate(tmp_path, monkeypatch):
+    # PYH-001 2026-11-27: produce failed real-voice D2 timing; edit_production is refused here.
+    from datetime import UTC, datetime
+
+    from healthvideo.domain.gate_review import GateKind
+    from healthvideo.workflows.gate_review import approve_gate
+
+    project = create_v2_project_fixture(tmp_path / 'projects', state=WorkflowState.AWAITING_MEDICAL_REVIEW)
+    approve_gate(project, GateKind.MEDICAL, reviewer='Doc', now=datetime.now(UTC))
+    (tmp_path / 'topics/logs' / project.name).mkdir(parents=True)
+    monkeypatch.setattr(repair_service, '_release', lambda root, slug: None)
+    repair_service.apply_reopen_or_delegate(
+        tmp_path, project.name, resolve_project_layout(project), direction='Gộp shot ngắn.',
+        delegate_role='storyboard_director', wake=False,
+    )
+    assert resolve_project_layout(project).manifest.state == WorkflowState.NEEDS_MEDICAL_REVISION
+    assert change_request.pending(project)
+    guidance = read_yaml(tmp_path / 'topics/logs' / project.name / 'leader-guidance.yaml')
+    assert (guidance['role'], guidance['step']) == ('storyboard_director', 'revise_medical')
