@@ -47,7 +47,6 @@ from healthvideo.domain.storyboard import Storyboard
 from healthvideo.domain.visual_budget import validate_visual_budget
 from healthvideo.render.input import R5RevisionAsset
 from healthvideo.render.quality import (
-    R5RuntimeStoryboard,
     measure_r5_quality,
     resolve_r5_shots,
     validate_r5_quality,
@@ -544,8 +543,11 @@ def approve_gate(
         validate_clip_script(script, storyboard)
         if storyboard.quality_profile == "r5_v1":
             validate_r5_contract(storyboard, script)
-            estimated = R5RuntimeStoryboard(**storyboard.model_dump(mode="python"), estimated=True)
-            validate_r5_quality(measure_r5_quality(resolve_r5_shots(estimated)), estimated=True)
+            # Same timing source as submission (measured draft voice, else estimate); a raw
+            # agent-frame check here let a submitted draft fail approval on S17 (PYH-001).
+            from healthvideo.workflows.draft import validate_estimated_layout
+
+            validate_estimated_layout(project_dir, script, storyboard, manifest)
         validate_hook_outro(script, storyboard, require_brand=True, allow_line_references=True)
         if storyboard.format_profile == "youtube_long":
             # The medical approval record does not exist yet while this gate is being approved.
