@@ -61,9 +61,8 @@ def validate_estimated_layout(
         from healthvideo.workflows.voice_preview import draft_line_ms
 
         measured = draft_line_ms(project_dir, script)
-    timed, _ = retime_storyboard(
-        storyboard, measured if measured is not None else estimate_line_ms(script, project_dir),
-    )
+    line_ms = measured if measured is not None else estimate_line_ms(script, project_dir)
+    timed, _ = retime_storyboard(storyboard, line_ms)
     errors: list[str] = []
     if storyboard.quality_profile == 'r5_v1':
         from healthvideo.domain.quality_standards import validate_r5_contract
@@ -84,6 +83,17 @@ def validate_estimated_layout(
             validate_r5_quality(report, estimated=True)
         except ValueError as error:
             errors.append(str(error))
+        # Estimates miss the real voice by up to ~10% per line: per-shot rhythm must hold at
+        # both speeds. Whole-video medians average that error out, so they stay nominal.
+        seen = set(report.issues)
+        for factor in (0.9, 1.1):
+            scaled, _ = retime_storyboard(storyboard, {k: round(v * factor) for k, v in line_ms.items()})
+            scaled = R5RuntimeStoryboard.model_validate({**scaled.model_dump(), 'estimated': True})
+            extra = [i for i in measure_r5_quality(scaled).issues if i not in seen]
+            seen.update(extra)
+            if extra:
+                errors.append('R5 rhythm fails if the real voice is 10% faster/slower '
+                              '(giọng thật nhanh/chậm 10%): keep each step 3.3-5.4s:\n' + '\n'.join(extra))
         if not report.issues:
             try:
                 timed = resolve_r5_shots(timed)

@@ -256,9 +256,9 @@ def _synthetic_r5_project(root: Path, *, slug: str = "r5-offline-fixture") -> Pa
         {
             "id": "L02",
             "text": (
-                "Ta đi từ toàn thân tới vùng gan ở hạ sườn phải. "
+                "Ta đi từ toàn thân tới vùng gan nằm ở hạ sườn phải của cơ thể. "
                 "Phóng sâu vào đơn vị tiểu thùy để thấy hàng tế bào xếp đều. "
-                "Mỗi tế bào giữ enzym bên trong để xử lý chuyển hóa."
+                "Mỗi tế bào giữ enzym bên trong để xử lý chuyển hóa mỗi ngày."
             ),
             "claim_id": "C01",
             "source_marker": "[1]",
@@ -267,9 +267,9 @@ def _synthetic_r5_project(root: Path, *, slug: str = "r5-offline-fixture") -> Pa
         {
             "id": "L03",
             "text": (
-                "Bình thường enzym nằm gọn trong tế bào gan khỏe mạnh. "
+                "Bình thường enzym nằm gọn bên trong tế bào gan khỏe mạnh. "
                 "Khi màng tế bào bị tổn thương thì hàng rào lỏng dần. "
-                "Enzym tràn ra dòng máu rồi hiện trên mẫu xét nghiệm."
+                "Enzym tràn ra dòng máu rồi hiện lên trên mẫu xét nghiệm máu."
             ),
             "claim_id": "C02",
             "source_marker": "[2]",

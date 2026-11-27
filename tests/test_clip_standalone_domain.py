@@ -226,3 +226,25 @@ def test_pre_gate_measured_clip_speech_limits(tmp_path, monkeypatch, hook_ms, ou
         timed = validate_estimated_layout(tmp_path, script, storyboard, clip_plan=ClipPlan(clips=(clip,)), claims={})
         assert timed.scenes[0].duration_frames == 150
         assert timed.scenes[-1].duration_frames == 240
+
+
+@pytest.mark.parametrize("line_ms,fails", [(13200, False), (16800, True)])
+def test_pre_gate_shot_rhythm_keeps_ten_percent_speech_margin(tmp_path, monkeypatch, line_ms, fails):
+    # Hóc xương cá 2026-11-27: steps ~5.7s by estimate became 6.1-6.5s with the real voice.
+    from healthvideo.workflows.draft import validate_estimated_layout
+    from tests.render.test_quality import action, shot
+    from tests.render.test_quality import board as r5_board
+
+    storyboard = r5_board([shot(0, 300, kind="mechanism", actions=[
+        action(0, 100, 0), action(100, 200, 1), action(200, 300, 2)])], frames=300)
+    # Equal token spans: each causal step lasts a third of the scene.
+    text = "w0 a b w100 c d w200 Question1? Question2?"
+    storyboard = storyboard.model_copy(update={"scenes": (
+        storyboard.scenes[0].model_copy(update={"narration": text}),)})
+    script = Script(title="Test", lines=[ScriptLine(id="L1", text=text)])
+    monkeypatch.setattr("healthvideo.workflows.voice_preview.draft_line_ms", lambda *_: {"L1": line_ms})
+    if fails:
+        with pytest.raises(ValueError, match="nhanh/chậm 10%"):
+            validate_estimated_layout(tmp_path, script, storyboard)
+    else:
+        validate_estimated_layout(tmp_path, script, storyboard)
