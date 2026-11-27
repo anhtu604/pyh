@@ -305,8 +305,16 @@ def validate_r5_contract(board: Storyboard, script: Script) -> None:
         too_long = []
         for scene in board.scenes:
             for shot in scene.shots:
+                # Mirror R5ShotScene.tsx preconditions so the storyboard fails here, not in Remotion.
+                kinds = {w.kind for w in shot.text_windows}
+                where = f"Scene {scene.id} shot {shot.id}: {shot.component}"
+                if shot.component == "VnLabSheet" and not kinds & {"lab_sheet", "table"}:
+                    too_long.append(f"{where} requires a lab_sheet or table text_window")
                 if shot.component != "TakeawayCard":
                     continue
+                if not any(w.kind in {"takeaway", "question"} for w in shot.text_windows):
+                    too_long.append(f"Scene {scene.id} shot {shot.id}: TakeawayCard requires a takeaway or "
+                                    "question text_window; use another component for shots without card text")
                 for window in shot.text_windows:
                     words = len(window.text.split())
                     if window.kind in {"takeaway", "question"} and not 1 <= words <= R5_MAX_TAKEAWAY_WORDS:

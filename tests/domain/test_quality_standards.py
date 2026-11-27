@@ -199,3 +199,16 @@ def test_takeaway_card_word_limit_covers_clip_only_scenes():
     with pytest.raises(ValueError, match="S52 shot SH1: TakeawayCard question needs 1..8 words, got 10") as error:
         validate_r5_contract(board, script)
     assert "S53 shot SH2" in str(error.value)
+
+
+def test_takeaway_card_without_text_window_is_rejected():
+    # PYH-001 2026-11-27: 98 TakeawayCard shots had no takeaway/question window; Remotion failed at CL01.
+    script = Script(title="Synthetic", lines=[{"id": f"L{i}", "text": "First? Second?" if i == 1 else "Synthetic."}
+                                               for i in range(1, 4)])
+    shot = {**shot_payload(), "kind": "story", "tier": None, "component": "TakeawayCard", "asset_paths": [],
+            "text_windows": []}
+    board = Storyboard(title="Synthetic", quality_profile="r5_v1", r5_contract=contract_payload(),
+                       scenes=[{"id": "S05", "start_frame": 0, "duration_frames": 120, "narration": "Synthetic.",
+                                "visual": "whiteboard", "on_screen_text": "Synthetic", "shots": [shot]}])
+    with pytest.raises(ValueError, match="S05 shot SH1: TakeawayCard requires a takeaway or question text_window"):
+        validate_r5_contract(board, script)

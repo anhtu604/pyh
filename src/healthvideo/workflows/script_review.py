@@ -345,11 +345,13 @@ def record_review(project: Path, reviewed_hash: str, *, event_id: str | None = N
     start = max(int(log.get('submitted', 0)), int(log.get('guidance_start', 0)))
     previous = (rounds[-1] if len(rounds) > start and rounds[-1].get('snapshot')
                 and not rounds[-1]['passed'] else None)
+    failed_round = previous is not None
     if previous is None:
         previous = medical_baseline(project) or log.get('guidance_baseline')
-    # A baseline copied from a passed round has no issues and therefore no scope: the doctor's
-    # line scope is enforced by rework.check after the writer, not by freezing every line here.
-    if previous and previous['issues']:
+    # A doctor baseline copied from a passed round has no issues and therefore no scope: the
+    # doctor's line scope is enforced by rework.check after the writer. A failed round without
+    # issues (decisions only) still freezes every accepted line.
+    if previous and (previous['issues'] or failed_round):
         allowed = {line for item in previous['issues']
                    for line in [item['line'], *item.get('related_lines', [])]}
         scoped_review.check_script(previous['snapshot']['script/script.yaml'].encode('utf-8'),

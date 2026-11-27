@@ -201,7 +201,7 @@ def test_pre_gate_measured_clip_speech_limits(tmp_path, monkeypatch, hook_ms, ou
 
     def _clip_shot(shot_id: str) -> dict:
         return {
-            "id": shot_id, "kind": "story", "tier": None, "component": "TakeawayCard",
+            "id": shot_id, "kind": "story", "tier": None, "component": "ReferenceDistribution",
             "asset_paths": [], "question_ids": ["Q1"],
             "start": {"kind": "scene_start"}, "end": {"kind": "scene_end"},
             "actions": [], "text_windows": [], "long_shot_reason": None,
