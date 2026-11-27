@@ -758,3 +758,15 @@ def test_medical_rejection_grants_two_critic_rounds(tmp_path):
     status = review_budget_status(revision, 'script')
     assert status['limit'] == before + 2
     assert {g['source'] for g in status['grants']} == {'doctor-medical-reject'}
+
+
+def test_doctor_guidance_after_passed_round_does_not_freeze_rewrite(tmp_path):
+    # PYH-001 / Hóc xương cá 2026-11-27: the passed baseline had no issues, so every rewritten
+    # line was a "scope violation" and each critic round was discarded after it had run.
+    from healthvideo.workflows import script_review
+
+    project = _project(tmp_path)
+    assert _review(project, 8)['passed'] is True
+    script_review.reset_for_doctor_guidance(project, 'vui-hon', require_script_rewrite=False)
+    _script(project, 'Lời mới vui hơn mà vẫn đúng claim.')
+    assert _review(project, 8)['passed'] is True

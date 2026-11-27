@@ -347,7 +347,9 @@ def record_review(project: Path, reviewed_hash: str, *, event_id: str | None = N
                 and not rounds[-1]['passed'] else None)
     if previous is None:
         previous = medical_baseline(project) or log.get('guidance_baseline')
-    if previous:
+    # A baseline copied from a passed round has no issues and therefore no scope: the doctor's
+    # line scope is enforced by rework.check after the writer, not by freezing every line here.
+    if previous and previous['issues']:
         allowed = {line for item in previous['issues']
                    for line in [item['line'], *item.get('related_lines', [])]}
         scoped_review.check_script(previous['snapshot']['script/script.yaml'].encode('utf-8'),
