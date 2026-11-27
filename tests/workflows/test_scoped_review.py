@@ -545,3 +545,18 @@ def test_safety_issue_cannot_be_downgraded():
     report = {'scores': {'safe': 8}, 'issues': [
         {'line': 'N01', 'criterion': 'safe', 'issue_id': 'safety', 'blocking_safety': False}]}
     assert reconcile(prior, report, 'line')['issues'][0]['blocking_safety'] is True
+
+
+def test_medical_note_line_range_names_every_line_inside(tmp_path):
+    # PYH-001 2026-11-27: "chọn trong N01–N53" scoped only N01 and N53.
+    from healthvideo.storage.files import read_yaml
+    from healthvideo.workflows import rework
+    from tests.helpers import create_v2_project_fixture
+
+    project = create_v2_project_fixture(tmp_path / 'projects')
+    ids = [line['id'] for line in read_yaml(project / 'revisions/001/script/script.yaml')['lines']]
+    numbered = ids[:-1]  # the fixture ends with a non-numbered OUTRO line
+    plan = rework.prepare(project, f'Biên kịch tự chọn trong {numbered[0]}–{numbered[-1]}.')
+    assert plan['scope']['script/script.yaml'] == numbered
+    single = rework.prepare(project, f'Chỉ sửa {ids[0]}.')
+    assert single['scope']['script/script.yaml'] == [ids[0]]

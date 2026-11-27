@@ -148,6 +148,17 @@ def storyboard_context(project: Path) -> str:
                               'fragments': fragments}, allow_unicode=True))
 
 
+_RANGE = re.compile(r'(?<![\w])([A-Z]+)(\d+)\s*[–-]\s*(?:\1)?(\d+)(?![\w])')
+
+
+def _in_range(identity: str, note: str) -> bool:
+    """An explicit range such as N01–N53 names every ID inside it (still explicit scope)."""
+    match = re.fullmatch(r'([A-Z]+)(\d+)', identity)
+    return bool(match) and any(
+        prefix == match[1] and int(low) <= int(match[2]) <= int(high)
+        for prefix, low, high in _RANGE.findall(note))
+
+
 def prepare(project: Path, note: str) -> dict:
     root = resolve_project_layout(project).artifact_root
     path = root / PLAN
@@ -163,8 +174,8 @@ def prepare(project: Path, note: str) -> dict:
         snapshot[relative] = file.read_bytes().decode('utf-8')
         items = read_yaml(file).get(collection, [])
         identities = [str(item.get('id') or item.get('path', '')) for item in items]
-        scope[relative] = [identity for identity in identities if identity and re.search(
-            r'(?<![\w])' + re.escape(identity) + r'(?![\w])', note)]
+        scope[relative] = [identity for identity in identities if identity and (re.search(
+            r'(?<![\w])' + re.escape(identity) + r'(?![\w])', note) or _in_range(identity, note))]
     issues = [{'issue_id': 'medical-' + request[:12] + '-' + identity,
                'line': identity, 'criterion': 'dung_yeu_cau', 'problem': note,
                'fix': 'Sửa đúng góp ý bác sĩ; giữ nguyên mọi phần khác.'}
