@@ -973,13 +973,55 @@ html[data-theme="light"] .ws-iso-stage{background:radial-gradient(ellipse 62% 46
   .ws-iso-stage{height:76px}
   .ws-iso-svg{height:76px}
 }
+/* Doctor waiting alert bar & bell toggle (UI.ALERT) */
+.alert-bar{position:fixed;top:0;left:0;right:var(--chat-w);z-index:12;display:flex;align-items:center;justify-content:space-between;gap:12px;
+  min-height:48px;padding:8px 20px;background:#B82030;color:#FFFFFF;border-bottom:1px solid rgba(255,255,255,.18);
+  box-shadow:0 4px 16px -4px rgba(0,0,0,.38);font-size:14px;font-weight:700}
+.alert-bar[hidden]{display:none}
+.alert-bar-msg{display:flex;align-items:center;gap:10px;min-width:0;line-height:1.35}
+.alert-dot{width:10px;height:10px;border-radius:50%;background:#FFE4E6;flex-shrink:0;position:relative;animation:alert-pulse 1.5s var(--ease) infinite}
+.alert-dot::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:2px solid rgba(255,228,230,.85);animation:ping 1.5s var(--ease) infinite}
+@keyframes alert-pulse{0%,100%{opacity:1}50%{opacity:.45}}
+.alert-bar-acts{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.alert-bar-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px;padding:6px 14px;border-radius:8px;
+  background:#FFFFFF;color:#8F1623;font-size:13.5px;font-weight:800;white-space:nowrap;transition:background .18s var(--ease),transform .18s var(--ease)}
+.alert-bar-btn:hover{background:#FFF1F2;transform:translateY(-1px)}
+.alert-bar-btn:focus-visible{outline:3px solid #FFFFFF;outline-offset:2px}
+.alert-kbd{font-family:'JetBrains Mono',monospace;font-size:11.5px;font-weight:600;padding:2px 6px;border-radius:5px;
+  background:rgba(255,255,255,.18);color:#FFE4E6}
+body.has-alert-bar{padding-top:48px}
+body.has-alert-bar .view{top:48px}
+.alert-bell{position:relative}
+.alert-bell[aria-pressed="true"]{color:var(--teal);border-color:color-mix(in srgb,var(--teal) 50%,transparent);background:color-mix(in srgb,var(--teal) 10%,transparent)}
+.alert-bell .bell-dot{width:6px;height:6px;border-radius:50%;background:var(--teal);position:absolute;top:7px;right:7px;display:none}
+.alert-bell[aria-pressed="true"] .bell-dot{display:block}
+@media (max-width:980px){.alert-bar{right:0}}
+@media (max-width:640px){
+  .alert-bar{flex-direction:column;align-items:stretch;gap:8px;padding:10px 14px}
+  .alert-bar-acts{width:100%}
+  .alert-bar-btn{width:100%;min-height:44px;font-size:14.5px}
+  .alert-kbd{display:none}
+  body.has-alert-bar{padding-top:96px}
+  body.has-alert-bar .view{top:96px}
+}
 @media (prefers-reduced-motion: reduce){
   #workshop:not([data-motion="on"]) *,#workshop:not([data-motion="on"]) *::before,#workshop:not([data-motion="on"]) *::after{animation:none !important;transition-duration:0.01ms !important}
   #workshop:not([data-motion="on"]) .ws-turn-track::after{animation:none !important;display:none}
+  .alert-dot,.alert-dot::after{animation:none !important}
 }
 </style>
 </head>
 <body>
+<div class="alert-bar" id="alert-bar" role="status" aria-live="polite" hidden>
+  <div class="alert-bar-msg">
+    <span class="alert-dot" aria-hidden="true"></span>
+    <span id="alert-bar-text">0 việc đang chờ bác sĩ</span>
+  </div>
+  <div class="alert-bar-acts">
+    <span class="alert-kbd" aria-hidden="true">N</span>
+    <button type="button" class="alert-bar-btn" id="alert-bar-open" title="Mở việc chờ đầu tiên (phím N chuyển tiếp)">Xem ngay</button>
+  </div>
+</div>
 <div class="wrap">
   <header>
     <div class="brand">
@@ -1010,6 +1052,10 @@ html[data-theme="light"] .ws-iso-stage{background:radial-gradient(ellipse 62% 46
       <button class="btn danger" id="btn-stop" type="button" style="display:none">
         <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>Dừng xưởng</button>
       <button class="btn" id="btn-admin-toggle" type="button" aria-expanded="false" aria-controls="admin-drawer">Quản trị ▾</button>
+      <button class="btn ghost alert-bell" id="btn-alert-toggle" type="button" aria-pressed="false" title="Bật chuông và thông báo khi có việc chờ" aria-label="Bật chuông và thông báo khi có việc chờ">
+        <svg id="alert-bell-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/><line id="alert-bell-slash" x1="3" y1="3" x2="21" y2="21"/></svg>
+        <span class="bell-dot" aria-hidden="true"></span>
+      </button>
       <button class="btn ghost" id="btn-theme" type="button" title="Đổi giao diện Sáng / Tối" aria-label="Đổi giao diện Sáng / Tối">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/></svg><span class="lbl">Sáng / Tối</span></button>
       <button class="btn" id="btn-chat-toggle" type="button" aria-controls="chat-panel" aria-expanded="false">
@@ -1519,6 +1565,161 @@ $('btn-theme').onclick = () => {
     localStorage.setItem('pyh-theme', 'light');
   }
 };
+/* Doctor alerts: chime, browser Notification, sticky red bar, N shortcut (UI.ALERT) */
+const ALERT_SEEN_KEY = 'pyh-alert-seen', ALERT_SOUND_KEY = 'pyh-alert-sound';
+const ALERT_DONE_STATES = new Set(['packaged', 'published_manual']);
+let alertAudioCtx = null, alertBooted = false, alertSeenKeys = null, alertPrevStates = new Map();
+let alertWaitingItems = [], alertCycleIdx = 0;
+let alertSoundOn = localStorage.getItem(ALERT_SOUND_KEY) === 'on';
+
+function syncAlertBellUI(){
+  const btn = $('btn-alert-toggle');
+  if(!btn) return;
+  btn.setAttribute('aria-pressed', String(alertSoundOn));
+  const slash = $('alert-bell-slash');
+  if(slash) slash.style.display = alertSoundOn ? 'none' : '';
+  const lbl = alertSoundOn ? 'Đang bật chuông báo việc chờ (bấm để tắt)' : 'Bật chuông và thông báo khi có việc chờ';
+  btn.title = lbl;
+  btn.setAttribute('aria-label', lbl);
+}
+function ensureAlertAudio(){
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if(!AC) return null;
+  if(!alertAudioCtx) alertAudioCtx = new AC();
+  if(alertAudioCtx.state === 'suspended') alertAudioCtx.resume().catch(()=>{});
+  return alertAudioCtx;
+}
+function playAlertTone(kind){
+  if(!alertSoundOn) return;
+  try{
+    const ctx = ensureAlertAudio();
+    if(!ctx || ctx.state !== 'running') return;
+    const t0 = ctx.currentTime + 0.01;
+    const notes = kind === 'new'
+      ? [{f:659.25, at:0, dur:0.17, peak:0.14}, {f:880, at:0.15, dur:0.32, peak:0.16}]
+      : [{f:1046.5, at:0, dur:0.34, peak:0.1}];
+    for(const n of notes){
+      const osc = ctx.createOscillator(), g = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(n.f, t0 + n.at);
+      g.gain.setValueAtTime(0.0001, t0 + n.at);
+      g.gain.exponentialRampToValueAtTime(n.peak, t0 + n.at + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + n.at + n.dur);
+      osc.connect(g); g.connect(ctx.destination);
+      osc.start(t0 + n.at); osc.stop(t0 + n.at + n.dur + 0.02);
+    }
+  }catch(e){}
+}
+function notifyDoctorItem(item){
+  if(typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+  try{
+    const name = [item.code, item.title || item.slug].filter(Boolean).join(' · ');
+    const gateName = item.gate === 'video' ? 'video' : (item.gate === 'medical' ? 'y khoa' : String(item.gate || ''));
+    const body = item.kind === 'gate' ? `${name}: chờ duyệt cổng ${gateName}` : `${name}: xưởng hỏi ý kiến`;
+    const n = new Notification('Xưởng video · Cần bác sĩ', {body, tag: item.key});
+    n.onclick = () => {
+      try{ window.focus(); }catch(e){}
+      n.close();
+      if(item.slug) openProduct(item.slug);
+    };
+  }catch(e){}
+}
+function renderAlertBar(){
+  const bar = $('alert-bar');
+  if(!bar) return;
+  const count = alertWaitingItems.length;
+  bar.hidden = count === 0;
+  document.body.classList.toggle('has-alert-bar', count > 0);
+  if(count > 0 && $('alert-bar-text')){
+    $('alert-bar-text').textContent = `${count} việc đang chờ bác sĩ`;
+  }
+}
+function collectWaitingItems(d){
+  const items = [];
+  for(const p of (d && Array.isArray(d.projects) ? d.projects : [])){
+    if(!p || !p.slug) continue;
+    if(p.gate){
+      items.push({key:`gate:${p.slug}:${p.state || p.gate}`, kind:'gate', slug:p.slug, code:p.code || '', title:p.title || p.slug, gate:p.gate});
+    }
+    if(p.doctor_question){
+      const qid = p.doctor_question.id || p.doctor_question.kind || 'q';
+      items.push({key:`q:${p.slug}:${qid}`, kind:'question', slug:p.slug, code:p.code || '', title:p.title || p.slug});
+    }
+  }
+  return items;
+}
+function saveAlertSeen(set){
+  try{ localStorage.setItem(ALERT_SEEN_KEY, JSON.stringify([...set])); }catch(e){}
+}
+function processDoctorAlerts(d){
+  const items = collectWaitingItems(d);
+  alertWaitingItems = items;
+  if(alertCycleIdx >= items.length) alertCycleIdx = 0;
+  renderAlertBar();
+  const currKeys = new Set(items.map(x => x.key));
+  const currStates = new Map((d?.projects || []).filter(p => p && p.slug).map(p => [p.slug, p.state || '']));
+  if(!alertBooted){
+    alertBooted = true;
+    alertSeenKeys = new Set(currKeys);
+    alertPrevStates = currStates;
+    saveAlertSeen(alertSeenKeys);
+    return;
+  }
+  const newItems = items.filter(x => !alertSeenKeys.has(x.key));
+  let resolvedAny = false;
+  for(const k of alertSeenKeys){
+    if(!currKeys.has(k)){ resolvedAny = true; break; }
+  }
+  let finishedAny = false;
+  for(const [slug, st] of currStates){
+    const prev = alertPrevStates.get(slug);
+    if(prev && prev !== st && ALERT_DONE_STATES.has(st)){ finishedAny = true; break; }
+  }
+  alertSeenKeys = new Set(currKeys);
+  alertPrevStates = currStates;
+  saveAlertSeen(alertSeenKeys);
+  if(newItems.length){
+    playAlertTone('new');
+    newItems.forEach(notifyDoctorItem);
+  } else if(resolvedAny || finishedAny){
+    playAlertTone('done');
+  }
+}
+function openNextWaitingItem(fromFirst = false){
+  if(!alertWaitingItems.length) return;
+  const idx = fromFirst ? 0 : (alertCycleIdx % alertWaitingItems.length);
+  const item = alertWaitingItems[idx];
+  alertCycleIdx = (idx + 1) % alertWaitingItems.length;
+  if(item && item.slug) openProduct(item.slug);
+}
+syncAlertBellUI();
+if($('alert-bar-open')) $('alert-bar-open').onclick = () => openNextWaitingItem(true);
+if($('btn-alert-toggle')) $('btn-alert-toggle').onclick = async () => {
+  alertSoundOn = !alertSoundOn;
+  try{ localStorage.setItem(ALERT_SOUND_KEY, alertSoundOn ? 'on' : 'off'); }catch(e){}
+  syncAlertBellUI();
+  if(alertSoundOn){
+    const ctx = ensureAlertAudio();
+    if(ctx && ctx.state === 'suspended'){ try{ await ctx.resume(); }catch(e){} }
+    if(typeof Notification !== 'undefined' && Notification.permission === 'default'){
+      try{ await Notification.requestPermission(); }catch(e){}
+    }
+    playAlertTone('done');
+    toast('Đã bật chuông báo việc chờ.');
+  } else {
+    toast('Đã tắt chuông báo việc chờ.');
+  }
+};
+document.addEventListener('pointerdown', () => { if(alertSoundOn && (!alertAudioCtx || alertAudioCtx.state === 'suspended')) ensureAlertAudio(); }, {passive:true});
+document.addEventListener('keydown', (e) => {
+  if(e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+  if(String(e.key || '').toLowerCase() !== 'n') return;
+  const t = e.target;
+  if(t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+  if(!alertWaitingItems.length) return;
+  e.preventDefault();
+  openNextWaitingItem(false);
+});
 function setAdminDrawer(open){
   const drawer = $('admin-drawer');
   const bd = $('admin-backdrop');
@@ -2883,6 +3084,7 @@ function render(d){
   const tgOn = Boolean(d.telegram && d.telegram.running);
   if($('chat-badge')) $('chat-badge').textContent = tgOn ? 'Trực tuyến · Telegram' : 'Trực tuyến';
   document.title=(d.waiting?`(${d.waiting}) `:'')+'Xưởng video · Protect Your Health';
+  processDoctorAlerts(d);
   syncStartGate();
 }
 let refreshInFlight = null, medanimInitialLoaded = false, progressInitialLoaded = false;
