@@ -123,15 +123,22 @@ def validate_estimated_layout(
 
         catalog = revision / 'assets/r5/catalog.yaml'
         known = {record.file for record in load_asset_catalog(catalog)} if catalog.is_file() else set()
-        missing = sorted(used_assets - known)
-        if missing:
-            errors.append('R5 asset_paths must be licensed assets from assets/r5/catalog.yaml (stage with '
-                          '`healthvideo step stage-r5-assets`, or use the scene mascot for StoryShot); '
-                          'not registered: ' + ', '.join(missing[:10]) + '; owner=storyboard_director')
+        # Name every scene: storyboard parts reopen only scenes the error mentions.
+        for scene in timed.scenes:
+            for shot in scene.shots:
+                for path in shot.asset_paths:
+                    if path not in known:
+                        errors.append(f'Scene {scene.id} shot {shot.id}: R5 asset_path {path} is not registered '
+                                      'in assets/r5/catalog.yaml (stage licensed assets with `healthvideo step '
+                                      'stage-r5-assets`, or drop asset_paths and use the scene mascot for '
+                                      'StoryShot); owner=storyboard_director')
     if timed.format_profile == 'youtube_long':
         if clip_plan is None:
-            if revision is None:
-                raise ValueError('youtube_long requires script/clip-plan.yaml')
+            if revision is None or not (revision / 'script/clip-plan.yaml').is_file():
+                # The storyboard director writes it in storyboard_design; say so instead of crashing.
+                raise ValueError('Estimated layout precheck failed:\n' + '\n'.join([*errors,
+                    ('youtube_long requires script/clip-plan.yaml written in storyboard_design; '
+                     'owner=storyboard_director')]))
             clip_plan = ClipPlan.model_validate(read_yaml(revision / 'script/clip-plan.yaml'))
         if claims is None:
             ledger = read_yaml(revision / 'evidence/ledger.yaml') if revision else {}

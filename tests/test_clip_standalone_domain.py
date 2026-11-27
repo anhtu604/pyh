@@ -266,5 +266,23 @@ def test_pre_gate_r5_asset_paths_must_be_in_licensed_catalog(tmp_path, monkeypat
         storyboard.scenes[0].model_copy(update={"narration": text}),)})
     script = Script(title="Test", lines=[ScriptLine(id="L1", text=text)])
     monkeypatch.setattr("healthvideo.workflows.voice_preview.draft_line_ms", lambda *_: {"L1": 60000})
-    with pytest.raises(ValueError, match="not registered: assets/illustrations/clinic.png"):
+    with pytest.raises(ValueError, match="Scene S1 shot SH1: R5 asset_path assets/illustrations/clinic.png is not registered"):
+        validate_estimated_layout(project, script, storyboard)
+
+
+def test_pre_gate_missing_clip_plan_is_actionable_not_a_crash(tmp_path, monkeypatch):
+    # Dev ticket 2026-11-27: youtube_long without script/clip-plan.yaml raised FileNotFoundError.
+    from healthvideo.workflows.draft import validate_estimated_layout
+    from tests.helpers import create_v2_project_fixture
+    from tests.render.test_quality import board as r5_board
+    from tests.render.test_quality import shot
+
+    project = create_v2_project_fixture(tmp_path / "projects")
+    (project / "revisions/001/script/clip-plan.yaml").unlink(missing_ok=True)
+    original = r5_board([shot(0, 1800)], frames=1800)
+    storyboard = original.model_copy(update={"format_profile": "youtube_long", "scenes": (
+        original.scenes[0].model_copy(update={"chapter_id": "CH01"}),)})
+    script = Script(title="Test", lines=[ScriptLine(id="L1", text=storyboard.scenes[0].narration)])
+    monkeypatch.setattr("healthvideo.workflows.voice_preview.draft_line_ms", lambda *_: None)
+    with pytest.raises(ValueError, match="clip-plan.yaml written in storyboard_design; owner=storyboard_director"):
         validate_estimated_layout(project, script, storyboard)
