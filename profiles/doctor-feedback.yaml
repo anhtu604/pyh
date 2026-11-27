@@ -703,3 +703,204 @@ entries:
   reviewer: Tu
   text: 'Quyết định Trạm repair: Cho phép xử lý / thử sửa thêm 1 chu kỳ'
   items: []
+- at: '2026-11-26T11:23:51+07:00'
+  slug: an-gao-lut-muoi-me-de-bo-doi-ung-thu-tu-chua-lanh-hay-tu-day
+  gate: tram-repair
+  revision: '001'
+  kind: comment
+  reviewer: Tu
+  text: 'Quyết định Trạm repair: Cho phép xử lý / thử sửa thêm 1 chu kỳ'
+  items: []
+- at: '2026-11-26T11:24:08+07:00'
+  slug: thay-men-gan-tang-lien-voi-mua-thuoc-bo-gan-mat-gan-uong-coi
+  gate: video
+  revision: '005'
+  kind: approve_note
+  reviewer: Tu
+  text: Anh Tu Vuong Dinh
+  items: []
+- at: '2026-11-26T14:08:47+07:00'
+  slug: an-gao-lut-muoi-me-de-bo-doi-ung-thu-tu-chua-lanh-hay-tu-day
+  gate: tram-repair
+  revision: '001'
+  kind: comment
+  reviewer: Tu
+  text: 'Quyết định Trạm repair: Giao làm lại theo chỉ đạo của tôi'
+  items: []
+- at: '2026-11-26T18:10:41+07:00'
+  slug: an-gao-lut-muoi-me-de-bo-doi-ung-thu-tu-chua-lanh-hay-tu-day
+  gate: tram-repair
+  revision: '002'
+  kind: comment
+  reviewer: Tu
+  text: 'Quyết định Trạm repair: Bác sĩ cung cấp hình và hồ sơ quyền. Hình đã có sẵn
+    trong thư viện repo, không cần tải: library/medanim/kidney-anatomy/assets.yaml,
+    id servier-kidney-section (Servier Medical Art, CC BY 4.0, smart.servier.com/smart_image/kidney/,
+    SHA đã ghi; mặt cắt dọc phân biệt vỏ thận hồng, tháp tủy trắng, bể thận vàng).
+    Dàn vào revision bằng healthvideo step stage-r5-assets với --catalog library/medanim/kidney-anatomy/assets.yaml
+    --ids servier-kidney-section, dùng cho N03–N04. Catalog library/medanim/liver-enzyme-leak/assets.yaml
+    đã sửa đường dẫn assets/ cho cả 10 mục, gồm ảnh cơ reactome-muscle-r-ico-014108.
+    Dựng đủ storyboard, asset-manifest và clip-plan (CL01 theo bàn giao shorts_producer).'
+  items: []
+- at: '2026-11-26T19:43:59+07:00'
+  slug: an-gao-lut-muoi-me-de-bo-doi-ung-thu-tu-chua-lanh-hay-tu-day
+  gate: tram-repair
+  revision: '002'
+  kind: comment
+  reviewer: Tu
+  text: 'Quyết định Trạm repair: Giao làm lại theo chỉ đạo của tôi. Đã xác minh provenance
+    hình gan servier-liver-gallbladder: tải lại từ original_url ngày 2026-11-26, SHA-256
+    trùng từng byte; catalog thư viện và rev 002 đã ghi retrieved_at 2026-11-26. Cả
+    3 hình (gan, thận, cơ) đủ điều kiện. Storyboard_director tiếp tục tạo storyboard.yaml,
+    asset-manifest.yaml, clip-plan.yaml.'
+  items: []
+- at: '2026-11-26T22:07:06+07:00'
+  slug: an-gao-lut-muoi-me-de-bo-doi-ung-thu-tu-chua-lanh-hay-tu-day
+  gate: tram-repair
+  revision: '002'
+  kind: comment
+  reviewer: Tu
+  text: 'Quyết định Trạm repair: Giao làm lại theo chỉ đạo của tôi. Kịch bản rev 002
+    đã qua kiểm duyệt, giữ nguyên, không giao biên kịch. Cả 3 hình (gan, thận, cơ)
+    đã đủ nguồn, giấy phép, SHA-256 và ngày lấy. Đạo diễn phân cảnh tạo storyboard.yaml,
+    asset-manifest.yaml, clip-plan.yaml.'
+  items: []
+- at: '2026-11-26T22:22:00+07:00'
+  slug: an-gao-lut-muoi-me-de-bo-doi-ung-thu-tu-chua-lanh-hay-tu-day
+  gate: tram-09
+  revision: '002'
+  kind: comment
+  reviewer: Tu
+  text: 'Quyết định Trạm 09: {"amin":"a-min","axit":"a-xít","ESPEN":"ét-pen","glycerol":"gli-xê-rôn","kia":"kia","lactate":"lác-tát","like":"lai","protein":"prô-tê-in","subscribe":"xáp-xcrai"}'
+  items: []
+- at: '2026-11-27T10:41:58+07:00'
+  slug: an-gao-lut-muoi-me-de-bo-doi-ung-thu-tu-chua-lanh-hay-tu-day
+  gate: tram-repair
+  revision: '002'
+  kind: comment
+  reviewer: Tu
+  text: 'Quyết định Trạm repair: Giao storyboard_director đồng bộ riêng cảnh S25 với
+    lời N25 (đề xuất)'
+  items: []
+- at: '2026-11-27T10:42:14+07:00'
+  slug: an-gao-lut-muoi-me-de-bo-doi-ung-thu-tu-chua-lanh-hay-tu-day
+  gate: tram-repair
+  revision: '002'
+  kind: comment
+  reviewer: Tu
+  text: 'Quyết định Trạm repair: Giao storyboard_director đồng bộ riêng cảnh S25 với
+    lời N25 (đề xuất)'
+  items: []
+- at: '2026-11-27T12:16:34+07:00'
+  slug: an-gao-lut-muoi-me-de-bo-doi-ung-thu-tu-chua-lanh-hay-tu-day
+  gate: medical
+  revision: '002'
+  kind: approve_note
+  reviewer: Tu
+  text: Anh Tu Vuong Dinh
+  items: []
+- at: '2026-11-27T13:54:11+07:00'
+  slug: an-gao-lut-muoi-me-de-bo-doi-ung-thu-tu-chua-lanh-hay-tu-day
+  gate: tram-repair
+  revision: '002'
+  kind: comment
+  reviewer: Tu
+  text: 'Quyết định Trạm repair: Cho phép xử lý / thử sửa thêm 1 chu kỳ'
+  items: []
+- at: '2026-11-27T14:38:35+07:00'
+  slug: an-gao-lut-muoi-me-de-bo-doi-ung-thu-tu-chua-lanh-hay-tu-day
+  gate: tram-repair
+  revision: '002'
+  kind: comment
+  reviewer: Tu
+  text: 'Quyết định Trạm repair: Giao làm lại theo chỉ đạo của tôi. Giao storyboard_director
+    làm lại nhịp hình theo thời lượng giọng Vibi thật: gộp các shot ngắn để trung
+    vị nhịp cảnh kể chuyện khoảng 3 giây; sửa bước hành động ở S04, S09, S16, S18
+    cho đủ 3–6 giây. Không đổi lời đọc, claim, hình đã duyệt hay thứ tự cảnh.'
+  items: []
+- at: '2026-11-27T14:52:29+07:00'
+  slug: an-gao-lut-muoi-me-de-bo-doi-ung-thu-tu-chua-lanh-hay-tu-day
+  gate: tram-repair
+  revision: '002'
+  kind: comment
+  reviewer: Tu
+  text: 'Quyết định Trạm repair: Cho phép xử lý / thử sửa thêm 1 chu kỳ'
+  items: []
+- at: '2026-11-27T15:10:09+07:00'
+  slug: an-gao-lut-muoi-me-de-bo-doi-ung-thu-tu-chua-lanh-hay-tu-day
+  gate: tram-repair
+  revision: '002'
+  kind: comment
+  reviewer: Tu
+  text: 'Quyết định Trạm repair: Cho phép xử lý / thử sửa thêm 1 chu kỳ. Đã sửa lỗi
+    đường dẫn ở bước kiểm đầu vào (2234d6f) và bổ sung ngày tải cho hình reactome-muscle
+    (SHA khớp). Chạy tiếp storyboard theo chỉ đạo nhịp hình trước đó.'
+  items: []
+- at: '2026-11-27T15:43:22+07:00'
+  slug: an-gao-lut-muoi-me-de-bo-doi-ung-thu-tu-chua-lanh-hay-tu-day
+  gate: tram-repair
+  revision: '002'
+  kind: comment
+  reviewer: Tu
+  text: 'Quyết định Trạm repair: Giao storyboard_director ghép và kiểm lại storyboard,
+    không duyệt lại lời (đề xuất). Lời đọc giữ nguyên bản đã đạt vòng 3 (6fc48e86).
+    Bản sửa 2486ff3 giữ kết quả đạt khi nộp lại y nguyên. Ghép storyboard, chạy precheck
+    rồi nộp cổng y khoa.'
+  items: []
+- at: '2026-11-27T15:50:05+07:00'
+  slug: an-gao-lut-muoi-me-de-bo-doi-ung-thu-tu-chua-lanh-hay-tu-day
+  gate: medical
+  revision: '002'
+  kind: approve_note
+  reviewer: Tu
+  text: Anh Tu Vuong Dinh
+  items: []
+- at: '2026-11-27T16:50:48+07:00'
+  slug: an-gao-lut-muoi-me-de-bo-doi-ung-thu-tu-chua-lanh-hay-tu-day
+  gate: tram-repair
+  revision: '002'
+  kind: comment
+  reviewer: Tu
+  text: 'Quyết định Trạm repair: Giao làm lại theo chỉ đạo của tôi. Giao storyboard_director
+    rút gọn chữ trên 4 thẻ TakeawayCard cho tối đa 8 chữ: S01_SH01 (12 chữ), S35_SH01
+    (9), S43_SH01 (9), S52_SH01 (10, cảnh clip CL01). Giữ nguyên ý, claim, lời đọc,
+    nhịp và các cảnh khác.'
+  items: []
+- at: '2026-11-27T16:57:32+07:00'
+  slug: hoc-xuong-ca-nuot-ngay-nam-com-to-cach-chua-meo-hay-tu-day-x
+  gate: tram-09
+  revision: '001'
+  kind: comment
+  reviewer: Tu
+  text: 'Quyết định Trạm 09: {"CT":"xi-ti","ESGE":"esge"}'
+  items: []
+- at: '2026-11-27T17:49:05+07:00'
+  slug: an-gao-lut-muoi-me-de-bo-doi-ung-thu-tu-chua-lanh-hay-tu-day
+  gate: medical
+  revision: '002'
+  kind: reject
+  reviewer: Tu
+  text: kịch bản cần vui vẻ, hài hước và châm biếm hơn để người nghe không bị như
+    nghe giảng
+  items: []
+- at: '2026-11-27T17:49:55+07:00'
+  slug: hoc-xuong-ca-nuot-ngay-nam-com-to-cach-chua-meo-hay-tu-day-x
+  gate: medical
+  revision: '001'
+  kind: reject
+  reviewer: Tu
+  text: kịch bản cần hài hước, châm biếm hơn để người xem không bị nhàm như nghe giảng
+  items: []
+- at: '2026-11-27T18:10:00+07:00'
+  slug: chung
+  gate: chung
+  revision: '-'
+  kind: comment
+  reviewer: Tu
+  text: 'Giọng kịch bản R5 cho mọi chủ đề (Claude ghi lại từ yêu cầu của bác sĩ ngày
+    2026-11-27 và hai lần từ chối cổng y khoa lúc 17:49): kịch bản phải vui vẻ, hài
+    hước và châm biếm hơn để người nghe không bị nhàm như nghe giảng. Mỗi chương có
+    ít nhất một nhịp vui hoặc châm biếm thật, đặt sau ý khô nhất; châm biếm nhắm vào
+    mẹo vô lý, quảng cáo thổi phồng và niềm tin sai, không nhắm người bệnh hay người
+    nhà. Câu cảnh báo, liều và ngưỡng giữ nghiêm; không bịa số hay ngộ nhận để gây cười.'
+  items: []
