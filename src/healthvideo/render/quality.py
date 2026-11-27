@@ -92,7 +92,8 @@ def _anchor(anchor: R5Anchor, scene: Scene, words: tuple[CaptionWord, ...]) -> i
     if len(matches) != 1:
         raise ValueError(f"anchor {anchor.phrase!r} requires exactly one complete match, found {len(matches)}")
     selected = words[matches[0]:matches[0]+len(tokens)]
-    if any(not 0 <= w.start_frame < w.end_frame <= scene.duration_frames for w in selected):
+    # Forced alignment rounds very short words to 0 frames; only scene containment matters here.
+    if any(not 0 <= w.start_frame <= w.end_frame <= scene.duration_frames for w in selected):
         raise ValueError(f"anchor {anchor.phrase!r} outside scene")
     return selected[0].start_frame
 

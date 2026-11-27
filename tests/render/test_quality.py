@@ -286,3 +286,20 @@ def test_causal_step_onsets_cannot_be_one_second_apart():
                                                              action(150, 300, 2)])], 300)
     with pytest.raises(ValueError, match="step onsets"):
         validate_r5_quality(measure_r5_quality(b), estimated=False)
+
+
+def test_zero_length_aligned_word_inside_scene_resolves():
+    """Forced alignment rounds short words to 0 frames (PYH hóc xương S03 'đến' 182-182)."""
+    from healthvideo.domain.quality_standards import R5Anchor
+    from healthvideo.domain.storyboard import CaptionWord
+
+    b = board([shot(0, 300), shot(300, 600, id="SH2")], 600)
+    s = b.scenes[0]
+    boundary = R5Anchor(kind="phrase", line_id="L1", phrase="alpha two")
+    words = (CaptionWord(text="w0", start_frame=0, end_frame=10),
+             CaptionWord(text="alpha", start_frame=300, end_frame=300),
+             CaptionWord(text="two", start_frame=300, end_frame=310))
+    shots = (s.shots[0].model_copy(update={"end": boundary}),
+             s.shots[1].model_copy(update={"start": boundary}))
+    b = b.model_copy(update={"scenes": (s.model_copy(update={"words": words, "shots": shots}),)})
+    assert resolve_r5_shots(b).scenes[0].resolved_shots[0].end_frame == 300
