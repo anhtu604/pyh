@@ -31,7 +31,7 @@ CRITERIA: dict[str, str] = {
     'nhip_cau': 'Nhịp câu đa dạng, không lặp khuôn rào đón',
     'khong_lap_y': 'Không lặp ý, phần cơ chế gọn',
     'hinh_anh': 'Hình ảnh so sánh đời thường dễ hiểu',
-    'ca_tinh': 'Có cá tính, châm biếm đúng đối tượng',
+    'ca_tinh': 'Vui, hài, châm biếm đúng đối tượng, không như nghe giảng',
     'dung_yeu_cau': 'Bám câu hỏi, ghi chú bác sĩ và đúng nghĩa claim',
 }
 ScriptAction = Literal['script_review', 'draft', 'submit_medical', 'wait_doctor']

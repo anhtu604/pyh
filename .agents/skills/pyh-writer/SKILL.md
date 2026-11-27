@@ -37,7 +37,9 @@ missing_data_to: medical_expert qua script/questions.yaml; coordinator nếu val
   Lấy khán giả, intent và câu hỏi từ expert brief; đọc outline hiện có khi sửa.
 - Đọc mục `slug: chung` trong `profiles/doctor-feedback.yaml`.
   Chuẩn `docs/superpowers/specs/2026-11-14-agent-editorial-standards-design.md`
-  ưu tiên hơn cách hiểu phễu/CTA cũ và việc ép hài, ẩn dụ, cú twist.
+  ưu tiên hơn cách hiểu phễu/CTA cũ và việc ép ẩn dụ, cú twist. Riêng giọng hài:
+  bác sĩ 2026-11-27 yêu cầu mọi kịch bản vui, hài, châm biếm, không như nghe giảng
+  (mục "Giọng vui" dưới đây thay cho câu "không ép hài" của spec).
 
 ## Phán đoán công việc
 - Trước lời thoại, chốt audience/intent/câu hỏi từ brief và promise/angle/payoff/CTA.
@@ -58,8 +60,15 @@ missing_data_to: medical_expert qua script/questions.yaml; coordinator nếu val
 - Từng mệnh đề y khoa, kể cả câu chốt/cập nhật, phải có claim và locator đã đọc; Abstract chỉ hỗ trợ điều thực có trong abstract. Thiếu claim trả medical_expert, không tự tìm hay suy thành đã đọc toàn văn.
 - Mỗi đoạn tăng giá trị: giải được điều đang treo, mở hệ quả mới hoặc ví dụ
   đời thường giúp hiểu. Cắt liệt kê rời câu hỏi; giữ câu chốt và recap có nhiệm vụ trả lời.
-- Hài chỉ khi hợp đề tài, nhắm niềm tin sai chứ không nhắm người bệnh.
-  Ẩn dụ/nhân hóa và cú bẻ lái chỉ dùng khi sáng rõ và đúng bằng chứng;
+- Giọng vui (bác sĩ 2026-11-27): kể như người bạn lanh lợi ngồi cà phê, không như
+  thầy đứng bục. Mỗi chương có ít nhất một nhịp vui hoặc châm biếm thật sự (câu
+  đá xoáy, so sánh phóng đại, tình huống đời thường dở khóc dở cười, câu tự trào),
+  đặt ngay sau ý khô nhất để người nghe thở. Châm biếm nhắm vào mẹo vô lý, lời
+  quảng cáo thổi phồng, niềm tin sai và "chuyên gia mạng"; không nhắm người bệnh,
+  người nhà đang lo, hay ngoại hình. Đoạn cảnh báo nguy hiểm/cấp cứu và câu đưa
+  liều/ngưỡng giữ nghiêm, đùa ở câu trước hoặc sau. Cái vui phải đúng bằng chứng:
+  không bịa số, bịa trích dẫn hay bịa ngộ nhận để có miếng hài.
+- Ẩn dụ/nhân hóa và cú bẻ lái chỉ dùng khi sáng rõ và đúng bằng chứng;
   không ép một ẩn dụ xuyên suốt hay bịa ngộ nhận để có twist.
 - Thuật ngữ lên màn hình khi cần; lời đọc tiếng Việt đời thường, câu dài ngắn xen nhau.
   Tự đọc thành tiếng để sửa chỗ vấp và giọng giáo trình, không tự nhận đã nghe TTS.

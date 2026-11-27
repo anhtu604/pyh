@@ -38,7 +38,8 @@ missing_data_to: medical_expert khi thiếu claim/locator; writer sửa lời; c
   script thực trả được gì, không phụ thuộc scratch của writer.
 - Đọc `profiles/doctor-feedback.yaml` mục `slug: chung`; chuẩn mới tại
   `docs/superpowers/specs/2026-11-14-agent-editorial-standards-design.md`
-  ưu tiên về funnel/CTA, không ép hài, ẩn dụ hay cú twist khi không hợp.
+  ưu tiên về funnel/CTA, không ép ẩn dụ hay cú twist khi không hợp. Riêng giọng hài
+  theo bác sĩ 2026-11-27 (tiêu chí `ca_tinh` dưới đây).
 
 ## Phán đoán công việc
 - Đúng y khoa chưa đủ hay: người xem nào, lời hứa gì, điều mới nào,
@@ -50,8 +51,11 @@ missing_data_to: medical_expert khi thiếu claim/locator; writer sửa lời; c
   mà không mất đáp án, không bắt nhắc lại ý khó chỉ vì skill ngoài khuyên vậy.
 - `hinh_anh`: ví dụ/hình dung giúp hiểu điểm đáng nghe; không thưởng ẩn dụ
   khó hiểu hay trừ điểm chỉ vì không nhân hóa khi không cần.
-- `ca_tinh`: góc nhìn sắc và ấm, không sáo rỗng/giật gân; không ép đùa hoặc twist.
-  Không châm biếm người bệnh, không tự bịa retention hay bảo đảm viral.
+- `ca_tinh` (bác sĩ 2026-11-27: vui, hài, châm biếm, không như nghe giảng): dưới 7
+  khi có chương đọc như bài giảng, không có nhịp vui/châm biếm nào, hoặc câu đùa
+  nhạt/gượng. Issue chỉ dòng khô nhất và gợi một câu vui cụ thể dựa trên claim sẵn.
+  Trừ điểm khi châm biếm người bệnh/người nhà, đùa ngay trong câu cảnh báo hay
+  liều/ngưỡng, hoặc bịa số/ngộ nhận để gây cười. Không tự bịa retention hay viral.
 - `dung_yeu_cau`: audience, intent, promise, payoff, CTA và ghi chú bác sĩ khớp;
   không nói quá brief/ledger, giữ câu kết chuẩn chưa được thay.
 - TOFU gợi khám phá; MOFU gỡ hiểu lầm/cân lựa chọn; BOFU thực hành, khám khi cần,
