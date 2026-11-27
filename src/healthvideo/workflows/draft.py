@@ -116,6 +116,18 @@ def validate_estimated_layout(
                           f'entrances={[e.start_frame for e in scene.entrances]}')
     revision = project_dir / 'revisions' / _project(project_dir).active_revision if (
         project_dir / 'project.yaml').is_file() else None
+    used_assets = {path for scene in timed.scenes for shot in scene.shots for path in shot.asset_paths}
+    if storyboard.quality_profile == 'r5_v1' and used_assets and revision is not None:
+        # submit_medical snapshots only catalogued assets; fail here with a fix the agent can apply.
+        from healthvideo.visuals.medanim_assets import load_asset_catalog
+
+        catalog = revision / 'assets/r5/catalog.yaml'
+        known = {record.file for record in load_asset_catalog(catalog)} if catalog.is_file() else set()
+        missing = sorted(used_assets - known)
+        if missing:
+            errors.append('R5 asset_paths must be licensed assets from assets/r5/catalog.yaml (stage with '
+                          '`healthvideo step stage-r5-assets`, or use the scene mascot for StoryShot); '
+                          'not registered: ' + ', '.join(missing[:10]) + '; owner=storyboard_director')
     if timed.format_profile == 'youtube_long':
         if clip_plan is None:
             if revision is None:

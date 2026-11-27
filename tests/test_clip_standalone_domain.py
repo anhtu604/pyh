@@ -248,3 +248,23 @@ def test_pre_gate_shot_rhythm_keeps_ten_percent_speech_margin(tmp_path, monkeypa
             validate_estimated_layout(tmp_path, script, storyboard)
     else:
         validate_estimated_layout(tmp_path, script, storyboard)
+
+
+def test_pre_gate_r5_asset_paths_must_be_in_licensed_catalog(tmp_path, monkeypatch):
+    # Hóc xương cá 2026-11-28: StoryShot pointed at FLUX illustrations; only submit_medical crashed.
+    from healthvideo.workflows.draft import validate_estimated_layout
+    from tests.helpers import create_v2_project_fixture
+    from tests.render.test_quality import board as r5_board
+    from tests.render.test_quality import shot
+
+    project = create_v2_project_fixture(tmp_path / "projects")
+    story = {**shot(0, 1800), "component": "StoryShot", "tier": None,
+             "asset_paths": ["assets/illustrations/clinic.png"]}
+    storyboard = r5_board([story], frames=1800)
+    text = f"{storyboard.scenes[0].narration} Question1? Question2?"
+    storyboard = storyboard.model_copy(update={"scenes": (
+        storyboard.scenes[0].model_copy(update={"narration": text}),)})
+    script = Script(title="Test", lines=[ScriptLine(id="L1", text=text)])
+    monkeypatch.setattr("healthvideo.workflows.voice_preview.draft_line_ms", lambda *_: {"L1": 60000})
+    with pytest.raises(ValueError, match="not registered: assets/illustrations/clinic.png"):
+        validate_estimated_layout(project, script, storyboard)
