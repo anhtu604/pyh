@@ -787,6 +787,18 @@ def reject_gate(
     write_yaml_atomic(project_dir / "project.yaml", changed.model_dump(mode="json"))
     remember(project_dir, gate=kind.value, revision=project.active_revision,
              kind="reject", text=reason, reviewer=reviewer, at=now)
+    if kind is GateKind.MEDICAL:
+        from healthvideo.workflows import review_budget
+
+        if review_budget.enabled(revision_root):
+            # Doctor 2026-11-27: a medical rejection asks for a rewrite, so the critic gets a
+            # fresh first check + one fix round, audited against this rejection file.
+            for index in (1, 2):
+                review_budget.grant_extra_round(
+                    revision_root, "script", source="doctor-medical-reject",
+                    issue_key=f"medical-reject:{rejection_path.name}",
+                    grant_id=f"medical-reject:{rejection_path.name}:{index}",
+                )
     return record
 
 

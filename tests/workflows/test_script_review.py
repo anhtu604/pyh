@@ -737,3 +737,24 @@ def test_identical_resubmission_keeps_passed_review(tmp_path):
     assert next_script_action(project) == 'submit_medical'
     _script(project, 'Đổi lời sau khi nộp lại')
     assert next_script_action(project) == 'script_review'
+
+
+def test_medical_rejection_grants_two_critic_rounds(tmp_path):
+    # Doctor 2026-11-27: a rejected medical gate must not strand the rewrite without a critic.
+    from datetime import UTC, datetime
+
+    from healthvideo.domain.gate_review import GateKind
+    from healthvideo.domain.project_v2 import WorkflowState
+    from healthvideo.workflows.gate_review import reject_gate
+    from healthvideo.workflows.review_budget import review_budget_status
+    from tests.helpers import create_v2_project_fixture
+
+    project = create_v2_project_fixture(tmp_path / 'projects', state=WorkflowState.AWAITING_MEDICAL_REVIEW)
+    revision = project / 'revisions/001'
+    write_yaml_atomic(revision / 'workflow/standards.yaml', {'quality_standard': {'profile': 'r5_v1'}})
+    before = review_budget_status(revision, 'script')['limit']
+    reject_gate(project, GateKind.MEDICAL, reviewer='Doc', reason='Vui hơn',
+                resume_state=WorkflowState.DRAFT_READY, now=datetime.now(UTC))
+    status = review_budget_status(revision, 'script')
+    assert status['limit'] == before + 2
+    assert {g['source'] for g in status['grants']} == {'doctor-medical-reject'}
