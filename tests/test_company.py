@@ -45,8 +45,10 @@ def test_critic_first_slot_differs_from_maker():
 def test_chain_uses_override_then_tier():
     company = load_company()
     assert company.chain('script_critic')[0] == ModelSlot(cli='agy', model='gemini-4-carbon-medium')
-    assert company.chain('writer')[0] == ModelSlot(cli='agy', model='claude-sonnet-5-5-medium')
-    assert company.chain('medical_expert')[0] == ModelSlot(cli='agy', model='claude-sonnet-5-5-medium')
+    assert company.chain('writer')[0] == ModelSlot(cli='codex', model='gpt-6.2-sol')
+    assert company.chain('medical_expert')[0] == ModelSlot(cli='codex', model='gpt-6.2-sol')
+    # Claude is only the last resort of the hard roles, never first anywhere.
+    assert all(company.chain(r)[0].model != 'claude-sonnet-5-5-medium' for r in company.roles)
     assert company.chain('scout') == company.tiers['bulk']
 
 
@@ -64,13 +66,11 @@ def test_every_role_uses_verified_direct_models_and_safe_fallbacks():
 def test_r534_primary_assignment_and_critic_independence():
     company = load_company()
     sol = {'medical_expert', 'writer', 'coordinator_senior'}
-    claude = {'art_director', 'product_critic'}
+    critics = {'art_director', 'product_critic', 'script_critic'}
     for role in company.roles:
         if role in sol:
-            expected = ('agy', 'claude-sonnet-5-5-medium')  # TEMP 2026-11-26: codex quota out
-        elif role in claude:
-            expected = ('agy', 'claude-sonnet-5-5-medium')
-        elif role == 'script_critic':
+            expected = ('codex', 'gpt-6.2-sol')
+        elif role in critics:
             expected = ('agy', 'gemini-4-carbon-medium')
         else:
             expected = ('agy', 'gemini-4-neon-medium')

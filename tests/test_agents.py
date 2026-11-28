@@ -408,11 +408,11 @@ def test_factory_uses_moderate_models_and_critics_away_from_the_author():
     for role in company.roles:
         assert company.chain(role)[0].cli in {'agy', 'codex', 'claude'}, role
     for step in ('research', 'draft', 'revise_medical', 'chat_deep'):
-        assert company.chain(company.role_for_step(step).id)[0].model_identity == ('agy', 'claude-sonnet-5-5-medium'), step  # TEMP codex quota
+        assert company.chain(company.role_for_step(step).id)[0].model_identity == ('codex', 'gpt-6.2-sol'), step
     for step in ('storyboard_design', 'repair'):
         assert company.chain(company.role_for_step(step).id)[0].model_identity == ('agy', 'gemini-4-neon-medium'), step
     for step in ('visual_review', 'product_review'):
-        assert company.chain(company.role_for_step(step).id)[0].model_identity == ('agy', 'claude-sonnet-5-5-medium'), step
+        assert company.chain(company.role_for_step(step).id)[0].model_identity == ('agy', 'gemini-4-carbon-medium'), step
     for role in ('coordinator', 'scout', 'copywriter', 'feedback_analyst', 'researcher',
                  'editor', 'shorts_producer', 'voice_director'):
         assert company.chain(role)[0].model_identity == ('agy', 'gemini-4-neon-medium'), role

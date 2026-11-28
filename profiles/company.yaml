@@ -1,10 +1,7 @@
-# TẠM 2026-11-26: codex hết hạn mức → vai Sol chạy agy Claude Sonnet 5.5 medium, kiểm duyệt kịch bản chạy
-# agy Carbon medium; codex giữ làm dự phòng. Trả lại khi codex có hạn mức.
-# M2 (2026-11-26): bác sĩ: vai làm theo skill dùng model nhanh (Neon). Sol chỉ cho chuyên gia y học
-# biên kịch và điều phối chuyên sâu (chỉ nhận câu hỏi khó). Kiểm duyệt giữ Terra/Sonnet, khác model người làm.
-# M1 (2026-11-24): doctor-approved model rebalance — Sol for medical_expert & storyboard_director,
-# Claude Sonnet 5.5 (Terra fallback) for art_director & product_critic, Terra for script_critic,
-# Neon for remaining light roles. Existing OmniRoute IDs only as fallback; direct/proxy aliases share identity.
+# 2026-11-28 bác sĩ (codex có lại hạn mức): ưu tiên agy; việc khó (biên kịch, chuyên gia y học,
+# điều phối chuyên sâu) dùng codex Sol; Claude chỉ là dự phòng cuối của việc cực khó, chạy qua agy
+# (cấm gọi Claude CLI trực tiếp). Kiểm duyệt chạy agy Carbon medium, khác model người làm (Neon/Sol).
+# M2 (2026-11-26): vai làm theo skill dùng Neon. M1 (2026-11-24): kiểm duyệt khác model người làm.
 tiers:
   hard:
   - {cli: codex, model: gpt-6.2-sol}
@@ -34,9 +31,9 @@ roles:
     - chat_deep
     tier: medium
     models:
-    - {cli: agy, model: claude-sonnet-5-5-medium}
     - {cli: codex, model: gpt-6.2-sol}
     - {cli: omniroute, model: codex/gpt-6.2-sol}
+    - {cli: agy, model: claude-sonnet-5-5-medium}
   researcher:
     name: Chuyên viên Nghiên cứu & Phân tích Kênh
     skills:
@@ -54,7 +51,6 @@ roles:
     steps:
     - scout
     tier: bulk
-  # 2026-11-24: Sol primary for medical evidence precision, Terra fallback.
   medical_expert:
     name: Chuyên gia y học
     skills:
@@ -63,11 +59,11 @@ roles:
     - research
     tier: medium
     models:
-    - {cli: agy, model: claude-sonnet-5-5-medium}
     - {cli: codex, model: gpt-6.2-sol}
     - {cli: omniroute, model: codex/gpt-6.2-sol}
     - {cli: codex, model: gpt-6.1-terra}
     - {cli: omniroute, model: codex/gpt-6.1-terra}
+    - {cli: agy, model: claude-sonnet-5-5-medium}
   writer:
     name: Biên kịch viral
     skills:
@@ -82,9 +78,9 @@ roles:
     - {cli: agy, model: gemini-4-neon-medium}
     - {cli: omniroute, model: agy/gemini-4-hydrogen-medium}
     models:
-    - {cli: agy, model: claude-sonnet-5-5-medium}
     - {cli: codex, model: gpt-6.2-sol}
     - {cli: omniroute, model: codex/gpt-6.2-sol}
+    - {cli: agy, model: claude-sonnet-5-5-medium}
   # 2026-11-26: bác sĩ: vai làm theo skill dùng Neon; chất lượng do skill + kiểm duyệt bảo đảm.
   storyboard_director:
     name: Đạo diễn Phân cảnh & Đồ họa
@@ -115,8 +111,6 @@ roles:
     - {cli: agy, model: gemini-4-carbon-medium}
     - {cli: codex, model: gpt-6.1-terra}
     - {cli: omniroute, model: codex/gpt-6.1-terra}
-  # 2026-11-24: Claude Sonnet 5.5 primary (Terra fallback) reviews images independently of storyboard Sol.
-  # 2026-11-28: bác sĩ cấm gọi Claude CLI trực tiếp (ăn hạn mức điều phối tổng) → Sonnet qua agy.
   art_director:
     name: Đạo diễn hình
     skills:
@@ -125,7 +119,7 @@ roles:
     - visual_review
     tier: medium
     models:
-    - {cli: agy, model: claude-sonnet-5-5-medium}
+    - {cli: agy, model: gemini-4-carbon-medium}
     - {cli: codex, model: gpt-6.1-terra}
     - {cli: omniroute, model: codex/gpt-6.1-terra}
   editor:
@@ -138,8 +132,6 @@ roles:
     - revise_production
     - revise_product
     tier: medium
-  # 2026-11-24: Claude Sonnet 5.5 primary (Terra fallback) reviews independently of editor Neon.
-  # 2026-11-28: bác sĩ cấm gọi Claude CLI trực tiếp (ăn hạn mức điều phối tổng) → Sonnet qua agy.
   product_critic:
     name: Kiểm định sản phẩm
     skills:
@@ -149,7 +141,7 @@ roles:
     - product_review
     tier: hard
     models:
-    - {cli: agy, model: claude-sonnet-5-5-medium}
+    - {cli: agy, model: gemini-4-carbon-medium}
     - {cli: codex, model: gpt-6.1-terra}
     - {cli: omniroute, model: codex/gpt-6.1-terra}
   copywriter:
