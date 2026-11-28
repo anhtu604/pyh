@@ -609,6 +609,6 @@ phases:
     note: 'Xong (9dcf44e): lỗi trình bày sau cổng video (kể cả khi bác sĩ gửi yêu cầu sửa) giao dựng sửa đúng cảnh qua revise_product, mang theo yêu cầu đang mở, lời đọc/claim khoá; chung giới hạn 2 lượt. R5 chặn shot phân bố tham chiếu thiếu chữ; renderer không in mã nội bộ.'
   - id: QA.FRAMES
     title: Kiểm file video cuối: khung đen, đứng hình, âm lượng (học từ claude-animated-shorts)
-    status: doing
+    status: done
     owner: codex
-    note: 'Đang làm: sau khi dựng, ffmpeg đo khung đen/đứng hình và độ to (LUFS, true peak) trên video dài và từng clip; ghi vào video-qa.json, lỗi nặng chặn trước khi chấm sản phẩm.'
+    note: 'Xong: sau khi dựng, ffmpeg đo khung đen, đứng hình, im lặng, LUFS và true peak trên video dài và từng clip, ghi vào video-qa.json. Chặn: đen ≥0,5 s, im lặng giữa video ≥3 s, peak > -0,5 dBTP. Ghi chú cho agent chấm: đứng hình ≥6 s, LUFS ngoài -16..-12, im lặng ở màn kết. Thử trên Thay men gan: không báo nhầm.'
