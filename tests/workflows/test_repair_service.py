@@ -418,7 +418,7 @@ def test_leader_delegates_content_issues_to_writer_expert_editor_respecting_gate
     rep_c = read_yaml(logs_c / repair.REPORT)
     assert rep_c['delegation']['requires_doctor_reopen'] is True
 
-    # Case D: editor in PRODUCTION_IN_PROGRESS -> transitions to NEEDS_PRODUCTION_REVISION, preserves medical gate
+    # Case D: editor in PRODUCTION_IN_PROGRESS receives a scoped presentation repair before review.
     root_d = tmp_path / 'case_d'
     proj_d = create_v2_project_fixture(root_d / 'projects', state=WorkflowState.DRAFT_READY)
     manifest_d = read_yaml(proj_d / 'project.yaml')
@@ -431,11 +431,12 @@ def test_leader_delegates_content_issues_to_writer_expert_editor_respecting_gate
         repair, '_ask',
         lambda *args: repair.Diagnosis(
             action='delegate', delegate_role='editor', cause='Scene pacing issue',
-            evidence=['render log'], brief='Adjust scene 2 timing',
+            evidence=['render log'], brief='Adjust S02 timing',
         ),
     )
     assert repair.repair_once(root_d, proj_d.name) == 'retry_requested'
-    assert read_yaml(proj_d / 'project.yaml')['state'] == WorkflowState.NEEDS_PRODUCTION_REVISION.value
+    assert read_yaml(proj_d / 'project.yaml')['state'] == WorkflowState.PRODUCTION_IN_PROGRESS.value
+    assert read_yaml(logs_d / 'leader-guidance.yaml')['step'] == 'revise_product'
 
 
 def test_quota_and_timeout_enter_cooldown_without_burning_attempts(job, monkeypatch):
@@ -1099,9 +1100,10 @@ def test_delegate_content_fix_routes_new_roles_writes_leader_guidance_and_respec
     assert read_yaml(logs_s / 'leader-guidance.yaml')['step'] == 'shorts_plan'
     assert read_yaml(proj_s / 'project.yaml')['state'] == WorkflowState.PRODUCTION_IN_PROGRESS.value
 
-    # 4. Post-gate block for writer/storyboard_director/voice_director after medical approval and shorts_producer at video gate
+    # 4. Protected work still requires the doctor after approval or at the video gate.
     for role, state in (
         ('writer', WorkflowState.MEDICALLY_APPROVED),
+        ('medical_expert', WorkflowState.MEDICALLY_APPROVED),
         ('storyboard_director', WorkflowState.PRODUCTION_IN_PROGRESS),
         ('voice_director', WorkflowState.NEEDS_PRODUCTION_REVISION),
         ('shorts_producer', WorkflowState.AWAITING_VIDEO_REVIEW),
@@ -1116,10 +1118,13 @@ def test_delegate_content_fix_routes_new_roles_writes_leader_guidance_and_respec
             lambda *args, _role=role: repair.Diagnosis(
                 action='delegate', delegate_role=_role, cause='Requires doctor',
                 evidence=['log'], brief='Needs reopen',
+                requires_doctor='gate' if _role == 'storyboard_director' else None,
             ),
         )
         assert repair.repair_once(root_g, proj_g.name) == 'needs_attention'
-        assert read_yaml(logs_g / repair.REPORT)['delegation']['requires_doctor_reopen'] is True
+        delegation = read_yaml(logs_g / repair.REPORT)['delegation']
+        assert delegation['requires_doctor_reopen'] is True
+        assert delegation['status'] == 'awaiting_doctor_reopen'
         assert not (logs_g / 'leader-guidance.yaml').exists()
 
     # 5. If _release raises, newly created leader-guidance.yaml is cleaned up
@@ -1381,9 +1386,13 @@ def test_delegate_post_product_review_routes_to_revise_product_and_escapes_needs
         (WorkflowState.PRODUCTION_IN_PROGRESS, 'storyboard_director'),
         (WorkflowState.PRODUCTION_IN_PROGRESS, 'editor'),
         (WorkflowState.NEEDS_PRODUCTION_REVISION, 'editor'),
+        (WorkflowState.MEDICALLY_APPROVED, 'storyboard_director'),
+        (WorkflowState.MEDICALLY_APPROVED, 'editor'),
     ]):
         root = tmp_path / f'post_pr_{idx}'
-        proj = _make_v2_project_in_state(root / 'projects', WorkflowState.PRODUCTION_IN_PROGRESS)
+        entry_state = (WorkflowState.PRODUCTION_IN_PROGRESS
+                       if start_state == WorkflowState.NEEDS_PRODUCTION_REVISION else start_state)
+        proj = _make_v2_project_in_state(root / 'projects', entry_state)
         write_yaml_atomic(proj / 'revisions/001' / product_review.LOG, {'version': 1, 'submitted': 0, 'rounds': []})
         if start_state == WorkflowState.NEEDS_PRODUCTION_REVISION:
             change_request.request_change(
@@ -1409,7 +1418,7 @@ def test_delegate_post_product_review_routes_to_revise_product_and_escapes_needs
             ),
         )
         assert repair.repair_once(root, proj.name) == 'retry_requested'
-        assert read_yaml(proj / 'project.yaml')['state'] == WorkflowState.PRODUCTION_IN_PROGRESS.value
+        assert read_yaml(proj / 'project.yaml')['state'] == entry_state.value
         guidance = read_yaml(logs / 'leader-guidance.yaml')
         assert guidance['step'] == 'revise_product'
         assert guidance['role'] == 'editor'

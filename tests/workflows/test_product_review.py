@@ -894,6 +894,156 @@ def test_surgical_repair_blocks_m64_outro_regression_and_supports_leader_guidanc
     script_path.write_bytes(orig_script)
 
 
+def _approved_r5_project(root):
+    from tests.helpers import write_critic_review_fixture
+
+    project = create_v2_project_fixture(root / 'projects', state=WorkflowState.AWAITING_MEDICAL_REVIEW)
+    storyboard_path = project / REV / 'storyboard/storyboard.yaml'
+    storyboard = read_yaml(storyboard_path)
+    storyboard['scenes'][1]['id'] = 'S19'
+    write_yaml_atomic(storyboard_path, storyboard)
+    write_critic_review_fixture(project)
+    approve_gate(project, GateKind.MEDICAL, reviewer='BS An', now=datetime(2026, 11, 28, tzinfo=UTC))
+    return project
+
+
+@pytest.mark.parametrize(('exhausted', 'legacy_hold'), [(False, False), (True, False), (False, True)])
+def test_measured_r5_failure_routes_to_scoped_repair_before_first_product_review(tmp_path, exhausted, legacy_hold):
+    from healthvideo.workflows import doctor_questions, repair_service
+    from healthvideo.workflows.produce import _ensure_v2_medical_approval_current
+
+    add_to_queue(tmp_path, QueueEntry(slug=SLUG, title='Synthetic fixture',
+                                      question='Fixture question?', added=date(2026, 11, 28)))
+    project = _approved_r5_project(tmp_path)
+    rev = project / REV
+    log_dir = tmp_path / 'topics/logs' / project.name
+    renders = []
+    edits = []
+
+    def read_state(proj):
+        return WorkflowState(read_yaml(proj / 'project.yaml')['state'])
+
+    def produce(proj):
+        _ensure_v2_medical_approval_current(rev)
+        renders.append(read_state(proj))
+        if exhausted or len(renders) == 1:
+            if len(renders) > 1:
+                raise ValueError(
+                    'R5 quality failed (estimated=False):\n'
+                    'Scene/shot S19/S19_SH01 frame [0,10601): '
+                    f'D2 story median {3.5 + len(renders) / 10}s outside (2.5, 3.5); owner=storyboard_director'
+                )
+            raise ValueError(
+                'R5 quality failed (estimated=False):\n'
+                'Scene S19 shot S19_SH01 frame [211,399): visual gap exceeds 6s; owner=storyboard_director'
+            )
+        manifest = ProjectManifestV2.model_validate(read_yaml(proj / 'project.yaml'))
+        producing = transition_v2(manifest, WorkflowState.PRODUCTION_IN_PROGRESS, TransitionContext(
+            active_revision='001', current_input_hash='1' * 64,
+            validated_artifacts=frozenset({'reviews/medical-approval.yaml'})))
+        write_yaml_atomic(proj / 'project.yaml', producing.model_dump(mode='json'))
+        _render(proj, len(renders))
+
+    def invoke(agents, prompt, *, log_dir, step, **_):
+        assert step == 'revise_product'
+        assert 'S19' in prompt
+        path = rev / 'storyboard/storyboard.yaml'
+        board = read_yaml(path)
+        idx = 2 if edits else 1
+        board['scenes'][idx]['anatomy']['motion'] = 'Adjusted pacing'
+        write_yaml_atomic(path, board)
+        edits.append(board['scenes'][idx]['id'])
+        return AgentResult(agents[0].cli, True, False, log_dir / 'fake.log')
+
+    def unexpected_diagnosis(*args, **kwargs):
+        pytest.fail('Measured R5 presentation fault should route without a diagnosis agent')
+
+    deps = RunDeps(
+        create_project=lambda *_: None, read_state=read_state, reject_note=lambda _: None,
+        python_steps={'produce': produce}, changed_code_paths=lambda _: [], invoke=invoke,
+        visual_review_pending=lambda _: False,
+    )
+    assert run_queue(tmp_path, deps, once=True).blocked == [project.name]
+    assert not (rev / pr.LOG).exists()
+    if legacy_hold:
+        detail = (log_dir / 'blocked.txt').read_text(encoding='utf-8')
+        reason = repair_service.playbook.normalize_incident_reason(detail)
+        write_yaml_atomic(log_dir / repair_service.REPORT, {
+            'revision': '001', 'attempts': 1, 'phase': 'needs_attention',
+            'incident': {'state': WorkflowState.MEDICALLY_APPROVED.value, 'reason': reason},
+            'delegation': {'role': 'storyboard_director', 'status': 'awaiting_doctor_reopen'},
+        })
+        doctor_questions.ask(
+            tmp_path, project.name, station='repair', kind='escalation',
+            question='Fixture escalation about a previously blocked R5 repair.',
+            options=[{'id': 'retry_repair_cycle', 'label': 'Retry'},
+                     {'id': 'pause_project', 'label': 'Pause'}],
+        )
+    for _ in range(2 if exhausted else 1):
+        assert repair_service.repair_once(tmp_path, project.name, invoke=unexpected_diagnosis) == 'retry_requested'
+        assert doctor_questions.open_question(tmp_path, project.name) is None
+        assert read_yaml(log_dir / repair_service.REPORT)['phase'] == 'retry_requested'
+        guidance = read_yaml(log_dir / 'leader-guidance.yaml')
+        assert guidance['step'] == 'revise_product'
+        assert 'S19' in guidance['brief']
+        assert run_queue(tmp_path, deps, once=True).blocked == ([project.name] if exhausted else [])
+
+    assert (rev / pr.MEDICAL_HASH_SYNC_LOG).is_file()
+    assert read_yaml(rev / pr.MEDICAL_HASH_SYNC_LOG)['entries'][0]['allowed_scenes'] == ['S19']
+    assert not (rev / pr.LOG).exists()
+    assert not (rev / 'reviews/video-approval.yaml').exists()
+    if exhausted:
+        assert edits == ['S19', 'S03']
+        assert renders == [WorkflowState.MEDICALLY_APPROVED] * 3
+        assert repair_service.repair_once(tmp_path, project.name, invoke=unexpected_diagnosis) == 'exhausted'
+        question = doctor_questions.open_question(tmp_path, project.name)
+        assert question['kind'] == 'escalation'
+        assert 'D2 story median' in question['options'][0]['direction']
+        assert repair_service.repair_once(tmp_path, project.name, invoke=unexpected_diagnosis) == 'needs_attention'
+        assert doctor_questions.open_question(tmp_path, project.name)['id'] == question['id']
+    else:
+        assert edits == ['S19']
+        assert renders == [WorkflowState.MEDICALLY_APPROVED] * 2
+        assert read_state(project) == WorkflowState.PRODUCTION_IN_PROGRESS
+
+
+@pytest.mark.parametrize('relative', [
+    'storyboard/storyboard.yaml', 'script/script.yaml', 'evidence/ledger.yaml',
+])
+def test_repair_with_guidance_only_rejects_edits_outside_s19(tmp_path, relative):
+    project = _approved_r5_project(tmp_path)
+    rev = project / REV
+    write_yaml_atomic(tmp_path / 'topics/logs' / project.name / 'leader-guidance.yaml', {
+        'revision': '001',
+        'step': 'revise_product',
+        'brief': 'Chỉnh nhịp hình S19.',
+    })
+    assert not (rev / pr.LOG).exists()
+    before = pr.repair_files(project)
+    path = rev / relative
+    data = read_yaml(path)
+    if relative.startswith('storyboard/'):
+        data['scenes'][2]['anatomy']['motion'] = 'Change outside S19'
+    elif relative.startswith('script/'):
+        data['lines'][0]['text'] = 'Changed narration'
+    else:
+        data['claims'][0]['text_public'] = 'Changed claim'
+    write_yaml_atomic(path, data)
+    with pytest.raises(ValueError, match='Repair scope violation'):
+        pr.check_repair(project, before)
+
+
+def test_repair_cannot_expand_its_own_leader_guidance(tmp_path):
+    project = _approved_r5_project(tmp_path)
+    path = tmp_path / 'topics/logs' / project.name / 'leader-guidance.yaml'
+    guidance = {'revision': '001', 'step': 'revise_product', 'brief': 'Chỉnh nhịp hình S19.'}
+    write_yaml_atomic(path, guidance)
+    before = pr.repair_files(project)
+    write_yaml_atomic(path, {**guidance, 'brief': 'Chỉnh nhịp hình S19 và S03.'})
+    with pytest.raises(ValueError, match='Repair scope violation: leader guidance is read-only'):
+        pr.check_repair(project, before)
+
+
 def test_check_repair_rejects_orphaning_manifest_visual_asset(tmp_path):
     project = _approved_production_project(tmp_path)
     rev = project / REV

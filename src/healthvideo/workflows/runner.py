@@ -162,7 +162,7 @@ _GUIDANCE_STEPS_BY_STATE: dict[WorkflowState, frozenset[str]] = {
     WorkflowState.EVIDENCE_READY: frozenset({"draft", "research"}),
     WorkflowState.DRAFT_READY: frozenset({"draft", "storyboard_design", "voice_prep", "research"}),
     WorkflowState.NEEDS_MEDICAL_REVISION: frozenset({"revise_medical", "research"}),
-    WorkflowState.MEDICALLY_APPROVED: frozenset({"shorts_plan", "posts", "visual_review"}),
+    WorkflowState.MEDICALLY_APPROVED: frozenset({"shorts_plan", "posts", "visual_review", "revise_product"}),
     WorkflowState.PRODUCTION_IN_PROGRESS: frozenset({"shorts_plan", "posts", "visual_review", "revise_product"}),
     WorkflowState.NEEDS_PRODUCTION_REVISION: frozenset({"revise_production", "shorts_plan"}),
 }
@@ -1105,6 +1105,9 @@ def _run_agent_invocation(
                         ) and original.read_bytes() != raw:
                             raise ValueError(f'Repair scope violation: {original}')
                 elif scoped_product:
+                    manifest_path = project_dir / 'project.yaml'
+                    if manifest_path.read_bytes() != checkpoint[manifest_path]:
+                        raise ValueError('Repair scope violation: project manifest is read-only')
                     product_review.check_repair(project_dir, product_before)
                     product_review.finalize_product_repair(project_dir, product_before)
                 elif scoped_storyboard:

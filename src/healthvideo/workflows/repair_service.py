@@ -6,6 +6,7 @@ import argparse
 import contextlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -48,6 +49,9 @@ from healthvideo.workflows.gate_review import GateKind, resume_gate
 from healthvideo.workflows.production_retry import _sanitize_reason
 
 MAX_REPAIRS = 2
+_PRESENTATION_RETRY = 'repair:revise_product'
+_PRESENTATION_LIMIT_REASON = 'Đã hết hai lượt tự sửa phần trình bày cho revision này.'
+_R5_SCENE_ID = r'(?:S\d+|HOOK|OUTRO)'
 MAX_TRANSIENT_FAILURES = 3
 REPAIR_COOLDOWN_SECONDS = 120
 QUOTA_COOLDOWN_SECONDS = 300
@@ -755,11 +759,69 @@ def _can_delegate_revise_product(layout, role: str | None) -> bool:
     """Return True when a production-stage visual fix can safely route through ``revise_product``."""
     if role not in {'editor', 'storyboard_director'}:
         return False
-    if not (layout.artifact_root / product_review.LOG).is_file():
-        return False
     return (
-        layout.manifest.state == WorkflowState.PRODUCTION_IN_PROGRESS
+        layout.manifest.state in {WorkflowState.MEDICALLY_APPROVED, WorkflowState.PRODUCTION_IN_PROGRESS}
         or _is_repair_production_side_state(layout)
+    )
+
+
+def _measured_r5_presentation_plan(layout, reason: str) -> Diagnosis | None:
+    if not _can_delegate_revise_product(layout, 'storyboard_director'):
+        return None
+    packet = reason.removeprefix('dựng lại sau sửa lỗi: ')
+    header = 'R5 quality failed (estimated=False):'
+    if not packet.startswith(header):
+        return None
+    issues = packet.removeprefix(header).split('; owner=storyboard_director')
+    if len(issues) < 2 or issues[-1].strip():
+        return None
+
+    scenes: set[str] = set()
+    messages: list[str] = []
+    all_scenes = False
+    for issue in issues[:-1]:
+        match = re.fullmatch(r'(.*?)\s*frame \[(\d+),\d+\): (.+)', issue.strip())
+        if match is None or '; owner=' in issue:
+            return None
+        location, start, message = match.groups()
+        local = re.fullmatch(rf'Scene ({_R5_SCENE_ID}) shot \S+', location)
+        if local:
+            scenes.add(local[1])
+        elif (
+            start == '0'
+            and re.match(r'D2 (?:story|mechanism) (?:median|P90)\b', message)
+            and (location.startswith('Scene/shot ') or location in {'', 'Scene * shot *'})
+        ):
+            all_scenes = True
+        elif location.startswith('Scene/shot '):
+            aggregate_scenes = re.findall(rf'\b({_R5_SCENE_ID})/', location)
+            if not aggregate_scenes:
+                return None
+            scenes.update(aggregate_scenes)
+        else:
+            return None
+        messages.append(message)
+
+    if all_scenes:
+        try:
+            storyboard = read_yaml(layout.artifact_root / 'storyboard/storyboard.yaml')
+            scenes.update(scene['id'] for scene in storyboard['scenes'])
+        except (OSError, KeyError, TypeError, ValueError, yaml.YAMLError):
+            return None
+    if not scenes:
+        return None
+    scope = ', '.join(sorted(scenes))
+    fault = ' | '.join(dict.fromkeys(messages))
+    brief = (
+        f'Đo lại và chỉnh nhịp hình theo thời lượng giọng đọc thực tế ở các cảnh {scope}. '
+        f'Xử lý lỗi R5 sau: {fault}. Giữ nguyên lời đọc, claim và nguồn đã duyệt.'
+    )
+    return Diagnosis(
+        action='delegate',
+        delegate_role='storyboard_director',
+        cause='Nhịp hình không đạt R5 khi đo theo giọng đọc thực tế.',
+        evidence=[reason],
+        brief=brief,
     )
 
 
@@ -787,13 +849,11 @@ def _delegate_content_fix(
             'cause': plan.cause,
         }
 
-    use_revise_product = _can_delegate_revise_product(layout, role)
-    if not use_revise_product and state in _PRODUCTION_STATES and role in {
-        'writer',
-        'medical_expert',
-        'storyboard_director',
-        'voice_director',
-    }:
+    use_revise_product = not plan.requires_doctor and _can_delegate_revise_product(layout, role)
+    if not use_revise_product and state in _PRODUCTION_STATES and (
+        role in {'writer', 'medical_expert', 'storyboard_director', 'voice_director'}
+        or (role == 'editor' and plan.requires_doctor)
+    ):
         return 'needs_attention', {
             'role': role,
             'status': 'awaiting_doctor_reopen',
@@ -1389,13 +1449,14 @@ def _escalate_to_supervisor(
     skip_playbook: bool = False,
 ) -> dict | None:
     """Apply a matching playbook rule or default auto-retry when safe; otherwise ask the doctor."""
-    if not skip_playbook:
+    rec = record if isinstance(record, dict) else {}
+    presentation_limit = rec.get('attention_reason') == _PRESENTATION_LIMIT_REASON
+    if not skip_playbook and not presentation_limit:
         applied = _try_apply_playbook(root, slug, layout, reason=reason, detail=detail, record=record)
         if applied is not None:
             return applied
 
     existing = doctor_questions.open_question(root, slug)
-    rec = record if isinstance(record, dict) else {}
     phase = str(rec.get('phase') or '')
     attempts_before = int(rec.get('attempts_before_incident') or 0)
     answered_escalations = sum(
@@ -1435,6 +1496,14 @@ def _escalate_to_supervisor(
             'location': str(diag.get('delegate_role') or 'leader'),
             'summary': ' '.join(str(diag.get('cause') or diag.get('brief') or '').split())[:200],
         })
+    options = _build_doctor_options(diag)
+    if presentation_limit and diag.get('brief'):
+        options[0] = {
+            'id': 'retry_repair_cycle',
+            'label': 'Thử dựng lại sau khi kiểm tra và chỉnh phần trình bày',
+            'detail': str(diag['brief']),
+            'direction': str(diag['brief']),
+        }
     return doctor_questions.ask(
         root,
         slug,
@@ -1442,7 +1511,7 @@ def _escalate_to_supervisor(
         kind='escalation',
         question=question,
         context=context,
-        options=_build_doctor_options(diag),
+        options=options,
         allow_free_text=True,
         fingerprint=fp,
         signature=signature,
@@ -1553,7 +1622,25 @@ def repair_once(
                 resumed_plan = None
     if record.get('phase') == 'awaiting_dev':
         return 'awaiting_dev'
-    if record.get('phase') == 'needs_attention':
+    measured_r5_plan = _measured_r5_presentation_plan(layout, reason)
+    presentation_attempts = record.get('playbook_auto_counts', {}).get(_PRESENTATION_RETRY, 0)
+    if measured_r5_plan and presentation_attempts >= MAX_REPAIRS:
+        already_escalated = record.get('phase') == 'needs_attention'
+        record['phase'] = 'needs_attention'
+        record['attention_reason'] = _PRESENTATION_LIMIT_REASON
+        record['diagnosis'] = measured_r5_plan.model_dump(mode='json')
+        write_yaml_atomic(record_path, record)
+        _escalate_to_supervisor(root, slug, layout, reason=reason, detail=detail, record=record)
+        return 'needs_attention' if already_escalated else 'exhausted'
+    delegation = record.get('delegation') or {}
+    legacy_r5_hold = (
+        measured_r5_plan is not None
+        and record.get('phase') == 'needs_attention'
+        and delegation.get('status') == 'awaiting_doctor_reopen'
+        and delegation.get('role') in {'editor', 'storyboard_director'}
+        and not (record.get('diagnosis') or {}).get('requires_doctor')
+    )
+    if record.get('phase') == 'needs_attention' and not legacy_r5_hold:
         outcome = _escalate_to_supervisor(root, slug, layout, reason=reason, detail=detail, record=record)
         if isinstance(outcome, dict) and outcome.get('playbook_applied'):
             return 'retry_requested'
@@ -1572,7 +1659,8 @@ def repair_once(
     if respect_cooldown and record.get('phase') == 'repair_failed' and _in_cooldown(record, now):
         return 'cooldown'
     if (record.get('transient_failures', 0) >= MAX_TRANSIENT_FAILURES
-            or record.get('attempts', 0) - record.get('attempts_before_incident', 0) >= MAX_REPAIRS):
+            or (not legacy_r5_hold
+                and record.get('attempts', 0) - record.get('attempts_before_incident', 0) >= MAX_REPAIRS)):
         record['phase'] = 'needs_attention'
         record['attention_reason'] = (
             'Đã hết lượt tự sửa cho lỗi này. Cần người vận hành xem chẩn đoán '
@@ -1596,7 +1684,7 @@ def repair_once(
         return 'cooldown'
     diagnosis_event = None
     diagnosis_stage = 'diagnosis:' + canonical_json_hash({'reason': reason})
-    if resumed_plan is None and review_budget.enabled(layout.artifact_root):
+    if resumed_plan is None and measured_r5_plan is None and review_budget.enabled(layout.artifact_root):
         diagnosis_event = uuid4().hex
         try:
             review_budget.consume_review_budget(layout.artifact_root, diagnosis_stage, diagnosis_event)
@@ -1634,10 +1722,11 @@ def repair_once(
         'Nếu lỗi nằm ở nội dung, kịch bản, bằng chứng y khoa, phát âm, shorts hoặc dựng hình/storyboard thì dùng '
         'action=delegate và chọn delegate_role là writer, medical_expert, editor, '
         'storyboard_director, shorts_producer hoặc voice_director. '
-        'Nếu revision đã có reviews/product-review-log.yaml và lỗi nằm ở phần trình bày/hình storyboard '
+        'Nếu revision đã duyệt y khoa và lỗi nằm ở phần trình bày/hình storyboard '
         '(như cảnh kết brand_outro M6.4, beat, bố cục, ngân sách hình, asset phi ngữ nghĩa) mà không đổi lời đọc/claim y khoa '
         '— kể cả khi đang ở needs_production_revision do leader-repair trước đó — chọn action=delegate, delegate_role=editor '
-        'để định tuyến về revise_product sửa phần trình bày an toàn (không chọn hold đòi mở cổng y khoa). '
+        'để định tuyến về revise_product sửa phần trình bày an toàn, kể cả khi chưa có log kiểm định sản phẩm. '
+        'Ghi rõ ID từng cảnh chịu lỗi trong brief. '
         'Nếu cần tài khoản, PIN hoặc thiếu dữ kiện để kết luận thì action=hold. '
         'Khi action=hold, BẮT BUỘC điền doctor_options gồm 2–3 phương án cụ thể theo đúng lỗi '
         '(ví dụ thiếu toàn văn: dùng abstract ghi giới hạn / bác sĩ bỏ PDF vào cache/fulltext/inbox / '
@@ -1655,8 +1744,8 @@ def repair_once(
     before_bytes: dict[str, bytes] = {}
     before_paths: set[str] = set()
     try:
-        if resumed_plan is not None:
-            plan = resumed_plan
+        plan = resumed_plan or measured_r5_plan
+        if plan is not None:
             write_yaml_atomic(work / 'diagnosis.yaml', plan.model_dump(mode='json'))
         else:
             plan = _ask(root, slug, 'coordinator_senior', 'repair_diagnose', context,
@@ -1665,15 +1754,21 @@ def repair_once(
                 review_budget.record_evidence(layout.artifact_root, diagnosis_stage, diagnosis_event,
                                               {'cause': plan.cause, 'evidence': plan.evidence, 'outcome': 'diagnosed',
                                                'incident': incident, 'report': str(work / 'diagnosis.yaml')})
-            record['diagnosis'] = plan.model_dump(mode='json')
+        record['diagnosis'] = plan.model_dump(mode='json')
         if plan.action == 'hold':
             record['phase'] = 'needs_attention'
         elif plan.action == 'delegate':
-            phase, delegation = _delegate_content_fix(root, slug, layout, plan, record['attempts'])
-            record['delegation'] = delegation
-            if phase == 'retry_requested':
-                record['retry_requested_at'] = datetime.now(UTC).isoformat()
-            record['phase'] = phase
+            if (presentation_attempts >= MAX_REPAIRS and not plan.requires_doctor
+                    and _can_delegate_revise_product(layout, plan.delegate_role)):
+                record.update(phase='needs_attention', attention_reason=_PRESENTATION_LIMIT_REASON)
+            else:
+                phase, delegation = _delegate_content_fix(root, slug, layout, plan, record['attempts'])
+                record['delegation'] = delegation
+                if phase == 'retry_requested':
+                    record['retry_requested_at'] = datetime.now(UTC).isoformat()
+                    if delegation['step'] == 'revise_product':
+                        record.setdefault('playbook_auto_counts', {})[_PRESENTATION_RETRY] = presentation_attempts + 1
+                record['phase'] = phase
         elif plan.action == 'repair':
             # Repair engineer no longer edits code directly; open a dev ticket and hold for dev lead.
             record['attempts'] = max(0, record['attempts'] - 1)

@@ -891,7 +891,7 @@ def record_review(project: Path, reviewed_hash: str, *, event_id: str | None = N
     return entry
 
 
-def repair_files(project: Path) -> dict[str, bytes]:
+def repair_files(project: Path, *, include_guidance: bool = True) -> dict[str, bytes]:
     """Capture permitted product sources, plus locked YAML to detect collateral edits."""
     root = _root(project)
     repo = project.parent.parent
@@ -915,6 +915,9 @@ def repair_files(project: Path) -> dict[str, bytes]:
         for p in dir_path.rglob('*.yaml'):
             if p.is_file():
                 files[p.relative_to(repo).as_posix()] = p.read_bytes()
+    guidance = _revise_product_guidance_path(project)
+    if include_guidance and guidance.is_file():
+        files[guidance.relative_to(repo).as_posix()] = guidance.read_bytes()
     return files
 
 
@@ -922,7 +925,7 @@ def snapshot(project: Path, *, extra_paths: Iterable[str] | None = None) -> dict
     """Keep revision YAMLs plus storyboard-relevant and edit-scoped ``video/src/`` files."""
     root = _root(project)
     repo = project.parent.parent
-    files = repair_files(project)
+    files = repair_files(project, include_guidance=False)
     edit_paths = _open_edit_paths(root) | set(extra_paths or ())
     for rel in edit_paths:
         if rel not in files and rel.startswith('video/src/') and (repo / rel).is_file():
@@ -1375,9 +1378,13 @@ def _check_video_src_repairs(
             raise ValueError('Repair scope violation: product target is locked')
 
 
-def _revise_product_guidance_brief(repo: Path, slug: str, active_revision: str) -> str:
+def _revise_product_guidance_path(project: Path) -> Path:
+    return project.parent.parent / 'topics/logs' / project.name / 'leader-guidance.yaml'
+
+
+def _revise_product_guidance_brief(project: Path, active_revision: str) -> str:
     """Return active Coordinator brief targeting ``revise_product`` for this revision, if any."""
-    path = repo / 'topics/logs' / slug / 'leader-guidance.yaml'
+    path = _revise_product_guidance_path(project)
     if not path.is_file():
         return ''
     try:
@@ -1396,7 +1403,11 @@ def check_repair(project: Path, before: dict[str, bytes]) -> None:
     root = _root(project)
     layout = resolve_project_layout(project)
     repo = project.parent.parent
-    guidance_brief = _revise_product_guidance_brief(repo, project.name, layout.manifest.active_revision)
+    after = repair_files(project)
+    guidance_key = _revise_product_guidance_path(project).relative_to(repo).as_posix()
+    if after.get(guidance_key) != before.get(guidance_key):
+        raise ValueError('Repair scope violation: leader guidance is read-only')
+    guidance_brief = _revise_product_guidance_brief(project, layout.manifest.active_revision)
     rounds = _cycle(root)
     if not rounds and not guidance_brief:
         return
@@ -1415,8 +1426,6 @@ def check_repair(project: Path, before: dict[str, bytes]) -> None:
         })
     rev_prefix = root.relative_to(repo).as_posix()
     edits_by_path = _check_edit_targets(fixable_issues, rev_prefix)
-    after = repair_files(project)
-
     for key, raw in after.items():
         if key.startswith(rev_prefix + '/') and key.endswith('.yaml') and before.get(key) != raw:
             validate_agent_text(yaml.safe_load(raw), key)
@@ -1465,7 +1474,8 @@ def finalize_product_repair(project: Path, before: dict[str, bytes]) -> None:
         medical_reviewed_paths,
     )
 
-    root = _root(project)
+    layout = resolve_project_layout(project)
+    root = layout.artifact_root
     repo = project.parent.parent
     rev_prefix = root.relative_to(repo).as_posix()
     sb_path = root / 'storyboard/storyboard.yaml'
@@ -1515,10 +1525,15 @@ def finalize_product_repair(project: Path, before: dict[str, bytes]) -> None:
     existing = read_yaml(sync_log_path) if sync_log_path.is_file() else {}
     entries = list(existing.get('entries', []))
     rounds = _cycle(root)
+    guidance_brief = _revise_product_guidance_brief(project, layout.manifest.active_revision)
+    scope_rounds = rounds or (_log(root)['rounds'] if guidance_brief else [])
+    allowed_scenes = set(_SCENE_ID_RE.findall(guidance_brief))
+    if scope_rounds:
+        allowed_scenes |= _allowed_scene_ids(scope_rounds[-1].get('issues', []))
     entries.append({
         'at': datetime.now(UTC).isoformat(),
         'round': rounds[-1]['round'] if rounds else None,
-        'allowed_scenes': sorted(_allowed_scene_ids(rounds[-1]['issues'])) if rounds else [],
+        'allowed_scenes': sorted(allowed_scenes),
         'changed_artifacts': changed_presentation,
         'updated_hashes': {
             rel: {'before': old_hashes.get(rel), 'after': new_hashes.get(rel)}
@@ -1552,8 +1567,7 @@ def revision_notes(project: Path) -> str:
     """Render the fixable issues of the latest round as instructions for the fixer."""
     root = _root(project)
     layout = resolve_project_layout(project)
-    repo = project.parent.parent
-    guidance_brief = _revise_product_guidance_brief(repo, project.name, layout.manifest.active_revision)
+    guidance_brief = _revise_product_guidance_brief(project, layout.manifest.active_revision)
     rounds = _cycle(root)
     if not rounds and not guidance_brief:
         return ''
