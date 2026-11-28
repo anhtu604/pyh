@@ -29,6 +29,28 @@ def decision(where='N14', id='D1'):
             ]}
 
 
+@pytest.mark.parametrize('gate', ['medical', 'video'])
+def test_card_key_points_use_current_revision_text(tmp_path, gate):
+    from healthvideo.workflows.decision_card import card
+
+    project = at_gate(tmp_path, gate)
+    rev = project / 'revisions/001'
+    module = sr if gate == 'medical' else pr
+    points = [{'where': where, 'claim_id': None, 'point': 'Điểm cần xem.',
+               'risk': 'Dễ hiểu nhầm.'} for where in ['N01', 'N99']]
+    write_yaml_atomic(rev / module.LOG, {'rounds': [
+        {'key_points': [{**points[0], 'point': 'Điểm cũ.'}]},
+        {'key_points': points}, {'key_points': []}, {},
+    ]})
+    write_yaml_atomic(rev / 'script/script.yaml', {
+        'lines': [{'id': 'N01', 'text': 'Nội dung hiện tại.'}],
+    })
+    result = card(project)
+    expected = [{**points[0], 'line_text': 'Nội dung hiện tại.'},
+                {**points[1], 'line_text': None}]
+    assert result['key_points'] == (expected if gate == 'medical' else [])
+
+
 def report(project, *, gate='medical', decisions=None, preserve_script=False):
     module = sr if gate == 'medical' else pr
     rev = project / 'revisions/001'
@@ -60,6 +82,7 @@ def test_old_logs_without_new_fields_still_load(tmp_path, gate):
     result = card(project)
     assert result['checked'] == []
     assert result['decisions'] == []
+    assert result['key_points'] == []
     assert result['more'] == 0
 
 

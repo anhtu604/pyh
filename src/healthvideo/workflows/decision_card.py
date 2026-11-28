@@ -78,6 +78,14 @@ def card(project_dir: Path) -> dict | None:
     root = project_dir / 'revisions' / project.active_revision
     rounds = _log(root, gate).get('rounds', [])
     latest = rounds[-1] if rounds else {}
+    key_points = []
+    if gate == 'medical':
+        points = next((row['key_points'] for row in reversed(rounds)
+                       if row.get('key_points')), [])
+        if points:
+            script = read_yaml(root / 'script/script.yaml')
+            lines = {line['id']: line.get('text') for line in script.get('lines', [])}
+            key_points = [{**item, 'line_text': lines.get(item['where'])} for item in points]
     decisions = [Decision.model_validate(item) for item in latest.get('decisions', [])]
     validate_decisions(decisions)
     shown = []
@@ -95,7 +103,7 @@ def card(project_dir: Path) -> dict | None:
     return {
         'gate': gate, 'revision': project.active_revision,
         'title': 'Duyệt y khoa' if gate == 'medical' else 'Duyệt video',
-        'checked': latest.get('checked', []), 'decisions': shown,
+        'checked': latest.get('checked', []), 'decisions': shown, 'key_points': key_points,
         'more': max(0, len(decisions) - MAX_DECISIONS), 'followup': followup,
     }
 

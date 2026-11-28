@@ -448,14 +448,47 @@ textarea.inp{min-height:90px;resize:vertical;line-height:1.55}
 @keyframes skel-pulse{0%,100%{opacity:.55}50%{opacity:1}}
 
 /* Decision Card (Spec 5.4) */
-.dcard{padding:18px 20px;margin-bottom:18px;border-radius:var(--radius);border:1.5px solid hsl(38 96% 60% / .5);background:linear-gradient(160deg,hsl(38 96% 55% / .10),var(--panel))}
-.dcard h3{font-size:17px;font-weight:800}
-.dcard-checks{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 14px}
-.dcard-item{padding:12px 14px;border-radius:12px;background:rgba(148,173,255,.05);border:1px solid var(--line);margin-bottom:10px}
-.dcard-item h4{font-size:14.5px;font-weight:700;margin-bottom:8px}
-.dcard-opt{display:flex;align-items:flex-start;gap:9px;padding:6px 8px;border-radius:8px;cursor:pointer;font-size:14px}
-.dcard-opt:hover{background:rgba(148,173,255,.08)}
+.dcard{padding:18px 20px;margin-bottom:18px;border-radius:var(--radius);border:1px solid color-mix(in srgb,var(--brand-yellow) 52%,transparent);background:color-mix(in srgb,var(--brand-yellow) 6%,var(--panel))}
+.dcard-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.dcard-head-acts{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.dcard h3{font-size:17px;font-weight:800;letter-spacing:-.015em}
+.dcard-followup{margin-top:10px;padding:9px 12px;border-radius:10px;font-size:13.5px;line-height:1.5;color:var(--text);
+  background:color-mix(in srgb,var(--teal) 12%,var(--panel));border:1px solid color-mix(in srgb,var(--teal) 36%,transparent)}
+.dcard-checks{display:flex;flex-wrap:wrap;gap:7px;margin:10px 0 14px}
+.dcard-kp{margin:14px 0 16px;padding-top:14px;border-top:1px solid var(--line)}
+.dcard-kp-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.dcard-kp-head h4{font-size:15px;font-weight:800;color:var(--text);letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.dcard-kp-empty{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:10px 12px;border-radius:10px;
+  font-size:13.5px;color:var(--muted);background:color-mix(in srgb,var(--text) 4%,var(--panel));border:1px solid var(--line)}
+.dcard-kp-list{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:12px;background:var(--panel-2);overflow:hidden}
+.dcard-kp-item{padding:11px 14px;border-top:1px solid var(--line);display:grid;gap:5px}
+.dcard-kp-item:first-child{border-top:0}
+.dcard-kp-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.dcard-where{display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:999px;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;
+  background:color-mix(in srgb,var(--teal) 15%,transparent);color:var(--teal);border:1px solid color-mix(in srgb,var(--teal) 42%,transparent);
+  cursor:pointer;transition:background .16s var(--ease),border-color .16s var(--ease)}
+.dcard-where:hover{background:color-mix(in srgb,var(--teal) 24%,transparent);border-color:var(--teal)}
+.dcard-where-static{cursor:default}
+.dcard-where-static:hover{background:color-mix(in srgb,var(--teal) 15%,transparent);border-color:color-mix(in srgb,var(--teal) 42%,transparent)}
+.dcard-claim{border:1px solid color-mix(in srgb,var(--sky) 35%,transparent)}
+.dcard-kp-point{font-size:14.5px;font-weight:700;line-height:1.45;color:var(--text);overflow-wrap:anywhere}
+.dcard-kp-risk{font-size:13px;line-height:1.45;color:var(--amber);font-weight:500;overflow-wrap:anywhere}
+.dcard-kp-quote{margin-top:2px;font-size:13px}
+.dcard-kp-quote summary{cursor:pointer;width:fit-content;color:var(--muted);font-size:12.5px;font-weight:600;padding:2px 0}
+.dcard-kp-quote summary:hover{color:var(--text)}
+.dcard-kp-quote blockquote{margin:6px 0 0;padding:8px 11px;border:1px solid var(--line);border-radius:8px;
+  background:color-mix(in srgb,var(--text) 4%,var(--panel));font-size:13px;font-style:normal;line-height:1.55;color:var(--muted);overflow-wrap:anywhere}
+.dcard-sec-title{font-size:15px;font-weight:800;color:var(--text);margin:14px 0 10px;letter-spacing:-.01em}
+.dcard-item{padding:12px 14px;border-radius:12px;background:var(--panel-2);border:1px solid var(--line);margin-bottom:10px}
+.dcard-item-head{display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.dcard-item h4{font-size:14.5px;font-weight:700;line-height:1.4;margin:0;flex:1 1 220px;min-width:0;overflow-wrap:anywhere}
+.dcard-why{color:var(--muted);font-size:13.5px;line-height:1.45;margin:0 0 8px;overflow-wrap:anywhere}
+.dcard-opt{display:flex;align-items:flex-start;gap:9px;padding:7px 9px;border-radius:8px;cursor:pointer;font-size:14px;line-height:1.45}
+.dcard-opt:hover{background:color-mix(in srgb,var(--text) 7%,transparent)}
+.dcard-opt input[type=radio]{margin-top:3px;accent-color:var(--teal);flex-shrink:0}
+.dcard-more{margin:8px 0 4px;font-size:13px;font-weight:600;color:var(--muted)}
 .dcard-foot{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-top:14px}
+.row.is-target{border-color:var(--teal);background:color-mix(in srgb,var(--teal) 13%,var(--panel));transition:background .3s var(--ease),border-color .3s var(--ease)}
 .s12-card{border-color:hsl(38 96% 60% / .42);background:linear-gradient(160deg,hsl(38 96% 55% / .10),rgba(148,173,255,.04),var(--panel))}
 .s12-lead{margin-top:6px;margin-bottom:12px}
 .s12-issues{list-style:none;display:grid;gap:8px;margin:0 0 14px;padding:0}
@@ -3269,7 +3302,8 @@ async function openProduct(slug, tab){
     b._loadedTabs = new Set(b.lite ? ['overview'] : ['overview','sources','script','storyboard','video','posts','log']);
     pv = b;
     seen.add(b.slug + '@' + b.revision);
-    pvTab = tab || (b.gate === 'video' ? 'video' : (b.gate === 'medical' ? 'script' : 'overview'));
+    const hasKeyPoints = Boolean(b.card && Array.isArray(b.card.key_points) && b.card.key_points.length > 0);
+    pvTab = tab || (b.gate === 'video' ? 'video' : (b.gate === 'medical' ? (hasKeyPoints ? 'overview' : 'script') : 'overview'));
     $('pv-title').textContent = [b.code, b.title].filter(Boolean).join(' · ');
     $('pv-meta').textContent = `${b.slug} · revision ${b.revision}`;
     const chip = $('pv-chip');
@@ -3295,44 +3329,155 @@ function closeProduct(){
   loadChat();
 }
 
+async function gotoScriptLine(where){
+  const target = String(where || '').trim();
+  if(pv){
+    pvTab = 'script';
+    updateChatContext({view: 'script'});
+    renderPv();
+    if(pv.lite && (!pv._loadedTabs || !pv._loadedTabs.has('script'))){
+      await ensurePvTabLoaded('script');
+    }
+  }
+  const findRow = (ref) => {
+    if(!ref) return null;
+    const direct = document.getElementById('line-' + ref);
+    if(direct) return direct;
+    const tok = ref.match(/\b([A-Za-z]+\d+)\b/);
+    if(tok){
+      const byTok = document.getElementById('line-' + tok[1]);
+      if(byTok) return byTok;
+    }
+    const body = $('pv-body');
+    if(!body) return null;
+    const norm = ref.toLowerCase();
+    for(const row of body.querySelectorAll('.row[data-line-id]')){
+      const lid = String(row.dataset.lineId || '').toLowerCase();
+      if(lid && (lid === norm || norm.includes(lid))) return row;
+    }
+    return null;
+  };
+  const row = findRow(target);
+  if(row){
+    row.scrollIntoView({behavior:'smooth', block:'center'});
+    row.classList.add('is-target');
+    setTimeout(() => row.classList.remove('is-target'), 2400);
+    return;
+  }
+  const body = $('pv-body');
+  if(body) body.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
 function renderDecisionCardSlot(b){
   const slot = $('pv-card-slot');
-  const card = b.card;
-  if(!card || !b.gate){
+  const card = b && b.card;
+  const gate = (b && b.gate) || (card && card.gate) || '';
+  if(!card || !gate){
     slot.innerHTML = '';
     return;
   }
-  const styleScore = b.gate === 'video'
+  const isMedical = gate === 'medical';
+  const decisions = Array.isArray(card.decisions) ? card.decisions : [];
+  const checkedList = Array.isArray(card.checked) ? card.checked : [];
+  const keyPoints = isMedical && Array.isArray(card.key_points) ? card.key_points : [];
+  const moreCount = Number(card.more || 0);
+  const followup = card.followup ? String(card.followup).trim() : '';
+
+  const styleScore = gate === 'video'
     ? (card.style_score || (b.product_review && b.product_review.style_score) || null)
     : null;
   const styleBadge = styleScore
     ? `<span class="chip ${styleScore.passed ? 'done' : 'gate'}" data-style-score="${esc(styleScore.score)}">${styleScore.passed ? '✓' : '!'} Điểm phong cách PYH (Trạm 12): ${esc(styleScore.score)}/10</span>`
     : '';
-  const checks = styleBadge + (card.auto_checks || []).map(c =>
-    `<span class="chip ${c.passed?'done':'gate'}">${c.passed?'✓':'!'} ${esc(c.label)}: ${esc(c.summary)}</span>`
+  const checksHtml = styleBadge + checkedList.map(c =>
+    `<span class="chip done">✓ ${esc(c)}</span>`
   ).join('');
-  const itemsHtml = (card.items || []).map(item => {
-    const opts = (item.options || []).map(opt => `
+
+  let keyPointsHtml = '';
+  if(isMedical){
+    if(keyPoints.length){
+      const kpRows = keyPoints.map(kp => {
+        const whereChip = kp.where
+          ? `<button type="button" class="dcard-where" data-goto-line="${esc(kp.where)}" title="Mở tab Kịch bản và cuộn tới ${esc(kp.where)}">${esc(kp.where)}</button>`
+          : '';
+        const claimChip = kp.claim_id
+          ? `<button type="button" class="tag claim dcard-claim" data-goto-claim="${esc(kp.claim_id)}" title="Xem bằng chứng ${esc(kp.claim_id)}">${esc(kp.claim_id)}</button>`
+          : '';
+        const quoteHtml = kp.line_text
+          ? `<details class="dcard-kp-quote"><summary>Trích lời thoại</summary><blockquote>${esc(kp.line_text)}</blockquote></details>`
+          : '';
+        return `<li class="dcard-kp-item">
+          ${(whereChip || claimChip) ? `<div class="dcard-kp-meta">${whereChip}${claimChip}</div>` : ''}
+          <div class="dcard-kp-point">${esc(kp.point || '')}</div>
+          ${kp.risk ? `<div class="dcard-kp-risk">${esc(kp.risk)}</div>` : ''}
+          ${quoteHtml}
+        </li>`;
+      }).join('');
+      keyPointsHtml = `
+        <section class="dcard-kp" aria-label="Điểm cần bác sĩ xem">
+          <div class="dcard-kp-head">
+            <h4>Điểm cần bác sĩ xem (${keyPoints.length})</h4>
+            <button type="button" class="btn ghost" data-open-full-script>Xem toàn bộ kịch bản</button>
+          </div>
+          <ul class="dcard-kp-list">${kpRows}</ul>
+        </section>`;
+    }else{
+      keyPointsHtml = `
+        <section class="dcard-kp" aria-label="Điểm cần bác sĩ xem">
+          <div class="dcard-kp-empty">
+            <span>Agent chưa tóm tắt điểm rủi ro — xem toàn bộ kịch bản</span>
+            <button type="button" class="btn ghost" data-open-full-script>Xem toàn bộ kịch bản</button>
+          </div>
+        </section>`;
+    }
+  }
+
+  const itemsHtml = decisions.map(item => {
+    const selectedId = item.selected != null && item.selected !== '' ? String(item.selected) : '';
+    const whereBadge = item.where
+      ? (isMedical
+          ? `<button type="button" class="dcard-where" data-goto-line="${esc(item.where)}" title="Mở tab Kịch bản và cuộn tới ${esc(item.where)}">${esc(item.where)}</button>`
+          : `<span class="dcard-where dcard-where-static">${esc(item.where)}</span>`)
+      : '';
+    const opts = (item.options || []).map(opt => {
+      const isChecked = selectedId ? String(opt.id) === selectedId : Boolean(opt.recommended);
+      const isKeep = Boolean(opt.keep);
+      return `
       <label class="dcard-opt">
-        <input type="radio" name="dc-${esc(item.id)}" value="${esc(opt.id)}" data-effect="${esc(opt.effect)}" ${opt.recommended?'checked':''}>
-        <span>${esc(opt.label)} ${opt.recommended?'<b style="color:var(--teal)">(Khuyến nghị)</b>':''}</span>
-      </label>
-    `).join('');
+        <input type="radio" name="dc-${esc(item.id)}" value="${esc(opt.id)}" data-keep="${isKeep ? '1' : '0'}" ${isChecked ? 'checked' : ''}>
+        <span>${esc(opt.label)}${opt.recommended ? ' <b style="color:var(--teal)">(Khuyến nghị)</b>' : ''}</span>
+      </label>`;
+    }).join('');
     return `<div class="dcard-item" data-dc-item="${esc(item.id)}">
-      <h4>${esc(item.label)}</h4>
-      ${item.summary ? `<p class="sub" style="margin-bottom:6px">${esc(item.summary)}</p>` : ''}
+      <div class="dcard-item-head">
+        ${whereBadge}
+        <h4>${esc(item.question || '')}</h4>
+      </div>
+      ${item.why_hard ? `<p class="dcard-why">${esc(item.why_hard)}</p>` : ''}
       ${opts}
     </div>`;
   }).join('');
+
+  const moreHtml = moreCount > 0 ? `<p class="dcard-more">Còn ${moreCount} điểm nữa</p>` : '';
+  const followupHtml = followup ? `<div class="dcard-followup">${esc(followup)}</div>` : '';
   const needRev = !(state && state.reviewer);
+  const gateLabel = gate === 'video' ? 'Duyệt video' : 'Duyệt y khoa';
+  const revLabel = b.revision || card.revision || '';
+
   slot.innerHTML = `
     <form class="dcard" id="dc-form" autocomplete="off">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-        <h3>Cần bạn quyết (${card.count || (card.items||[]).length} điểm) — ${esc(card.gate_label || (b.gate==='video'?'Duyệt video':'Duyệt y khoa'))}</h3>
-        <span class="tag">rev ${esc(b.revision)}</span>
+      <div class="dcard-head">
+        <h3>Cần bạn quyết (${decisions.length} điểm) — ${esc(gateLabel)}</h3>
+        <div class="dcard-head-acts">
+          ${revLabel ? `<span class="tag">rev ${esc(revLabel)}</span>` : ''}
+        </div>
       </div>
-      <div class="dcard-checks">${checks}</div>
+      ${followupHtml}
+      ${checksHtml ? `<div class="dcard-checks">${checksHtml}</div>` : ''}
+      ${keyPointsHtml}
+      ${decisions.length && isMedical ? `<h4 class="dcard-sec-title">Điểm khó cần quyết định (${decisions.length})</h4>` : ''}
       ${itemsHtml}
+      ${moreHtml}
       <label class="f" for="dc-other">Ý khác (tùy chọn — nếu nhập sẽ gửi sửa)</label>
       <textarea class="inp" id="dc-other" rows="2" maxlength="2000" autocomplete="off" placeholder="Để trống nếu duyệt theo khuyến nghị…"></textarea>
       ${needRev ? `<label class="f" for="dc-reviewer">Tên bác sĩ duyệt</label><input class="inp" id="dc-reviewer" maxlength="80" required>` : ''}
@@ -3346,12 +3491,23 @@ function renderDecisionCardSlot(b){
       <div class="err-box" id="dc-err"></div>
     </form>
   `;
+
   const form = $('dc-form');
+  form.querySelectorAll('[data-goto-line]').forEach(btn => {
+    btn.onclick = () => gotoScriptLine(btn.dataset.gotoLine);
+  });
+  form.querySelectorAll('[data-open-full-script]').forEach(btn => {
+    btn.onclick = () => gotoScriptLine('');
+  });
+  form.querySelectorAll('[data-goto-claim]').forEach(btn => {
+    btn.onclick = () => gotoClaim(btn.dataset.gotoClaim);
+  });
+
   const syncDcButton = () => {
     const other = $('dc-other').value.trim();
     let anyFix = Boolean(other);
     form.querySelectorAll('input[type=radio]:checked').forEach(r => {
-      if(r.dataset.effect === 'send_fix') anyFix = true;
+      if(r.dataset.keep === '0') anyFix = true;
     });
     const btn = $('dc-submit');
     btn.textContent = anyFix ? 'Gửi sửa theo lựa chọn' : 'Duyệt';
@@ -3364,8 +3520,8 @@ function renderDecisionCardSlot(b){
   form.onsubmit = async (e) => {
     e.preventDefault();
     const choices = {};
-    (card.items || []).forEach(item => {
-      const checked = form.querySelector(`input[name="dc-${CSS.escape(item.id)}"]:checked`);
+    decisions.forEach(item => {
+      const checked = form.querySelector(`input[name="dc-${CSS.escape(String(item.id))}"]:checked`);
       if(checked) choices[item.id] = checked.value;
     });
     const pin = $('dc-pin').value;
@@ -3377,7 +3533,7 @@ function renderDecisionCardSlot(b){
     try{
       const msg = await post(`/api/project/${encodeURIComponent(b.slug)}/decide`, {
         action: 'card',
-        revision: b.revision,
+        revision: b.revision || card.revision,
         choices,
         other: $('dc-other').value,
         reviewer: $('dc-reviewer') ? $('dc-reviewer').value : '',
@@ -3695,7 +3851,7 @@ function tabScript(b,dm,opts={}){
   if(!opts.readOnly) h+=`<div class="sec-card"><button type="button" class="btn" data-voice-preview="">Nghe thử giọng (máy)</button><p class="sub">Bản nháp để nghe lời và đo thời lượng. Bản đăng dùng giọng Vibi.</p><div id="voice-preview-result" aria-live="polite"></div></div>`;
   return h+b.lines.map(l=>{const id=l.id||'?';
     const deliv=l.delivery?`<span class="tag">${esc(typeof l.delivery==='string'?l.delivery:JSON.stringify(l.delivery))}</span>`:'';
-    return `<div class="row ${dm[id]?'has-c':''}"><div class="rid">${esc(id)}</div>
+    return `<div class="row ${dm[id]?'has-c':''}" id="line-${esc(id)}" data-line-id="${esc(id)}"><div class="rid">${esc(id)}</div>
       <div><div class="rtext">${esc(l.text)}</div><div class="rmeta">${opts.readOnly?'':`<button type="button" class="btn" data-voice-preview="${esc(id)}">Nghe thử dòng (máy)</button>`}${l.purpose&&l.purpose!=='content'?`<span class="tag">${esc(l.purpose)}</span>`:''}${deliv}${l.claim_id?`<span class="tag claim" data-goto="${esc(l.claim_id)}" title="Xem bằng chứng">${esc(l.claim_id)}${l.source_marker?' · '+esc(l.source_marker):''}</span>`:''}</div></div>
       ${opts.readOnly?'':cbtn(id,dm)+cmtRow(id,dm)}</div>`}).join('');
 }
@@ -5145,8 +5301,11 @@ async function saveComment(target,text){
     renderPv(); refresh();
   }catch(e){toast(e.message,true)}
 }
-function gotoClaim(id){
-  pvTab='sources'; renderPv();
+async function gotoClaim(id){
+  pvTab='sources'; updateChatContext({view:'sources'}); renderPv();
+  if(pv && pv.lite && (!pv._loadedTabs || !pv._loadedTabs.has('sources'))){
+    await ensurePvTabLoaded('sources');
+  }
   const el=document.getElementById('claim-'+id); if(!el) return;
   el.scrollIntoView({behavior:'smooth',block:'center'});
 }

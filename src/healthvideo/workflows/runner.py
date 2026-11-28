@@ -715,7 +715,12 @@ def _build_step_prompt(
         notes = expert.answer_notes(project_dir) if answering else revision_notes(project_dir)
         prompt_fields["reject_note"] = f"{notes}\n{prompt_fields.get('reject_note', '')}".strip()
     if step == 'script_review':
-        prompt_fields['reject_note'] += '\n' + previous_review_notes(project_dir)
+        prompt_fields['reject_note'] += ('\n' + previous_review_notes(project_dir)
+            + '\nGhi key_points 5–10 mục bằng tiếng Việt, chọn các câu dễ sai hoặc dễ gây hại nhất '
+            'cho người xem (số liệu, liều, lời khuyên hành động, suy diễn vượt nguồn, câu dễ hiểu nhầm); '
+            'mỗi mục có where là ID dòng thật không trùng, claim_id nếu có trong evidence/ledger.yaml, '
+            'point tóm tắt khẳng định/lời khuyên tối đa 40 từ, và risk giải thích vì sao bác sĩ cần xem; '
+            'bác sĩ chỉ đọc các điểm này thay vì cả bài.')
     if step in {"draft", "storyboard_design", "revise_product", "revise_production"}:
         blocked = root / 'topics/logs' / entry.slug / 'blocked.txt'
         if blocked.is_file():
@@ -753,7 +758,8 @@ def _build_step_prompt(
                       '(resolved/still_open), không phải danh sách. Ví dụ YAML: '
                       'issue_statuses: {PR3-01: still_open, PR3-02: resolved}. overall ngắn. '
                       'Giữ điểm tiêu chí không có issue và các decisions chưa có chỉ dẫn xử lý. '
-                      'Bắt buộc ghi YAML bằng Python encoding="utf-8" (không làm mất dấu tiếng Việt thành "?").\n'
+                      + ('Không cần ghi lại key_points nếu không đổi. ' if step == 'script_review' else '')
+                      + 'Bắt buộc ghi YAML bằng Python encoding="utf-8" (không làm mất dấu tiếng Việt thành "?").\n'
                       + incremental + '\n' + output
                       + '\n## Quy tắc cứng\n' + '\n'.join(f'- {rule}' for rule in HARD_RULES))
         elif step == 'revise_product':

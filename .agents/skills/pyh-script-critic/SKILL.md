@@ -9,7 +9,7 @@ Quyền agent xưởng hiện tại vẫn theo HARD_RULES: chỉ ghi trong proje
 
 ```yaml
 input: Script, outline, ledger, brief, contract và issue/diff của revision hiện hành.
-output: 'reviews/script-review.yaml: sáu tiêu chí, issue có dòng thật, checked và decisions.'
+output: 'reviews/script-review.yaml: sáu tiêu chí, issue có dòng thật, checked, decisions và key_points.'
 done_when: Từng mệnh đề được đối chiếu locator và từng câu hỏi có đáp án; báo cáo trung thực trong budget D4.
 missing_data_to: medical_expert khi thiếu claim/locator; writer sửa lời; coordinator trình bác sĩ khi hết budget.
 ```
@@ -20,6 +20,7 @@ missing_data_to: medical_expert khi thiếu claim/locator; writer sửa lời; c
 ## Duyệt lại từng phần (ưu tiên hơn hướng dẫn đọc toàn bài bên dưới)
 - Vòng đầu đọc/chấm toàn bộ. Mỗi issue có `issue_id` ổn định và ID dòng thật;
   `related_lines` chỉ những dòng thực sự phải sửa cùng, ghi ngay vòng đầu.
+- Vòng đầu/toàn bài ghi `key_points` 5–10 câu dễ sai hoặc dễ gây hại nhất (số liệu, liều, lời khuyên hành động, suy diễn vượt nguồn, dễ hiểu nhầm): mỗi mục có `where` là ID dòng thật không trùng, `claim_id` trong ledger nếu có, `point` tiếng Việt tối đa 40 từ và `risk`; bác sĩ chỉ đọc các điểm này thay vì cả bài. Vòng sửa từng phần không cần ghi lại `key_points` nếu không đổi.
 - Vòng sau dùng issue mở + diff có ngữ cảnh; không đọc lại để chấm từ đầu.
   Kiểm việc sửa và ảnh hưởng quanh chỗ sửa, xem tổng thể một lượt ngắn.
 - Không nêu lỗi mới ở phần không đổi hoặc mở lại lỗi đã resolved, trừ nguy cơ

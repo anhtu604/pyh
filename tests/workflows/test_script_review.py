@@ -67,6 +67,89 @@ def _review(project: Path, score: int) -> dict:
     return record_review(project, script_hash(project))
 
 
+def _key_point(where='N01', **changes):
+    return {'where': where, 'claim_id': 'C01', 'point': 'Khuyến nghị cần kiểm tra.',
+            'risk': 'Có thể bị hiểu sai thành lời khuyên điều trị.', **changes}
+
+
+@pytest.mark.parametrize('changes', [{}, {'key_points': []}])
+def test_key_points_are_logged_and_survive_scoped_review(tmp_path, changes):
+    project = _project(tmp_path)
+    points = [_key_point()]
+    _report(project, 6, key_points=points)
+    assert record_review(project, script_hash(project))['key_points'] == points
+    _report(project, 8, **changes)
+    entry = record_review(project, script_hash(project))
+    assert entry['passed'] is True
+    assert entry['key_points'] == points
+    assert read_yaml(project / 'revisions/001' / LOG)['rounds'][-1]['key_points'] == points
+
+
+def test_key_points_fall_back_to_latest_nonempty_round(tmp_path):
+    project = _project(tmp_path)
+    _review(project, 8)
+    path = project / 'revisions/001' / LOG
+    log = read_yaml(path)
+    log['rounds'][0]['key_points'] = [_key_point()]
+    log['rounds'].append({**log['rounds'][0], 'round': 2, 'key_points': []})
+    write_yaml_atomic(path, log)
+    _report(project, 8)
+    assert record_review(project, script_hash(project))['key_points'] == [_key_point()]
+
+
+@pytest.mark.parametrize('points, message', [
+    ([_key_point('N99')], 'N99'),
+    ([_key_point(), _key_point()], 'trùng'),
+    ([_key_point(f'N{i:02}') for i in range(11)], '10'),
+    ([_key_point(point=' '.join(['từ'] * 41))], '40'),
+    ([_key_point(extra='không hợp lệ')], 'extra'),
+])
+def test_invalid_key_points_are_not_logged(tmp_path, points, message):
+    project = _project(tmp_path)
+    _report(project, key_points=points)
+    with pytest.raises(ValueError, match=message):
+        record_review(project, script_hash(project))
+    assert not (project / 'revisions/001' / LOG).exists()
+
+
+def test_missing_key_points_still_passes(tmp_path):
+    project = _project(tmp_path)
+    entry = _review(project, 8)
+    assert entry['passed'] is True
+    assert entry['key_points'] == []
+
+
+def test_new_key_points_replace_previous_points(tmp_path):
+    project = _project(tmp_path)
+    _report(project, 6, key_points=[_key_point()])
+    record_review(project, script_hash(project))
+    points = [_key_point(point='Lời khuyên đã sửa cần được bác sĩ xem lại.', claim_id=None)]
+    _report(project, 8, key_points=points)
+    entry = record_review(project, script_hash(project))
+    assert entry['key_points'] == points
+    assert entry['passed'] is True
+
+
+@pytest.mark.parametrize('scoped', [False, True])
+def test_key_points_prompt_matches_review_scope(tmp_path, scoped):
+    from healthvideo.workflows.runner import _build_step_prompt
+
+    project = _project(tmp_path)
+    if scoped:
+        _review(project, 6)
+    entry = QueueEntry(slug=SLUG, title='Muối', question='Vì sao?', added=date(2026, 11, 6))
+    prompt = _build_step_prompt(tmp_path, _deps({}, None), entry, project, 'script_review')
+    if scoped:
+        assert 'không đọc lại toàn bộ bài' in prompt
+        assert 'Không cần ghi lại key_points nếu không đổi.' in prompt
+        assert 'Ghi key_points 5–10' not in prompt
+    else:
+        assert 'Ghi key_points 5–10' in prompt
+        assert 'bác sĩ chỉ đọc các điểm này thay vì cả bài' in prompt
+        assert 'claim_id' in prompt
+        assert '40 từ' in prompt
+
+
 @pytest.mark.parametrize('field', ['summary', 'overall', 'checked', 'problem', 'fix'])
 def test_corrupt_review_is_not_logged(tmp_path, field):
     project = _project(tmp_path)
@@ -770,3 +853,14 @@ def test_doctor_guidance_after_passed_round_does_not_freeze_rewrite(tmp_path):
     script_review.reset_for_doctor_guidance(project, 'vui-hon', require_script_rewrite=False)
     _script(project, 'Lời mới vui hơn mà vẫn đúng claim.')
     assert _review(project, 8)['passed'] is True
+
+
+def test_carried_key_point_on_deleted_line_is_dropped_not_fatal(tmp_path):
+    project = _project(tmp_path)
+    _review(project, 8)
+    path = project / 'revisions/001' / LOG
+    log = read_yaml(path)
+    log['rounds'][0]['key_points'] = [_key_point(), _key_point('N99')]
+    write_yaml_atomic(path, log)
+    _report(project, 8)
+    assert record_review(project, script_hash(project))['key_points'] == [_key_point()]

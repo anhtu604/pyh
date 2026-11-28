@@ -54,6 +54,22 @@ class ResolvedScriptIssue(BaseModel):
     criterion: str
 
 
+class KeyPoint(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+
+    where: str
+    claim_id: str | None = None
+    point: str
+    risk: str
+
+    @field_validator('point')
+    @classmethod
+    def limit_point_words(cls, value: str) -> str:
+        if len(value.split()) > 40:
+            raise ValueError('Mỗi key point tối đa 40 từ.')
+        return value
+
+
 class ScriptReviewReport(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
@@ -64,6 +80,7 @@ class ScriptReviewReport(BaseModel):
     resolved_issues: list[ResolvedScriptIssue] = Field(default_factory=list)
     checked: list[str] = Field(default_factory=list)
     decisions: list[Decision] = Field(default_factory=list)
+    key_points: list[KeyPoint] = Field(default_factory=list, max_length=10)
     issue_statuses: dict[str, Literal['resolved', 'still_open']] = Field(default_factory=dict)
     overall: str = ''
 
@@ -290,6 +307,11 @@ def require_passed_review(project: Path) -> None:
 
 def _validated(report: ScriptReviewReport, line_ids: set[str]) -> None:
     validate_decisions(report.decisions, line_ids)
+    if len({item.where for item in report.key_points}) != len(report.key_points):
+        raise ValueError('Dòng key_points không được trùng.')
+    for item in report.key_points:
+        if item.where not in line_ids:
+            raise ValueError(f'Dòng không có trong kịch bản: {item.where}')
     if set(report.scores) != set(CRITERIA):
         raise ValueError('Báo cáo chấm kịch bản phải có đủ đúng các tiêu chí.')
     if any(not 1 <= score <= 10 for score in report.scores.values()):
@@ -358,6 +380,12 @@ def record_review(project: Path, reviewed_hash: str, *, event_id: str | None = N
                                    script_path(project).read_bytes(), allowed)
     report = ScriptReviewReport.model_validate(scoped_review.reconcile(
         previous, report.model_dump(mode='json'), 'line'))
+    if not report.key_points:
+        # Scoped critics may omit these; older intermediate rounds may have none either.
+        points = next((row['key_points'] for row in reversed(rounds)
+                       if row.get('key_points')), [])
+        live = {str(line.get('id')) for line in script.get('lines', [])}  # writer may have deleted a carried line
+        report.key_points = [KeyPoint.model_validate(item) for item in points if item["where"] in live]
     _validated(report, {str(line.get('id')) for line in script.get('lines', [])})
     entry = {
         'round': len(rounds) + 1,
