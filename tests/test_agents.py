@@ -386,7 +386,7 @@ def test_log_written_utf8(tmp_path: Path) -> None:
 
 
 def test_argv_for_each_cli_injects_model():
-    for slot in (CODEX_SLOT, AGY_SLOT, ModelSlot(cli='claude', model='claude-opus-5-5')):
+    for slot in (CODEX_SLOT, AGY_SLOT):
         cli, argv = argv_for(slot)
         assert cli.name == slot.cli
         flag = '-m' if slot.cli == 'codex' else '--model'
@@ -412,7 +412,7 @@ def test_factory_uses_moderate_models_and_critics_away_from_the_author():
     for step in ('storyboard_design', 'repair'):
         assert company.chain(company.role_for_step(step).id)[0].model_identity == ('agy', 'gemini-4-neon-medium'), step
     for step in ('visual_review', 'product_review'):
-        assert company.chain(company.role_for_step(step).id)[0].model_identity == ('claude', 'claude-sonnet-5-5'), step
+        assert company.chain(company.role_for_step(step).id)[0].model_identity == ('agy', 'claude-sonnet-5-5-medium'), step
     for role in ('coordinator', 'scout', 'copywriter', 'feedback_analyst', 'researcher',
                  'editor', 'shorts_producer', 'voice_director'):
         assert company.chain(role)[0].model_identity == ('agy', 'gemini-4-neon-medium'), role
@@ -984,3 +984,11 @@ def test_cli_exception_windows_file_lock_is_transient(tmp_path, code):
         error.winerror = code
         raise error
     assert _failover(tmp_path, [CODEX_SLOT], locked).failure_kind == 'transient'
+
+
+def test_factory_never_calls_claude_directly():
+    import pytest
+    for slot in ({'cli': 'claude', 'model': 'claude-sonnet-5-5'},
+                 {'cli': 'omniroute', 'model': 'cc/claude-sonnet-5-5'}):
+        with pytest.raises(ValueError, match='Claude'):
+            ModelSlot.model_validate(slot)

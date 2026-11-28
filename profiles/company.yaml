@@ -116,6 +116,7 @@ roles:
     - {cli: codex, model: gpt-6.1-terra}
     - {cli: omniroute, model: codex/gpt-6.1-terra}
   # 2026-11-24: Claude Sonnet 5.5 primary (Terra fallback) reviews images independently of storyboard Sol.
+  # 2026-11-28: bác sĩ cấm gọi Claude CLI trực tiếp (ăn hạn mức điều phối tổng) → Sonnet qua agy.
   art_director:
     name: Đạo diễn hình
     skills:
@@ -124,7 +125,7 @@ roles:
     - visual_review
     tier: medium
     models:
-    - {cli: claude, model: claude-sonnet-5-5}
+    - {cli: agy, model: claude-sonnet-5-5-medium}
     - {cli: codex, model: gpt-6.1-terra}
     - {cli: omniroute, model: codex/gpt-6.1-terra}
   editor:
@@ -138,6 +139,7 @@ roles:
     - revise_product
     tier: medium
   # 2026-11-24: Claude Sonnet 5.5 primary (Terra fallback) reviews independently of editor Neon.
+  # 2026-11-28: bác sĩ cấm gọi Claude CLI trực tiếp (ăn hạn mức điều phối tổng) → Sonnet qua agy.
   product_critic:
     name: Kiểm định sản phẩm
     skills:
@@ -147,7 +149,7 @@ roles:
     - product_review
     tier: hard
     models:
-    - {cli: claude, model: claude-sonnet-5-5}
+    - {cli: agy, model: claude-sonnet-5-5-medium}
     - {cli: codex, model: gpt-6.1-terra}
     - {cli: omniroute, model: codex/gpt-6.1-terra}
   copywriter:

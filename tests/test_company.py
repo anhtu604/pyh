@@ -69,7 +69,7 @@ def test_r534_primary_assignment_and_critic_independence():
         if role in sol:
             expected = ('agy', 'claude-sonnet-5-5-medium')  # TEMP 2026-11-26: codex quota out
         elif role in claude:
-            expected = ('claude', 'claude-sonnet-5-5')
+            expected = ('agy', 'claude-sonnet-5-5-medium')
         elif role == 'script_critic':
             expected = ('agy', 'gemini-4-carbon-medium')
         else:

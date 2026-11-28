@@ -89,6 +89,10 @@ class ModelSlot(BaseModel):
 
     @model_validator(mode='after')
     def explicit_router_model(self):
+        # Bác sĩ 2026-11-28: xưởng không gọi Claude trực tiếp — nó ăn hạn mức của điều phối tổng.
+        if self.cli == 'claude' or (self.cli == 'omniroute'
+                                    and self.model.partition('/')[0] in ('claude', 'cc')):
+            raise ValueError('Xưởng không được gọi Claude trực tiếp; dùng agy (claude-sonnet-5-5-medium) hoặc codex.')
         if self.cli == 'omniroute':
             provider, _, model = self.model.partition('/')
             if provider not in ('codex', 'cx', 'agy', 'antigravity', 'claude', 'cc',
