@@ -1134,3 +1134,22 @@ def test_r5_product_result_recovers_after_history_write_failure(tmp_path, monkey
     assert pr.next_product_action(project, create_question=False) == 'submit_video'
     assert len(read_yaml(revision / pr.LOG)['rounds']) == 1
     assert review_budget_status(revision, 'product')['used'] == 1
+
+
+def test_scoped_storyboard_repair_ignores_estimate_faults_it_did_not_add(monkeypatch, tmp_path):
+    """PYH-002 2026-11-28: a locked scene's +-10% estimate fault must not roll back an S19 fix."""
+    from types import SimpleNamespace
+
+    from healthvideo.workflows import product_review as pr
+
+    def fake_validate(project, script, storyboard, manifest):
+        lines = [f'Scene {sid} shot X: fault' for sid in sorted(storyboard.bad)]
+        if lines:
+            raise ValueError('Estimated layout precheck failed:\n' + '\n'.join(lines))
+
+    monkeypatch.setattr(pr, 'validate_estimated_layout', fake_validate)
+    monkeypatch.setattr(pr.Storyboard, 'model_validate', staticmethod(lambda data: SimpleNamespace(bad=data['bad'])))
+    before = {'bad': {'S10'}}
+    pr._check_no_new_layout_errors(tmp_path, None, before, SimpleNamespace(bad={'S10'}), None)
+    with pytest.raises(ValueError, match='Scene S19 shot X: fault'):
+        pr._check_no_new_layout_errors(tmp_path, None, before, SimpleNamespace(bad={'S10', 'S19'}), None)

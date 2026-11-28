@@ -1173,8 +1173,31 @@ def _check_storyboard_repair(
     if (root / 'explainer/explainer.yaml').is_file():
         _validate_storyboard_explainer_bindings(root, storyboard)
     if script is not None:
-        validate_estimated_layout(project, script, storyboard, manifest)
+        _check_no_new_layout_errors(project, script, before_data, storyboard, manifest)
     return before_data, after_data
+
+
+def _layout_errors(project: Path, script: Script, storyboard: Storyboard, manifest) -> set[str]:
+    try:
+        validate_estimated_layout(project, script, storyboard, manifest)
+    except ValueError as error:
+        return {line.strip() for line in str(error).splitlines()[1:] if line.strip()}
+    return set()
+
+
+def _check_no_new_layout_errors(
+    project: Path, script: Script, before_data: Mapping[str, Any], storyboard: Storyboard, manifest,
+) -> None:
+    # PYH-002 2026-11-28: a correct S19 fix was rolled back twice because the +-10% voice estimate
+    # flagged locked S10, which passed on the real voice. A scoped repair must not add faults;
+    # faults in scenes it may not touch are not its to fix, and produce re-measures the real voice.
+    try:
+        baseline = _layout_errors(project, script, Storyboard.model_validate(before_data), manifest)
+    except ValueError:
+        baseline = set()
+    new = sorted(_layout_errors(project, script, storyboard, manifest) - baseline)
+    if new:
+        raise ValueError('Estimated layout precheck failed:\n' + '\n'.join(new))
 
 
 def _check_asset_manifest_repair(
