@@ -3334,7 +3334,7 @@ function renderDecisionCardSlot(b){
       <div class="dcard-checks">${checks}</div>
       ${itemsHtml}
       <label class="f" for="dc-other">Ý khác (tùy chọn — nếu nhập sẽ gửi sửa)</label>
-      <input class="inp" id="dc-other" maxlength="2000" placeholder="Để trống nếu duyệt theo khuyến nghị…">
+      <textarea class="inp" id="dc-other" rows="2" maxlength="2000" autocomplete="off" placeholder="Để trống nếu duyệt theo khuyến nghị…"></textarea>
       ${needRev ? `<label class="f" for="dc-reviewer">Tên bác sĩ duyệt</label><input class="inp" id="dc-reviewer" maxlength="80" required>` : ''}
       <div class="dcard-foot">
         <div>
