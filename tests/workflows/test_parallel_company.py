@@ -480,7 +480,7 @@ def test_maker_slots_for_critic_uses_latest_per_role_and_falls_back_to_primary_a
 
     slot_a = ModelSlot(cli="agy", model="model-a")
     slot_b = ModelSlot(cli="codex", model="model-b")
-    slot_c = ModelSlot(cli="claude", model="model-c")
+    slot_c = ModelSlot(cli="agy", model="model-c")
     company = Company(
         roles={
             "script_critic": Role(
@@ -543,7 +543,7 @@ def test_maker_slots_for_critic_skips_malformed_rows_and_resets_after_critic(tmp
 
     slot_a = ModelSlot(cli="agy", model="model-a")
     slot_b = ModelSlot(cli="codex", model="model-b")
-    slot_c = ModelSlot(cli="claude", model="model-c")
+    slot_c = ModelSlot(cli="agy", model="model-c")
     company = Company(
         roles={
             "script_critic": Role(
