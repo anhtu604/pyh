@@ -229,6 +229,9 @@ def test_produce_prebundle_gpu_fallback_and_media_probe(tmp_path: Path, monkeypa
     monkeypatch.setenv("PYH_REMOTION_PREBUNDLE", "1")
     monkeypatch.setattr(produce.remotion_module, "create_bundle", fake_create_bundle)
     monkeypatch.setattr(produce, "probe_video_streams", fake_probe)
+    # The runner writes only an MP4 header. Exercise the missing-FFmpeg path.
+    find_executable = produce.shutil.which
+    monkeypatch.setattr(produce.shutil, "which", lambda name: None if name == "ffmpeg" else find_executable(name))
 
     result = produce.produce_project(project, tts=SilentTTS(), runner=runner)
     assert len(bundle_calls) == 1
@@ -239,6 +242,7 @@ def test_produce_prebundle_gpu_fallback_and_media_probe(tmp_path: Path, monkeypa
     assert str(bundle_calls[0].resolve()) in render_calls[1]
     qa = json.loads((project / "revisions/001/reviews/video-qa.json").read_text(encoding="utf-8"))
     assert qa["media_probe"]["passed"] is True
+    assert qa["frame_qa"] == {"long": None, "clips": {}}
     assert result.is_file()
 
 

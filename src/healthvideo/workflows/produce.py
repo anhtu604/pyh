@@ -66,6 +66,7 @@ from healthvideo.render import remotion as remotion_module
 from healthvideo.render.beats import resolve_scene_beats
 from healthvideo.render.chapters import render_long_form
 from healthvideo.render.chunked import render_chunked
+from healthvideo.render.frame_qa import measure_frame_qa
 from healthvideo.render.input import (
     R5RevisionAsset,
     audio_timing_qa,
@@ -681,17 +682,22 @@ def _produce_v2_inner(
                 validate_r5_render_report(layout.artifact_root, renders_dir)
         except (OSError, ValueError, KeyError, TypeError):
             cache_valid = False
-    if cache_valid and (require_timing or visual_budget_qa is not None):
-        cache_valid = _v2_video_qa_is_valid(
+    promoted_qa_valid = False
+    if cache_valid:
+        # Validate render provenance independently so older QA can be measured in place.
+        promoted_qa_valid = _v2_video_qa_is_valid(
             layout.artifact_root,
             input_hash,
             require_timing=require_timing,
             final_frame=final_frame,
             expected_visual_budget=visual_budget_qa,
-        ) or _production_qa_is_valid(
+            require_frame_qa=False,
+        )
+        cache_valid = promoted_qa_valid or _production_qa_is_valid(
             renders_dir / "video-qa.json",
             renders_dir,
             final_frame,
+            input_hash=input_hash,
             require_timing=require_timing,
             expected_visual_budget=visual_budget_qa,
         )
@@ -699,18 +705,13 @@ def _produce_v2_inner(
     if project.state is WorkflowState.AWAITING_VIDEO_REVIEW:
         if not (
             _is_active_v2_cache(project, input_hash, cache_valid)
-            and _v2_video_qa_is_valid(
-                layout.artifact_root,
-                input_hash,
-                require_timing=require_timing,
-                final_frame=final_frame,
-                expected_visual_budget=visual_budget_qa,
-            )
+            and promoted_qa_valid
         ):
             raise ValueError(
                 "Production requires v2 project state medically_approved"
             )
         if not dry_run:
+            # reviews/video-qa.json is in the video gate hash: never rewrite it while the doctor reviews.
             _promote_pronunciation_qa(layout.artifact_root, input_hash)
             _promote_r5_quality_report(layout.artifact_root)
             render_optional_thumbnail(layout.artifact_root, runner=runner)
@@ -722,6 +723,11 @@ def _produce_v2_inner(
     if cache_valid and rebuild_requested(layout.artifact_root):
         cache_valid = False
     if cache_valid:
+        qa_path = (
+            layout.artifact_root / V2_VIDEO_QA_ARTIFACT
+            if promoted_qa_valid else renders_dir / "video-qa.json"
+        )
+        _refresh_cached_frame_qa(qa_path, renders_dir, runner)
         _ensure_contact_sheet(layout.artifact_root)
         render_optional_thumbnail(layout.artifact_root, runner=runner)
         _promote_v2_video_qa_if_needed(
@@ -1214,6 +1220,7 @@ def _produce_v2_inner(
             revision=project.active_revision,
             gpu=False,
         ):
+            frame_qa = _measure_production_frame_qa(staging_dir, clip_outputs, runner)
             _write_json_atomic(
                 staging_dir / "video-qa.json",
                 {
@@ -1235,8 +1242,10 @@ def _produce_v2_inner(
                     ),
                     **({"media_probe": media_probe} if media_probe is not None else {}),
                     **({"clip_media_probes": clip_probes} if clip_probes else {}),
+                    "frame_qa": frame_qa,
                 },
             )
+            _raise_frame_qa_blocks(frame_qa, clip_outputs)
             _record_motion_qa(staging_dir, {scene.id: scene.visual for scene in render_input.scenes})
             _validate_v2_staged_run(
                 staging_dir, input_hash, provider_name, asset_hashes,
@@ -1259,6 +1268,7 @@ def _produce_v2_inner(
             require_timing=require_timing,
             final_frame=final_frame,
             expected_visual_budget=visual_budget_qa,
+            replace_existing=True,
         )
         write_yaml_atomic(
             layout.project_dir / "project.yaml",
@@ -1455,11 +1465,12 @@ def _promote_v2_video_qa_if_needed(
     require_timing: bool = True,
     final_frame: int | None = None,
     expected_visual_budget: Mapping[str, Any] | None = None,
+    replace_existing: bool = False,
 ) -> None:
     _promote_pronunciation_qa(revision_root, input_hash)
     _promote_motion_report(revision_root)
     _promote_r5_quality_report(revision_root)
-    if _v2_video_qa_is_valid(
+    if not replace_existing and _v2_video_qa_is_valid(
         revision_root, input_hash, require_timing=require_timing,
         final_frame=final_frame,
         expected_visual_budget=expected_visual_budget,
@@ -1494,16 +1505,20 @@ def _v2_video_qa_is_valid(
     require_timing: bool = True,
     final_frame: int | None = None,
     expected_visual_budget: Mapping[str, Any] | None = None,
+    require_frame_qa: bool = True,
 ) -> bool:
     path = revision_root / V2_VIDEO_QA_ARTIFACT
     if not path.is_file():
         return False
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
+        renders_dir = revision_root / "renders"
+        clips = _frame_qa_clips(renders_dir) if require_frame_qa else {}
+    except (OSError, ValueError):
         return False
     return (
-        data.get("input_hash") == input_hash
+        isinstance(data, dict)
+        and data.get("input_hash") == input_hash
         and (
             not require_timing
             or _timing_qa_is_valid(path, revision_root / "renders", final_frame)
@@ -1512,7 +1527,78 @@ def _v2_video_qa_is_valid(
             expected_visual_budget is None
             or _visual_budget_qa_is_valid(path, expected_visual_budget)
         )
+        and (
+            not require_frame_qa
+            or _frame_qa_is_current(data.get("frame_qa"), renders_dir, clips)
+        )
     )
+
+
+def _frame_qa_clips(run_dir: Path) -> dict[str, str]:
+    manifest = json.loads((run_dir / V2_RENDER_MANIFEST_NAME).read_text(encoding="utf-8"))
+    return manifest.get("clips", {})
+
+
+def _frame_qa_is_current(frame_qa: Any, run_dir: Path, clips: Mapping[str, str]) -> bool:
+    if not isinstance(frame_qa, dict) or "long" not in frame_qa:
+        return False
+    reports = frame_qa.get("clips")
+    if not isinstance(reports, dict) or reports.keys() != clips.keys():
+        return False
+    reports_by_path = {OUTPUT_NAME: frame_qa["long"]}
+    reports_by_path.update({relative: reports[key] for key, relative in clips.items()})
+    ffmpeg_available = shutil.which("ffmpeg") is not None
+    for relative, report in reports_by_path.items():
+        if report is None:
+            if ffmpeg_available and is_mp4_container(run_dir / relative):
+                return False
+        elif not isinstance(report, dict) or not {
+            "black", "freeze", "silence", "integrated_lufs", "true_peak_db", "issues",
+        }.issubset(report) or not isinstance(report["issues"], list):
+            return False
+    return True
+
+
+def _measure_production_frame_qa(
+    run_dir: Path, clips: Mapping[str, str], runner: Any,
+) -> dict[str, Any]:
+    ffmpeg = shutil.which("ffmpeg")
+    real_runner = _is_real_render_runner(runner)
+
+    def measure(relative: str) -> dict[str, Any] | None:
+        path = run_dir / relative
+        if ffmpeg and (is_mp4_container(path) or real_runner):
+            return measure_frame_qa(path, ffmpeg=ffmpeg)
+        return None
+
+    return {"long": measure(OUTPUT_NAME), "clips": {key: measure(rel) for key, rel in clips.items()}}
+
+
+def _raise_frame_qa_blocks(frame_qa: Mapping[str, Any], clips: Mapping[str, str]) -> None:
+    errors = []
+    reports = [(OUTPUT_NAME, frame_qa["long"])]
+    reports.extend((rel, frame_qa["clips"][key]) for key, rel in clips.items())
+    for relative, report in reports:
+        if report is None:
+            continue
+        for issue in report["issues"]:
+            if issue["severity"] == "block":
+                start, end = issue["at"]
+                errors.append(f"{relative} {issue['kind']} at {start:.6f}-{end:.6f}s; owner=editor")
+    if errors:
+        raise ValueError("Frame QA failed:\n" + "\n".join(errors))
+
+
+def _refresh_cached_frame_qa(path: Path, run_dir: Path, runner: Any) -> None:
+    clips = _frame_qa_clips(run_dir)
+    data = json.loads(path.read_text(encoding="utf-8"))
+    frame_qa = data.get("frame_qa")
+    if _frame_qa_is_current(frame_qa, run_dir, clips):
+        _raise_frame_qa_blocks(frame_qa, clips)
+        return
+    frame_qa = _measure_production_frame_qa(run_dir, clips, runner)
+    _raise_frame_qa_blocks(frame_qa, clips)
+    _write_json_atomic(path, {**data, "frame_qa": frame_qa})
 
 
 def _production_qa_is_valid(
@@ -1520,14 +1606,22 @@ def _production_qa_is_valid(
     run_dir: Path,
     final_frame: int | None,
     *,
+    input_hash: str,
     require_timing: bool,
     expected_visual_budget: Mapping[str, Any] | None,
 ) -> bool:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
     return (
-        not require_timing or _timing_qa_is_valid(path, run_dir, final_frame)
-    ) and (
-        expected_visual_budget is None
-        or _visual_budget_qa_is_valid(path, expected_visual_budget)
+        isinstance(data, dict)
+        and data.get("input_hash") == input_hash
+        and (not require_timing or _timing_qa_is_valid(path, run_dir, final_frame))
+        and (
+            expected_visual_budget is None
+            or _visual_budget_qa_is_valid(path, expected_visual_budget)
+        )
     )
 
 

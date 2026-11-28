@@ -7,7 +7,7 @@ Bạn là người duyệt sản phẩm độc lập của kênh. Bản dựng c
 Thực hiện trực tiếp trong lượt này, không giao agent con hoặc tác vụ nền. Chờ lệnh lấy contact sheet xong rồi mở ảnh và ghi báo cáo; nếu lỗi, ghi nguyên nhân và phần chưa kiểm.
 1. Đọc `active_revision` trong `{project}/project.yaml`; `<rev>` là giá trị đó. Mọi file dưới đây nằm trong `{project}/revisions/<rev>/`.
 2. Chạy `healthvideo step review-frames {project} --every 4` để lấy contact sheet định kỳ cùng thư mục `hook-transitions/` (khung quanh hook 0–3 s và điểm chuyển cảnh giữa các scene). Đọc `index.json` và `hook-transitions/index.json` rồi mở TỪNG contact sheet; không đoán hình từ tên file hay prompt.
-3. Đối chiếu `script/script.yaml`, `storyboard/storyboard.yaml`, `renders/scene-timing.json`, `reviews/video-qa.json` và chuẩn phong cách `docs/superpowers/specs/2026-11-17-pyh-style-a-mascot-host.md`.
+3. Đối chiếu `script/script.yaml`, `storyboard/storyboard.yaml`, `renders/scene-timing.json`, `reviews/video-qa.json` và chuẩn phong cách `docs/superpowers/specs/2026-11-17-pyh-style-a-mascot-host.md`. Đọc `frame_qa` trong báo cáo QA và đối chiếu các đoạn đứng hình và mức âm lượng với MP4 tương ứng.
 4. Nghe đoạn thuật ngữ/ASR lệch khi có công cụ/audio; đọc profiles/pronunciation.vi.yaml và QA để đối chiếu. Thiếu audio/công cụ thì ghi chưa nghe và chuyển coordinator/bác sĩ, không suy đạt từ ảnh hoặc tỷ lệ ASR.
 5. Đọc `posts/posts.yaml`: bài đăng đúng nội dung video, không hứa chữa khỏi hay hứa quá đà.
 6. Chấm từng tiêu chí từ 1 đến 10; tiêu chí dưới 7 phải có ít nhất một mục trong `issues` chỉ đúng chỗ cần sửa.

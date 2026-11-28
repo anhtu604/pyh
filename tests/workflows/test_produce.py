@@ -25,7 +25,11 @@ from healthvideo.workflows.produce import produce_project
 from healthvideo.workflows.visual_assets import (
     create_mascot_reaction_asset,
 )
-from tests.helpers import align_fixture_script, create_v2_project_fixture
+from tests.helpers import (
+    align_fixture_script,
+    create_long_form_project_fixture,
+    create_v2_project_fixture,
+)
 
 V2_REVIEWED_AT = datetime(2026, 9, 12, 8, 0, tzinfo=UTC)
 
@@ -846,7 +850,8 @@ def test_v2_produce_uses_active_revision_and_reuses_its_cache(
     assert len(calls) == 1
     assert resolutions == 2
     assert (revision_root / "renders" / "render-manifest.json").is_file()
-    assert (revision_root / "reviews" / "video-qa.json").is_file()
+    report = json.loads((revision_root / "reviews/video-qa.json").read_text(encoding="utf-8"))
+    assert report["frame_qa"] == {"long": None, "clips": {}}
     assert read_yaml(project_dir / "project.yaml")["state"] == (
         WorkflowState.PRODUCTION_IN_PROGRESS.value
     )
@@ -856,6 +861,80 @@ def test_v2_produce_uses_active_revision_and_reuses_its_cache(
     assert read_yaml(project_dir / "project.yaml")["state"] == (
         WorkflowState.AWAITING_VIDEO_REVIEW.value
     )
+
+
+@pytest.mark.parametrize("cache_source", ["reviews", "renders"])
+def test_v2_fills_legacy_frame_qa_and_reuses_existing_mp4s(tmp_path, monkeypatch, cache_source):
+    project = create_long_form_project_fixture(tmp_path)
+    revision = project / "revisions/001"
+    approve_gate(project, GateKind.MEDICAL, reviewer="BS Nguyễn Văn An", now=V2_REVIEWED_AT)
+    measured = []
+    blocks = False
+    find_executable = produce_workflow.shutil.which
+    monkeypatch.setattr(
+        produce_workflow.shutil, "which",
+        lambda name: "ffmpeg" if name == "ffmpeg" else find_executable(name),
+    )
+
+    def fake_render(argv):
+        output = Path(argv[argv.index("--output") + 1]) if "--output" in argv else Path(argv[-1])
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(b"\0\0\0\x18ftypisom")
+        return 0
+
+    monkeypatch.setattr(produce_workflow, "probe_video_streams", lambda *args, **kwargs: {"passed": True})
+
+    def measure(path, *, ffmpeg):
+        assert ffmpeg == "ffmpeg"
+        measured.append(path.name)
+        report = {
+            "black": [], "freeze": [[1, 5]], "silence": [],
+            "integrated_lufs": -14, "true_peak_db": -1,
+            "issues": [{"severity": "warn", "kind": "freeze", "at": [1, 5], "message": "Static scene"}],
+        }
+        if blocks and path.name == "CL02.mp4":
+            report["black"] = [[1, 1.6]]
+            report["issues"].append(
+                {"severity": "block", "kind": "black", "at": [1, 1.6], "message": "Black frames"}
+            )
+        return report
+
+    monkeypatch.setattr(produce_workflow, "measure_frame_qa", measure)
+    output = produce_project(project, SilentTTS(), fake_render)
+    filenames = ["video.mp4", "CL01.mp4", "CL02.mp4", "CL03.mp4"]
+    report_path = revision / "reviews/video-qa.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert set(report["frame_qa"]["clips"]) == {"CL01", "CL02", "CL03"}
+    assert report["frame_qa"]["long"]["issues"][0]["severity"] == "warn"
+    assert measured == filenames
+    before = {path: path.stat().st_mtime_ns for path in output.parent.rglob("*.mp4")}
+
+    del report["frame_qa"]
+    report_path.unlink()
+    source = revision / cache_source / "video-qa.json"
+    source.write_text(json.dumps(report), encoding="utf-8")
+    measured.clear()
+
+    def render_on_cache_hit(_):
+        pytest.fail("renderer invoked on Frame QA cache hit")
+
+    blocks = True
+    with pytest.raises(ValueError) as error:
+        produce_project(project, NoSynthesis(), render_on_cache_hit)
+    assert str(error.value) == "Frame QA failed:\nclips/CL02.mp4 black at 1.000000-1.600000s; owner=editor"
+    assert measured == filenames
+    assert "frame_qa" not in json.loads(source.read_text(encoding="utf-8"))
+
+    blocks = False
+    measured.clear()
+    assert produce_project(project, NoSynthesis(), render_on_cache_hit) == output
+    assert measured == filenames
+    assert "frame_qa" in json.loads(report_path.read_text(encoding="utf-8"))
+    assert {path: path.stat().st_mtime_ns for path in before} == before
+
+    measured.clear()
+    assert produce_project(project, NoSynthesis(), render_on_cache_hit) == output
+    assert measured == []
 
 
 class ExplodingTTS:
