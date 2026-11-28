@@ -759,18 +759,48 @@ def _can_delegate_revise_product(layout, role: str | None) -> bool:
     """Return True when a production-stage visual fix can safely route through ``revise_product``."""
     if role not in {'editor', 'storyboard_director'}:
         return False
-    return (
-        layout.manifest.state in {WorkflowState.MEDICALLY_APPROVED, WorkflowState.PRODUCTION_IN_PROGRESS}
-        or _is_repair_production_side_state(layout)
+    return layout.manifest.state in {
+        WorkflowState.MEDICALLY_APPROVED,
+        WorkflowState.PRODUCTION_IN_PROGRESS,
+        WorkflowState.NEEDS_PRODUCTION_REVISION,
+    }
+
+
+def _product_review_presentation_plan(layout, reason: str) -> Diagnosis | None:
+    if layout.manifest.state != WorkflowState.NEEDS_PRODUCTION_REVISION:
+        return None
+    if 'Trạm 12 chưa đạt' not in reason and not reason.startswith(
+        'agent không làm đổi trạng thái (revise_production,'
+    ):
+        return None
+    rows = []
+    for issue in product_review.storyboard_repair_issues(layout.artifact_root):
+        location = issue['at']
+        scenes = set(re.findall(rf'\b({_R5_SCENE_ID})\b', location))
+        for first, last in re.findall(r'\bS(\d+)\s*[-–—−]\s*S(\d+)\b', location):
+            width = min(len(first), len(last))
+            scenes.update(f'S{number:0{width}d}' for number in range(int(first), int(last) + 1))
+        if scenes:
+            rows.append(f"- {', '.join(sorted(scenes))}: {issue['problem']} Hướng sửa: {issue['fix']}")
+    if not rows:
+        return None
+    return Diagnosis(
+        action='delegate',
+        delegate_role='storyboard_director',
+        cause='Trạm 12 phát hiện lỗi trình bày cần sửa trong storyboard.',
+        evidence=[product_review.LOG],
+        brief='Sửa phần trình bày trong storyboard/storyboard.yaml theo các cảnh dưới đây. '
+        'Giữ nguyên lời đọc, claim, nguồn và các trường y khoa đã duyệt.\n' + '\n'.join(rows),
     )
 
 
-def _measured_r5_presentation_plan(layout, reason: str) -> Diagnosis | None:
+def _r5_presentation_plan(layout, reason: str) -> Diagnosis | None:
     if not _can_delegate_revise_product(layout, 'storyboard_director'):
         return None
     packet = reason.removeprefix('dựng lại sau sửa lỗi: ')
-    header = 'R5 quality failed (estimated=False):'
-    if not packet.startswith(header):
+    headers = ('R5 quality failed (estimated=False):', 'R5 storyboard contract failed:')
+    header = next((header for header in headers if packet.startswith(header)), None)
+    if header is None:
         return None
     issues = packet.removeprefix(header).split('; owner=storyboard_director')
     if len(issues) < 2 or issues[-1].strip():
@@ -813,13 +843,13 @@ def _measured_r5_presentation_plan(layout, reason: str) -> Diagnosis | None:
     scope = ', '.join(sorted(scenes))
     fault = ' | '.join(dict.fromkeys(messages))
     brief = (
-        f'Đo lại và chỉnh nhịp hình theo thời lượng giọng đọc thực tế ở các cảnh {scope}. '
+        f'Sửa phần trình bày trong storyboard/storyboard.yaml ở các cảnh {scope}. '
         f'Xử lý lỗi R5 sau: {fault}. Giữ nguyên lời đọc, claim và nguồn đã duyệt.'
     )
     return Diagnosis(
         action='delegate',
         delegate_role='storyboard_director',
-        cause='Nhịp hình không đạt R5 khi đo theo giọng đọc thực tế.',
+        cause='Storyboard không đạt chuẩn trình bày R5.',
         evidence=[reason],
         brief=brief,
     )
@@ -863,14 +893,6 @@ def _delegate_content_fix(
         }
 
     if use_revise_product:
-        if state == WorkflowState.NEEDS_PRODUCTION_REVISION:
-            change_request.mark_applied(project_dir)
-            resume_gate(
-                project_dir,
-                GateKind.VIDEO,
-                target=WorkflowState.PRODUCTION_IN_PROGRESS,
-                now=now,
-            )
         effective_role = 'editor'
         target_step = 'revise_product'
     else:
@@ -900,20 +922,38 @@ def _delegate_content_fix(
 
     guidance_path = root / 'topics/logs' / slug / 'leader-guidance.yaml'
     previous_guidance = guidance_path.read_bytes() if guidance_path.is_file() else None
-    write_yaml_atomic(guidance_path, {
-        'revision': layout.manifest.active_revision,
-        'role': effective_role,
-        'step': target_step,
-        'brief': plan.brief,
-        'at': now.isoformat(),
-    })
+    brief = plan.brief
+    resume_production = use_revise_product and state == WorkflowState.NEEDS_PRODUCTION_REVISION
+    resumed_production = False
     try:
+        with chat.locked(root) if resume_production else contextlib.nullcontext():
+            requests = change_request.pending(project_dir) if resume_production else []
+            if requests:
+                notes = [
+                    f"{request['brief']}\n{change_request.context_label(request['context'])}".strip()
+                    for _, request in requests
+                ]
+                brief += '\n\nYêu cầu sửa đang mở (giữ các khóa y khoa của bước này)\n' + '\n\n'.join(notes)
+            write_yaml_atomic(guidance_path, {
+                'revision': layout.manifest.active_revision,
+                'role': effective_role,
+                'step': target_step,
+                'brief': brief,
+                'at': now.isoformat(),
+            })
+            if resume_production:
+                resume_gate(project_dir, GateKind.VIDEO, target=WorkflowState.PRODUCTION_IN_PROGRESS, now=now)
+                resumed_production = True
+                if requests:
+                    change_request.mark_applied(project_dir)
         _release(root, slug)
     except Exception:
-        if previous_guidance is None:
-            guidance_path.unlink(missing_ok=True)
-        else:
-            guidance_path.write_bytes(previous_guidance)
+        # After resuming, this brief carries the requests even if hold release fails.
+        if not resumed_production:
+            if previous_guidance is None:
+                guidance_path.unlink(missing_ok=True)
+            else:
+                guidance_path.write_bytes(previous_guidance)
         raise
 
     return 'retry_requested', {
@@ -921,7 +961,7 @@ def _delegate_content_fix(
         'step': target_step,
         'status': 'delegated',
         'requires_doctor_reopen': False,
-        'brief': plan.brief,
+        'brief': brief,
         'cause': plan.cause,
     }
 
@@ -1572,31 +1612,32 @@ def repair_once(
     detail = blocked.read_text(encoding='utf-8', errors='replace')
     if detail.strip().startswith('Chờ dev lead sửa code:'):
         return 'awaiting_dev'
-    if ('Review budget exhausted:' in detail or script_review.CYCLE_LIMIT_REASON in detail
+    # Each retry gets a new log path. It is evidence, not a new failure.
+    reason = _normalize_incident_reason(detail)
+    product_plan = _product_review_presentation_plan(layout, reason)
+    if product_plan is None and (
+            'Review budget exhausted:' in detail or script_review.CYCLE_LIMIT_REASON in detail
             or 'Trạm 07 cần hướng dẫn:' in detail or 'Trạm 12 cần hướng dẫn:' in detail
             or 'Trạm 12 chưa đạt' in detail
             or 'Storyboard cần hướng dẫn:' in detail or 'Góp ý y khoa chưa có vị trí:' in detail):
         # This is an editorial stop awaiting doctor guidance, not a repair incident.
-        editorial_reason = _normalize_incident_reason(detail)
         applied = _try_apply_playbook(
-            root, slug, layout, reason=editorial_reason, detail=detail, record=record,
+            root, slug, layout, reason=reason, detail=detail, record=record,
         )
         if applied is not None:
             return 'retry_requested'
         _diagnose_editorial_stop(
-            root, slug, layout, logs=logs, reason=editorial_reason, detail=detail,
+            root, slug, layout, logs=logs, reason=reason, detail=detail,
             record=record, record_path=record_path, invoke=invoke,
         )
         _escalate_to_supervisor(
             root, slug, layout,
-            reason=editorial_reason,
+            reason=reason,
             detail=detail,
             record=record,
             skip_playbook=True,
         )
         return 'needs_attention'
-    # Each retry gets a new log path. It is evidence, not a new failure.
-    reason = _normalize_incident_reason(detail)
     incident = {'state': layout.manifest.state.value, 'reason': reason}
     if record.get('incident') != incident or record.get('phase') == 'validated':
         doctor_questions.supersede_kind(
@@ -1622,25 +1663,29 @@ def repair_once(
                 resumed_plan = None
     if record.get('phase') == 'awaiting_dev':
         return 'awaiting_dev'
-    measured_r5_plan = _measured_r5_presentation_plan(layout, reason)
+    r5_plan = _r5_presentation_plan(layout, reason)
+    presentation_plan = r5_plan or product_plan
     presentation_attempts = record.get('playbook_auto_counts', {}).get(_PRESENTATION_RETRY, 0)
-    if measured_r5_plan and presentation_attempts >= MAX_REPAIRS:
+    if presentation_plan and presentation_attempts >= MAX_REPAIRS:
         already_escalated = record.get('phase') == 'needs_attention'
         record['phase'] = 'needs_attention'
         record['attention_reason'] = _PRESENTATION_LIMIT_REASON
-        record['diagnosis'] = measured_r5_plan.model_dump(mode='json')
+        record['diagnosis'] = presentation_plan.model_dump(mode='json')
         write_yaml_atomic(record_path, record)
         _escalate_to_supervisor(root, slug, layout, reason=reason, detail=detail, record=record)
         return 'needs_attention' if already_escalated else 'exhausted'
     delegation = record.get('delegation') or {}
     legacy_r5_hold = (
-        measured_r5_plan is not None
+        r5_plan is not None
         and record.get('phase') == 'needs_attention'
         and delegation.get('status') == 'awaiting_doctor_reopen'
         and delegation.get('role') in {'editor', 'storyboard_director'}
         and not (record.get('diagnosis') or {}).get('requires_doctor')
     )
-    if record.get('phase') == 'needs_attention' and not legacy_r5_hold:
+    recover_presentation_hold = legacy_r5_hold or (
+        product_plan is not None and not (record.get('diagnosis') or {}).get('requires_doctor')
+    )
+    if record.get('phase') == 'needs_attention' and not recover_presentation_hold:
         outcome = _escalate_to_supervisor(root, slug, layout, reason=reason, detail=detail, record=record)
         if isinstance(outcome, dict) and outcome.get('playbook_applied'):
             return 'retry_requested'
@@ -1659,7 +1704,7 @@ def repair_once(
     if respect_cooldown and record.get('phase') == 'repair_failed' and _in_cooldown(record, now):
         return 'cooldown'
     if (record.get('transient_failures', 0) >= MAX_TRANSIENT_FAILURES
-            or (not legacy_r5_hold
+            or (presentation_plan is None
                 and record.get('attempts', 0) - record.get('attempts_before_incident', 0) >= MAX_REPAIRS)):
         record['phase'] = 'needs_attention'
         record['attention_reason'] = (
@@ -1684,7 +1729,7 @@ def repair_once(
         return 'cooldown'
     diagnosis_event = None
     diagnosis_stage = 'diagnosis:' + canonical_json_hash({'reason': reason})
-    if resumed_plan is None and measured_r5_plan is None and review_budget.enabled(layout.artifact_root):
+    if resumed_plan is None and presentation_plan is None and review_budget.enabled(layout.artifact_root):
         diagnosis_event = uuid4().hex
         try:
             review_budget.consume_review_budget(layout.artifact_root, diagnosis_stage, diagnosis_event)
@@ -1724,9 +1769,12 @@ def repair_once(
         'storyboard_director, shorts_producer hoặc voice_director. '
         'Nếu revision đã duyệt y khoa và lỗi nằm ở phần trình bày/hình storyboard '
         '(như cảnh kết brand_outro M6.4, beat, bố cục, ngân sách hình, asset phi ngữ nghĩa) mà không đổi lời đọc/claim y khoa '
-        '— kể cả khi đang ở needs_production_revision do leader-repair trước đó — chọn action=delegate, delegate_role=editor '
-        'để định tuyến về revise_product sửa phần trình bày an toàn, kể cả khi chưa có log kiểm định sản phẩm. '
-        'Ghi rõ ID từng cảnh chịu lỗi trong brief. '
+        '— kể cả khi needs_production_revision có reason_code=chat_change — chọn action=delegate, '
+        'delegate_role=storyboard_director hoặc editor để giao revise_product. '
+        'Bước revise_product được sửa phần trình bày của storyboard/storyboard.yaml trong phạm vi cảnh được giao, '
+        'với lời đọc, claim, nguồn và các trường y khoa giữ nguyên. '
+        'Lấy ID cảnh từ trường at của từng issue product review nếu có, liệt kê từng ID trong khoảng cảnh ở brief. '
+        'Giới hạn chỉ đọc của lượt chẩn đoán không áp dụng cho storyboard ở bước revise_product. '
         'Nếu cần tài khoản, PIN hoặc thiếu dữ kiện để kết luận thì action=hold. '
         'Khi action=hold, BẮT BUỘC điền doctor_options gồm 2–3 phương án cụ thể theo đúng lỗi '
         '(ví dụ thiếu toàn văn: dùng abstract ghi giới hạn / bác sĩ bỏ PDF vào cache/fulltext/inbox / '
@@ -1744,7 +1792,7 @@ def repair_once(
     before_bytes: dict[str, bytes] = {}
     before_paths: set[str] = set()
     try:
-        plan = resumed_plan or measured_r5_plan
+        plan = presentation_plan or resumed_plan
         if plan is not None:
             write_yaml_atomic(work / 'diagnosis.yaml', plan.model_dump(mode='json'))
         else:

@@ -315,6 +315,14 @@ describe('R5ShotScene registry routing and caption policy', () => {
       renderScene(makeScene([missingLabRows], {id: 'S97'}), LAYOUTS.youtube_long),
     ).toThrow(/S97\/SH-EMPTY-LAB.*VnLabSheet/i);
 
+    const actionOnlyDistribution = makeShotForComponent('ReferenceDistribution', {
+      id: 'SH-ID-LABELS',
+      text_windows: [],
+    });
+    expect(() =>
+      renderScene(makeScene([actionOnlyDistribution], {id: 'S93'}), LAYOUTS.youtube_long),
+    ).toThrow(/S93\/SH-ID-LABELS.*ReferenceDistribution requires text_windows/i);
+
     const missingLeakStages = makeShotForComponent('R5LiverLeakSignature', {
       id: 'SH-SHORT-LEAK',
       actions: [

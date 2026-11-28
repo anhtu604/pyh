@@ -292,17 +292,11 @@ const renderVnLabSheet: R5ShotRenderer = ({scene, shot, layout, assets, frame}) 
 };
 
 const renderReferenceDistribution: R5ShotRenderer = ({scene, shot, layout, assets, frame}) => {
-  if (shot.text_windows.length === 0 && shot.actions.length === 0) {
-    failShot(
-      scene.id,
-      shot.id,
-      'ReferenceDistribution requires at least one text_window or action datum',
-    );
+  // action.outcome is a machine id (lam_ro_y_chinh_1); never put it on screen.
+  if (shot.text_windows.length === 0) {
+    failShot(scene.id, shot.id, 'ReferenceDistribution requires text_windows; action outcomes are internal ids');
   }
-  const bandSources =
-    shot.text_windows.length > 0
-      ? shot.text_windows.map((w) => ({label: w.text, claimIds: w.claim_ids}))
-      : shot.actions.map((a) => ({label: a.outcome, claimIds: [] as readonly string[]}));
+  const bandSources = shot.text_windows.map((w) => ({label: w.text, claimIds: w.claim_ids}));
 
   const tones: readonly DistributionBand['tone'][] = ['teal', 'yellow', 'navy'];
   const span = 1 / bandSources.length;

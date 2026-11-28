@@ -217,17 +217,23 @@ def test_takeaway_card_without_text_window_is_rejected():
         validate_r5_contract(board, script)
 
 
-def test_reference_distribution_without_text_or_action_is_rejected():
+@pytest.mark.parametrize("has_actions", [False, True])
+def test_reference_distribution_without_text_is_rejected(has_actions):
     script = Script(title="Synthetic", lines=[{"id": f"L{i}", "text": "First? Second?" if i == 1 else "Synthetic."}
                                                for i in range(1, 4)])
     shot = {**shot_payload(), "kind": "story", "tier": None, "component": "ReferenceDistribution",
-            "asset_paths": [], "actions": [], "text_windows": []}
+            "asset_paths": [], "text_windows": []}
+    if has_actions:
+        shot["actions"] = [{
+            "actor": "A", "compartment": "C", "change": "shows", "outcome": "lam_ro_y_chinh_1",
+            "start": {"kind": "scene_start"}, "end": {"kind": "scene_end"},
+        }]
     board = Storyboard(title="Synthetic", quality_profile="r5_v1", r5_contract=contract_payload(),
                        scenes=[{"id": "S06", "start_frame": 0, "duration_frames": 120, "narration": "Synthetic.",
                                 "visual": "whiteboard", "on_screen_text": "Synthetic", "shots": [shot]}])
     with pytest.raises(
         ValueError,
-        match="S06 shot SH1: ReferenceDistribution requires at least one text_window or action",
+        match=r"Scene S06 shot SH1 frame \[0,120\): ReferenceDistribution .*; owner=storyboard_director",
     ):
         validate_r5_contract(board, script)
 

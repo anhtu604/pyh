@@ -194,6 +194,21 @@ def _cycle(root: Path) -> list[dict]:
     return log['rounds'][log['submitted']:]
 
 
+def storyboard_repair_issues(root: Path) -> list[dict]:
+    """Read visual issues left out of the critic's normal surgical repair route."""
+    rounds = _log(root)['rounds']
+    if not rounds or rounds[-1].get('passed'):
+        return []
+    issues = rounds[-1].get('issues', [])
+    if any(item.get('blocking_safety') for item in issues):
+        return []
+    return [
+        item for item in issues
+        if not item.get('fixable') and not item.get('edits')
+        and item.get('criterion') in _VIDEO_VISUAL_CRITERIA
+    ]
+
+
 def render_hash(project: Path) -> str:
     rev = _root(project)
     from healthvideo.workflows.external_revision import is_external

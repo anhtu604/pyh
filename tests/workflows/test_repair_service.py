@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import subprocess
 from contextlib import nullcontext
 from datetime import UTC, datetime, timedelta
@@ -1425,6 +1426,76 @@ def test_delegate_post_product_review_routes_to_revise_product_and_escapes_needs
         assert 'S36' in guidance['brief']
         assert not change_request.pending(proj)
         assert (root, proj.name) in released
+
+
+@pytest.mark.parametrize('block', [
+    'Trạm 12 chưa đạt; lỗi vượt phạm vi thợ dựng.',
+    'agent không làm đổi trạng thái (revise_production, trạng thái needs_production_revision)',
+])
+def test_chat_change_presentation_repair_carries_requests_and_shares_retry_limit(tmp_path, monkeypatch, block):
+    project = _make_v2_project_in_state(tmp_path / 'projects', WorkflowState.PRODUCTION_IN_PROGRESS)
+    rev = project / 'revisions/001'
+    logs = tmp_path / 'topics/logs' / project.name
+    logs.mkdir(parents=True)
+    blocked = logs / 'blocked.txt'
+    approval = rev / 'reviews/medical-approval.yaml'
+    approved = approval.read_bytes()
+    change_request = repair.change_request
+    monkeypatch.setattr(repair, '_active', lambda *args: False)
+
+    def unexpected_diagnosis(*args, **kwargs):
+        pytest.fail('Station 12 presentation evidence is already available')
+
+    monkeypatch.setattr(repair, '_ask', unexpected_diagnosis)
+    mark_applied = change_request.mark_applied
+
+    def mark_after_writing_guidance(project_dir):
+        guidance = read_yaml(logs / 'leader-guidance.yaml')
+        pending = change_request.pending(project_dir)
+        assert pending
+        assert all(request['brief'] in guidance['brief'] for _, request in pending)
+        mark_applied(project_dir)
+
+    monkeypatch.setattr(change_request, 'mark_applied', mark_after_writing_guidance)
+    for i in range(2):
+        request = f'Adjust card spacing requested by the doctor (request {i}).'
+        context = {'scene': 'S03', 'time_s': 5}
+        change_request.request_change(
+            project, 'edit_production', request, context, now=datetime.now(UTC),
+        )
+        assert read_yaml(project / 'project.yaml')['side_state']['reason_code'] == 'chat_change'
+        write_yaml_atomic(rev / repair.product_review.LOG, {
+            'submitted': 1,
+            'rounds': [{'passed': False, 'issues': [{
+                'at': 'S01–S50 (mascot)',
+                'criterion': 'nhip_dung',
+                'problem': 'Static mascot holds too long.',
+                'fix': 'Use storyboard visuals at each beat.',
+                'fixable': False,
+                'edits': [],
+            }]}],
+        })
+        blocked.write_text(block, encoding='utf-8')
+        assert repair.repair_once(tmp_path, project.name) == 'retry_requested'
+        assert repair.doctor_questions.open_question(tmp_path, project.name) is None
+        assert read_yaml(project / 'project.yaml')['state'] == 'production_in_progress'
+        guidance = read_yaml(logs / 'leader-guidance.yaml')
+        assert guidance['step'] == 'revise_product'
+        assert guidance['role'] == 'editor'
+        assert request in guidance['brief']
+        assert 'S03 @ 00:05' in guidance['brief']
+        assert set(re.findall(r'\bS\d+\b', guidance['brief'])) == {f'S{n:02d}' for n in range(1, 51)}
+        assert not change_request.pending(project)
+        assert approval.read_bytes() == approved
+
+    blocked.write_text(
+        'dựng lại sau sửa lỗi: R5 storyboard contract failed:\n'
+        'Scene S03 shot SH1 frame [0,120): ReferenceDistribution requires a text_window; owner=storyboard_director',
+        encoding='utf-8',
+    )
+    assert repair.repair_once(tmp_path, project.name) == 'exhausted'
+    assert repair.doctor_questions.open_question(tmp_path, project.name)['kind'] == 'escalation'
+    assert read_yaml(logs / repair.REPORT)['playbook_auto_counts'][repair._PRESENTATION_RETRY] == 2
 
 
 def test_escalation_fingerprint_changes_after_answered_cycle_even_without_leader_repair(tmp_path, monkeypatch):

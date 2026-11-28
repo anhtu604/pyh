@@ -303,6 +303,7 @@ def validate_r5_contract(board: Storyboard, script: Script) -> None:
         # Clip-only scenes are filtered below, yet Remotion renders them too (TakeawayCard.tsx).
         # Report every card at once so one rework round fixes them all.
         too_long = []
+        missing_reference_text = []
         for scene in board.scenes:
             has_mascot = any(asset.role == "mascot" for asset in scene.visual_assets)
             for shot in scene.shots:
@@ -311,8 +312,13 @@ def validate_r5_contract(board: Storyboard, script: Script) -> None:
                 where = f"Scene {scene.id} shot {shot.id}: {shot.component}"
                 if shot.component == "VnLabSheet" and not kinds & {"lab_sheet", "table"}:
                     too_long.append(f"{where} requires a lab_sheet or table text_window")
-                if shot.component == "ReferenceDistribution" and not (shot.text_windows or shot.actions):
-                    too_long.append(f"{where} requires at least one text_window or action")
+                if shot.component == "ReferenceDistribution" and not shot.text_windows:
+                    # Shot anchors are unresolved here, so report the containing scene's frame span.
+                    scene_end = scene.start_frame + scene.duration_frames
+                    missing_reference_text.append(
+                        f"Scene {scene.id} shot {shot.id} frame [{scene.start_frame},{scene_end}): "
+                        "ReferenceDistribution requires a text_window for its visible label; owner=storyboard_director"
+                    )
                 if shot.component == "StoryShot" and not (shot.asset_paths or has_mascot):
                     too_long.append(f"{where} requires asset_paths or a scene mascot in visual_assets")
                 if shot.component != "TakeawayCard":
@@ -325,6 +331,8 @@ def validate_r5_contract(board: Storyboard, script: Script) -> None:
                     if window.kind in {"takeaway", "question"} and not 1 <= words <= R5_MAX_TAKEAWAY_WORDS:
                         too_long.append(f"Scene {scene.id} shot {shot.id}: TakeawayCard {window.kind} needs "
                                         f"1..{R5_MAX_TAKEAWAY_WORDS} words, got {words}")
+        if missing_reference_text:
+            raise ValueError("R5 storyboard contract failed:\n" + "\n".join(missing_reference_text))
         if too_long:
             raise ValueError("\n".join(too_long))
     board = long_form_storyboard(board)
