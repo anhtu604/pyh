@@ -1,5 +1,6 @@
 """Read critic decision cards and compose the doctor's choices; never approve gates."""
 
+import re
 from pathlib import Path
 from typing import Literal
 
@@ -117,5 +118,8 @@ def compose(card: dict, choices: dict[str, str], other: str) -> tuple[Literal['a
         rows.append(f'{item.id} ({item.where}) → {option.id}: {option.label}')
         send_fix = send_fix or not option.keep
     if other.strip():
+        if card.get('gate') == 'medical' and not re.search(r'(?<![\w])[A-Z]{1,4}\d{1,4}(?![\w])', other):
+            # rework scopes medical fixes by line/scene ID; a note without one can never be applied.
+            raise ValueError('Ý khác cần ghi rõ ID dòng/cảnh cần sửa (ví dụ N12, S03); để trống nếu duyệt.')
         rows.append('Ý khác: ' + other.strip())
     return ('send_fix' if send_fix else 'approve', '\n'.join(rows))

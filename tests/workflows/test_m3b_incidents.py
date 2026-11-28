@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -343,3 +344,15 @@ def test_preflight_checks_script_review_voice_prep_and_shorts_plan(tmp_path):
     for step in ("voice_prep", "shorts_plan"):
         errs = preflight(step, project)
         assert any("storyboard/storyboard.yaml" in err for err in errs)
+
+
+def test_block_left_over_from_before_the_gate_is_cleared_not_escalated(tmp_path: Path) -> None:
+    # 2026-11-28 PYH-004: a stale blocked.txt re-opened the same doctor question after resubmission.
+    project = _setup_queue_project(tmp_path, state=WorkflowState.AWAITING_MEDICAL_REVIEW)
+    logs = tmp_path / "topics/logs" / project.name
+    logs.mkdir(parents=True, exist_ok=True)
+    (logs / "blocked.txt").write_text("lỗi xử lý chủ đề: ValueError: Góp ý y khoa chưa có vị trí\n", encoding="utf-8")
+    submitted = (project / "project.yaml").stat().st_mtime
+    os.utime(logs / "blocked.txt", (submitted - 60, submitted - 60))  # written before the resubmission
+    assert repair.repair_once(tmp_path, project.name) == "idle"
+    assert not (logs / "blocked.txt").exists()

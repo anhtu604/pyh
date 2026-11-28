@@ -133,6 +133,10 @@ def validate_estimated_layout(
                                       'stage-r5-assets`, or drop asset_paths and use the scene mascot for '
                                       'StoryShot); owner=storyboard_director')
     if timed.format_profile == 'youtube_long':
+        if revision is not None and not (revision / 'script/outline.yaml').is_file():
+            # The medical gate reads the outline; fail here so the writer adds it, not at approval.
+            errors.append('youtube_long requires script/outline.yaml (writer: `healthvideo step draft-script '
+                          '<project> --script script/script.yaml --outline <file>`, script unchanged); owner=writer')
         if clip_plan is None:
             if revision is None or not (revision / 'script/clip-plan.yaml').is_file():
                 # The storyboard director writes it in storyboard_design; say so instead of crashing.

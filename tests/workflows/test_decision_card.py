@@ -180,3 +180,12 @@ def test_excess_decisions_require_bounded_rewrite(tmp_path, gate):
             else:
                 assert pr.next_product_action(project) == 'revise_product'
     assert read_yaml(project / 'revisions/001' / (sr.LOG if gate == 'medical' else pr.LOG))
+
+
+def test_medical_other_note_must_name_a_line_or_scene():
+    from healthvideo.workflows.decision_card import compose
+
+    # 2026-11-28: a note without IDs ("Anh Tu Vuong Dinh", autofilled) looped the factory 5 times.
+    with pytest.raises(ValueError, match='ID dòng/cảnh'):
+        compose({'gate': 'medical', 'decisions': []}, {}, 'Anh Tu Vuong Dinh')
+    assert compose({'gate': 'medical', 'decisions': []}, {}, 'N12: bỏ câu này')[0] == 'send_fix'

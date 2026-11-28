@@ -215,7 +215,7 @@ def test_card_all_keep_records_choices_in_approval(gate):
     assert approval['note'] == f'D1 ({line_id}) → a: Giữ nguyên'
 
 
-@pytest.mark.parametrize('other', ['', 'Sửa cách diễn đạt'])
+@pytest.mark.parametrize('other', ['', 'N01: Sửa cách diễn đạt'])
 def test_card_preserves_existing_draft_comments(gate, other):
     root, project, _ = gate
     dashboard.save_comment(root, project.name, 'chung', 'Góp ý cần giữ lại')

@@ -1477,6 +1477,11 @@ def repair_once(
     if _active(root, slug):
         return 'busy'
     blocked = logs / 'blocked.txt'
+    if (layout.manifest.state in {WorkflowState.AWAITING_MEDICAL_REVIEW, WorkflowState.AWAITING_VIDEO_REVIEW}
+            and blocked.is_file()
+            and blocked.stat().st_mtime < (project / 'project.yaml').stat().st_mtime):
+        # A block written before the project was (re)submitted to the gate is already resolved.
+        blocked.unlink(missing_ok=True)
     if not blocked.is_file():
         doctor_questions.supersede_kind(
             root, slug, 'escalation', reason='Lỗi chặn đã được giải quyết.',

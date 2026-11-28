@@ -286,3 +286,21 @@ def test_pre_gate_missing_clip_plan_is_actionable_not_a_crash(tmp_path, monkeypa
     monkeypatch.setattr("healthvideo.workflows.voice_preview.draft_line_ms", lambda *_: None)
     with pytest.raises(ValueError, match="clip-plan.yaml written in storyboard_design; owner=storyboard_director"):
         validate_estimated_layout(project, script, storyboard)
+
+
+def test_pre_gate_missing_outline_is_caught_before_the_doctor(tmp_path, monkeypatch):
+    # 2026-11-28 PYH-004: youtube_long without script/outline.yaml reached the gate; approval then failed.
+    from healthvideo.workflows.draft import validate_estimated_layout
+    from tests.helpers import create_v2_project_fixture
+    from tests.render.test_quality import board as r5_board
+    from tests.render.test_quality import shot
+
+    project = create_v2_project_fixture(tmp_path / "projects")
+    (project / "revisions/001/script/outline.yaml").unlink(missing_ok=True)
+    original = r5_board([shot(0, 1800)], frames=1800)
+    storyboard = original.model_copy(update={"format_profile": "youtube_long", "scenes": (
+        original.scenes[0].model_copy(update={"chapter_id": "CH01"}),)})
+    script = Script(title="Test", lines=[ScriptLine(id="L1", text=storyboard.scenes[0].narration)])
+    monkeypatch.setattr("healthvideo.workflows.voice_preview.draft_line_ms", lambda *_: None)
+    with pytest.raises(ValueError, match="requires script/outline.yaml .*owner=writer"):
+        validate_estimated_layout(project, script, storyboard)
