@@ -227,3 +227,28 @@ def test_clip_mechanism_variety(subjects: tuple[str, ...]) -> None:
             assert f"{scene_id}=artery_cross_section" in str(error.value)
     else:
         assert validate_clip_plan(plan, board, CLAIMS)["CL02"] == board.scenes[2:5]
+
+
+def _board_with_hook(frames: int) -> Storyboard:
+    board = _board()
+    scenes = [scene.model_dump() for scene in board.scenes]
+    scenes[1].update(clip_only="CL01", start_frame=0, chapter_id=None, claim_id=None, duration_frames=frames)
+    scenes[1]["words"] = [w for w in scenes[1]["words"] if w["end_frame"] <= frames]
+    start = 0
+    for scene in scenes:
+        if scene.get("clip_only") is None:
+            scene["start_frame"] = start
+            start += scene["duration_frames"]
+    return Storyboard.model_validate({**board.model_dump(), "scenes": scenes})
+
+
+def test_clip_hook_cap_is_on_speech_not_on_the_retime_pad() -> None:
+    # PYH-004 2026-11-28: a 4.983 s hook became 150 + 9 pad frames and was rejected as > 5 s.
+    from healthvideo.domain.clip_plan import SCENE_PAD_FRAMES
+    from healthvideo.render.timing import PAD_FRAMES
+
+    assert SCENE_PAD_FRAMES == PAD_FRAMES
+    plan = _with(_clip("CL01", "S03", "S04", hook_scene_id="S02"))
+    validate_clip_plan(plan, _board_with_hook(150 + PAD_FRAMES), CLAIMS)
+    with pytest.raises(ValueError, match="CL01: clip-only hook exceeds 5s"):
+        validate_clip_plan(plan, _board_with_hook(151 + PAD_FRAMES), CLAIMS)

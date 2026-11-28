@@ -21,6 +21,8 @@ CLIP_CTA_FRAMES = 3 * FPS
 STYLE_A_MASCOT_MAX_WIDTH_PERCENT = 28.0
 STYLE_A_SUBTITLE_POSITION = "bottom_center"
 STYLE_A_HOOK_MAX_SECONDS = 2.0
+# render.timing.PAD_FRAMES; render imports domain, so it cannot be imported here.
+SCENE_PAD_FRAMES = 9
 
 
 class ClipSpec(BaseModel):
@@ -179,7 +181,8 @@ def validate_clip_plan(
             if storyboard.quality_profile == "r5_v1" and scene.clip_only != clip.id:
                 raise ValueError(f"{clip.id}: R5 {role} requires clip_only={clip.id}")
             if scene.clip_only is not None:
-                if scene.duration_frames > max_seconds * FPS:
+                # The cap is on the spoken line; retiming adds the fixed scene pad after it.
+                if scene.duration_frames > max_seconds * FPS + SCENE_PAD_FRAMES:
                     raise ValueError(f"{clip.id}: clip-only {role} exceeds {max_seconds}s")
                 if script is not None:
                     line = next(line for line in script.lines if line.id == scene.script_line_id)
