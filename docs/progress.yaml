@@ -602,3 +602,8 @@ phases:
     status: done
     owner: codex
     note: 'Xong: lỗi R5 (nhịp shot, khoảng trống hình) sau giọng thật tự giao dựng sửa đúng cảnh lỗi qua revise_product, lời đọc/claim khoá; tối đa 2 lượt mỗi bản rồi mới hỏi bác sĩ. Gỡ được câu hỏi cũ của PYH-002, PYH-004.'
+  - id: FIX.PRODROUTE
+    title: Sửa phần trình bày sau cổng video đi đúng vai có quyền sửa storyboard; không lộ mã nội bộ lên hình
+    status: doing
+    owner: codex
+    note: 'Đang sửa (PYH-001): ở needs_production_revision lỗi trình bày bị giao revise_production (không được sửa storyboard) nên lặp tới hết lượt rồi hỏi bác sĩ; shot ReferenceDistribution thiếu chữ hiện mã outcome nội bộ.'
