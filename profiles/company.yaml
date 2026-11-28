@@ -7,8 +7,8 @@
 # Neon for remaining light roles. Existing OmniRoute IDs only as fallback; direct/proxy aliases share identity.
 tiers:
   hard:
-  - {cli: codex, model: gpt-6.1-sol}
-  - {cli: omniroute, model: codex/gpt-6.1-sol}
+  - {cli: codex, model: gpt-6.2-sol}
+  - {cli: omniroute, model: codex/gpt-6.2-sol}
   medium:
   - {cli: agy, model: gemini-4-neon-medium}
   - {cli: omniroute, model: agy/gemini-4-hydrogen-medium}
@@ -35,8 +35,8 @@ roles:
     tier: medium
     models:
     - {cli: agy, model: claude-sonnet-5-5-medium}
-    - {cli: codex, model: gpt-6.1-sol}
-    - {cli: omniroute, model: codex/gpt-6.1-sol}
+    - {cli: codex, model: gpt-6.2-sol}
+    - {cli: omniroute, model: codex/gpt-6.2-sol}
   researcher:
     name: Chuyên viên Nghiên cứu & Phân tích Kênh
     skills:
@@ -64,8 +64,8 @@ roles:
     tier: medium
     models:
     - {cli: agy, model: claude-sonnet-5-5-medium}
-    - {cli: codex, model: gpt-6.1-sol}
-    - {cli: omniroute, model: codex/gpt-6.1-sol}
+    - {cli: codex, model: gpt-6.2-sol}
+    - {cli: omniroute, model: codex/gpt-6.2-sol}
     - {cli: codex, model: gpt-6.1-terra}
     - {cli: omniroute, model: codex/gpt-6.1-terra}
   writer:
@@ -83,8 +83,8 @@ roles:
     - {cli: omniroute, model: agy/gemini-4-hydrogen-medium}
     models:
     - {cli: agy, model: claude-sonnet-5-5-medium}
-    - {cli: codex, model: gpt-6.1-sol}
-    - {cli: omniroute, model: codex/gpt-6.1-sol}
+    - {cli: codex, model: gpt-6.2-sol}
+    - {cli: omniroute, model: codex/gpt-6.2-sol}
   # 2026-11-26: bác sĩ: vai làm theo skill dùng Neon; chất lượng do skill + kiểm duyệt bảo đảm.
   storyboard_director:
     name: Đạo diễn Phân cảnh & Đồ họa

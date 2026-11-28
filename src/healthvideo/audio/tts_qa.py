@@ -14,6 +14,7 @@ from healthvideo.storage.files import (
 )
 
 QA_VERSION = 'r5-line-2'
+WHISPER_UNAVAILABLE = 'Whisper unavailable'
 LETTER_NAMES = dict(zip('ABCDEFGHIJKLMNOPQRSTUVWXYZ',
     ('a', 'bê', 'xê', 'đê', 'e', 'ép', 'giê', 'hát', 'i', 'giây', 'ca', 'e lờ',
      'em', 'en', 'o', 'pê', 'quy', 'e rờ', 'ét', 'tê', 'u', 'vê', 'vê kép', 'ích', 'i', 'dét'), strict=True))
@@ -134,26 +135,34 @@ def check_line(*, line_id: str, text: str, terms: Sequence[str], asr_lexicon: Ma
     except (OSError, ValueError, KeyError, TypeError):
         state = {}
     accepted_hashes = accepted_hashes or set()
+
+    def align(attempts: int) -> tuple[dict, dict]:
+        params = inspect.signature(aligner).parameters
+        kwargs = ({'preserve_asr_source': True} if 'preserve_asr_source' in params
+                  or any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()) else {})
+        result = aligner({line_id: wav}, {line_id: text},
+                         out_dir=cache_dir / 'alignment', asr_lexicon=asr_lexicon, **kwargs)
+        checked = {**line_qa(result, terms=terms), 'identity': identity,
+                   'wav_sha256': sha256_file(wav), 'attempts': attempts,
+                   'retry_id': retry_id, 'text': text}
+        if not result:
+            checked['flags'] = [{'line': line_id, 'script_word': text,
+                                 'heard': WHISPER_UNAVAILABLE, 'severity': 'block',
+                                 'priority': 'normal', 'start': 0, 'end': 0,
+                                 'suggestion': 'Khôi phục Whisper hoặc nghe lại audio.'}]
+        write_text_atomic(receipt, json.dumps(checked, ensure_ascii=False, indent=2))
+        return result, checked
+
     if not state or (retry_id and state.get('retry_id') != retry_id):
         # A later render failure must not reset this line's paid retry budget.
         for attempt in range(2):
             synthesize(wav, bool(attempt or retry_id))
-            params = inspect.signature(aligner).parameters
-            kwargs = ({'preserve_asr_source': True} if 'preserve_asr_source' in params
-                      or any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()) else {})
-            result = aligner({line_id: wav}, {line_id: text},
-                             out_dir=cache_dir / 'alignment', asr_lexicon=asr_lexicon, **kwargs)
-            state = {**line_qa(result, terms=terms), 'identity': identity,
-                     'wav_sha256': sha256_file(wav), 'attempts': attempt + 1,
-                     'retry_id': retry_id, 'text': text}
-            if not result:
-                state['flags'] = [{'line': line_id, 'script_word': text,
-                                   'heard': 'Whisper unavailable', 'severity': 'block',
-                                   'priority': 'normal', 'start': 0, 'end': 0,
-                                   'suggestion': 'Khôi phục Whisper hoặc nghe lại audio.'}]
-            write_text_atomic(receipt, json.dumps(state, ensure_ascii=False, indent=2))
+            result, state = align(attempt + 1)
             if not state['blocked'] or state['wav_sha256'] in accepted_hashes or not result:
                 break
+    elif any(f.get('heard') == WHISPER_UNAVAILABLE for f in state.get('flags', [])):
+        # A Whisper outage says nothing about the audio: re-check the paid WAV, never re-synthesize.
+        _, state = align(state.get('attempts', 1))
     result = json.loads(json.dumps(state))
     if result['wav_sha256'] in accepted_hashes:
         result['doctor_accepted'] = True

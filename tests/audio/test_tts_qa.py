@@ -96,3 +96,23 @@ def test_retry_correct_then_no_more_whisper(tmp_path):
     assert not check_line(**args)[0]['blocked']
     check_line(**args)
     assert len(calls) == 2
+
+
+def test_whisper_outage_is_rechecked_on_cached_wav_without_new_synthesis(tmp_path):
+    synth_calls, align_calls = [], []
+
+    def synth(output, force):
+        synth_calls.append(force)
+        output.write_bytes(b'paid audio')
+
+    def aligner(wavs, scripts, **kwargs):
+        align_calls.append(1)
+        return {} if len(align_calls) == 1 else _alignment(scripts['L1'], 'viêm gan bê')
+
+    args = {'line_id': 'L1', 'text': 'viêm gan bê', 'terms': ['bê'], 'asr_lexicon': {},
+            'cache_dir': tmp_path, 'request_key': 'key', 'synthesize': synth, 'aligner': aligner}
+    assert check_line(**args)[0]['blocked']
+    report = check_line(**args)[0]
+    assert not report['blocked'] and synth_calls == [False] and len(align_calls) == 2
+    check_line(**args)
+    assert len(align_calls) == 2

@@ -879,6 +879,7 @@ def _run_agent_invocation(
     defer_validation_record: bool = False,
     mark_blocked_on_failure: bool = True,
     allow_missing_storyboard: bool = False,
+    review_correction: str = "",
 ) -> tuple[str, Path | None, str | None, dict[str, str] | None]:
     """Run one agent step with fingerprint retry gating, failover & quarantine."""
     from healthvideo.workflows import storyboard_parts
@@ -895,6 +896,10 @@ def _run_agent_invocation(
     prompt = _build_step_prompt(
         root, deps, entry, project_dir, step, rewriting=rewriting, answering=answering
     )
+    if review_correction:
+        prompt += '\n\n' + review_correction
+        # The correction is an instruction, not a change to the reviewed inputs.
+        brief_context = brief_context.removesuffix('\n\n' + review_correction)
     from healthvideo.workflows.external_revision import is_external
 
     external_root, _ = _revision_root_or_error(project_dir)
@@ -2073,8 +2078,31 @@ def _run_topic(
                                   else product_review.record_review)
                         try:
                             event_id = (invoke_meta or {}).get('review_event_id')
-                            record(project_dir, reviewed_hash,
-                                   **({'event_id': event_id} if event_id else {}))
+                            try:
+                                record(project_dir, reviewed_hash,
+                                       **({'event_id': event_id} if event_id else {}))
+                            except ValueError as exc:
+                                correction = (
+                                    f'Báo cáo vừa nộp bị từ chối khi kiểm: {exc}. '
+                                    'Chỉ sửa file báo cáo cho hợp lệ; giữ nguyên nhận định, điểm và lỗi đã ghi; '
+                                    'không sửa file nào khác.'
+                                )
+                                pre_fingerprint = agent_fingerprint(root, project_dir, step, brief_context)
+                                outcome, result_log_path, _, invoke_meta = _run_agent_invocation(
+                                    root, deps, entry, project_dir, report,
+                                    step=step, brief_context=brief_context + '\n\n' + correction,
+                                    log_dir=log_dir, rewriting=rewriting, answering=answering,
+                                    defer_validation_record=True, mark_blocked_on_failure=False,
+                                    review_correction=correction,
+                                )
+                                if is_project_paused(root, entry.slug):
+                                    break
+                                pre_fingerprint = (invoke_meta or {}).get('fingerprint', pre_fingerprint)
+                                if outcome != 'ok':
+                                    raise ValueError((invoke_meta or {}).get('error') or outcome) from exc
+                                event_id = (invoke_meta or {}).get('review_event_id')
+                                record(project_dir, reviewed_hash,
+                                       **({'event_id': event_id} if event_id else {}))
                             if external:
                                 if step == 'script_review':
                                     external_script_review.require_passed_review(project_dir)

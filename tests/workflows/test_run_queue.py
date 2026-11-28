@@ -257,7 +257,8 @@ def test_failed_critic_report_cannot_be_rebound_to_changed_input(tmp_path, kind)
         attempts.append(kwargs['step'])
         if len(attempts) == 1:
             helpers._report(project, 8, summary='OLD INPUT REPORT')
-        elif len(attempts) == 3:
+        elif len(attempts) == 4:
+            # The second queue run includes one correction for its missing report.
             helpers._report(project, 8, summary='FRESH INPUT REPORT')
         return AgentResult('fake', len(attempts) != 1, False, _log_file(log_dir),
                            failure_kind='transient' if len(attempts) == 1 else None)

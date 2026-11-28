@@ -54,8 +54,8 @@ Hai nhân viên:
 | Nhân viên | Model | Giao việc gì |
 | --- | --- | --- |
 | `agy` | `gemini-4-neon-medium` | Giao diện app (`dashboard.html`), Remotion/TypeScript, xóa code hàng loạt, việc cần nhìn ảnh hay khung hình. Bác sĩ 2026-11-19: mặc định Neon (nhanh hơn Carbon 4 lần trên việc nhỏ); chỉ dùng `gemini-4-carbon-high` cho việc cần suy luận sâu |
-| `codex` | `gpt-6.1-sol` | Dự phòng khi agy làm sai hai vòng liền (bác sĩ 2026-11-12: dùng model vừa phải, không dùng Opus hay astra) |
-| `codex` | `gpt-6.1-sol` | Python có bất biến cần giữ: cổng duyệt, hash, timing, retry, storage |
+| `codex` | `gpt-6.2-sol` | Dự phòng khi agy làm sai hai vòng liền (bác sĩ 2026-11-12: dùng model vừa phải, không dùng Opus hay astra) |
+| `codex` | `gpt-6.2-sol` | Python có bất biến cần giữ: cổng duyệt, hash, timing, retry, storage |
 
 Từ 2026-11-14, model từng vai tra `profiles/company.yaml`; không mặc định dùng
 orchestrator cho mọi việc. Biên kịch Sol, y khoa Carbon high, kiểm duyệt/hình/dựng
@@ -69,7 +69,7 @@ Lệnh giao việc (chạy từ PowerShell, trong worktree của việc đó, ch
 ```powershell
 agy -p "Đọc và làm đúng theo file <đường dẫn brief.md>" --model gemini-4-neon-medium --mode accept-edits --print-timeout 0s
 agy -c -p "<yêu cầu sửa>" --model gemini-4-neon-medium --mode accept-edits --print-timeout 0s
-Get-Content -Raw <brief.md> | codex exec -m gpt-6.1-sol --dangerously-bypass-approvals-and-sandbox -
+Get-Content -Raw <brief.md> | codex exec -m gpt-6.2-sol --dangerously-bypass-approvals-and-sandbox -
 ```
 
 Quy trình mỗi việc:

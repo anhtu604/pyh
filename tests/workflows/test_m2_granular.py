@@ -241,7 +241,7 @@ def test_scoped_writer_rework_uses_neon_even_for_scope_retry(storyboard_job, mon
 
 
 @pytest.mark.parametrize('failures,expected', [(0, 'gemini-4-neon-medium'),
-                                               (1, 'gemini-4-neon-medium'), (2, 'gpt-6.1-sol')])
+                                               (1, 'gemini-4-neon-medium'), (2, 'gpt-6.2-sol')])
 def test_medium_escalation_uses_existing_retry_counter(storyboard_job, monkeypatch, failures, expected):
     from healthvideo.workflows import runner
 
