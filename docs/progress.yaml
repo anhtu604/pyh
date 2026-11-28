@@ -1,5 +1,5 @@
 version: 1
-updated: '2026-11-27'
+updated: '2026-11-28'
 phases:
 - id: R1
   title: Hoàn thiện xưởng trước khi làm video mới
@@ -587,3 +587,8 @@ phases:
     status: done
     owner: agy
     note: 'Xong (a57f399): thêm StoryShot (hình có giấy phép hoặc mascot, chuyển động nhẹ, không chữ); kiểm điều kiện từng component trước cổng. Trước đó: storyboard gán TakeawayCard không chữ cho ~100 shot mỗi video vì R5 chưa có component cho shot kể chuyện thuần; thêm StoryShot (TS+Python), kiểm điều kiện component trước cổng.'
+  - id: GATE.KEY
+    title: Cổng y khoa chỉ hiện 5–10 điểm rủi ro do AI chọn, kịch bản đầy đủ gấp lại
+    status: doing
+    owner: codex
+    note: 'Đang làm: agent chấm kịch bản ghi thêm 5–10 điểm rủi ro (dòng, luận điểm, vì sao cần xem); thẻ duyệt hiện các điểm này và sửa lỗi thẻ không hiện điểm khó.'
