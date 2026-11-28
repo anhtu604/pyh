@@ -597,3 +597,8 @@ phases:
     status: done
     owner: codex
     note: 'Xong (468cad7): agent chấm nộp báo cáo sai định dạng được gửi lại lỗi để sửa một lần thay vì hỏi bác sĩ; Whisper lỗi tạm thì chạy lại trên audio đã có, không tổng hợp giọng mới. Cùng đợt: codex chuyển sang gpt-6.2-sol.'
+  - id: FIX.R5ROUTE
+    title: Lỗi nhịp hình sau giọng thật tự giao dựng storyboard sửa, không hỏi bác sĩ
+    status: doing
+    owner: codex
+    note: 'Đang sửa: lỗi R5 (nhịp shot, khoảng trống hình) thuộc storyboard_director trước lần dựng đầu đang bị đòi bác sĩ mở lại cổng; chuyển sang đường revise_product có khoá lời đọc/claim, chỉ sửa đúng cảnh lỗi (PYH-002, PYH-004).'
