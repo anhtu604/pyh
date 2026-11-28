@@ -594,6 +594,6 @@ phases:
     note: 'Xong (e549bcc): agent chấm kịch bản chọn 5–10 điểm rủi ro (dòng, luận điểm, vì sao cần xem); thẻ duyệt y khoa hiện các điểm này, kịch bản đầy đủ ở tab riêng; sửa lỗi thẻ không hiện điểm khó. Cùng đợt (110dc68): xưởng không còn gọi Claude CLI trực tiếp.'
   - id: FIX.BLOCKS
     title: Báo cáo chấm sai định dạng được tự sửa một lần; Whisper lỗi tạm không thành chặn vĩnh viễn
-    status: doing
+    status: done
     owner: codex
-    note: 'Đang sửa: agent chấm (kịch bản/sản phẩm) báo cáo sai định dạng thì được gửi lại lỗi để sửa một lần thay vì hỏi bác sĩ (PYH-001); Whisper lỗi tạm thì chạy lại trên audio đã có, không tốn credit (PYH-002).'
+    note: 'Xong (468cad7): agent chấm nộp báo cáo sai định dạng được gửi lại lỗi để sửa một lần thay vì hỏi bác sĩ; Whisper lỗi tạm thì chạy lại trên audio đã có, không tổng hợp giọng mới. Cùng đợt: codex chuyển sang gpt-6.2-sol.'
