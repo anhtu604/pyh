@@ -457,10 +457,17 @@ def hash_reviewed_artifacts(paths: dict[str, Path]) -> dict[str, str]:
     tolerates gaps, since "an asset is missing" can itself be the rejection
     reason and must not crash the audit trail.
     """
-    return {
-        name: (sha256_file(path) if name.startswith("r5-byte:") else _hash_artifact(path))
-        for name, path in paths.items() if path.is_file()
-    }
+    script = paths.get("script/script.yaml")
+    hashes = {}
+    for name, path in paths.items():
+        if not path.is_file():
+            continue
+        if name == "profiles/pronunciation.vi.yaml" and script is not None and script.is_file():
+            # The lexicon is shared: hash only entries this script uses (doctor 2026-11-28).
+            hashes[name] = pronunciation_module.used_pronunciation_hash(path, script)
+        else:
+            hashes[name] = sha256_file(path) if name.startswith("r5-byte:") else _hash_artifact(path)
+    return hashes
 
 
 def _hash_artifact(path: Path) -> str:

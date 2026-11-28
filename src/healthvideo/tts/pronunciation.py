@@ -35,6 +35,20 @@ def apply_pronunciation(text: str, lexicon: PronunciationLexicon) -> str:
     return pattern.sub(lambda match: mapping[match.group().casefold()], text)
 
 
+def used_pronunciation_hash(lexicon_path: Path, script_path: Path) -> str:
+    """Hash only the entries the script can speak, so choices for other projects keep this approval valid.
+
+    Matches the raw script file (a superset of the TTS text), with apply_pronunciation's word boundaries.
+    """
+    text = script_path.read_text(encoding="utf-8")
+    used = sorted({
+        (entry.written.casefold(), entry.spoken)
+        for entry in load_pronunciation_lexicon(lexicon_path).entries
+        if re.search(r"(?<!\w)" + re.escape(entry.written) + r"(?!\w)", text, flags=re.IGNORECASE | re.UNICODE)
+    })
+    return canonical_json_hash([list(pair) for pair in used])
+
+
 def save_doctor_pronunciations(path: Path, choices: Mapping[str, str], date: str) -> None:
     """Patch YAML nodes, preserving existing order, comments and unrelated formatting."""
     with revision_lock(path):

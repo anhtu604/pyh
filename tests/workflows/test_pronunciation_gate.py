@@ -143,7 +143,6 @@ def test_submit_waits_then_approval_hash_includes_doctor_choice(tmp_path, monkey
     from healthvideo.commands.operator import submit_medical
     from healthvideo.domain.gate_review import GateKind
     from healthvideo.domain.project_v2 import WorkflowState
-    from healthvideo.storage.files import canonical_json_hash
     from healthvideo.workflows.gate_review import approve_gate
     from tests.helpers import submit_medical_review_fixture
     from tests.workflows.test_produce import V2_REVIEWED_AT, _r5_project
@@ -178,4 +177,18 @@ def test_submit_waits_then_approval_hash_includes_doctor_choice(tmp_path, monkey
     approve_gate(project, GateKind.MEDICAL, reviewer='doctor', now=V2_REVIEWED_AT)
     from healthvideo.workflows.gate_review import MEDICAL_APPROVAL_ARTIFACT
     approval = read_yaml(revision / MEDICAL_APPROVAL_ARTIFACT)
-    assert approval['artifact_hashes']['profiles/pronunciation.vi.yaml'] == canonical_json_hash(read_yaml(path))
+    used = pronunciation_module.used_pronunciation_hash(path, revision / 'script/script.yaml')
+    assert approval['artifact_hashes']['profiles/pronunciation.vi.yaml'] == used
+    from healthvideo.domain.project_v2 import ProjectManifestV2
+    from healthvideo.workflows.review import approval_is_stale
+
+    def stale():
+        manifest = ProjectManifestV2.model_validate(read_yaml(project / 'project.yaml'))
+        return approval_is_stale(project, manifest, GateKind.MEDICAL)
+
+    # The shared lexicon gains a term another project chose: this approval stays current.
+    pronunciation_module.save_doctor_pronunciations(path, {'ESGE': 'e ét gờ e'}, '2026-11-28')
+    assert not stale()
+    # A term this script speaks changes: the medical gate must reopen.
+    pronunciation_module.save_doctor_pronunciations(path, {'HBsAg': 'hát bê ét a'}, '2026-11-28')
+    assert stale()

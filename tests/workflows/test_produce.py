@@ -739,15 +739,16 @@ def test_v2_pronunciation_is_cache_bound_and_preserves_approved_script(
 
     approved_project = (project_dir / "project.yaml").read_bytes()
     profile.write_text(
-        profile.read_text(encoding="utf-8").replace("version: '1'", "version: '2'"),
+        profile.read_text(encoding="utf-8").replace("spoken: proof", "spoken: other"),
         encoding="utf-8",
     )
+    # The gate hashes only entries the script speaks; changing one reopens the medical gate.
     with pytest.raises(ValueError, match="current medical approval"):
         produce_project(project_dir, SpyTTS(), fake_runner)
     assert requests == []
     assert (project_dir / "project.yaml").read_bytes() == approved_project
     profile.write_text(
-        profile.read_text(encoding="utf-8").replace("version: '2'", "version: '1'"),
+        profile.read_text(encoding="utf-8").replace("spoken: other", "spoken: proof"),
         encoding="utf-8",
     )
 
@@ -772,7 +773,7 @@ def test_v2_pronunciation_is_cache_bound_and_preserves_approved_script(
     assert "renders/render-manifest.json" in video_approval.artifact_hashes
     assert set(video_approval.artifact_hashes) == set(video_reviewed_paths(revision))
 
-    profile.write_text(profile.read_text(encoding="utf-8").replace("version: '1'", "version: '2'"), encoding="utf-8")
+    profile.write_text(profile.read_text(encoding="utf-8").replace("spoken: proof", "spoken: other"), encoding="utf-8")
     with pytest.raises(ValueError, match="current medical approval"):
         package_project(project_dir)
     assert len(requests) == 6
